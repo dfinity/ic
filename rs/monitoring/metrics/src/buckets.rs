@@ -26,9 +26,7 @@ use std::cmp::Ordering;
 pub fn decimal_buckets(min_power: i32, max_power: i32) -> Vec<f64> {
     assert!(
         min_power <= max_power,
-        "min_power must be <= max_power, given {} and {}",
-        min_power,
-        max_power
+        "min_power must be <= max_power, given {min_power} and {max_power}"
     );
     let mut buckets = Vec::with_capacity(3 * (max_power - min_power + 1) as usize);
     for n in min_power..=max_power {

@@ -1,14 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::tls::{tls_cert_from_registry_raw, TlsCertFromRegistryError};
-use crate::{key_from_registry, CryptoComponentImpl};
+use crate::tls::{TlsCertFromRegistryError, tls_cert_from_registry_raw};
+use crate::{CryptoComponentImpl, key_from_registry};
+use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::vault::api::{
     CspPublicKeyStoreError, NodeKeysErrors, PksAndSksContainsErrors,
 };
-use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_logmon::metrics::{
     BooleanOperation, BooleanResult, KeyCounts, KeyRotationResult, MetricsResult,
 };
@@ -69,8 +69,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                         );
                         Err(CryptoError::InternalError {
                             internal_error: format!(
-                                "Error calling pks_and_sks_contains: {:?}",
-                                node_keys_errors
+                                "Error calling pks_and_sks_contains: {node_keys_errors:?}"
                             ),
                         })
                     }
@@ -79,8 +78,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                         self.observe_all_key_counts(&KeyCounts::ZERO, MetricsResult::Err);
                         Err(CryptoError::TransientInternalError {
                             internal_error: format!(
-                                "Transient error calling pks_and_sks_contains: {:?}",
-                                internal_error
+                                "Transient error calling pks_and_sks_contains: {internal_error:?}"
                             ),
                         })
                     }

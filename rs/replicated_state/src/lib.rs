@@ -62,14 +62,14 @@ pub mod metadata_state;
 pub mod page_map;
 pub mod replicated_state;
 pub use canister_state::{
+    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
+    SchedulerState,
     execution_state::Memory,
     num_bytes_try_from,
     system_state::{
-        memory_usage_of_request, CallContext, CallContextAction, CallContextManager, CallOrigin,
-        CanisterMetrics, CanisterStatus, ExecutionTask, SystemState,
+        CallContext, CallContextAction, CallContextManager, CallOrigin, CanisterMetrics,
+        CanisterStatus, ExecutionTask, SystemState, memory_usage_of_request,
     },
-    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
-    SchedulerState,
 };
 pub use metadata_state::{
     IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,

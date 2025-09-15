@@ -4,14 +4,14 @@ use std::{
     convert::TryFrom,
     fs::File,
     mem::size_of,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{Arc, Mutex, atomic::Ordering},
     time::Duration,
 };
 
 use ic_management_canister_types_private::Global;
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
-    StoreLimits, StoreLimitsBuilder, Val, ValType,
+    Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store, StoreLimits,
+    StoreLimitsBuilder, Val, ValType, unix::StoreExt,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -19,23 +19,23 @@ use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
-use ic_logger::{debug, error, fatal, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, fatal};
 use ic_replicated_state::{
-    canister_state::{execution_state, WASM_PAGE_SIZE_IN_BYTES},
     EmbedderCache, NumWasmPages, PageIndex, PageMap,
+    canister_state::{WASM_PAGE_SIZE_IN_BYTES, execution_state},
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
+    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions, NumOsPages,
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumBytes, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
-    WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, WasmMemoryType,
 };
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
@@ -69,7 +69,7 @@ pub(crate) const MAX_STORE_TABLE_ELEMENTS: usize = 1_000_000;
 
 fn demangle(func_name: &str) -> String {
     if let Ok(name) = rustc_demangle::try_demangle(func_name) {
-        format!("{:#}", name)
+        format!("{name:#}")
     } else {
         func_name.to_string()
     }
@@ -184,7 +184,7 @@ pub enum CanisterMemoryType {
 
 impl std::fmt::Display for CanisterMemoryType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -249,7 +249,7 @@ impl WasmtimeEmbedder {
         let module = wasmtime::Module::new(&self.create_engine()?, wasm_binary.as_slice())
             .map_err(|e| {
                 HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                    format!("{:?}", e),
+                    format!("{e:?}"),
                 ))
             })?;
         Ok(module)
@@ -290,8 +290,7 @@ impl WasmtimeEmbedder {
 
         let instance_pre = linker.instantiate_pre(module).map_err(|e| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(format!(
-                "{:?}",
-                e
+                "{e:?}"
             )))
         })?;
 
@@ -313,7 +312,7 @@ impl WasmtimeEmbedder {
             Module::deserialize(&self.create_engine()?, serialized_module.as_slice()).map_err(
                 |err| {
                     HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
-                        format!("{:?}", err),
+                        format!("{err:?}"),
                     ))
                 },
             )
@@ -336,7 +335,7 @@ impl WasmtimeEmbedder {
             Module::deserialize_open_file(&self.create_engine()?, serialized_module).map_err(
                 |err| {
                     HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
-                        format!("{:?}", err),
+                        format!("{err:?}"),
                     ))
                 },
             )
@@ -445,7 +444,7 @@ impl WasmtimeEmbedder {
                 );
                 return Err((
                     HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                        format!("{:?}", err),
+                        format!("{err:?}"),
                     )),
                     store.into_data().system_api,
                 ));
@@ -460,11 +459,11 @@ impl WasmtimeEmbedder {
 
             if exported_globals.len() != instance_globals.len() {
                 fatal!(
-                self.log,
-                "Given number of exported globals {} is not equal to the number of instance exported globals {}",
-                exported_globals.len(),
-                instance_globals.len()
-            );
+                    self.log,
+                    "Given number of exported globals {} is not equal to the number of instance exported globals {}",
+                    exported_globals.len(),
+                    instance_globals.len()
+                );
             }
 
             // set the globals to persisted values
@@ -977,11 +976,11 @@ impl WasmtimeInstance {
                 export
                     .into_memory()
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
-                        error: format!("export '{}' is not a memory", name),
+                        error: format!("export '{name}' is not a memory"),
                     })
             }
             None => Err(HypervisorError::ToolchainContractViolation {
-                error: format!("export '{}' not found", name),
+                error: format!("export '{name}' not found"),
             }),
         }
     }
@@ -1160,7 +1159,7 @@ impl WasmtimeInstance {
                         Ok(())
                     }
                     _ => Err(HypervisorError::ToolchainContractViolation {
-                        error: format!("Bytemap contains invalid value {}", written),
+                        error: format!("Bytemap contains invalid value {written}"),
                     }),
                 }
             }
@@ -1225,7 +1224,7 @@ impl WasmtimeInstance {
             Some(num_instructions_global) => {
                 match num_instructions_global.set(&mut self.store, Val::I64(instruction_counter)) {
                     Ok(_) => (),
-                    Err(e) => panic!("couldn't set the instruction counter: {:?}", e),
+                    Err(e) => panic!("couldn't set the instruction counter: {e:?}"),
                 }
             }
             None => panic!("couldn't find the instruction counter in the canister globals"),

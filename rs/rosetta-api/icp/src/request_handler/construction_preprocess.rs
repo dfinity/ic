@@ -5,7 +5,7 @@ use crate::models::{
     ConstructionPreprocessResponse,
 };
 use crate::request::Request;
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{RosettaRequestHandler, verify_network_id};
 use crate::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
     NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,

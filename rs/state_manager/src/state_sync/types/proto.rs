@@ -1,7 +1,7 @@
 //! Conversions from Rust to proto structs and back for `StateSync`.
 use crate::state_sync::types::{ChunkInfo, FileInfo, Manifest, MetaManifest};
-use ic_protobuf::proxy::try_decode_hash;
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::try_decode_hash;
 use ic_protobuf::state::sync::v1 as pb;
 use std::convert::TryFrom;
 

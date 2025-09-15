@@ -7,12 +7,12 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_canister_client::{
-    test_registry_data_stable_memory_impl, RegistryDataStableMemory, StableCanisterRegistryClient,
-    StorableRegistryKey, StorableRegistryValue,
+    RegistryDataStableMemory, StableCanisterRegistryClient, StorableRegistryKey,
+    StorableRegistryValue, test_registry_data_stable_memory_impl,
 };
 use ic_registry_keys::{
-    make_subnet_list_record_key, DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
@@ -88,7 +88,7 @@ fn generate_node_operator_key_value(
         dc_id,
         ..NodeOperatorRecord::default()
     };
-    let key = format!("{}{}", NODE_OPERATOR_RECORD_KEY_PREFIX, principal_id);
+    let key = format!("{NODE_OPERATOR_RECORD_KEY_PREFIX}{principal_id}");
 
     (key, value)
 }
@@ -99,7 +99,7 @@ fn generate_dc_key_value(dc_id: String) -> (String, DataCenterRecord) {
         region: "A".to_string(),
         ..DataCenterRecord::default()
     };
-    let key = format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id);
+    let key = format!("{DATA_CENTER_KEY_PREFIX}{dc_id}");
 
     (key, value)
 }
@@ -165,7 +165,7 @@ fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Ve
     rewardable_nodes
         .iter()
         .find(|n| n.node_id == node_id)
-        .unwrap_or_else(|| panic!("Node {} should be present", node_id))
+        .unwrap_or_else(|| panic!("Node {node_id} should be present"))
         .clone()
         .rewardable_days
 }
@@ -394,7 +394,7 @@ fn test_node_re_registered_after_deletion() {
 
     // Re-register node_1 after it was deleted
     let node_id = PrincipalId::new_node_test_id(node_1_id);
-    let node_key = format!("{}{}", NODE_RECORD_KEY_PREFIX, node_id);
+    let node_key = format!("{NODE_RECORD_KEY_PREFIX}{node_id}");
     let node_record = NodeRecord {
         node_reward_type: Some(NodeRewardType::Type0 as i32),
         node_operator_id: PrincipalId::new_user_test_id(no_1_id).to_vec(),
@@ -499,7 +499,6 @@ fn test_node_operator_data_returns_expected_data() {
     .unwrap();
     assert!(
         data.is_none(),
-        "Data should not exist for version {} because Operator was not yet added",
-        not_yet_added_no_version
+        "Data should not exist for version {not_yet_added_no_version} because Operator was not yet added"
     );
 }

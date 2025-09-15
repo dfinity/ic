@@ -1,8 +1,8 @@
 use bitcoin::{
-    consensus::encode::deserialize, dogecoin::Network as DogeNetwork, Amount, BlockHash,
-    Network as BtcNetwork,
+    Amount, BlockHash, Network as BtcNetwork, consensus::encode::deserialize,
+    dogecoin::Network as DogeNetwork,
 };
-use ic_btc_adapter::{start_server, AdapterNetwork, Config, IncomingSource};
+use ic_btc_adapter::{AdapterNetwork, Config, IncomingSource, start_server};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::{
     bitcoind::{Conf, Daemon},
@@ -14,7 +14,7 @@ use ic_btc_replica_types::{
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use std::{
     collections::{HashMap, HashSet},
@@ -295,7 +295,7 @@ fn sync_until_end_block<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -340,7 +340,7 @@ fn sync_blocks<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -375,7 +375,7 @@ fn sync_blocks_at_once<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -494,7 +494,7 @@ fn sync_headers_until_checkpoint(adapter_client: &AdapterClient, anchor: Vec<u8>
                 // Checkpoint has not been surpassed, adapter still syncing headers
                 std::thread::sleep(std::time::Duration::from_secs(10));
             }
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
             _ => return,
         }
     }

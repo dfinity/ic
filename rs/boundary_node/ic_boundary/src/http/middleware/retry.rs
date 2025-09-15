@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use axum::{
-    body::{to_bytes, Body},
+    Extension,
+    body::{Body, to_bytes},
     extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
 };
 use http::StatusCode;
 
@@ -130,8 +130,8 @@ mod test {
 
     use anyhow::Error;
     use axum::{
-        body::Body, extract::State, http::Request, middleware, response::IntoResponse,
-        routing::method_routing::post, Router,
+        Router, body::Body, extract::State, http::Request, middleware, response::IntoResponse,
+        routing::method_routing::post,
     };
     use http::StatusCode;
     use ic_bn_lib::principal;

@@ -37,9 +37,7 @@ fn test_skipping_quota() {
         let expected_err = "Skipping cost exceeds the limit";
         assert!(
             err.contains(expected_err),
-            "Expected `{}` did not occur within the observed error:\n{}",
-            expected_err,
-            err
+            "Expected `{expected_err}` did not occur within the observed error:\n{err}"
         );
 
         Ok(())

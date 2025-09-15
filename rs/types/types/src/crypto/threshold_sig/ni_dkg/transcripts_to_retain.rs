@@ -46,7 +46,7 @@ impl TranscriptsToRetain {
             .map(|t| t.registry_version)
             .min()
             .unwrap() // This never panics because the invariants ensure that
-                      // there are at least two elements in `transcripts`.
+        // there are at least two elements in `transcripts`.
     }
 
     /// Returns a string representation of `TranscriptsToRetain`. Can be used

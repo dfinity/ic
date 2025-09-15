@@ -4,10 +4,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
 use ic_state_manager::{
-    checkpoint::load_checkpoint,
-    tree_diff::{diff, Changes, PrettyPrintedChanges},
-    tree_hash::hash_state,
     CheckpointError, CheckpointMetrics,
+    checkpoint::load_checkpoint,
+    tree_diff::{Changes, PrettyPrintedChanges, diff},
+    tree_hash::hash_state,
 };
 use ic_types::Height;
 use std::path::PathBuf;
@@ -41,7 +41,7 @@ fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, Checkpo
 
 /// `cdiff` command entry point.
 pub fn do_diff(path_a: PathBuf, path_b: PathBuf) -> Result<(), String> {
-    let d = diff_checkpoints(path_a, path_b).map_err(|err| format!("✗ Diff FAILED:\n\t{}", err))?;
+    let d = diff_checkpoints(path_a, path_b).map_err(|err| format!("✗ Diff FAILED:\n\t{err}"))?;
     if d.is_empty() {
         println!("✓ Snapshots are identical");
     } else {

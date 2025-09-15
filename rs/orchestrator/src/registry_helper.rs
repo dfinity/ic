@@ -14,8 +14,8 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::{
-    consensus::CatchUpPackage, hostos_version::HostosVersion, NodeId, PrincipalId, RegistryVersion,
-    ReplicaVersion, SubnetId,
+    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    hostos_version::HostosVersion,
 };
 use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 
@@ -228,8 +228,7 @@ impl RegistryHelper {
                 let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
                     .map_err(|err| {
                         OrchestratorError::UpgradeError(format!(
-                            "Couldn't parse the replica version: {}",
-                            err
+                            "Couldn't parse the replica version: {err}"
                         ))
                     })?;
                 Ok(replica_version)
@@ -295,8 +294,7 @@ impl RegistryHelper {
             .map(|node_record| {
                 HostosVersion::try_from(node_record).map_err(|err| {
                     OrchestratorError::UpgradeError(format!(
-                        "Could not parse HostOS version: {}",
-                        err
+                        "Could not parse HostOS version: {err}"
                     ))
                 })
             })

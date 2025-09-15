@@ -1,7 +1,7 @@
 use candid::Principal;
 use pocket_ic::PocketIc;
-use reqwest::blocking::Client;
 use reqwest::Url;
+use reqwest::blocking::Client;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 pub fn frontend_canister(

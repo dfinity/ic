@@ -8,8 +8,8 @@ use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultFromManagementCanister,
 };
 use ic_nervous_system_root::{
-    change_canister::{change_canister, ChangeCanisterRequest},
     LOG_PREFIX,
+    change_canister::{ChangeCanisterRequest, change_canister},
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::registry::get_value;
@@ -45,7 +45,7 @@ impl FromStr for RootProposalBallot {
         match string {
             "yes" => Ok(RootProposalBallot::Yes),
             "no" => Ok(RootProposalBallot::No),
-            &_ => Err(format!("Unknown root proposal ballot value: {:?}", string)),
+            &_ => Err(format!("Unknown root proposal ballot value: {string:?}")),
         }
     }
 }
@@ -190,11 +190,10 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
         || request.mode != CanisterInstallMode::Upgrade
     {
         let message = format!(
-            "{}Invalid proposal. Proposal must be an upgrade proposal \
-             to the governance canister with some wasm.",
-            LOG_PREFIX
+            "{LOG_PREFIX}Invalid proposal. Proposal must be an upgrade proposal \
+             to the governance canister with some wasm."
         );
-        println!("{}", message);
+        println!("{message}");
         return Err(message);
     }
 
@@ -205,11 +204,10 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
     let current_governance_wasm_sha = get_current_governance_canister_wasm().await;
     if expected_governance_wasm_sha != current_governance_wasm_sha {
         let message = format!(
-            "{}Invalid proposal. Expected governance wasm sha must match \
-             the currently running governance wasm's sha. Current: {:?}. Expected: {:?}",
-            LOG_PREFIX, current_governance_wasm_sha, expected_governance_wasm_sha
+            "{LOG_PREFIX}Invalid proposal. Expected governance wasm sha must match \
+             the currently running governance wasm's sha. Current: {current_governance_wasm_sha:?}. Expected: {expected_governance_wasm_sha:?}"
         );
-        println!("{}", message);
+        println!("{message}");
         return Err(message);
     }
 
@@ -221,10 +219,10 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
     let mut node_operator_ballots = Vec::new();
     let nns_subnet_id = get_nns_subnet_id()
         .await
-        .map_err(|e| format!("Error: {:?}", e))?;
+        .map_err(|e| format!("Error: {e:?}"))?;
     let (nns_nodes, subnet_membership_registry_version) = get_nns_membership(&nns_subnet_id)
         .await
-        .map_err(|e| format!("Error: {:?}", e))?;
+        .map_err(|e| format!("Error: {e:?}"))?;
 
     let mut voted_on: i32 = 0;
     let mut total_votes: i32 = 0;
@@ -233,7 +231,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
         let node_operator_pid =
             get_node_operator_pid_of_node(&node, subnet_membership_registry_version)
                 .await
-                .map_err(|e| format!("Error: {:?}", e))?;
+                .map_err(|e| format!("Error: {e:?}"))?;
         if node_operator_pid == caller {
             voted_on += 1;
             node_operator_ballots.push((node_operator_pid, RootProposalBallot::Yes));
@@ -246,10 +244,9 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
     // cast at least one ballot.
     if voted_on == 0 {
         let message = format!(
-            "{}Invalid proposal. Caller: {} must be among the node operators of the nns subnet.",
-            LOG_PREFIX, caller
+            "{LOG_PREFIX}Invalid proposal. Caller: {caller} must be among the node operators of the nns subnet."
         );
-        println!("{}", message);
+        println!("{message}");
         return Err(message);
     }
 
@@ -258,8 +255,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
         // that we'll be replacing it.
         if let Some(previous_proposal_from_the_same_principal) = proposals.borrow().get(&caller) {
             println!(
-                "{}Current root proposal {:?} from {} is going to be overwritten.",
-                LOG_PREFIX, previous_proposal_from_the_same_principal, caller,
+                "{LOG_PREFIX}Current root proposal {previous_proposal_from_the_same_principal:?} from {caller} is going to be overwritten.",
             );
         }
 
@@ -283,14 +279,8 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
         );
 
         println!(
-            "{}Root proposal to upgrade the governance canister from: {:?} to {:?}, \
-             proposed by: {:?} was submitted. Current tally: {}/{}",
-            LOG_PREFIX,
-            current_governance_wasm_sha,
-            proposed_wasm_sha,
-            caller,
-            voted_on,
-            total_votes
+            "{LOG_PREFIX}Root proposal to upgrade the governance canister from: {current_governance_wasm_sha:?} to {proposed_wasm_sha:?}, \
+             proposed by: {caller:?} was submitted. Current tally: {voted_on}/{total_votes}"
         );
     });
     Ok(())
@@ -321,7 +311,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
 
     let (_, version) = get_nns_membership(&proposal.nns_subnet_id)
         .await
-        .map_err(|e| format!("Error executing proposal: {:?}", e))?;
+        .map_err(|e| format!("Error executing proposal: {e:?}"))?;
 
     // Check all the constraints and vote (without any async calls in between).
     PROPOSALS.with(|proposals| {
@@ -329,10 +319,9 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
         let proposal = proposals.get_mut(&proposer);
         if proposal.is_none() {
             let message = format!(
-                "No root governance upgrade proposal from {} is pending",
-                proposer
+                "No root governance upgrade proposal from {proposer} is pending"
             );
-            println!("{}", message);
+            println!("{message}");
             return Err(message);
         }
         let proposal = proposal.unwrap();
@@ -345,11 +334,10 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
         {
             proposals.remove(&proposer);
             let message = format!(
-                "{}Current root governance upgrade proposal from {} is too old.\
+                "{LOG_PREFIX}Current root governance upgrade proposal from {proposer} is too old.\
                  Deleting.",
-                LOG_PREFIX, proposer,
             );
-            println!("{}", message);
+            println!("{message}");
             return Err(message);
         }
 
@@ -357,11 +345,10 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
         if version != proposal.subnet_membership_registry_version {
             proposals.remove(&proposer);
             let message = format!(
-                "{}Registry version of the subnet record changed since the \
-                 proposal from {} was submitted. Deleting.",
-                LOG_PREFIX, proposer,
+                "{LOG_PREFIX}Registry version of the subnet record changed since the \
+                 proposal from {proposer} was submitted. Deleting.",
             );
-            println!("{}", message);
+            println!("{message}");
             return Err(message);
         }
 
@@ -370,7 +357,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
                 "{}The sha of the wasm in the governance upgrade proposal that the voter intends to vote on: {:?}\
                  is not the same as the sha of the wasm: {:?} proposed by: {}", LOG_PREFIX, wasm_sha256,
                 proposal.proposed_wasm_sha, proposer);
-            println!("{}", message);
+            println!("{message}");
             return Err(message);
         }
 
@@ -385,10 +372,9 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
 
         if voted_on == 0 {
             let message = format!(
-                "{}Caller: {} is not eligible to vote on root proposal.",
-                LOG_PREFIX, caller,
+                "{LOG_PREFIX}Caller: {caller} is not eligible to vote on root proposal.",
             );
-            println!("{}", message);
+            println!("{message}");
             return Err(message);
         }
         Ok(())
@@ -410,16 +396,14 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
     }
 
     println!(
-        "{}Vote(s) on root proposal to upgrade the governance canister to sha {:?} \
-         from: {:?} were accepted. Current tally: {} Yes, {} No, {} Undecided.",
-        LOG_PREFIX, wasm_sha256, proposer, votes_yes, votes_no, votes_undecided
+        "{LOG_PREFIX}Vote(s) on root proposal to upgrade the governance canister to sha {wasm_sha256:?} \
+         from: {proposer:?} were accepted. Current tally: {votes_yes} Yes, {votes_no} No, {votes_undecided} Undecided."
     );
 
     if proposal.is_byzantine_majority_yes() {
         println!(
-            "{}Root proposal from {} to upgrade the governance canister to sha: {:?} \
-             was accepted. Votes: {} Yes, {} No, {} Undecided. Upgrading.",
-            LOG_PREFIX, proposer, wasm_sha256, votes_yes, votes_no, votes_undecided
+            "{LOG_PREFIX}Root proposal from {proposer} to upgrade the governance canister to sha: {wasm_sha256:?} \
+             was accepted. Votes: {votes_yes} Yes, {votes_no} No, {votes_undecided} Undecided. Upgrading."
         );
         let payload = proposal.payload.clone();
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));
@@ -432,7 +416,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
              the currently running governance wasm's sha. Current: {:?}. Expected: {:?}",
                 LOG_PREFIX, current_governance_wasm_sha, proposal.current_wasm_sha
             );
-            println!("{}", message);
+            println!("{message}");
             return Err(message);
         }
         let _ = change_canister::<CdkRuntime>(payload).await;
@@ -440,11 +424,10 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));
         let message = format!(
-            "{}Root proposal from {} to upgrade the governance canister to sha: {:?} \
-             was rejected. Votes: {} Yes, {} No, {} Undecided. Deleting.",
-            LOG_PREFIX, proposer, wasm_sha256, votes_yes, votes_no, votes_undecided
+            "{LOG_PREFIX}Root proposal from {proposer} to upgrade the governance canister to sha: {wasm_sha256:?} \
+             was rejected. Votes: {votes_yes} Yes, {votes_no} No, {votes_undecided} Undecided. Deleting."
         );
-        println!("{}", message);
+        println!("{message}");
         Ok(())
     } else {
         Ok(())
@@ -454,18 +437,15 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
 fn get_proposal_clone(proposer: &PrincipalId) -> Result<GovernanceUpgradeRootProposal, String> {
     let proposal = PROPOSALS.with(|proposals| proposals.borrow().get(proposer).cloned());
     if proposal.is_none() {
-        let message = format!(
-            "No root governance upgrade proposal from {} is pending",
-            proposer
-        );
-        println!("{}", message);
+        let message = format!("No root governance upgrade proposal from {proposer} is pending");
+        println!("{message}");
         return Err(message);
     }
     Ok(proposal.unwrap())
 }
 
-pub fn get_pending_root_proposals_to_upgrade_governance_canister(
-) -> Vec<GovernanceUpgradeRootProposal> {
+pub fn get_pending_root_proposals_to_upgrade_governance_canister()
+-> Vec<GovernanceUpgradeRootProposal> {
     // Return the pending proposals, but strip the wasm so that the response stays
     // small.
     PROPOSALS.with(|proposals| {
@@ -495,10 +475,7 @@ async fn get_nns_subnet_id() -> Result<SubnetId, String> {
     )
     .await
     .map_err(|(code, message)| {
-        format!(
-            "Error when calling get_subnet_for_canister, code: {:?}, message: {}",
-            code, message
-        )
+        format!("Error when calling get_subnet_for_canister, code: {code:?}, message: {message}")
     })?;
     let response = response?;
     let nns_subnet_id = response
@@ -513,7 +490,7 @@ async fn get_nns_membership(subnet_id: &SubnetId) -> Result<(Vec<NodeId>, u64), 
     let (subnet_registry_entry, version) =
         get_value::<SubnetRecordPb>(make_subnet_record_key(*subnet_id).as_bytes(), None)
             .await
-            .map_err(|e| format!("Error getting membership of nns subnet. Error: {:?}", e))?;
+            .map_err(|e| format!("Error getting membership of nns subnet. Error: {e:?}"))?;
 
     Ok((
         subnet_registry_entry
@@ -536,15 +513,9 @@ async fn get_node_operator_pid_of_node(
         get_value::<NodeRecordPb>(make_node_record_key(*node_id).as_bytes(), Some(version))
             .await
             .map_err(|e| {
-                format!(
-                    "Error getting the node record from the registry. Error: {:?}",
-                    e
-                )
+                format!("Error getting the node record from the registry. Error: {e:?}")
             })?;
     PrincipalId::try_from(node_record.node_operator_id).map_err(|e| {
-        format!(
-            "Error decoding the node operator id from the node record. Error: {:?}",
-            e
-        )
+        format!("Error decoding the node operator id from the node record. Error: {e:?}")
     })
 }

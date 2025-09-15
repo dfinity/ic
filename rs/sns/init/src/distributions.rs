@@ -1,22 +1,22 @@
 use crate::{
+    SnsCanisterIds,
     pb::v1::{
         DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
         SwapDistribution, TreasuryDistribution,
     },
-    SnsCanisterIds,
 };
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
+    ONE_MONTH_SECONDS,
     ledger::{
         compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount,
         compute_neuron_staking_subaccount_bytes,
     },
-    ONE_MONTH_SECONDS,
 };
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
-    pb::v1::{neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission},
+    pb::v1::{NervousSystemParameters, Neuron, NeuronId, NeuronPermission, neuron::DissolveState},
 };
 use ic_sns_swap::swap::{NEURON_BASKET_MEMO_RANGE_START, SALE_NEURON_MEMO_RANGE_END};
 use icrc_ledger_types::icrc1::account::Account;
@@ -195,8 +195,7 @@ impl FractionalDeveloperVotingPower {
 
         if missing_developer_principals_count != 0 {
             return Err(format!(
-                "Error: {} developer_neurons are missing controllers",
-                missing_developer_principals_count
+                "Error: {missing_developer_principals_count} developer_neurons are missing controllers"
             ));
         }
 
@@ -248,8 +247,7 @@ impl FractionalDeveloperVotingPower {
         if !configured_at_least_one_voting_neuron {
             return Err(format!(
                 "Error: There needs to be at least one voting-eligible neuron configured. To be \
-                 eligible to vote, a neuron must have dissolve_delay_seconds of at least {}",
-                neuron_minimum_dissolve_delay_to_vote_seconds
+                 eligible to vote, a neuron must have dissolve_delay_seconds of at least {neuron_minimum_dissolve_delay_to_vote_seconds}"
             ));
         }
 
@@ -265,7 +263,7 @@ impl FractionalDeveloperVotingPower {
         if !misconfigured_dissolve_delay_principals.is_empty() {
             return Err(format!(
                 "Error: The following PrincipalIds have a dissolve_delay_seconds configured greater than \
-                 the allowed max_dissolve_delay_seconds ({}): {:?}", max_dissolve_delay_seconds, misconfigured_dissolve_delay_principals
+                 the allowed max_dissolve_delay_seconds ({max_dissolve_delay_seconds}): {misconfigured_dissolve_delay_principals:?}"
             ));
         }
 
@@ -388,7 +386,7 @@ impl FractionalDeveloperVotingPower {
                     return Err(
                         "The total distribution overflowed and is not a valid distribution"
                             .to_string(),
-                    )
+                    );
                 }
             }
         }
@@ -465,25 +463,25 @@ impl NeuronDistribution {
 #[cfg(test)]
 mod test {
     use crate::{
+        SnsCanisterIds, Tokens,
         distributions::{MAX_DEVELOPER_DISTRIBUTION_COUNT, SWAP_SUBACCOUNT_NONCE},
         pb::v1::{
             DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
             SwapDistribution, TreasuryDistribution,
         },
-        SnsCanisterIds, Tokens,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_ledger_core::tokens::CheckedAdd;
     use ic_nervous_system_common::{
-        ledger::{compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount_bytes},
         ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+        ledger::{compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount_bytes},
     };
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
     };
     use ic_sns_governance::{
         governance::TREASURY_SUBACCOUNT_NONCE,
-        pb::v1::{neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission},
+        pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission, neuron::DissolveState},
     };
     use ic_sns_swap::swap::NEURON_BASKET_MEMO_RANGE_START;
     use icrc_ledger_types::icrc1::account::Account;
@@ -769,23 +767,29 @@ mod test {
         let nervous_system_parameters = NervousSystemParameters::with_default_values();
 
         // Validate that the initial version is valid
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // The developer_distribution being absent should fail validation
         initial_token_distribution.developer_distribution = None;
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
 
         // Check that returning to a default is valid
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // Duplicate principals + memo combos should fail validation
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -802,9 +806,11 @@ mod test {
                 },
             ],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
 
         // Unique principals + memo combo should pass validation
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -826,9 +832,11 @@ mod test {
                 },
             ],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // The sum of the distributions MUST fit into a u64
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -845,9 +853,11 @@ mod test {
                 },
             ],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
 
         // The sum of the distributions can equal the swap_distribution.total_e8s
         // which is set to 100 at the beginning of the test
@@ -865,9 +875,11 @@ mod test {
                 },
             ],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // The sum of the distributions being greater than swap_distribution.total_e8s should fail
         // validation
@@ -885,9 +897,11 @@ mod test {
                 },
             ],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
 
         // Reset to a valid developer_distribution
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -897,9 +911,11 @@ mod test {
                 ..NeuronDistribution::with_valid_values_for_testing()
             }],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // There must be at least one neuron with the dissolve_delay greater than or equal to
         // neuron_minimum_dissolve_delay_to_vote_seconds.
@@ -917,9 +933,11 @@ mod test {
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // Any neurons are configured with a dissolve_delay over the maximum should fail
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -936,9 +954,11 @@ mod test {
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // Exceeding the maximum count of developer neurons should fail
         let invalid_developer_neurons = (0..MAX_DEVELOPER_DISTRIBUTION_COUNT + 1)
@@ -951,9 +971,11 @@ mod test {
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: invalid_developer_neurons,
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
     }
 
     #[test]
@@ -977,30 +999,38 @@ mod test {
         initial_token_distribution
             .validate(&nervous_system_parameters)
             .expect("");
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // The treasury_distribution being absent should fail validation
         initial_token_distribution.treasury_distribution = None;
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
 
         // Check that returning to a default is valid
         initial_token_distribution.treasury_distribution =
             Some(TreasuryDistribution { total_e8s: 0 });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // Check that the max value is valid
         initial_token_distribution.treasury_distribution = Some(TreasuryDistribution {
             total_e8s: u64::MAX,
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -1021,42 +1051,52 @@ mod test {
         let nervous_system_parameters = NervousSystemParameters::with_default_values();
 
         // Validate that the initial version is valid
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // The swap_distribution being absent should fail validation
         initial_token_distribution.swap_distribution = None;
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
 
         // Check that returning to a default is valid
         initial_token_distribution.swap_distribution = Some(SwapDistribution {
             total_e8s: 1_000_000_000,
             initial_swap_amount_e8s: 100_000_000,
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_ok()
+        );
 
         // initial_swap_amount_e8s must be greater than 0
         initial_token_distribution.swap_distribution = Some(SwapDistribution {
             initial_swap_amount_e8s: 0,
             total_e8s: 0,
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
 
         // initial_swap_amount_e8s cannot be greater than total_e8s
         initial_token_distribution.swap_distribution = Some(SwapDistribution {
             initial_swap_amount_e8s: 10,
             total_e8s: 5,
         });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
+        assert!(
+            initial_token_distribution
+                .validate(&nervous_system_parameters)
+                .is_err()
+        );
     }
 
     /// Test that validation fails if developer neurons are given memos in the incorrect range.

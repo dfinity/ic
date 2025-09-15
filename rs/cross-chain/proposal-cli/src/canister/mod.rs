@@ -412,7 +412,7 @@ impl FromStr for TargetCanister {
             ["sol", "rpc"] => Ok(TargetCanister::SolRpc),
             ["bitcoin"] => Ok(TargetCanister::Bitcoin),
             ["btc", "watchdog"] => Ok(TargetCanister::BtcWatchdog),
-            _ => Err(format!("Unknown canister name: {}", canister)),
+            _ => Err(format!("Unknown canister name: {canister}")),
         }
     }
 }

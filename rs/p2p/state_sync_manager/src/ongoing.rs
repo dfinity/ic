@@ -12,7 +12,7 @@
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -23,12 +23,12 @@ use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 use ic_base_types::NodeId;
 use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_quic_transport::{Shutdown, Transport};
 use rand::{
+    SeedableRng,
     distributions::{Distribution, WeightedIndex},
     rngs::SmallRng,
-    SeedableRng,
 };
 use thiserror::Error;
 use tokio::{
@@ -303,13 +303,13 @@ impl OngoingStateSync {
                         chunk_id,
                         err: e.to_string(),
                     }),
-                }
+                };
             }
             Err(_) => {
                 return DownloadResult {
                     peer_id,
                     result: Err(DownloadChunkError::Timeout),
-                }
+                };
             }
         };
 
@@ -364,7 +364,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, Height};
+    use ic_types::{Height, crypto::CryptoHash};
     use ic_types_test_utils::ids::NODE_1;
     use prost::Message;
     use tokio::runtime::Runtime;

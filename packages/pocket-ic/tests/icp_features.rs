@@ -8,8 +8,8 @@ use pocket_ic::common::rest::{
     InstanceHttpGatewayConfig, SubnetSpec,
 };
 use pocket_ic::{
-    start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
-    StartServerParams,
+    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, start_server, update_candid,
+    update_candid_as,
 };
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -206,8 +206,7 @@ fn test_sns() {
             .0;
     let pic_time_seconds = pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
     assert!(health_status.contains(&format!(
-        "The last partial update was at: {}.  Last update cycle started at {}",
-        pic_time_seconds, pic_time_seconds
+        "The last partial update was at: {pic_time_seconds}.  Last update cycle started at {pic_time_seconds}"
     )));
 }
 
@@ -241,7 +240,7 @@ fn test_nns_governance() {
             match self {
                 NeuronResult::NeuronId(neuron_id) => neuron_id,
                 NeuronResult::Error(governance_error) => {
-                    panic!("Unexpected error: {:?}", governance_error)
+                    panic!("Unexpected error: {governance_error:?}")
                 }
             }
         }
@@ -751,9 +750,7 @@ fn test_cycles_ledger() {
         // Allow the actual ICP cycles balance to be less than the expected cycles balance by 10B cycles due to resource consumption.
         assert!(
             expected <= actual + 10 * B && actual <= expected,
-            "actual: {}; expected: {}",
-            actual,
-            expected
+            "actual: {actual}; expected: {expected}"
         );
     };
 
