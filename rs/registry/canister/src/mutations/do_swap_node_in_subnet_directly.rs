@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use candid::CandidType;
-use ic_types::{PrincipalId, SubnetId};
+use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +10,7 @@ use crate::{
         is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
         is_node_swapping_enabled_on_subnet,
     },
+    mutations::node_management::common::find_subnet_for_node,
     registry::Registry,
 };
 
@@ -38,7 +39,7 @@ impl Registry {
 
         //Check if the feature is allowed on the target subnet and for the caller
         Self::swapping_enabled_for_caller(caller)?;
-        let subnet_id = self.find_subnet_for_node(old_node_id)?;
+        let subnet_id = self.find_subnet_for_old_node(old_node_id)?;
         Self::swapping_allowed_on_subnet(subnet_id)?;
 
         //TODO(DRE-553): Rate-limiting mechanism
@@ -58,30 +59,13 @@ impl Registry {
 
     /// Map the `old_node_id` to a subnet and error if it is
     /// not a member of any subnet.
-    fn find_subnet_for_node(&self, old_node_id: PrincipalId) -> Result<SubnetId, SwapError> {
-        for (subnet, id) in self
-            .get_subnet_list_record()
-            .subnets
-            .into_iter()
-            // This unwrap should never happen if the registry is invariant compliant.
-            .map(|bytes| SubnetId::new(PrincipalId::try_from(bytes).unwrap()))
-            // This unwrap should never happen if the registry is invariant compliant.
-            .map(|subnet_id| (self.get_subnet_or_panic(subnet_id), subnet_id))
-        {
-            if !subnet
-                .membership
-                .iter()
-                .map(|bytes| PrincipalId::try_from(bytes).unwrap())
-                .any(|node| node == old_node_id)
-            {
-                // Node is not a member of this subnet so skip it.
-                continue;
-            }
-
-            return Ok(id);
-        }
-
-        Err(SwapError::SubnetNotFoundForNode { old_node_id })
+    fn find_subnet_for_old_node(&self, old_node_id: PrincipalId) -> Result<SubnetId, SwapError> {
+        find_subnet_for_node(
+            &self,
+            NodeId::new(old_node_id),
+            &self.get_subnet_list_record(),
+        )
+        .ok_or(SwapError::SubnetNotFoundForNode { old_node_id })
     }
 
     fn swapping_allowed_on_subnet(subnet_id: SubnetId) -> Result<(), SwapError> {
