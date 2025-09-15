@@ -23,7 +23,9 @@ Variant::
 end::catalog[] */
 
 use anyhow::Result;
-use ic_nested_nns_recovery_common::{SetupConfig, TestConfig, setup, test};
+use ic_nested_nns_recovery_common::{
+    DKG_INTERVAL, SUBNET_SIZE, SetupConfig, TestConfig, setup, test,
+};
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
 
