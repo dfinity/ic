@@ -16439,6 +16439,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 
 [[package]]
+name = "launch-single-vm"
+version = "0.1.0"
+dependencies = [
+ "clap 4.5.27",
+ "config",
+ "config_types",
+ "ic-prep",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "reqwest 0.12.15",
+ "serde",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tempfile",
+ "url",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -33,11 +33,3 @@ path = "reboot_toy.rs"
 [[bin]]
 name = "root_tests"
 path = "root_tests.rs"
-
-[[bin]]
-name = "launch_single_guest"
-path = "launch_single_guest.rs"
-
-[[bin]]
-name = "launch_single_host"
-path = "launch_single_host.rs"
