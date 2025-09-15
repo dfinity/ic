@@ -85,8 +85,8 @@ pub struct NNSRecoverySameNodesArgs {
 
     /// The output directory where the recovery artifacts (and its hash) will be stored.
     /// IMPORTANT: this directory must be in a shared mount of the node if doing the recovery
-    /// locally (like /var/lib/ic/data) because the WaitForCUP step (which happens after the
-    /// artifacts are created) upgrades the node and thus swaps partitions. If not in a shared
+    /// locally (like /var/lib/ic/data) because the UploadCUPAndRegistry step (which happens after
+    /// the artifacts are created) upgrades the node and thus swaps partitions. If not in a shared
     /// mount, the recovery artifacts will be lost after the upgrade.
     #[clap(long)]
     pub output_dir: Option<PathBuf>,
