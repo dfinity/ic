@@ -1,8 +1,8 @@
 //! TODO:
-//! - source not controlled by user
-//! - target not controlled by user
-//! - source not controlled by MC
-//! - target not controlled by MC
+//! -x source not controlled by user
+//! -x target not controlled by user
+//! -x source not controlled by MC
+//! -x target not controlled by MC
 //! - source not stopped
 //! - target not stopped
 //! - not enough cycles for migration
@@ -245,7 +245,7 @@ async fn validation_succeeds() {
 }
 
 #[tokio::test]
-async fn validation_fails_sender_doesnt_control_source() {
+async fn validation_fails_caller_not_controller() {
     let Setup {
         pic,
         source,
@@ -271,4 +271,79 @@ async fn validation_fails_sender_doesnt_control_source() {
         panic!()
     };
     assert_eq!(canister, target);
+}
+
+#[tokio::test]
+async fn validation_fails_mc_not_source_controller() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings {
+        mc_controls_source: false,
+        ..Default::default()
+    })
+    .await;
+    // MC not controller of source
+    let sender = source_controllers[0];
+    let Err(ValidationError::NotController { canister }) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+    assert_eq!(canister, source);
+}
+
+#[tokio::test]
+async fn validation_fails_mc_not_target_controller() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings {
+        mc_controls_target: false,
+        ..Default::default()
+    })
+    .await;
+    // MC not controller of target
+    let sender = source_controllers[0];
+    let Err(ValidationError::NotController { canister }) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+    assert_eq!(canister, target);
+}
+
+#[tokio::test]
+async fn validation_fails_not_stopped() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+
+    // source
+    pic.start_canister(source, Some(sender)).await.unwrap();
+    let Err(ValidationError::SourceNotStopped) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+    pic.stop_canister(source, Some(sender)).await.unwrap();
+
+    // target
+    pic.start_canister(target, Some(sender)).await.unwrap();
+    let Err(ValidationError::TargetNotStopped) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
 }
