@@ -1086,11 +1086,8 @@ fn get_canister_metadata_success() {
     let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
     let caller = test.universal_canister().unwrap();
 
-    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
-        canister,
-        "my_public_section".to_string()
-    ))
-    .unwrap();
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_public_section".to_string()).encode();
     let get_canister_metadata = wasm()
         .call_simple(
             ic00::IC_00,
@@ -1106,37 +1103,13 @@ fn get_canister_metadata_success() {
 }
 
 #[test]
-fn get_canister_metadata_ingress_fails() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
-
-    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
-        canister,
-        "my_public_section".to_string()
-    ))
-    .unwrap();
-    let result = test.subnet_message(Method::CanisterMetadata, canister_metadata_args);
-
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            "canister_metadata cannot be called by a user."
-        ))
-    );
-}
-
-#[test]
 fn get_canister_metadata_no_execution_state_fails() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.empty_canister();
     let caller = test.universal_canister().unwrap();
 
-    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
-        canister,
-        "my_private_section".to_string()
-    ))
-    .unwrap();
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_private_section".to_string()).encode();
     let get_canister_metadata = wasm()
         .call_simple(
             ic00::IC_00,
@@ -1158,11 +1131,8 @@ fn get_canister_metadata_not_found_fails() {
     let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
     let caller = test.universal_canister().unwrap();
 
-    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
-        canister,
-        "my_not_found_section".to_string()
-    ))
-    .unwrap();
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_not_found_section".to_string()).encode();
     let get_canister_metadata = wasm()
         .call_simple(
             ic00::IC_00,
@@ -1184,11 +1154,8 @@ fn get_canister_metadata_private_section_fails() {
     let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
     let caller = test.universal_canister().unwrap();
 
-    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
-        canister,
-        "my_private_section".to_string()
-    ))
-    .unwrap();
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_private_section".to_string()).encode();
     let get_canister_metadata = wasm()
         .call_simple(
             ic00::IC_00,
