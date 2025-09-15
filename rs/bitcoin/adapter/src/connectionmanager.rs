@@ -7,30 +7,30 @@ use std::{
 use bitcoin::p2p::ServiceFlags;
 
 use bitcoin::p2p::{
+    Address, Magic,
     message::{CommandString, NetworkMessage},
     message_network::VersionMessage,
-    Address, Magic,
 };
-use ic_logger::{error, info, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, trace, warn};
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
-    sync::mpsc::{channel, Sender},
-    sync::mpsc::{unbounded_channel, Receiver},
+    sync::mpsc::{Receiver, unbounded_channel},
+    sync::mpsc::{Sender, channel},
     task::JoinHandle,
 };
 
 use crate::{
+    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
+    ProcessNetworkMessageError,
     addressbook::{
-        validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
+        AddressBook, AddressBookError, AddressEntry, AddressTimestamp, validate_services,
     },
     common::{BlockHeight, BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
-    ProcessNetworkMessageError,
 };
 
 type StreamConfigOf<Network> =
@@ -360,7 +360,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         // The node address that will be receiving this message.
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
-        let nonce: u64 = self.rng.gen();
+        let nonce: u64 = self.rng.r#gen();
         let user_agent = String::from(USER_AGENT);
         let message = <NetworkMessageOf<Network>>::Version(VersionMessage::new(
             self.p2p_protocol_version,
@@ -389,7 +389,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
     /// This function is used to send a `ping` message to a specified connection.
     fn send_ping(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        let nonce = self.rng.gen();
+        let nonce = self.rng.r#gen();
         let conn = self.get_connection(addr)?;
         conn.expect_pong(nonce);
         self.send_to(addr, NetworkMessage::Ping(nonce))
@@ -480,8 +480,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         trace!(
             self.logger,
-            "Completed the version handshake with {}",
-            address
+            "Completed the version handshake with {}", address
         );
         Ok(())
     }
@@ -710,7 +709,7 @@ mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
     use bitcoin::p2p::ServiceFlags;
-    use bitcoin::{block::Header, Block, Network};
+    use bitcoin::{Block, Network, block::Header};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;

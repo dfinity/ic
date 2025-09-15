@@ -2,7 +2,6 @@ use prost_build::Config;
 use std::path::Path;
 
 pub struct ProtoPaths<'a> {
-    pub transport: &'a Path,
     pub base_types: &'a Path,
     pub protobuf: &'a Path,
     pub nns_common: &'a Path,
@@ -18,10 +17,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     let mut config = Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");
 
-    config.extern_path(
-        ".ic_registry_transport.pb.v1",
-        "::ic-registry-transport::pb::v1",
-    );
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 
     for type_name in [
@@ -34,7 +29,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "SubnetForCanister",
     ] {
         config.type_attribute(
-            format!("ic_registry_canister.pb.v1.{}", type_name),
+            format!("ic_registry_canister.pb.v1.{type_name}"),
             "#[derive(candid::CandidType, candid::Deserialize)]",
         );
     }
@@ -45,7 +40,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "Chunk.content",
     ] {
         config.field_attribute(
-            format!("ic_registry_canister.pb.v1.{}", option_blob_field_name),
+            format!("ic_registry_canister.pb.v1.{option_blob_field_name}"),
             r#"#[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]"#,
         );
     }
@@ -58,7 +53,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             &[proto_file],
             &[
                 proto.registry_canister,
-                proto.transport,
                 proto.protobuf,
                 proto.nns_common,
                 proto.base_types,

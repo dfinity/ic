@@ -4,9 +4,9 @@ use candid::Encode;
 use ic_cdk::{
     api::{msg_reject, msg_reply},
     management_canister::{
-        sign_with_ecdsa, sign_with_schnorr, vetkd_derive_key, SignWithEcdsaArgs,
-        SignWithEcdsaResult, SignWithSchnorrArgs, SignWithSchnorrResult, VetKDDeriveKeyArgs,
-        VetKDDeriveKeyResult,
+        SignWithEcdsaArgs, SignWithEcdsaResult, SignWithSchnorrArgs, SignWithSchnorrResult,
+        VetKDDeriveKeyArgs, VetKDDeriveKeyResult, sign_with_ecdsa, sign_with_schnorr,
+        vetkd_derive_key,
     },
     update,
 };

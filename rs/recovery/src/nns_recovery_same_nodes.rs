@@ -1,11 +1,11 @@
 use crate::{
+    CUPS_DIR, RecoveryArgs, RecoveryResult,
     cli::{print_height_info, read_optional, read_optional_data_location, read_optional_version},
     error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     util::{DataLocation, SshUser},
-    RecoveryArgs, RecoveryResult, CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;

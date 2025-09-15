@@ -3,8 +3,8 @@ use candid::{CandidType, Nat};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use futures::join;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::{i2d, E8, UNITS_PER_PERMYRIAD};
-use ic_nervous_system_initial_supply::{initial_supply_e8s, InitialSupplyOptions};
+use ic_nervous_system_common::{E8, UNITS_PER_PERMYRIAD, i2d};
+use ic_nervous_system_initial_supply::{InitialSupplyOptions, initial_supply_e8s};
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID};
 use ic_sns_swap_proto_library::pb::v1::{GetDerivedStateRequest, GetDerivedStateResponse};
@@ -164,20 +164,19 @@ async fn try_get_balance_valuation_factors(
 
     // Unwrap/forward errors to the caller.
     let balance_of_response = balance_of_response.map_err(|err| {
-        ValuationError::new_external(format!("Unable to obtain balance from ledger: {:?}", err))
+        ValuationError::new_external(format!("Unable to obtain balance from ledger: {err:?}"))
     })?;
     let icps_per_token_response = icps_per_token_response.map_err(|err| {
-        ValuationError::new_external(format!("Unable to determine ICPs per token: {:?}", err))
+        ValuationError::new_external(format!("Unable to determine ICPs per token: {err:?}"))
     })?;
     let xdrs_per_icp_response = xdrs_per_icp_response.map_err(|err| {
-        ValuationError::new_external(format!("Unable to obtain XDR per ICP: {:?}", err))
+        ValuationError::new_external(format!("Unable to obtain XDR per ICP: {err:?}"))
     })?;
 
     // Extract and interpret the data we actually care about from the (Ok) responses.
     let tokens = Decimal::from(u128::try_from(balance_of_response.0).map_err(|err| {
         ValuationError::new_arithmetic(format!(
-            "Balance of {:?} does not fit in u128: {:?}",
-            account, err
+            "Balance of {account:?} does not fit in u128: {err:?}"
         ))
     })?) / Decimal::from(E8);
     let icps_per_token = icps_per_token_response;
@@ -337,20 +336,17 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
         // Unwrap (intermediate) results.
         let get_derived_state_response = get_derived_state_result.map_err(|err| {
             ValuationError::new_external(format!(
-                "Unable to obtain SNS token price at the time of the SNS initialization swap: {:?}",
-                err,
+                "Unable to obtain SNS token price at the time of the SNS initialization swap: {err:?}",
             ))
         })?;
         let initial_supply_e8s = initial_supply_e8s_result.map_err(|err| {
             ValuationError::new_external(format!(
-                "Unable to determine the initial supply of SNS tokens: {:?}",
-                err,
+                "Unable to determine the initial supply of SNS tokens: {err:?}",
             ))
         })?;
         let (current_supply_e8s,) = current_supply_result.map_err(|err| {
             ValuationError::new_external(format!(
-                "Unable to obtain the current supply of SNS tokens: {:?}",
-                err,
+                "Unable to obtain the current supply of SNS tokens: {err:?}",
             ))
         })?;
 
@@ -373,9 +369,8 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
         let initial_sns_tokens_per_icp = Decimal::from_f64_retain(initial_sns_tokens_per_icp)
             .ok_or_else(|| {
                 ValuationError::new_arithmetic(format!(
-                    "Unable to convert sns_tokens_per_icp {} (double precision \
+                    "Unable to convert sns_tokens_per_icp {initial_sns_tokens_per_icp} (double precision \
                      floating point) to Decimal.",
-                    initial_sns_tokens_per_icp,
                 ))
             })?;
 
@@ -384,8 +379,7 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
         let current_supply_e8s =
             Decimal::from(current_supply_e8s.0.to_u128().ok_or_else(|| {
                 ValuationError::new_arithmetic(format!(
-                    "Unable to convert current_supply_e8s ({}) from Nat to Decimal.",
-                    current_supply_e8s,
+                    "Unable to convert current_supply_e8s ({current_supply_e8s}) from Nat to Decimal.",
                 ))
             })?);
 
@@ -396,8 +390,7 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
             .checked_div(initial_sns_tokens_per_icp)
             .ok_or_else(|| {
             ValuationError::new_arithmetic(format!(
-                "Unable to perform 1 / sns_tokens_per_icp (where sns_tokens_per_icp = {}).",
-                initial_sns_tokens_per_icp,
+                "Unable to perform 1 / sns_tokens_per_icp (where sns_tokens_per_icp = {initial_sns_tokens_per_icp}).",
             ))
         })?;
 
@@ -406,8 +399,7 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
             .ok_or_else(|| {
                 ValuationError::new_arithmetic(format!(
                     "Unable to perform current_supply / initial_supply \
-                     (where current_supply_e8s = {} and initial_supply_e8s = {})",
-                    current_supply_e8s, initial_supply_e8s,
+                     (where current_supply_e8s = {current_supply_e8s} and initial_supply_e8s = {initial_supply_e8s})",
                 ))
             })?;
 
@@ -417,8 +409,7 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
             .ok_or_else(|| {
                 ValuationError::new_arithmetic(format!(
                     "Unable to perform initial_icps_per_sns_token / total_inflation \
-                     (where initial_icps_per_sns_token = {} and total_inflation = {})",
-                    initial_icps_per_sns_token, total_inflation,
+                     (where initial_icps_per_sns_token = {initial_icps_per_sns_token} and total_inflation = {total_inflation})",
                 ))
             })
     }
@@ -453,8 +444,7 @@ fn new_standard_xdrs_per_icp_client<MyRuntime: Runtime + Send + Sync>() -> impl 
                 .map_err(|err| {
                     ValuationError::new_external(format!(
                         "Unable to determine XDRs per ICP, because the cycles minting canister \
-                         did not reply to a get_average_icp_xdr_conversion_rate call: {:?}",
-                        err,
+                         did not reply to a get_average_icp_xdr_conversion_rate call: {err:?}",
                     ))
                 })?;
 

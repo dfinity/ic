@@ -112,8 +112,7 @@ fn is_canon(msg: &str, inputs: &Floats) -> Result<(), String> {
             let target = CANON_32BIT_NAN;
             if bits != target {
                 return Err(format!(
-                    "In {} f32 element {} \nExpected: \t0x{:x}\nFound: \t0x{:x}",
-                    msg, i, target, bits
+                    "In {msg} f32 element {i} \nExpected: \t0x{target:x}\nFound: \t0x{bits:x}"
                 ));
             }
         }
@@ -122,8 +121,7 @@ fn is_canon(msg: &str, inputs: &Floats) -> Result<(), String> {
             let target = CANON_64BIT_NAN;
             if bits != target {
                 return Err(format!(
-                    "In {} f64 element {} \nExpected: \t0x{:x}\nFound: \t0x{:x}",
-                    msg, i, target, bits
+                    "In {msg} f64 element {i} \nExpected: \t0x{target:x}\nFound: \t0x{bits:x}"
                 ));
             }
         }

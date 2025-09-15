@@ -1,6 +1,6 @@
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero},
 };
 use prometheus::{Histogram, HistogramVec};
 use std::time::Instant;

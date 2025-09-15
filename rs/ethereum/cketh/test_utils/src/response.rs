@@ -4,7 +4,7 @@ use crate::{
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::str::FromStr;
 
 pub fn empty_logs() -> Vec<ethers_core::types::Log> {
@@ -32,7 +32,7 @@ pub fn send_raw_transaction_response() -> ethers_core::types::TxHash {
 }
 
 pub fn block_response(block_number: u64) -> ethers_core::types::Block<ethers_core::types::TxHash> {
-    use ethers_core::types::{H256, H64};
+    use ethers_core::types::{H64, H256};
 
     let mut hash = [0_u8; 32];
     hex::decode_to_slice(&DEFAULT_BLOCK_HASH[2..], &mut hash).unwrap();
@@ -82,7 +82,7 @@ pub fn transaction_receipt(transaction_hash: String) -> ethers_core::types::Tran
 }
 
 pub fn transaction_count_response(count: u32) -> String {
-    format!("{:#x}", count)
+    format!("{count:#x}")
 }
 
 pub fn fee_history() -> ethers_core::types::FeeHistory {
@@ -209,7 +209,7 @@ pub fn decode_transaction(
     ))
     .map(|(tx, sig)| match tx {
         TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {:?}", tx),
+        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
     })
     .expect("BUG: failed to deserialize sent ETH transaction")
 }

@@ -245,12 +245,11 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         // Because 0 through 14 accounts for the first 15 canister +
         // 1 for exchange rate canister.
         18,
-        "{:#?}",
-        id_to_name
+        "{id_to_name:#?}"
     );
 
     id_to_name
         .get(&canister_id)
         .map(|name| name.to_string())
-        .unwrap_or_else(|| format!("{}", canister_id))
+        .unwrap_or_else(|| format!("{canister_id}"))
 }

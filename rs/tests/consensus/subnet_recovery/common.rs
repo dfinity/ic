@@ -51,13 +51,13 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
+    NodeMetrics, Recovery, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
     util::DataLocation,
-    NodeMetrics, Recovery, RecoveryArgs,
 };
 use ic_recovery::{file_sync_helper, get_node_metrics};
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
@@ -67,10 +67,10 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env_api::scp_send_to;
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{consensus::CatchUpPackage, Height, ReplicaVersion, SubnetId};
+use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{collections::BTreeMap, convert::TryFrom};
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
@@ -305,10 +305,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     if cfg.local_recovery {
-        std::env::set_var(
-            "IC_ADMIN_BIN",
-            get_dependency_path_from_env("IC_ADMIN_PATH"),
-        );
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe {
+            std::env::set_var(
+                "IC_ADMIN_BIN",
+                get_dependency_path_from_env("IC_ADMIN_PATH"),
+            )
+        };
     }
 
     let initial_version = get_guestos_img_version();
@@ -437,10 +440,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
 
-    let upload_node = if let Some(node) = unassigned_nodes.next() {
-        node
-    } else {
-        app_nodes.next().unwrap()
+    let upload_node = match unassigned_nodes.next() {
+        Some(node) => node,
+        _ => app_nodes.next().unwrap(),
     };
 
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
@@ -610,7 +612,7 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
     }
 }
 
@@ -782,10 +784,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         let session = node.block_on_ssh_session().unwrap();
         execute_bash_command(
             &session,
-            format!(
-                "sudo touch {}; sudo chmod a+rw {}",
-                NEW_CUP_PATH, NEW_CUP_PATH
-            ),
+            format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
         )
         .expect("touch");
         let mut channel = session
@@ -796,10 +795,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         info!(logger, "Restarting node {:?}", node.get_ip_addr());
         execute_bash_command(
             &session,
-            format!(
-                "sudo mv {} {}; sudo systemctl restart ic-replica",
-                NEW_CUP_PATH, CUP_PATH
-            ),
+            format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
         )
         .expect("restart");
     }
@@ -846,8 +842,7 @@ fn assert_subnet_is_broken(
         info!(logger, "Ensure the subnet works in read mode");
         assert!(
             can_read_msg(logger, node_url, can_id, msg),
-            "Failed to read message on node: {}",
-            node_url
+            "Failed to read message on node: {node_url}"
         );
     }
     info!(
@@ -856,8 +851,7 @@ fn assert_subnet_is_broken(
     );
     assert!(
         cannot_store_msg(logger.clone(), node_url, can_id, msg),
-        "Writing messages still successful on: {}",
-        node_url
+        "Writing messages still successful on: {node_url}"
     );
 }
 

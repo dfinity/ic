@@ -9,9 +9,9 @@ use anyhow::{Context, Error};
 use clap::Parser;
 use tempfile::NamedTempFile;
 
-use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
+use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
 use setupos_image_config::{
-    update_deployment, write_config, write_public_keys, ConfigIni, DeploymentConfig,
+    ConfigIni, DeploymentConfig, update_deployment, write_config, write_public_keys,
 };
 
 #[derive(Parser)]

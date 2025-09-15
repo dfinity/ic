@@ -9,8 +9,8 @@ use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self as tla, account_to_tla, opt_subaccount_to_tla, Destination, ToTla,
-    TLA_INSTRUMENTATION_STATE,
+    self as tla, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla,
+    opt_subaccount_to_tla,
 };
 
 #[cfg(feature = "tla")]

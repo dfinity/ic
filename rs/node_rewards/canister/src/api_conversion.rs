@@ -1,10 +1,10 @@
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    node_status::Status as StatusCandid, Assigned as AssignedCandid,
-    BaseRewards as BaseRewardsCandid, DailyBaseRewardsType3 as DailyBaseRewardsType3Candid,
-    DailyResults as DailyResultsCandid, DayUtc as DayUtcCandid,
-    NodeMetricsDaily as NodeMetricsDailyCandid, NodeProviderRewards as NodeProviderRewardsCandid,
-    NodeResults as NodeResultsCandid, NodeStatus as NodeStatusCandid,
-    Unassigned as UnassignedCandid,
+    Assigned as AssignedCandid, BaseRewards as BaseRewardsCandid,
+    DailyBaseRewardsType3 as DailyBaseRewardsType3Candid, DailyResults as DailyResultsCandid,
+    DayUtc as DayUtcCandid, NodeMetricsDaily as NodeMetricsDailyCandid,
+    NodeProviderRewards as NodeProviderRewardsCandid, NodeResults as NodeResultsCandid,
+    NodeStatus as NodeStatusCandid, Unassigned as UnassignedCandid,
+    node_status::Status as StatusCandid,
 };
 use rewards_calculation::rewards_calculator_results::{NodeProviderRewards, NodeStatus};
 

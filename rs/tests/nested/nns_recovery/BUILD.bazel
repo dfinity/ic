@@ -31,12 +31,31 @@ rust_library(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
-        "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:futures",
         "@crate_index//:rand",
         "@crate_index//:sha2",
         "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "nr_large",
+    enable_head_nns_variant = False,
+    env = ENV,
+    flaky = True,
+    tags = ["system_test_large"],
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+    ],
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
     ],
 )
 

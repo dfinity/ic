@@ -59,11 +59,11 @@ mod ensure_sufficient_openings {
 
 mod ensure_matching_transcript_ids_and_dealer_ids {
     use super::*;
-    use crate::sign::canister_threshold_sig::idkg::transcript::ensure_matching_transcript_ids_and_dealer_ids;
-    use crate::sign::canister_threshold_sig::idkg::transcript::IDkgTranscript;
-    use crate::sign::canister_threshold_sig::idkg::transcript::IDkgTranscriptType;
     use crate::sign::canister_threshold_sig::idkg::IDkgComplaint;
     use crate::sign::canister_threshold_sig::idkg::IDkgOpening;
+    use crate::sign::canister_threshold_sig::idkg::transcript::IDkgTranscript;
+    use crate::sign::canister_threshold_sig::idkg::transcript::IDkgTranscriptType;
+    use crate::sign::canister_threshold_sig::idkg::transcript::ensure_matching_transcript_ids_and_dealer_ids;
     use crate::sign::canister_threshold_sig::test_utils::batch_signed_dealing_with;
     use crate::sign::canister_threshold_sig::test_utils::node_set;
     use crate::sign::tests::REG_V1;
@@ -182,8 +182,8 @@ mod ensure_matching_transcript_ids_and_dealer_ids {
     }
 
     #[test]
-    fn should_return_error_for_two_complaints_each_with_two_openings_but_one_has_wrong_transcript_id(
-    ) {
+    fn should_return_error_for_two_complaints_each_with_two_openings_but_one_has_wrong_transcript_id()
+     {
         let setup = Setup::builder(DEALER_ID, DEALER_INDEX, TRANSCRIPT_ID)
             .with_complaint_transcript_id_and_opening_ids(
                 TRANSCRIPT_ID,

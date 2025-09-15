@@ -1,7 +1,7 @@
 use crate::universal_canister::UniversalCanister;
 use crate::{
-    assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
-    LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL,
+    LedgerAccount, LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL, assert_reply,
+    ledger_wasm, out_of_band_upgrade, stop_canister,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -25,16 +25,14 @@ pub struct AddErc20TokenFlow {
 impl AddErc20TokenFlow {
     pub fn expect_new_ledger_and_index_canisters(self) -> ManagedCanistersAssert {
         let contract = self.params.contract;
-        let canister_ids =
-            self.setup.wait_for(
-                || match self.setup.call_orchestrator_canister_ids(&contract) {
-                    Some(ids) if ids.ledger.is_some() && ids.index.is_some() => Ok(ids),
-                    incomplete_ids => Err(format!(
-                        "Not all canister IDs are available for ERC-20 {:?}: {:?}",
-                        contract, incomplete_ids
-                    )),
-                },
-            );
+        let canister_ids = self.setup.wait_for(|| {
+            match self.setup.call_orchestrator_canister_ids(&contract) {
+                Some(ids) if ids.ledger.is_some() && ids.index.is_some() => Ok(ids),
+                incomplete_ids => Err(format!(
+                    "Not all canister IDs are available for ERC-20 {contract:?}: {incomplete_ids:?}"
+                )),
+            }
+        });
         assert_ne!(
             canister_ids.ledger, canister_ids.index,
             "BUG: ledger and index canister IDs MUST be different"
@@ -154,8 +152,7 @@ impl ManagedCanistersAssert {
         let canister_info = caller.canister_info(self.ledger_canister_id());
         assert!(
             predicate(&canister_info),
-            "BUG: ledger canister info does not satisfy predicate. Canister info: {:?}",
-            canister_info
+            "BUG: ledger canister info does not satisfy predicate. Canister info: {canister_info:?}"
         );
         self
     }
@@ -168,8 +165,7 @@ impl ManagedCanistersAssert {
         let canister_info = caller.canister_info(self.index_canister_id());
         assert!(
             predicate(&canister_info),
-            "BUG: index canister info does not satisfy predicate. Canister info: {:?}",
-            canister_info
+            "BUG: index canister info does not satisfy predicate. Canister info: {canister_info:?}"
         );
         self
     }
@@ -187,8 +183,7 @@ impl ManagedCanistersAssert {
             let canister_info = caller.canister_info(archive);
             assert!(
                 predicate(&canister_info),
-                "BUG: archive canister info does not satisfy predicate. Canister info: {:?}",
-                canister_info
+                "BUG: archive canister info does not satisfy predicate. Canister info: {canister_info:?}"
             );
         }
         self
@@ -429,7 +424,7 @@ impl CanisterHttpQuery<UserError> for ManagedCanistersAssert {
 }
 
 macro_rules! assert_ledger {
-    ($name:expr, $ty:ty) => {
+    ($name:expr_2021, $ty:ty) => {
         paste::paste! {
             pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_base_types::CanisterId) -> $ty {
                 candid::Decode!(

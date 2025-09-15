@@ -5,10 +5,10 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
-    FIREWALL_FILE_DEFAULT_PATH,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig, FIREWALL_FILE_DEFAULT_PATH,
+    ReplicaConfig as ReplicaFirewallConfig,
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
@@ -132,16 +132,14 @@ impl Firewall {
             (Err(err), Ok(None)) => Err(OrchestratorError::RoleError(
                 format!(
                     "The node is not assigned to any subnet \
-                    but we failed to retrieve the `boundary_node_record` from the registry: {}",
-                    err
+                    but we failed to retrieve the `boundary_node_record` from the registry: {err}"
                 ),
                 registry_version,
             )),
             (Err(err_1), Err(err_2)) => Err(OrchestratorError::RoleError(
                 format!(
                     "Failed to retrieve both the `boundary_node_record` \
-                    and the `subnet_id` from the registry: \n{}\n{}",
-                    err_1, err_2
+                    and the `subnet_id` from the registry: \n{err_1}\n{err_2}"
                 ),
                 registry_version,
             )),
@@ -726,7 +724,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{
-        add_single_subnet_record, add_subnet_list_record, SubnetRecordBuilder,
+        SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
@@ -933,7 +931,7 @@ mod tests {
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
         let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
-        let file_name = format!("nftables_{}.conf", label);
+        let file_name = format!("nftables_{label}.conf");
         if nftables != golden {
             maybe_write_golden(nftables, &file_name);
             panic!(

@@ -4,7 +4,7 @@
 use criterion::{BatchSize, Criterion};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
-    Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
+    CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
@@ -12,8 +12,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
-    as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
-    IngressHistoryWriterImpl, RoundLimits,
+    CompilationCostHandling, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
+    RoundLimits, as_round_instructions,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
@@ -31,10 +31,10 @@ use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, NO_DEADLINE},
+    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+    messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
-    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;

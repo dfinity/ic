@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use config_types::*;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};

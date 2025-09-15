@@ -2,16 +2,16 @@ use ic_crypto_prng::RandomnessPurpose::{
     BlockmakerRanking, CommitteeSampling, DkgCommitteeSampling, ExecutionThread,
 };
 use ic_crypto_prng::{Csprng, RandomnessPurpose};
+use ic_types::Randomness;
 use ic_types::consensus::RandomBeacon;
 use ic_types::consensus::RandomBeaconContent;
 use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
 };
 use ic_types::signature::ThresholdSignature;
-use ic_types::Randomness;
 use ic_types::{
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     Height, ReplicaVersion,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use rand::RngCore;
@@ -69,7 +69,7 @@ fn should_offer_methods_of_rng_trait() {
 
     let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
 
-    assert_eq!(rng.gen::<u32>(), 196_996_056);
+    assert_eq!(rng.r#gen::<u32>(), 196_996_056);
 }
 
 #[test]
