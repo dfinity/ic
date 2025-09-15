@@ -576,8 +576,9 @@ pub enum IcpFeaturesConfig {
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
-/// The subnets to which the corresponding system canisters are deployed
-/// must be empty.
+/// The subnets to which the corresponding system canisters are deployed must be empty.
+/// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
+/// if the corresponding field is not `None`.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
     /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
