@@ -168,7 +168,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.download_pool_node.is_none() {
                     self.params.download_pool_node = read_optional(
                         &self.logger,
-                        "Enter IP to download the most up-to-date consensus pool from (backup access required):",
+                        "Enter IP to download the consensus pool from (backup access required):",
                     );
                 }
             }
