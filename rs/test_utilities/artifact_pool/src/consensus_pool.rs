@@ -162,7 +162,7 @@ fn dkg_payload_builder_fn(
             no_op_logger(),
             10, // at most dealings per block
         )
-        .unwrap_or_else(|err| panic!("Couldn't create the payload: {:?}", err))
+        .unwrap_or_else(|err| panic!("Couldn't create the payload: {err:?}"))
     })
 }
 
@@ -248,10 +248,11 @@ impl TestConsensusPool {
     }
 
     pub fn make_next_block_with_rank(&self, rank: Rank) -> BlockProposal {
-        if let Some(parent) = self.latest_notarized_blocks().next() {
-            self.make_next_block_from_parent(&parent, rank)
-        } else {
-            panic!("Pool contains a valid notarization on a block that is not in the pool");
+        match self.latest_notarized_blocks().next() {
+            Some(parent) => self.make_next_block_from_parent(&parent, rank),
+            _ => {
+                panic!("Pool contains a valid notarization on a block that is not in the pool");
+            }
         }
     }
 
@@ -325,7 +326,7 @@ impl TestConsensusPool {
             .finalization()
             .get_by_height(height)
             .next()
-            .unwrap_or_else(|| panic!("Finalization does not exist at height {}", height));
+            .unwrap_or_else(|| panic!("Finalization does not exist at height {height}"));
         let catchup_height = self
             .pool
             .validated()
@@ -341,7 +342,7 @@ impl TestConsensusPool {
             .get_by_height(height)
             .find(|proposal| proposal.content.get_hash() == &finalization.content.block)
             .map(|proposal| proposal.into())
-            .unwrap_or_else(|| panic!("Finalized block not found at height {}", height));
+            .unwrap_or_else(|| panic!("Finalized block not found at height {height}"));
         if !block.payload.as_ref().is_summary() {
             panic!("Attempt to make catch up package from block that is not a dkg summary");
         }

@@ -1,12 +1,12 @@
 use crate::errors::ApiError;
-use crate::request::request_result::{convert_to_request_result_metadata, RequestResult};
-use crate::request::transaction_results::TransactionResults;
 use crate::request::Request;
+use crate::request::request_result::{RequestResult, convert_to_request_result_metadata};
+use crate::request::transaction_results::TransactionResults;
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 
-use crate::models::operation::OperationType;
 use crate::models::Operation;
+use crate::models::operation::OperationType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
@@ -19,8 +19,7 @@ impl TryFrom<Option<ObjectMap>> for TransactionOperationResults {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse TransactionOperationResults metadata from metadata JSON object: {}",
-                e
+                "Could not parse TransactionOperationResults metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -40,8 +39,7 @@ impl TransactionOperationResults {
     pub fn parse(json: ObjectMap) -> Result<Self, ApiError> {
         serde_json::from_value(serde_json::Value::Object(json)).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse TransactionOperationResults from Object: {}",
-                e
+                "Could not parse TransactionOperationResults from Object: {e}"
             ))
         })
     }
@@ -109,7 +107,7 @@ impl TransactionOperationResults {
                         "Too few Operations, could not match requests with operations.\n{}\n\n{}",
                         serde_json::to_string(&tr.operations).unwrap(),
                         serde_json::to_string(&operations).unwrap()
-                    )))
+                    )));
                 }
             };
         }

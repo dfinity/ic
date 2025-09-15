@@ -9,12 +9,12 @@
 //! bazel run //rs/execution_environment:execute_update_bench
 //! ```
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
-    ExecutionResponse, RoundLimits,
+    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundLimits,
+    as_num_instructions, as_round_instructions,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{

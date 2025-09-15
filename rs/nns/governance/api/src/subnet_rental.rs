@@ -26,7 +26,7 @@ impl FromStr for RentalConditionId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "App13CH" => Ok(Self::App13CH),
-            other => Err(format!("Unknown rental condition ID {}", other)),
+            other => Err(format!("Unknown rental condition ID {other}")),
         }
     }
 }

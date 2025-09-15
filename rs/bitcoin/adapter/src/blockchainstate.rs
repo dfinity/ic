@@ -4,8 +4,8 @@ use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     metrics::BlockchainStateMetrics,
 };
-use bitcoin::{block::Header, consensus::Encodable, BlockHash, Work};
-use ic_btc_validation::HeaderStore;
+use bitcoin::{BlockHash, Work, block::Header, consensus::Encodable, };
+use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -67,7 +67,7 @@ enum AddHeaderResult {
     HeaderAlreadyExists,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, PartialEq, Error)]
 pub enum AddHeaderError<Network: BlockchainNetwork> {
     /// This variant is used when the input header is invalid
     /// (eg: not of the right format)
@@ -381,7 +381,7 @@ impl<Network: BlockchainNetwork> HeaderStore for BlockchainState<Network> {
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{consensus::Decodable, Block, Network, TxMerkleNode};
+    use bitcoin::{Block, Network, TxMerkleNode, consensus::Decodable};
     use ic_btc_validation::ValidateHeaderError;
     use ic_metrics::MetricsRegistry;
 
@@ -497,8 +497,7 @@ mod test {
         let (_, maybe_err) = state.add_headers(&chain);
         assert!(
             maybe_err.is_none(),
-            "unsuccessfully added first chain: {:?}",
-            maybe_err
+            "unsuccessfully added first chain: {maybe_err:?}"
         );
 
         // Create a fork chain forking from chain_hashes[10] and adding to the BlockchainState.
@@ -512,8 +511,7 @@ mod test {
         let (_, maybe_err) = state.add_headers(&fork_chain);
         assert!(
             maybe_err.is_none(),
-            "unsuccessfully added fork chain: {:?}",
-            maybe_err
+            "unsuccessfully added fork chain: {maybe_err:?}"
         );
 
         assert_eq!(state.tips.len(), 2);

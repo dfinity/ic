@@ -19,7 +19,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{IcRpcClientType, ADDRESS_LENGTH};
+use crate::{ADDRESS_LENGTH, IcRpcClientType};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
@@ -44,7 +44,7 @@ use icrc_ledger_types::{
     icrc1::transfer::BlockIndex,
     icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::time::{Duration, Instant};
 
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
@@ -85,8 +85,7 @@ pub fn generate_blocks<T: RpcClientType>(
     assert_eq!(
         generated_blocks.len() as u64,
         nb_blocks,
-        "Expected {} blocks.",
-        nb_blocks
+        "Expected {nb_blocks} blocks."
     );
 }
 
@@ -208,7 +207,7 @@ pub async fn wait_for_signed_tx(
                 info!(&logger, "[retrieve_btc_status] : Tx building (1/3)")
             }
             RetrieveBtcStatus::AmountTooLow => {
-                panic!("The minter rejected retrieve request {}", block_index);
+                panic!("The minter rejected retrieve request {block_index}");
             }
             RetrieveBtcStatus::Signing => {
                 info!(&logger, "[retrieve_btc_status] : Tx signing (2/3)")
@@ -253,10 +252,7 @@ pub async fn wait_for_finalization<T: RpcClientType>(
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
-            panic!(
-                "Retrieve btc request {} did not finalize in {:?}",
-                block_index, LONG_TIMEOUT
-            );
+            panic!("Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}");
         };
         self_check(ckbtc_minter_agent)
             .await
@@ -274,7 +270,7 @@ pub async fn wait_for_finalization<T: RpcClientType>(
                 return txid;
             }
             RetrieveBtcStatus::AmountTooLow => {
-                panic!("The minter rejected retrieve request {}", block_index);
+                panic!("The minter rejected retrieve request {block_index}");
             }
             status => {
                 info!(
@@ -298,10 +294,7 @@ pub async fn wait_for_finalization_no_new_blocks(
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
-            panic!(
-                "Retrieve btc request {} did not finalize in {:?}",
-                block_index, LONG_TIMEOUT
-            );
+            panic!("Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}");
         };
         self_check(ckbtc_minter_agent)
             .await
@@ -315,7 +308,7 @@ pub async fn wait_for_finalization_no_new_blocks(
                 return txid;
             }
             RetrieveBtcStatus::AmountTooLow => {
-                panic!("The minter rejected retrieve request {}", block_index);
+                panic!("The minter rejected retrieve request {block_index}");
             }
             _ => {}
         }
@@ -410,7 +403,7 @@ pub async fn send_to_btc_address<T: RpcClientType>(
             debug!(&logger, "txid: {:?}", txid);
         }
         Err(e) => {
-            panic!("bug: could not send btc to btc client : {:?}", e);
+            panic!("bug: could not send btc to btc client : {e:?}");
         }
     }
 }
@@ -503,7 +496,7 @@ pub async fn retrieve_btc(
                         "retrieve_btc endpoint is unavailable ({}), retrying ...", msg
                     );
                 }
-                Err(err) => panic!("[retrieve_btc] unexpected error : {:?}", err),
+                Err(err) => panic!("[retrieve_btc] unexpected error : {err:?}"),
             },
             Err(_) => info!(
                 &logger,
@@ -541,12 +534,11 @@ pub async fn assert_mint_transaction(
         .mint
         .as_ref()
         .expect("Expecting mint transaction");
-    assert_eq!(to, &mint.to, "Expecting mint to account {}", to);
+    assert_eq!(to, &mint.to, "Expecting mint to account {to}");
     assert_eq!(
         Nat::from(amount),
         mint.amount,
-        "Expecting {} satoshis",
-        amount
+        "Expecting {amount} satoshis"
     );
 }
 
@@ -578,12 +570,11 @@ pub async fn assert_burn_transaction(
         .burn
         .as_ref()
         .expect("Expecting burn transaction");
-    assert_eq!(from, &burn.from, "Expecting burn from account {}", from);
+    assert_eq!(from, &burn.from, "Expecting burn from account {from}");
     assert_eq!(
         Nat::from(amount),
         burn.amount,
-        "Expecting {} satoshis",
-        amount
+        "Expecting {amount} satoshis"
     );
 }
 
@@ -601,8 +592,7 @@ pub async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
     assert_eq!(
         Nat::from(0_u8),
         res.log_length,
-        "Ledger expected to not have transactions, got {:?}",
-        res
+        "Ledger expected to not have transactions, got {res:?}"
     )
 }
 

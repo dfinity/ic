@@ -30,7 +30,7 @@ pub trait Dashboard {
         let listener = match TcpListener::bind(addr).await {
             Ok(listener) => listener,
             Err(e) => {
-                self.log_info(&format!("Failed to bind to socket {}: {}", addr, e));
+                self.log_info(&format!("Failed to bind to socket {addr}: {e}"));
                 return;
             }
         };
@@ -47,7 +47,7 @@ pub trait Dashboard {
     async fn handle_connection(&self, mut stream: TcpStream) {
         let mut buffer = [0; 512];
         if let Err(e) = stream.read(&mut buffer).await {
-            self.log_info(&format!("Failed to read request: {}", e));
+            self.log_info(&format!("Failed to read request: {e}"));
             return;
         }
 
@@ -56,7 +56,7 @@ pub trait Dashboard {
             true => {
                 let headers = "HTTP/1.1 200 OK\r\n\r\n";
                 let contents = self.build_response();
-                format!("{}{}", headers, contents)
+                format!("{headers}{contents}")
             }
             false => {
                 let request = match buffer.lines().next() {
@@ -75,11 +75,11 @@ pub trait Dashboard {
         stream
             .write_all(response.as_bytes())
             .await
-            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {}", e)));
+            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {e}")));
         stream
             .flush()
             .await
-            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {}", e)));
+            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {e}")));
     }
 
     /// Returns the port reserved by the implementing component.

@@ -3,9 +3,8 @@ use candid::CandidType;
 use futures::future::join_all;
 use ic_cdk::api::call::CallResult;
 use ic_cdk::api::management_canister::main::{
-    canister_status, create_canister, install_code, CanisterId, CanisterIdRecord,
-    CanisterInstallMode, CanisterSettings, CanisterStatusType, CreateCanisterArgument,
-    InstallCodeArgument,
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CanisterStatusType,
+    CreateCanisterArgument, InstallCodeArgument, canister_status, create_canister, install_code,
 };
 use ic_cdk::update;
 use serde::{Deserialize, Serialize};

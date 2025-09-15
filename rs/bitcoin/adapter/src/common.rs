@@ -1,6 +1,6 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
-use bitcoin::{block::Header as PureHeader, BlockHash, Work};
+use bitcoin::{BlockHash, Work, block::Header as PureHeader};
 use ic_btc_validation::doge::DogecoinHeaderValidator;
 use ic_btc_validation::{
     AuxPowHeaderValidator, HeaderStore, ValidateAuxPowHeaderError, ValidateHeaderError,
@@ -360,7 +360,7 @@ pub mod test_common {
         net::SocketAddr,
     };
 
-    use bitcoin::{consensus::deserialize, Block};
+    use bitcoin::{Block, consensus::deserialize};
     use hex::FromHex;
 
     use crate::{Channel, ChannelError, Command};

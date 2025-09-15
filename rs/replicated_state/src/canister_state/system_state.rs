@@ -3,11 +3,11 @@ pub mod proto;
 mod task_queue;
 pub mod wasm_chunk_store;
 
-pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueue};
+pub use self::task_queue::{TaskQueue, is_low_wasm_memory_hook_condition_satisfied};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
-use super::queues::{can_push, CanisterInput};
-pub use super::queues::{memory_usage_of_request, CanisterOutputQueuesIterator};
+use super::queues::{CanisterInput, can_push};
+pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
@@ -19,7 +19,7 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
     LogVisibilityV2,
@@ -28,8 +28,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-    StopCanisterContext, NO_DEADLINE,
+    Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
+    Response, StopCanisterContext,
 };
 use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
@@ -1155,10 +1155,7 @@ impl SystemState {
             // Return the stop context, nothing to do here.
             CanisterStatus::Stopped => Some(stop_context),
 
-            CanisterStatus::Stopping {
-                ref mut stop_contexts,
-                ..
-            } => {
+            CanisterStatus::Stopping { stop_contexts, .. } => {
                 // Add the message so we can respond to it once the canister has fully stopped.
                 stop_contexts.push(stop_context);
                 None
@@ -1331,7 +1328,7 @@ impl SystemState {
     pub fn collect_controllers_as_string(&self) -> String {
         self.controllers
             .iter()
-            .map(|id| format!("{}", id))
+            .map(|id| format!("{id}"))
             .collect::<Vec<String>>()
             .join(" ")
     }
@@ -1389,7 +1386,7 @@ impl SystemState {
 
                     // This should not happen. Bail out and let Message Routing deal with it.
                     Err(e) => {
-                        debug_assert!(false, "Failed to induct message to self: {:?}", e);
+                        debug_assert!(false, "Failed to induct message to self: {e:?}");
                         return;
                     }
                 }
@@ -1891,20 +1888,30 @@ pub(crate) fn should_enqueue_input(
     };
 
     match callback {
-        Some(callback) if response.respondent != callback.respondent
+        Some(callback)
+            if response.respondent != callback.respondent
                 || response.originator != callback.originator
-                || response.deadline != callback.deadline => {
-            Err(StateError::non_matching_response(format!(
+                || response.deadline != callback.deadline =>
+        {
+            Err(StateError::non_matching_response(
+                format!(
                     "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
-                    callback.originator, callback.respondent, Time::from(callback.deadline)
-                ), response))
+                    callback.originator,
+                    callback.respondent,
+                    Time::from(callback.deadline)
+                ),
+                response,
+            ))
         }
         Some(_) => Ok(true),
         None => {
             // Received an unknown callback ID.
             if response.deadline == NO_DEADLINE {
                 // This is an error for a guaranteed response.
-                Err(StateError::non_matching_response("unknown callback ID", response))
+                Err(StateError::non_matching_response(
+                    "unknown callback ID",
+                    response,
+                ))
             } else {
                 // But should be ignored in the case of a best-effort response (as the callback
                 // may have expired and been dropped in the meantime).

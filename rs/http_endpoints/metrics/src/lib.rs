@@ -16,8 +16,8 @@ use std::string::String;
 use std::time::Duration;
 use thiserror::Error;
 use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
-    timeout::error::Elapsed, BoxError, ServiceBuilder,
+    BoxError, ServiceBuilder, limit::concurrency::GlobalConcurrencyLimitLayer,
+    load_shed::error::Overloaded, timeout::error::Elapsed,
 };
 
 const LOG_INTERVAL_SECS: u64 = 30;
@@ -249,7 +249,7 @@ async fn map_box_error_to_response(err: BoxError) -> (StatusCode, String) {
     } else {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Unexpected error: {}", err),
+            format!("Unexpected error: {err}"),
         )
     }
 }

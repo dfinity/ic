@@ -2,7 +2,7 @@ use crate::utils::canister_id_range_to_string;
 
 use ic_base_types::SubnetId;
 use ic_recovery::admin_helper::{
-    quote, AdminHelper, CommandHelper, IcAdmin, SSH_READONLY_ACCESS_ARG, SUMMARY_ARG,
+    AdminHelper, CommandHelper, IcAdmin, SSH_READONLY_ACCESS_ARG, SUMMARY_ARG, quote,
 };
 use ic_registry_routing_table::CanisterIdRange;
 
@@ -106,8 +106,7 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
         .add_argument(
             SUMMARY_ARG,
             quote(format!(
-                "Halt subnet {} at cup height and optionally update ssh readonly access",
-                subnet_id,
+                "Halt subnet {subnet_id} at cup height and optionally update ssh readonly access",
             )),
         )
         .add_argument("halt-at-cup-height", true);
@@ -149,7 +148,8 @@ mod tests {
         )
         .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
@@ -158,7 +158,7 @@ mod tests {
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height and optionally update ssh readonly access\" \
             --halt-at-cup-height true \
             --ssh-readonly-access \"fake ssh key\""
-            );
+        );
     }
 
     #[test]

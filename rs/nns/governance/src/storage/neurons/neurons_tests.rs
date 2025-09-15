@@ -95,7 +95,7 @@ fn new_red_herring_neuron(seed: u64) -> Neuron {
     });
 
     let mut new_known_neuron_data = result.known_neuron_data().unwrap().clone();
-    new_known_neuron_data.name = format!("Red Herring {}", seed);
+    new_known_neuron_data.name = format!("Red Herring {seed}");
     result.set_known_neuron_data(new_known_neuron_data);
 
     result.transfer.as_mut().unwrap().memo = seed;
@@ -177,15 +177,11 @@ fn test_store_simplest_nontrivial_case() {
                 assert_eq!(*neuron_id, NeuronId { id: 42 });
             }
             _ => panic!(
-                "create(evil_twin_neuron) resulted in an Err other than already exists: {:?}",
-                err
+                "create(evil_twin_neuron) resulted in an Err other than already exists: {err:?}"
             ),
         },
 
-        _ => panic!(
-            "create(evil_twin_neuron) did not result in an Err: {:?}",
-            bad_create_result
-        ),
+        _ => panic!("create(evil_twin_neuron) did not result in an Err: {bad_create_result:?}"),
     }
 
     // 3. Read back the first neuron (the second one should have no effect).
@@ -201,13 +197,10 @@ fn test_store_simplest_nontrivial_case() {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
             }
-            _ => panic!("read returns error other than not found: {:?}", err),
+            _ => panic!("read returns error other than not found: {err:?}"),
         },
 
-        _ => panic!(
-            "read(0xDEAD) did not result in an Err: {:?}",
-            bad_read_result
-        ),
+        _ => panic!("read(0xDEAD) did not result in an Err: {bad_read_result:?}"),
     }
 
     // 5. Update existing neuron.
@@ -271,11 +264,11 @@ fn test_store_simplest_nontrivial_case() {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
             }
-            _ => panic!("update returns Err other than not found {:?}", err),
+            _ => panic!("update returns Err other than not found {err:?}"),
         },
 
         // Any other result is bad.
-        _ => panic!("{:#?}", update_result),
+        _ => panic!("{update_result:#?}"),
     }
     assert_that_red_herring_neurons_are_untouched(&store);
 
@@ -289,11 +282,11 @@ fn test_store_simplest_nontrivial_case() {
                 NeuronStoreError::NeuronNotFound { neuron_id } => {
                     assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
                 }
-                _ => panic!("read returns error other than not found: {:?}", err),
+                _ => panic!("read returns error other than not found: {err:?}"),
             }
         }
 
-        _ => panic!("read did not return Err: {:?}", read_result),
+        _ => panic!("read did not return Err: {read_result:?}"),
     }
 
     // 9. Update again.
@@ -323,11 +316,11 @@ fn test_store_simplest_nontrivial_case() {
                 NeuronStoreError::NeuronNotFound { neuron_id } => {
                     assert_eq!(*neuron_id, NeuronId { id: 42 });
                 }
-                _ => panic!("read returns error other than not found: {:?}", err),
+                _ => panic!("read returns error other than not found: {err:?}"),
             }
         }
 
-        _ => panic!("second delete did not return Err: {:?}", delete_result),
+        _ => panic!("second delete did not return Err: {delete_result:?}"),
     }
     assert_that_red_herring_neurons_are_untouched(&store);
 
@@ -341,11 +334,11 @@ fn test_store_simplest_nontrivial_case() {
                 NeuronStoreError::NeuronNotFound { neuron_id } => {
                     assert_eq!(*neuron_id, NeuronId { id: 42 });
                 }
-                _ => panic!("read returns error other than not found: {:?}", err),
+                _ => panic!("read returns error other than not found: {err:?}"),
             }
         }
 
-        _ => panic!("read did not return Err: {:?}", read_result),
+        _ => panic!("read did not return Err: {read_result:?}"),
     }
     assert_that_red_herring_neurons_are_untouched(&store);
 
@@ -366,10 +359,7 @@ fn test_store_simplest_nontrivial_case() {
             assert_ne!(
                 key_value_to_neuron_id(key, value.clone()),
                 bad_neuron_id,
-                "{} {:?}: {:#?}",
-                map_name,
-                key,
-                value
+                "{map_name} {key:?}: {value:#?}"
             );
         }
     }

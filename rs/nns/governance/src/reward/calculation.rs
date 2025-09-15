@@ -237,7 +237,7 @@ mod test {
     /// Asserts that the two arguments are equal, with a relative tolerance of
     /// 2^-50
     macro_rules! assert_approx_eq {
-        ($a:expr, $b:expr) => {{
+        ($a:expr_2021, $b:expr_2021) => {{
             // f64 have 53 bits of mantissa
             let eps = 2.0_f64.powi(-50);
             let (a, b) = (&$a, &$b);

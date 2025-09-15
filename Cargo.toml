@@ -453,6 +453,7 @@ members = [
     "rs/tests/message_routing/xnet",
     "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/nested",
+    "rs/tests/nested/nns_recovery",
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
@@ -530,7 +531,7 @@ version = "0.9.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Autonomous serverless cloud functionality for the public Internet."
 documentation = "https://internetcomputer.org/docs/"
-edition = "2021"
+edition = "2024"
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
@@ -689,6 +690,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
+indoc = "1.0.9"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"

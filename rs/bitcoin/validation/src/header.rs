@@ -1,15 +1,15 @@
 use bitcoin::dogecoin::Header as AuxPowHeader;
 use bitcoin::{
-    block::Header as BlockHeader, block::ValidationError, BlockHash, CompactTarget, Network, Target,
+    BlockHash, CompactTarget, Network, Target, block::Header as BlockHeader, block::ValidationError,
 };
 use std::time::Duration;
 
 use crate::{
-    constants::{
-        checkpoints, latest_checkpoint_height, max_target, no_pow_retargeting, pow_limit_bits,
-        BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
-    },
     BlockHeight,
+    constants::{
+        BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES, checkpoints,
+        latest_checkpoint_height, max_target, no_pow_retargeting, pow_limit_bits,
+    },
 };
 
 /// An error thrown when trying to validate a header.
@@ -452,7 +452,7 @@ mod test {
     use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
     use bitcoin::{
-        block::Version, consensus::deserialize, hashes::hex::FromHex, hashes::Hash, TxMerkleNode,
+        TxMerkleNode, block::Version, consensus::deserialize, hashes::Hash, hashes::hex::FromHex,
     };
     use csv::Reader;
 
@@ -591,7 +591,7 @@ mod test {
             let result = validate_header(&Network::Bitcoin, &store, header);
             assert!(
                 result.is_ok(),
-                "Failed to validate header on line {i}: {result:?}",
+                "Failed to validate header on line {i}: {result:?}"
             );
             store.add(*header);
         }

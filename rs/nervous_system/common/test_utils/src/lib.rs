@@ -5,17 +5,17 @@ use async_trait::async_trait;
 use candid::Nat;
 use dfn_core::CanisterId;
 use futures::{
+    StreamExt,
     channel::{
         mpsc::{UnboundedReceiver, UnboundedSender},
         oneshot::{self, Sender as OneShotSender},
     },
-    StreamExt,
 };
 use ic_nervous_system_canisters::ledger::{ICRC1Ledger, IcpLedger};
 use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic, atomic::Ordering as AtomicOrdering};
 mod prometheus;
 pub mod wasm_helpers;
 
@@ -244,8 +244,7 @@ impl ICRC1Ledger for SpyLedger {
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -272,8 +271,7 @@ impl ICRC1Ledger for SpyLedger {
         match ledger_reply {
             LedgerReply::AccountBalance(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -337,8 +335,7 @@ impl IcpLedger for SpyLedger {
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -366,8 +363,7 @@ impl IcpLedger for SpyLedger {
         match ledger_reply {
             LedgerReply::AccountBalance(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {reply:?}"
             ),
         }
     }

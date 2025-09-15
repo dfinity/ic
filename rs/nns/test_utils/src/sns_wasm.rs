@@ -10,10 +10,11 @@ use ic_nervous_system_common_test_utils::wasm_helpers;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{
+    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal, ProposalInfo,
+    ProposalStatus,
     manage_neuron::{Command, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,
-    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-    ProposalInfo, ProposalStatus,
+    proposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
@@ -198,7 +199,7 @@ fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> P
 
     match response.command.unwrap() {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     }
 }
 
@@ -393,7 +394,7 @@ pub fn wait_for_proposal_status(
         machine.tick();
         machine.advance_time(Duration::from_secs(1));
     }
-    panic!("Proposal {} never exited the Open state.", proposal_id);
+    panic!("Proposal {proposal_id} never exited the Open state.");
 }
 
 /// Makes a bunch of proposals, and waits for them to be no longer be open.
