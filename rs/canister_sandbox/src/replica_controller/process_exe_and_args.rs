@@ -313,14 +313,14 @@ fn get_profile_args(current_exe: Option<PathBuf>) -> Vec<String> {
     }
     if let Some(current_exe) = current_exe {
         let current_exe = current_exe.to_string_lossy().to_string();
-        if let Some(caps) = PROFILE_PARSE_RE.captures(&current_exe) {
-            if let Some(dir) = caps.get(2) {
-                // Match directory name to profile
-                match dir.as_str() {
-                    "debug" => return vec![],
-                    p => return vec!["--profile".to_string(), p.to_string()],
-                };
-            }
+        if let Some(caps) = PROFILE_PARSE_RE.captures(&current_exe)
+            && let Some(dir) = caps.get(2)
+        {
+            // Match directory name to profile
+            match dir.as_str() {
+                "debug" => return vec![],
+                p => return vec!["--profile".to_string(), p.to_string()],
+            };
         }
     }
     vec![]

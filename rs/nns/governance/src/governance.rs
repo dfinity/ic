@@ -3837,16 +3837,16 @@ impl Governance {
 
         // The proposal was adopted, return the rejection fee for non-ManageNeuron
         // proposals.
-        if !proposal.is_manage_neuron() {
-            if let Some(nid) = proposal.proposer {
-                let rejection_cost = proposal.reject_cost_e8s;
-                self.with_neuron_mut(&nid, |neuron| {
-                    if neuron.neuron_fees_e8s >= rejection_cost {
-                        neuron.neuron_fees_e8s -= rejection_cost;
-                    }
-                })
-                .ok();
-            }
+        if !proposal.is_manage_neuron()
+            && let Some(nid) = proposal.proposer
+        {
+            let rejection_cost = proposal.reject_cost_e8s;
+            self.with_neuron_mut(&nid, |neuron| {
+                if neuron.neuron_fees_e8s >= rejection_cost {
+                    neuron.neuron_fees_e8s -= rejection_cost;
+                }
+            })
+            .ok();
         }
 
         if let Some(action) = action {
@@ -4796,13 +4796,13 @@ impl Governance {
             // successful conversion should indicate that the blob does not contain a large amount
             // of data.
             Command::Disburse(disburse) => {
-                if let Some(to_account) = &disburse.to_account {
-                    if AccountIdentifier::try_from(to_account).is_err() {
-                        return Err(GovernanceError::new_with_message(
-                            ErrorType::InvalidCommand,
-                            "The to_account field is invalid",
-                        ));
-                    }
+                if let Some(to_account) = &disburse.to_account
+                    && AccountIdentifier::try_from(to_account).is_err()
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "The to_account field is invalid",
+                    ));
                 }
             }
             Command::Follow(follow) => {

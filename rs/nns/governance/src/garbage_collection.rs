@@ -65,10 +65,10 @@ impl Governance {
             if props.len() > max_proposals {
                 for prop_id in props.iter().take(props.len() - max_proposals) {
                     // Check that this proposal can be purged.
-                    if let Some(prop) = self.heap_data.proposals.get(prop_id) {
-                        if prop.can_be_purged(now_seconds, voting_period_seconds) {
-                            self.heap_data.proposals.remove(prop_id);
-                        }
+                    if let Some(prop) = self.heap_data.proposals.get(prop_id)
+                        && prop.can_be_purged(now_seconds, voting_period_seconds)
+                    {
+                        self.heap_data.proposals.remove(prop_id);
                     }
                 }
             }

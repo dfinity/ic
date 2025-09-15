@@ -110,10 +110,10 @@ impl RegistryQuerier {
                 ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
                 continue;
             };
-            if let Some(provider_filter) = provider_filter {
-                if node_provider_id != provider_filter {
-                    continue;
-                }
+            if let Some(provider_filter) = provider_filter
+                && node_provider_id != provider_filter
+            {
+                continue;
             }
             let Some(some_reward_type) = node_record.node_reward_type else {
                 ic_cdk::println!("Node {} has no node_reward_type: skipping", node_id);
@@ -220,23 +220,23 @@ impl RegistryQuerier {
                     }
 
                     // If the node was present at any time and we have its record, decode and return it.
-                    if !days.is_empty() {
-                        if let Some(final_value) = latest_value {
-                            let principal = PrincipalId::from_str(&node_key[prefix_length..])
-                                .expect("Invalid node key");
-                            let node_id = NodeId::from(principal);
-                            let node_record = NodeRecord::decode(final_value.as_slice())
-                                .expect("Failed to decode NodeRecord");
+                    if !days.is_empty()
+                        && let Some(final_value) = latest_value
+                    {
+                        let principal = PrincipalId::from_str(&node_key[prefix_length..])
+                            .expect("Invalid node key");
+                        let node_id = NodeId::from(principal);
+                        let node_record = NodeRecord::decode(final_value.as_slice())
+                            .expect("Failed to decode NodeRecord");
 
-                            return Some((
-                                node_id,
-                                (
-                                    node_record,
-                                    RegistryVersion::from(latest_version),
-                                    days.into_iter().sorted().collect(),
-                                ),
-                            ));
-                        }
+                        return Some((
+                            node_id,
+                            (
+                                node_record,
+                                RegistryVersion::from(latest_version),
+                                days.into_iter().sorted().collect(),
+                            ),
+                        ));
                     }
                     None
                 })

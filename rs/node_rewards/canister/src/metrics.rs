@@ -208,26 +208,26 @@ where
             .collect();
 
         let mut last_total_metrics: HashMap<_, _> = HashMap::new();
-        if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value() {
-            if timestamp_nanos < &start_day {
-                last_total_metrics = subnets_metrics_by_day
-                    .pop_first()
-                    .unwrap()
-                    .1
-                    .into_iter()
-                    .flat_map(|(k, v)| {
-                        v.nodes_metrics.into_iter().map(move |node_metrics| {
+        if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value()
+            && timestamp_nanos < &start_day
+        {
+            last_total_metrics = subnets_metrics_by_day
+                .pop_first()
+                .unwrap()
+                .1
+                .into_iter()
+                .flat_map(|(k, v)| {
+                    v.nodes_metrics.into_iter().map(move |node_metrics| {
+                        (
+                            (k.subnet_id, node_metrics.node_id),
                             (
-                                (k.subnet_id, node_metrics.node_id),
-                                (
-                                    node_metrics.num_blocks_proposed_total,
-                                    node_metrics.num_blocks_failed_total,
-                                ),
-                            )
-                        })
+                                node_metrics.num_blocks_proposed_total,
+                                node_metrics.num_blocks_failed_total,
+                            ),
+                        )
                     })
-                    .collect();
-            }
+                })
+                .collect();
         };
 
         for (_, subnets_metrics) in subnets_metrics_by_day {

@@ -1555,12 +1555,11 @@ fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
 pub fn canister_id_from_path(path: &Path) -> Option<CanisterId> {
     let mut path = path.iter();
     let top_level = path.next();
-    if top_level == Some(OsStr::new(CANISTER_STATES_DIR))
-        || top_level == Some(OsStr::new(SNAPSHOTS_DIR))
+    if (top_level == Some(OsStr::new(CANISTER_STATES_DIR))
+        || top_level == Some(OsStr::new(SNAPSHOTS_DIR)))
+        && let Some(hex) = path.next()
     {
-        if let Some(hex) = path.next() {
-            return parse_canister_id(hex.to_str()?).ok();
-        }
+        return parse_canister_id(hex.to_str()?).ok();
     }
     None
 }

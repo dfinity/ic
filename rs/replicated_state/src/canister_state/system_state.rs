@@ -1065,17 +1065,16 @@ impl SystemState {
                     ..
                 },
             ) => {
-                if let RequestOrResponse::Response(response) = &msg {
-                    if !should_enqueue_input(
+                if let RequestOrResponse::Response(response) = &msg
+                    && !should_enqueue_input(
                         response,
                         call_context_manager,
                         self.aborted_or_paused_response(),
                     )
                     .map_err(|err| (err, msg.clone()))?
-                    {
-                        // Best effort response whose callback is gone. Silently drop it.
-                        return Ok(false);
-                    }
+                {
+                    // Best effort response whose callback is gone. Silently drop it.
+                    return Ok(false);
                 }
                 push_input(
                     &mut self.queues,
@@ -1833,16 +1832,16 @@ pub(crate) fn push_input(
     input_queue_type: InputQueueType,
 ) -> Result<bool, (StateError, RequestOrResponse)> {
     // Do not enforce limits for local messages on system subnets.
-    if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
-        if let Err(required_memory) = can_push(&msg, *subnet_available_guaranteed_response_memory) {
-            return Err((
-                StateError::OutOfMemory {
-                    requested: NumBytes::new(required_memory as u64),
-                    available: *subnet_available_guaranteed_response_memory,
-                },
-                msg,
-            ));
-        }
+    if (own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet)
+        && let Err(required_memory) = can_push(&msg, *subnet_available_guaranteed_response_memory)
+    {
+        return Err((
+            StateError::OutOfMemory {
+                requested: NumBytes::new(required_memory as u64),
+                available: *subnet_available_guaranteed_response_memory,
+            },
+            msg,
+        ));
     }
 
     // But always adjust `subnet_available_guaranteed_response_memory` by

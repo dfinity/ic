@@ -101,17 +101,18 @@ impl Verify for CertificateVerifier {
 
             // When a key is provided, require that the first item ID is <= the given key
             // or that a left guard is present
-            if let Some(pkg) = pkgs.first() {
-                if pkg.id > key && !left_guard_present {
-                    return Err(anyhow!("first item greater than key").into());
-                }
+            if let Some(pkg) = pkgs.first()
+                && pkg.id > key
+                && !left_guard_present
+            {
+                return Err(anyhow!("first item greater than key").into());
             }
 
             // When a key is provided, require that only the first item ID is <= the given key
-            if let Some(pkg) = pkgs.get(1) {
-                if pkg.id <= key {
-                    return Err(anyhow!("second item lower/equal than key").into());
-                }
+            if let Some(pkg) = pkgs.get(1)
+                && pkg.id <= key
+            {
+                return Err(anyhow!("second item lower/equal than key").into());
             }
         }
 
