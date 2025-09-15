@@ -931,10 +931,28 @@ fn load_canister_snapshot_works_on_another_canister() {
         .unwrap()
         .snapshot_id();
 
+    // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` should
+    // fail if there is non-empty page delta in the shared page map.
+    // This limitation will be lifted in the future.
+    let err = env
+        .load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+            canister_id_2,
+            snapshot_id_1,
+            None,
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Snapshot {} is not currently loadable on the specified canister {}. Try again later.",
+            snapshot_id_1, canister_id_2
+        ),
+    );
+
     // Checkpoint the state before loading the snapshot to ensure that
     // there no outstanding page delta in the shared page map by the
     // two canisters (the one owning the snapshot and the one loading it).
-    // This limitation will be lifted in the future.
     env.checkpointed_tick();
 
     // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` succeeds.
