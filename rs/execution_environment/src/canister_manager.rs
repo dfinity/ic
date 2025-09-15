@@ -2055,11 +2055,11 @@ impl CanisterManager {
                             // a bug, so log an error message for investigation.
                             snapshot_exists_without_associated_canister.inc();
                             error!(
-                            self.log,
-                            "[EXC-BUG]: Canister {} does not exist although there's a snapshot {} associated with it.",
-                            snapshot_canister_id,
-                            snapshot_id,
-                        );
+                                self.log,
+                                "[EXC-BUG]: Canister {} does not exist although there's a snapshot {} associated with it.",
+                                snapshot_canister_id,
+                                snapshot_id,
+                            );
                             return (
                                 Err(CanisterManagerError::CanisterNotFound(snapshot_canister_id)),
                                 NumInstructions::new(0),
