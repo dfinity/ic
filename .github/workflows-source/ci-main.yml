@@ -327,6 +327,10 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
 
+      - name: Install lld
+        run: |
+          sudo apt install lld
+
       - name: Build and Test
         run: |
           # run pocket-ic tests
