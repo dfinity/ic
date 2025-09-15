@@ -1,9 +1,9 @@
 use crate::{
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, GovernanceError, KnownNeuron},
+    pb::v1::{GovernanceError, KnownNeuron, governance_error::ErrorType},
 };
 
-use ic_nervous_system_common_validation::validate_proposal_url;
+use ic_nervous_system_common_validation::validate_url;
 
 /// Maximum size in bytes for a neuron's name, in KnownNeuronData.
 pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
@@ -97,14 +97,12 @@ impl KnownNeuron {
             ));
         }
         for (index, link) in known_neuron_data.links.iter().enumerate() {
-            validate_proposal_url(link, 0, MAX_KNOWN_NEURON_LINK_SIZE, "links", None).map_err(
-                |error| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!("Link at index {index} is not valid. Error: {error}"),
-                    )
-                },
-            )?;
+            validate_url(link, 0, MAX_KNOWN_NEURON_LINK_SIZE, "links", None).map_err(|error| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Link at index {index} is not valid. Error: {error}"),
+                )
+            })?;
         }
 
         // Check that the name is not already used by another known neuron

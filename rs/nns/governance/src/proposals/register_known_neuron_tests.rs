@@ -3,7 +3,7 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, KnownNeuron, KnownNeuronData},
+    pb::v1::{KnownNeuron, KnownNeuronData, governance_error::ErrorType},
     proposals::register_known_neuron::{
         KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN,
     },
