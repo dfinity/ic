@@ -35,6 +35,8 @@ DEPENDENCIES = [
     "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
