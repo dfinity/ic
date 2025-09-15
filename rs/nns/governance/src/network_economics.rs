@@ -148,8 +148,7 @@ impl NeuronsFundEconomics {
         {
             if maximum_icp_xdr_rate < minimum_icp_xdr_rate {
                 defects.push(format!(
-                    "maximum_icp_xdr_rate ({}) must be greater than or equal to minimum_icp_xdr_rate ({}).",
-                    maximum_icp_xdr_rate, minimum_icp_xdr_rate,
+                    "maximum_icp_xdr_rate ({maximum_icp_xdr_rate}) must be greater than or equal to minimum_icp_xdr_rate ({minimum_icp_xdr_rate}).",
                 ));
             }
         }
@@ -227,22 +226,19 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
         let _contribution_threshold_xdr = try_convert_decimal(contribution_threshold_xdr)
             .inspect_err(|original| {
                 defects.push(format!(
-                    "contribution_threshold_xdr ({}) is not a Decimal.",
-                    original
+                    "contribution_threshold_xdr ({original}) is not a Decimal."
                 ));
             });
         let one_third_participation_milestone_xdr =
             try_convert_decimal(one_third_participation_milestone_xdr).inspect_err(|original| {
                 defects.push(format!(
-                    "one_third_participation_milestone_xdr ({}) is not a Decimal.",
-                    original
+                    "one_third_participation_milestone_xdr ({original}) is not a Decimal."
                 ));
             });
         let full_participation_milestone_xdr =
             try_convert_decimal(full_participation_milestone_xdr).inspect_err(|original| {
                 defects.push(format!(
-                    "full_participation_milestone_xdr ({}) is not a Decimal.",
-                    original
+                    "full_participation_milestone_xdr ({original}) is not a Decimal."
                 ));
             });
 
@@ -253,9 +249,7 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
         ) {
             if one_third_participation_milestone_xdr >= full_participation_milestone_xdr {
                 defects.push(format!(
-                    "one_third_participation_milestone_xdr ({}) must be less than full_participation_milestone_xdr ({}).",
-                    one_third_participation_milestone_xdr,
-                    full_participation_milestone_xdr,
+                    "one_third_participation_milestone_xdr ({one_third_participation_milestone_xdr}) must be less than full_participation_milestone_xdr ({full_participation_milestone_xdr}).",
                 ));
             }
         }

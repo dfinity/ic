@@ -2,22 +2,22 @@ mod common;
 
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, MixedHashTree, flatmap};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{maybe_upgrade_to_self, UpgradeTestingScenario},
+    itest_helpers::{UpgradeTestingScenario, maybe_upgrade_to_self},
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_registry_transport::{
     insert,
     pb::v1::{
-        high_capacity_registry_get_value_response, registry_error::Code, CertifiedResponse,
-        HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest, RegistryError,
-        RegistryGetLatestVersionResponse, RegistryGetValueRequest,
+        CertifiedResponse, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryError, RegistryGetLatestVersionResponse, RegistryGetValueRequest,
+        high_capacity_registry_get_value_response, registry_error::Code,
     },
     update,
 };

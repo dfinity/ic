@@ -3,7 +3,7 @@ use ic_config::logger::{Config as LoggingConfig, Level, LogDestination, LogForma
 use time::format_description::well_known::Rfc3339;
 use tracing::Subscriber;
 use tracing_appender::{non_blocking, non_blocking::WorkerGuard};
-use tracing_subscriber::{filter::LevelFilter, fmt, layer::Layer, registry::LookupSpan, Registry};
+use tracing_subscriber::{Registry, filter::LevelFilter, fmt, layer::Layer, registry::LookupSpan};
 
 enum InnerFormat {
     Full(fmt::format::Format<fmt::format::Full, fmt::time::UtcTime<Rfc3339>>),

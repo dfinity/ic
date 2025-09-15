@@ -61,10 +61,7 @@ impl Registry {
                 .get(version_key.as_bytes(), self.latest_version())
                 .is_some()
             {
-                panic!(
-                    "{}HostOS version: {:?} already exists",
-                    LOG_PREFIX, version_id
-                );
+                panic!("{LOG_PREFIX}HostOS version: {version_id:?} already exists");
             }
 
             // Register the new version (that is, insert the new HostosVersionRecord)

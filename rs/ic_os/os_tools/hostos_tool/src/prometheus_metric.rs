@@ -27,7 +27,7 @@ impl fmt::Display for MetricType {
             Summary => "summary",
             Untyped => "untyped",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

@@ -2,9 +2,9 @@ use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icp_archive::ArchiveUpgradeArgument;
+use ic_ledger_core::Tokens;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::Tokens;
 use icp_ledger::Operation::Mint;
 use icp_ledger::{AccountIdentifier, Block, Memo, Transaction};
 use pocket_ic::PocketIcBuilder;
@@ -205,9 +205,10 @@ fn large_http_request() {
             large_http_request_bytes,
         )
         .unwrap_err();
-    assert!(err
-        .reject_message
-        .contains("Decoding cost exceeds the limit"));
+    assert!(
+        err.reject_message
+            .contains("Decoding cost exceeds the limit")
+    );
 }
 
 #[test]

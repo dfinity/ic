@@ -4,10 +4,7 @@
 fn main() {
     let args: Vec<_> = std::env::args().collect();
     if args.len() != 2 {
-        eprintln!(
-            "Expected exactly one argument (the name of the output file), got: {:?}",
-            args
-        );
+        eprintln!("Expected exactly one argument (the name of the output file), got: {args:?}");
         std::process::exit(1);
     }
     std::fs::write(&args[1], lifeline::LIFELINE_CANISTER_WASM)

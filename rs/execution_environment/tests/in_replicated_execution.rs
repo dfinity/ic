@@ -1,7 +1,7 @@
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
-use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_types::{CanisterId, Cycles};
 
 const REPLICATED_EXECUTION: [u8; 4] = [1, 0, 0, 0];
@@ -29,9 +29,9 @@ pub fn expect_reply(result: Result<WasmResult, UserError>) -> Vec<u8> {
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 

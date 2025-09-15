@@ -2,11 +2,11 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::pocket_ic_helpers::index::{
-    get_blocks, wait_until_sync_is_completed, LEDGER_INDEX_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, get_blocks, wait_until_sync_is_completed,
 };
 use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
@@ -15,8 +15,8 @@ use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
-    AccountIdentifier, CandidBlock, CandidTransaction, LedgerCanisterInitPayload,
-    LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, CandidBlock, CandidTransaction, DEFAULT_TRANSFER_FEE,
+    LedgerCanisterInitPayload, LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs,
 };
 use maplit::hashmap;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -167,9 +167,10 @@ impl Setup {
                 if should_succeed {
                     panic!("Upgrade should succeed!");
                 } else {
-                    assert!(e
-                        .reject_message
-                        .contains("Trying to downgrade from incompatible version"));
+                    assert!(
+                        e.reject_message
+                            .contains("Trying to downgrade from incompatible version")
+                    );
                 }
             }
         };

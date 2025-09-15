@@ -1,11 +1,11 @@
 use std::{path::PathBuf, sync::Arc};
 
-use anyhow::{anyhow, bail, Context as _, Error};
+use anyhow::{Context as _, Error, anyhow, bail};
 use async_trait::async_trait;
 use candid::{Decode, Encode};
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_types::CanisterId;
-use rate_limits_api::{v1::RateLimitRule, GetConfigResponse, Version};
+use rate_limits_api::{GetConfigResponse, Version, v1::RateLimitRule};
 use tokio::fs;
 
 const SCHEMA_VERSION: u64 = 1;
