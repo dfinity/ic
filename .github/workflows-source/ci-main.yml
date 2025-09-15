@@ -327,6 +327,8 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
 
+      # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
+      # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
       - name: Install lld
         run: |
           sudo apt install lld
