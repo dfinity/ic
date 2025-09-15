@@ -9750,7 +9750,6 @@ dependencies = [
  "ic-ledger-suite-state-machine-tests",
  "ic-ledger-test-utils",
  "ic-metrics-encoder",
- "ic-rosetta-test-utils",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -9954,8 +9953,8 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-suite-state-machine-tests",
  "ic-metrics-encoder",
- "ic-rosetta-test-utils",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -10481,6 +10480,8 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -11431,6 +11432,7 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
+ "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
  "ic-nervous-system-linear-map",
  "ic-nervous-system-long-message",
@@ -12983,7 +12985,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-handler-root",
- "ic-nns-test-utils",
  "ic-rosetta-test-utils",
  "ic-sys",
  "ic-types",
@@ -13024,12 +13025,9 @@ name = "ic-rosetta-test-utils"
 version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
- "candid",
  "hex",
- "ic-http-types",
  "ic-icrc1-test-utils",
  "ic-rosetta-api",
- "ic-state-machine-tests",
  "ic-types",
  "icp-ledger",
  "nix 0.24.3",
@@ -13037,7 +13035,6 @@ dependencies = [
  "reqwest 0.12.15",
  "rosetta-core",
  "serde",
- "serde_bytes",
  "serde_json",
  "slog",
  "tempfile",
@@ -20712,9 +20709,7 @@ version = "0.9.0"
 dependencies = [
  "chrono",
  "ic-base-types",
- "ic-cdk",
  "ic-protobuf",
- "ic-types",
  "itertools 0.12.1",
  "maplit",
  "rust_decimal",
