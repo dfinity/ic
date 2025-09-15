@@ -863,11 +863,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "lmdb-rkv": crate.spec(
                 git = "https://github.com/dfinity-lab/lmdb-rs",
-                rev = "f62018b2deb79ea0d53914d5502389433fc3e6da",
+                rev = "4d952c8f1dca79de855af892b444d7112567b58d",
             ),
             "lmdb-rkv-sys": crate.spec(
                 git = "https://github.com/dfinity-lab/lmdb-rs",
-                rev = "f62018b2deb79ea0d53914d5502389433fc3e6da",
+                rev = "4d952c8f1dca79de855af892b444d7112567b58d",
                 default_features = False,
             ),
             "local-ip-address": crate.spec(
