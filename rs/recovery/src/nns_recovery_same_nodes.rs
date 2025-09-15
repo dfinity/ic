@@ -165,12 +165,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
             StepType::StopReplica => {
-                print_height_info(
-                    &self.logger,
-                    &self.recovery.registry_helper,
-                    self.params.subnet_id,
-                );
-
                 if self.params.download_method.is_none() {
                     self.params.download_method = read_optional_data_location(
                         &self.logger,
