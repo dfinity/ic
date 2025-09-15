@@ -35,8 +35,8 @@ pub fn setup(env: TestEnv) {
 }
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
-/// This is much faster than the full config() setup.
-pub fn simple_config(env: TestEnv) {
+/// This is much faster than the full setup() setup.
+pub fn simple_setup(env: TestEnv) {
     simple_setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
 }
 
