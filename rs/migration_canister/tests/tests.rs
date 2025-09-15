@@ -78,7 +78,6 @@ impl Default for Settings {
 }
 
 /// Sets up PocketIc with the registry canister, the migration canister and two canisters on different app subnets.
-/// Returns: (PocketIc, source subnet, target subnet, source canister, target canister, controllers)
 async fn setup(
     Settings {
         mc_controls_source,
@@ -104,6 +103,7 @@ async fn setup(
     let c1 = Principal::self_authenticating(vec![1]);
     let c2 = Principal::self_authenticating(vec![2]);
     let c3 = Principal::self_authenticating(vec![3]);
+    // Setup a unique controller each, and a shared one.
     let source_controllers = vec![c1, c2];
     let target_controllers = vec![c1, c3];
 
@@ -205,6 +205,23 @@ async fn setup(
     }
 }
 
+async fn migrate_canister(
+    pic: &PocketIc,
+    sender: Principal,
+    args: &MigrateCanisterArgs,
+) -> Result<(), ValidationError> {
+    let res = pic
+        .update_call(
+            MIGRATION_CANISTER_ID.into(),
+            sender,
+            "migrate_canister",
+            Encode!(args).unwrap(),
+        )
+        .await
+        .unwrap();
+    Decode!(&res, Result<(), ValidationError>).unwrap()
+}
+
 #[tokio::test]
 async fn validation_succeeds() {
     let Setup {
@@ -216,48 +233,42 @@ async fn validation_succeeds() {
     } = setup(Settings::default()).await;
     let sender = source_controllers[0];
 
-    let res = pic
-        .update_call(
-            MIGRATION_CANISTER_ID.into(),
-            sender,
-            "migrate_canister",
-            Encode!(&MigrateCanisterArgs { source, target }).unwrap(),
-        )
+    migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target })
         .await
         .unwrap();
-    let res = Decode!(&res, Result<(), ValidationError>).unwrap();
-    res.unwrap();
 
     for _ in 0..100 {
-        println!("=============================================");
+        // println!("=============================================");
         pic.advance_time(Duration::from_millis(100)).await;
         pic.tick().await;
     }
 }
 
 #[tokio::test]
-async fn validation_fails() {
+async fn validation_fails_sender_doesnt_control_source() {
     let Setup {
         pic,
         source,
         target,
-        controllers,
+        source_controllers,
+        target_controllers,
         ..
-    } = setup().await;
+    } = setup(Settings::default()).await;
     // sender not controller of source
-    let bad_sender = Principal::self_authenticating(vec![99]);
+    let bad_sender = target_controllers[1];
+    let Err(ValidationError::CallerNotController { canister }) =
+        migrate_canister(&pic, bad_sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+    assert_eq!(canister, source);
 
     // sender not controller of target
-
-    // MC not controller of source
-
-    // MC not controller of target
-
-    // rate limited
-
-    // disabled
-
-    // source not stopped
-
-    // target not stopped
+    let bad_sender = source_controllers[1];
+    let Err(ValidationError::CallerNotController { canister }) =
+        migrate_canister(&pic, bad_sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+    assert_eq!(canister, target);
 }
