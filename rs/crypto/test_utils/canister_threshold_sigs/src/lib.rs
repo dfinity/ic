@@ -207,18 +207,7 @@ pub fn generate_key_transcript<R: RngCore + CryptoRng>(
     alg: AlgorithmId,
     rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
-
-    let masked_key_transcript = env
-        .nodes
-        .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
-
-    let unmasked_key_params = build_params_from_previous(
-        masked_key_params,
-        IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
-        rng,
-    );
-
+    let unmasked_key_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
     env.nodes
         .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
 }
