@@ -279,6 +279,7 @@ impl ExecutionEnvironmentMetrics {
                 let speed_label = match method_name {
                     ic00::Method::CanisterStatus
                     | ic00::Method::CanisterInfo
+                    | ic00::Method::CanisterMetadata
                     | ic00::Method::CreateCanister
                     | ic00::Method::DeleteCanister
                     | ic00::Method::DepositCycles
