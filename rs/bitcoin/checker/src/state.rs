@@ -21,8 +21,8 @@ pub enum HttpGetTxError {
     TxEncoding(String),
     TxidMismatch { expected: Txid, decoded: Txid },
     ResponseTooLarge,
-    //TODO: XC-455 rename to IcError?
-    Rejected(String),
+    Rejected { code: u32, message: String },
+    CallPerformFailed,
 }
 
 impl fmt::Display for HttpGetTxError {
@@ -36,7 +36,8 @@ impl fmt::Display for HttpGetTxError {
                 expected, decoded
             ),
             ResponseTooLarge => write!(f, "ResponseTooLarge"),
-            Rejected(msg) => write!(f, "Rejected: {msg}"),
+            Rejected { code, message } => write!(f, "Rejected: code {:?}, {}", code, message),
+            CallPerformFailed => write!(f, "CallPerformedFailed"),
         }
     }
 }

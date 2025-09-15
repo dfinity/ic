@@ -53,7 +53,10 @@ impl FetchEnv for MockEnv {
         self.replies
             .borrow_mut()
             .pop_front()
-            .unwrap_or(Err(HttpGetTxError::Rejected("no more reply".to_string())))
+            .unwrap_or(Err(HttpGetTxError::Rejected {
+                code: 2, //SYS_TRANSIENT
+                message: "no more reply".to_string(),
+            }))
     }
     fn cycles_accept(&self, cycles: u128) -> u128 {
         let mut available = self.available_cycles.borrow_mut();
@@ -525,7 +528,10 @@ async fn test_check_fetched() {
         FetchTxStatus::Error(FetchTxStatusError {
             provider: provider.clone(),
             max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
-            error: HttpGetTxError::Rejected("no more reply".to_string()),
+            error: HttpGetTxError::Rejected {
+                code: 2, //SYS_TRANSIENT
+                message: "no more reply".to_string(),
+            },
         }),
     );
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));

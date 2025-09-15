@@ -10,6 +10,7 @@ use ic_btc_checker::{
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
+use ic_cdk::call::Error;
 use ic_cdk::management_canister::TransformArgs;
 use ic_http_types as http;
 use ic_management_canister_types::HttpRequestResult;
@@ -27,9 +28,18 @@ mod providers;
 mod state;
 
 #[derive(PartialOrd, Ord, PartialEq, Eq)]
+pub enum IcError {
+    CallRejected {
+        raw_reject_code: u32,
+        reject_message: String,
+    },
+    CallPerformFailed,
+}
+
+#[derive(PartialOrd, Ord, PartialEq, Eq)]
 enum HttpsOutcallStatus {
     ResponseTooLarge,
-    IcError(String),
+    IcError(IcError),
     HttpStatusCode(Nat),
 }
 
@@ -37,7 +47,12 @@ impl fmt::Display for HttpsOutcallStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::ResponseTooLarge => write!(f, "ResponseTooLarge"),
-            Self::IcError(msg) => write!(f, "IcError({msg})"),
+            Self::IcError(ic_error) => match ic_error {
+                IcError::CallRejected {
+                    raw_reject_code, ..
+                } => write!(f, "IcErrorCallRejected({raw_reject_code})"),
+                IcError::CallPerformFailed => write!(f, "IcErrorCallPerformFailed"),
+            },
             Self::HttpStatusCode(status_code) => write!(f, "HttpStatusCode({})", status_code),
         }
     }
@@ -387,7 +402,10 @@ impl FetchEnv for BtcCheckerCanisterEnv {
         use ic_cdk::management_canister::http_request;
         let request = provider
             .create_request(txid, max_response_bytes)
-            .map_err(HttpGetTxError::Rejected)?;
+            .map_err(|err| HttpGetTxError::Rejected {
+                code: 1, //SYS_FATAL
+                message: err,
+            })?;
         let url = request.url.clone();
         match http_request(&request).await {
             Ok(response) => {
@@ -409,10 +427,10 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
                     // All non-200 status are treated as transient errors
-                    return Err(HttpGetTxError::Rejected(format!(
-                        "HTTP call {url} received code {}",
-                        response.status
-                    )));
+                    return Err(HttpGetTxError::Rejected {
+                        code: 2, //SYS_TRANSIENT
+                        message: format!("HTTP call {} received code {}", url, response.status),
+                    });
                 }
                 let tx = match provider.btc_network() {
                     BtcNetwork::Regtest { .. } => {
@@ -459,21 +477,40 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 Err(HttpGetTxError::ResponseTooLarge)
             }
             Err(error) => {
+                let (status, http_error) = match error {
+                    Error::InsufficientLiquidCycleBalance(e) => {
+                        panic!("BUG: Insufficient liquidity balance: {}", e)
+                    }
+                    Error::CandidDecodeFailed(e) => {
+                        panic!("BUG: Candid decoding http_request failed: {}", e)
+                    }
+                    Error::CallPerformFailed(_e) => (
+                        HttpsOutcallStatus::IcError(IcError::CallPerformFailed),
+                        HttpGetTxError::CallPerformFailed,
+                    ),
+                    Error::CallRejected(e) => (
+                        HttpsOutcallStatus::IcError(IcError::CallRejected {
+                            raw_reject_code: e.raw_reject_code(),
+                            reject_message: e.reject_message().to_string(),
+                        }),
+                        HttpGetTxError::Rejected {
+                            code: e.raw_reject_code(),
+                            message: e.reject_message().to_string(),
+                        },
+                    ),
+                };
                 STATS.with(|s| {
                     let mut stat = s.borrow_mut();
                     *stat
                         .https_outcall_status
-                        .entry((
-                            provider.name(),
-                            HttpsOutcallStatus::IcError(error.to_string()),
-                        ))
+                        .entry((provider.name(), status))
                         .or_default() += 1;
                 });
                 log!(
                     DEBUG,
-                    "The http_request resulted into error. Error: {error}, Request: {request:?}"
+                    "The http_request resulted into error. Error: {http_error}, Request: {request:?}"
                 );
-                Err(HttpGetTxError::Rejected(error.to_string()))
+                Err(http_error)
             }
         }
     }

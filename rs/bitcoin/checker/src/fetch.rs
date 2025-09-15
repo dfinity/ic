@@ -22,7 +22,7 @@ impl HttpGetTxError {
     pub(crate) fn into_response(self, txid: Txid) -> CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match self {
-            HttpGetTxError::Rejected(message) => {
+            HttpGetTxError::Rejected { message, .. } => {
                 CheckTransactionRetriable::TransientInternalError(message).into()
             }
             HttpGetTxError::ResponseTooLarge => {

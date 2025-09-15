@@ -796,7 +796,7 @@ fn test_check_transaction_error() {
             r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"HttpStatusCode\(404\)\"\} 1 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"IcError\(2\)\"\} 1 \d+"#,
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"IcErrorCallRejected\(2\)\"\} 1 \d+"#,
         );
 }
 #[test]
