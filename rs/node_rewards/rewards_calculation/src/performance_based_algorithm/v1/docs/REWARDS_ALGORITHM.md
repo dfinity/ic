@@ -15,8 +15,8 @@ nodes. It calculates daily rewards based on node performance relative to subnet 
 ## Core Constants
 
 ```rust
-const SUBNET_FAILURE_RATE_PERCENTILE: f64 = 0.75;  // 75th percentile
-const MIN_FAILURE_RATE: Decimal = 0.1;             // 10% minimum for penalties
+const SUBNET_FAILURE_RATE_PERCENTILE: f64 = 0.75;
+const MIN_FAILURE_RATE: Decimal = 0.1;             // 10% minimum reduction threshold
 const MAX_FAILURE_RATE: Decimal = 0.6;             // 60% maximum reduction threshold
 const MIN_REWARDS_REDUCTION: Decimal = 0.0;        // 0% minimum reduction
 const MAX_REWARDS_REDUCTION: Decimal = 0.8;        // 80% maximum reduction
