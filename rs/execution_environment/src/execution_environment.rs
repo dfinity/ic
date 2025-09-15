@@ -37,19 +37,19 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
-    FetchCanisterLogsRequest, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
-    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    RenameCanisterArgs, ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
-    SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult,
+    CanisterInfoResponse, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusType,
+    ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse, EmptyBlob, FetchCanisterLogsRequest, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -58,6 +58,7 @@ use ic_replicated_state::{
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
     canister_state::{
         NextExecution,
+        execution_state::CustomSectionType,
         system_state::{CyclesUseCase, PausedExecutionId},
     },
     metadata_state::subnet_call_context_manager::{
@@ -927,6 +928,22 @@ impl ExecutionEnvironment {
                 }
                 CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::CanisterInfo)
+                }
+            },
+
+            Ok(Ic00Method::CanisterMetadata) => match &msg {
+                CanisterCall::Request(_) => {
+                    let res = CanisterMetadataRequest::decode(payload).and_then(|record| {
+                        self.get_canister_metadata(record.canister_id(), record.name(), &state)
+                            .map(|res| (res, Some(record.canister_id())))
+                    });
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::CanisterMetadata)
                 }
             },
 
@@ -2312,6 +2329,39 @@ impl ExecutionEnvironment {
             .copied()
             .collect::<Vec<PrincipalId>>();
         let res = CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers);
+        Ok(res.encode())
+    }
+
+    fn get_canister_metadata(
+        &self,
+        canister_id: CanisterId,
+        name: &str,
+        state: &ReplicatedState,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(canister_id, state)?;
+        let Some(execution_state) = &canister.execution_state else {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "Canister has no execution state",
+            ));
+        };
+        let Some(custom_section) = execution_state.metadata.get_custom_section(name) else {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Metadata section '{}' not found", name),
+            ));
+        };
+        match custom_section.visibility() {
+            // Only allow public metadata sections to be read.
+            CustomSectionType::Public => {}
+            CustomSectionType::Private => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("Metadata section '{}' is private", name),
+                ));
+            }
+        };
+        let res = CanisterMetadataResponse::new(custom_section.content().to_vec());
         Ok(res.encode())
     }
 

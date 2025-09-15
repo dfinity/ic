@@ -4,12 +4,13 @@ use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
-    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
-    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod, IC_00,
+    LogVisibilityV2, MasterPublicKeyId, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UpdateSettingsArgs,
+    UploadChunkArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
@@ -23,7 +24,7 @@ use ic_replicated_state::{
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
-    get_reply,
+    get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
@@ -1069,6 +1070,138 @@ fn get_canister_status_memory_metrics_snapshots_size() {
         get_canister_status(&mut test, canister_id).snapshots_size(),
         csr.snapshots_size()
     );
+}
+
+// A Wasm module with custom sections
+const CUSTOM_SECTIONS_WAT: &str = r#"(module
+(memory $memory 1)
+(export "memory" (memory $memory))
+(@custom "icp:public my_public_section" "my_public_section_value✅")
+(@custom "icp:private my_private_section" "my_private_section_value")
+)"#;
+
+#[test]
+fn get_canister_metadata_success() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
+        canister,
+        "my_public_section".to_string()
+    ))
+    .unwrap();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args().other_side(canister_metadata_args),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+    let reply = get_reply(result);
+    let response = CanisterMetadataResponse::decode(&reply).unwrap();
+
+    assert_eq!(response.value(), b"my_public_section_value\xE2\x9C\x85");
+}
+
+#[test]
+fn get_canister_metadata_ingress_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+
+    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
+        canister,
+        "my_public_section".to_string()
+    ))
+    .unwrap();
+    let result = test.subnet_message(Method::CanisterMetadata, canister_metadata_args);
+
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterContractViolation,
+            "canister_metadata cannot be called by a user."
+        ))
+    );
+}
+
+#[test]
+fn get_canister_metadata_no_execution_state_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.empty_canister();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
+        canister,
+        "my_private_section".to_string()
+    ))
+    .unwrap();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args()
+                .other_side(canister_metadata_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reject = get_reject(result);
+    assert_eq!(reject, "Canister has no execution state");
+}
+
+#[test]
+fn get_canister_metadata_not_found_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
+        canister,
+        "my_not_found_section".to_string()
+    ))
+    .unwrap();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args()
+                .other_side(canister_metadata_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reject = get_reject(result);
+    assert_eq!(reject, "Metadata section 'my_not_found_section' not found");
+}
+
+#[test]
+fn get_canister_metadata_private_section_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
+        canister,
+        "my_private_section".to_string()
+    ))
+    .unwrap();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args()
+                .other_side(canister_metadata_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reject = get_reject(result);
+    assert_eq!(reject, "Metadata section 'my_private_section' is private");
 }
 
 #[test]
