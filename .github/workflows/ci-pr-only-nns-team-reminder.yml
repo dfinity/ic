@@ -51,47 +51,55 @@ jobs:
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             console.log("Adding reminder to update unreleased_changelog.md...");
             const reminderText = `
-              This pull request changes code owned by the Governance team.
-              Therefore, make sure that you have done the following (for
-              Governance-owned code):
 
-              1. Add entry(s) to corresponding \`unreleased_changelog.md\`
-                 file(s). This is only necessary if the code changes result in
-                 externally visible behavior changes.
+              This pull request changes code owned by the Governance team. Therefore, make sure that
+              you have considered the following (for Governance-owned code):
 
-              2. If there are behavior changes, are they breaking? This is
-                 usually due to some new requirement(s) imposed by the canister,
-                 or removal of guarantees supplied by the canister. If the
-                 changes are breaking, are your clients ready for them? If not,
-                 put your changes behind a "feature flag". If you have a feature
-                 flag, then, do NOT add entrie(s) to \`unreleased_changelog.md\`
-                 in this PR, but rather, do that later when you set the flag to
-                 "enable" in another PR.
+              1. Update \`unreleased_changelog.md\` (if there are behavior changes, even if they are
+                 non-breaking).
 
-              3. Is data migration needed? (If so, make sure it is part of this
-                 PR.)
+              2. Are there BREAKING changes?
 
-              4. Does this require security review? At the very least, you can
-                 tell security team about this PR, and let them decide whether
-                 the risk warrants their review.
+              3. Is a data migration needed?
 
-              To acknowldge this reminder (and unblock the PR), dismiss this
-              code review by going to the bottom of the pull request page, look
-              for where it says this bot is requesting changes, click the three
-              dots on the right, select "Dismiss review", and for each of the
-              numbered items listed above, supply one of the following reasons:
+              4. Security review?
 
-              * Done.
 
-              * $REASON_WHY_NO_NEED. E.g. for \`unreleased_changelog.md\`, "No
+              # How to Satisfy This Automatic Review
+
+              1. Go to the bottom of the pull request page.
+
+              2. Look for where it says this bot is requesting changes.
+
+              3. Click the three dots to the right.
+
+              4. Select "Dismiss review".
+
+              5. In the text entry box, respond to each of the numbered items in the previous
+                 section, declare one of the following:
+
+                * Done.
+
+                * $REASON_WHY_NO_NEED. E.g. for \`unreleased_changelog.md\`, "No
                 canister behavior changes.", or for item 2, "Existing APIs
                 behave as before.".
 
-              To be more precise, "externally visible behavior change" usually
-              means that responses differ in some way. However, "externally
-              visible behavior change" is not limited to that. For example, it
-              could also means that the canister makes different requests to
-              other canisters.
+
+              # Brief Guide to "Externally Visible" Changes
+
+              "Externally visible behavior change" is very often due to some NEW canister API.
+
+              Changes to EXISTING APIs are more likely to be "breaking".
+
+              If these changes are breaking, make sure that clients know how to migrate, how to
+              maintain their continuity of operations.
+
+              If your changes are behind a feature flag, then, do NOT add entrie(s) to
+              \`unreleased_changelog.md\` in this PR! But rather, add entrie(s) later, in the PR
+              that enables these changes in production.
+
+
+              # Reference(s)
 
               For a more comprehensive checklist, [see here][checklist].
 

@@ -2,8 +2,8 @@ use candid::Encode;
 use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
 use criterion::{BatchSize, Criterion, Throughput};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::ingress::WasmResult;
 use ic_types::NumBytes;
+use ic_types::ingress::WasmResult;
 use ic_wasm_transform::Module;
 use std::{
     cell::RefCell,
@@ -70,7 +70,7 @@ fn initialize_execution_test(
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {
-        panic!("Installation rejected: {}", s)
+        panic!("Installation rejected: {s}")
     }
     match setup_action {
         SetupAction::PerformCheckpoint => {

@@ -28,7 +28,7 @@ fn main() {
             PrincipalId::new_anonymous(),
             canister_id,
             "create_canisters",
-            format!("{}", NUM_CANISTERS_PER_CREATOR_CANISTER)
+            format!("{NUM_CANISTERS_PER_CREATOR_CANISTER}")
                 .as_bytes()
                 .to_vec(),
         );

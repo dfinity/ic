@@ -45,11 +45,11 @@ use ic_system_test_driver::{
         },
     },
     systest,
-    util::{block_on, UniversalCanister},
+    util::{UniversalCanister, block_on},
 };
 use ic_types::{CanisterId, PrincipalId};
 use reqwest::Response;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::net::SocketAddr;
 use url::Url;
 
@@ -220,7 +220,7 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
                 assert_2xx(&status);
             }
             read_state::canister::Version::V3 => {
-                // TODO: change it to 2xx once the boundary node supports the new endpoint
+                // TODO(CON-1586): change it to 2xx once the boundary node supports the new endpoint
                 assert_4xx(&status);
             }
         }

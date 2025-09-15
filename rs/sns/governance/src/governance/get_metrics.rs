@@ -1,6 +1,6 @@
-use crate::governance::test_helpers::basic_governance_proto;
 use crate::governance::ValidGovernanceProto;
-use crate::governance::{test_helpers::DoNothingLedger, Governance};
+use crate::governance::test_helpers::basic_governance_proto;
+use crate::governance::{Governance, test_helpers::DoNothingLedger};
 use crate::pb::v1::{self as pb, ProposalData};
 use crate::types::test_helpers::NativeEnvironment;
 use ic_nervous_system_canisters::cmc::FakeCmc;
@@ -59,9 +59,7 @@ fn test_recently_executed_proposals() {
         assert_eq!(
             governance.recently_submitted_proposals(time_window),
             proposals,
-            "Expected {} submitted proposals for {}",
-            proposals,
-            lable
+            "Expected {proposals} submitted proposals for {lable}"
         );
     }
 }
@@ -129,9 +127,7 @@ fn test_recently_submitted_proposals() {
         assert_eq!(
             governance.recently_executed_proposals(time_window),
             proposals,
-            "Expected {} executed proposals for {}",
-            proposals,
-            lable
+            "Expected {proposals} executed proposals for {lable}"
         );
     }
 }

@@ -79,8 +79,7 @@ impl Time {
             .map(Time)
             .ok_or_else(|| {
                 TimeInstantiationError::Overflow(format!(
-                    "The number of milliseconds {} is too large and cannot be converted into a u64 of nanoseconds",
-                    millis
+                    "The number of milliseconds {millis} is too large and cannot be converted into a u64 of nanoseconds"
                 ))
             })
     }
@@ -95,8 +94,7 @@ impl Time {
             .map(Time)
             .ok_or_else(|| {
                 TimeInstantiationError::Overflow(format!(
-                    "The number of seconds {} is too large and cannot be converted into a u64 of nanoseconds",
-                    secs
+                    "The number of seconds {secs} is too large and cannot be converted into a u64 of nanoseconds"
                 ))
             })
     }

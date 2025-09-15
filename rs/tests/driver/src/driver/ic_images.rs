@@ -2,7 +2,7 @@
 
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
+use ic_types::{ReplicaVersion, hostos_version::HostosVersion};
 use url::Url;
 
 /// Pull the version of the initial GuestOS image from the environment.

@@ -107,10 +107,7 @@ impl Provider {
                 Ok(btcscan_request(txid, max_response_bytes))
             }
             (provider, btc_network) => {
-                panic!(
-                    "Provider {} does not support Bitcoin {}",
-                    provider, btc_network
-                )
+                panic!("Provider {provider} does not support Bitcoin {btc_network}")
             }
         }
     }
@@ -118,7 +115,7 @@ impl Provider {
 
 fn btcscan_request(txid: Txid, max_response_bytes: u32) -> HttpRequestArgs {
     let host = "btcscan.org";
-    let url = format!("https://{}/api/tx/{}/raw", host, txid);
+    let url = format!("https://{host}/api/tx/{txid}/raw");
     let request_headers = vec![HttpHeader {
         name: "User-Agent".to_string(),
         value: "bitcoin_inputs_collector".to_string(),
@@ -140,8 +137,8 @@ fn make_get_request(
     max_response_bytes: u32,
 ) -> HttpRequestArgs {
     let url = match network {
-        BtcNetwork::Mainnet => format!("https://{}/api/tx/{}/raw", host, txid),
-        BtcNetwork::Testnet => format!("https://{}/testnet/api/tx/{}/raw", host, txid),
+        BtcNetwork::Mainnet => format!("https://{host}/api/tx/{txid}/raw"),
+        BtcNetwork::Testnet => format!("https://{host}/testnet/api/tx/{txid}/raw"),
         BtcNetwork::Regtest { .. } => panic!("Request to regtest network requires POST"),
     };
     let request_headers = vec![];
@@ -161,10 +158,7 @@ fn make_post_request(
     max_response_bytes: u32,
 ) -> Result<HttpRequestArgs, String> {
     let (url, header) = parse_authorization_header_from_url(json_rpc_url)?;
-    let body = format!(
-        "{{\"method\": \"gettransaction\", \"params\": [\"{}\"]}}",
-        txid
-    );
+    let body = format!("{{\"method\": \"gettransaction\", \"params\": [\"{txid}\"]}}");
     Ok(HttpRequestArgs {
         url: url.to_string(),
         method: HttpMethod::POST,
@@ -203,12 +197,12 @@ pub(crate) fn parse_authorization_header_from_url(
             .0,
     ));
     url.set_username("")
-        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
+        .map_err(|()| format!("Invalid JSON RPC URL {json_rpc_url}"))?;
     url.set_password(None)
-        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
+        .map_err(|()| format!("Invalid JSON RPC URL {json_rpc_url}"))?;
     let header = HttpHeader {
         name: "Authorization".to_string(),
-        value: format!("Basic {}", authorization),
+        value: format!("Basic {authorization}"),
     };
     Ok((url, header))
 }

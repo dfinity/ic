@@ -37,7 +37,7 @@ impl std::convert::TryFrom<u32> for StateSyncVersion {
 
 impl Display for StateSyncVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

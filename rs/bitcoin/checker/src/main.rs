@@ -53,7 +53,7 @@ impl fmt::Display for HttpsOutcallStatus {
                 } => write!(f, "IcErrorCallRejected({raw_reject_code})"),
                 IcError::CallPerformFailed => write!(f, "IcErrorCallPerformFailed"),
             },
-            Self::HttpStatusCode(status_code) => write!(f, "HttpStatusCode({})", status_code),
+            Self::HttpStatusCode(status_code) => write!(f, "HttpStatusCode({status_code})"),
         }
     }
 }
@@ -87,11 +87,9 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
     let btc_network = config.btc_network();
     let address = Address::from_str(args.address.trim())
-        .unwrap_or_else(|err| ic_cdk::trap(format!("Invalid Bitcoin address: {}", err)))
+        .unwrap_or_else(|err| ic_cdk::trap(format!("Invalid Bitcoin address: {err}")))
         .require_network(btc_network.clone().into())
-        .unwrap_or_else(|err| {
-            ic_cdk::trap(format!("Not a Bitcoin {} address: {}", btc_network, err))
-        });
+        .unwrap_or_else(|err| ic_cdk::trap(format!("Not a Bitcoin {btc_network} address: {err}")));
 
     match config.check_mode {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,
@@ -139,7 +137,7 @@ async fn check_transaction_str(args: CheckTransactionStrArgs) -> CheckTransactio
 async fn check_transaction_query(args: CheckTransactionQueryArgs) -> CheckTransactionQueryResponse {
     match Txid::try_from(args) {
         Ok(txid) => check_fetched_transaction_inputs(txid).await,
-        Err(err) => panic!("Invalid transaction ID: {}", err),
+        Err(err) => panic!("Invalid transaction ID: {err}"),
     }
 }
 
@@ -187,7 +185,7 @@ fn init(arg: Option<CheckArg>) {
                 init_arg.check_mode,
                 init_arg.num_subnet_nodes,
             )
-            .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err))),
+            .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {err}"))),
         ),
         _ => {
             ic_cdk::trap("cannot init canister state without init args");
@@ -210,7 +208,7 @@ fn post_upgrade(arg: Option<CheckArg>) {
                 .unwrap_or(old_config.check_mode);
             let config =
                 Config::new_and_validate(old_config.btc_network(), check_mode, num_subnet_nodes)
-                    .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err)));
+                    .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {err}")));
             set_config(config);
         }
         Some(CheckArg::InitArg(_)) => {
@@ -322,7 +320,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 Err(_) => {
                     return http::HttpResponseBuilder::bad_request()
                         .with_body_and_content_length("failed to parse the 'time' parameter")
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -365,7 +363,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 Err(_) => {
                     return http::HttpResponseBuilder::bad_request()
                         .with_body_and_content_length("failed to parse the 'page' parameter")
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -434,9 +432,9 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 }
                 let tx = match provider.btc_network() {
                     BtcNetwork::Regtest { .. } => {
-                        use serde_json::{from_slice, from_value, Value};
+                        use serde_json::{Value, from_slice, from_value};
                         let json: Value = from_slice(response.body.as_slice()).map_err(|err| {
-                            HttpGetTxError::TxEncoding(format!("JSON parsing error {}", err))
+                            HttpGetTxError::TxEncoding(format!("JSON parsing error {err}"))
                         })?;
                         let hex: String =
                             from_value(json["result"]["hex"].clone()).map_err(|_| {
@@ -445,10 +443,10 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                                 )
                             })?;
                         let raw = hex::decode(&hex).map_err(|err| {
-                            HttpGetTxError::TxEncoding(format!("decode hex error: {}", err))
+                            HttpGetTxError::TxEncoding(format!("decode hex error: {err}"))
                         })?;
                         Transaction::consensus_decode(&mut raw.as_slice()).map_err(|err| {
-                            HttpGetTxError::TxEncoding(format!("decode tx error: {}", err))
+                            HttpGetTxError::TxEncoding(format!("decode tx error: {err}"))
                         })?
                     }
                     _ => Transaction::consensus_decode(&mut response.body.as_slice())
@@ -588,7 +586,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     candid::export_service!();
 

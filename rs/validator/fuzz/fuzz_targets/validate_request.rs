@@ -9,7 +9,7 @@ use ic_validator_http_request_arbitrary::AnonymousContent;
 use ic_validator_ingress_message::IngressMessageVerifier;
 use ic_validator_ingress_message::RequestValidationError;
 use ic_validator_ingress_message::{HttpRequestVerifier, TimeProvider};
-use libfuzzer_sys::{fuzz_target, Corpus};
+use libfuzzer_sys::{Corpus, fuzz_target};
 
 fuzz_target!(|content: AnonymousContent| -> Corpus {
     let (call_content, query_content, read_content) = (
@@ -57,7 +57,9 @@ fuzz_target!(|content: AnonymousContent| -> Corpus {
             }
         }
         (result_call_request, result_query_request, result_read_request) => {
-            panic!("Parsing of HttpCallContent {result_call_request:?}, HttpQueryContent {result_query_request:?} and HttpReadStateContent are inconsistent {result_read_request:?}")
+            panic!(
+                "Parsing of HttpCallContent {result_call_request:?}, HttpQueryContent {result_query_request:?} and HttpReadStateContent are inconsistent {result_read_request:?}"
+            )
         }
     }
 });

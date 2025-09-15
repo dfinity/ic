@@ -94,7 +94,7 @@ impl<Input: CandidType, Output: CandidType> TryFrom<candid::types::reference::Fu
     type Error = String;
     fn try_from(func: candid::types::reference::Func) -> Result<Self, Self::Error> {
         let canister_id = Principal::try_from(func.principal.as_slice())
-            .map_err(|e| format!("principal is not a canister id: {}", e))?;
+            .map_err(|e| format!("principal is not a canister id: {e}"))?;
         Ok(QueryArchiveFn {
             canister_id,
             method: func.method,

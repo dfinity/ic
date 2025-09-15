@@ -31,8 +31,8 @@ use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::{
         assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -50,10 +50,10 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    util::{block_on, get_nns_node, MessageCanister},
+    util::{MessageCanister, block_on, get_nns_node},
 };
 use ic_types::Height;
-use slog::{debug, error, info, Logger};
+use slog::{Logger, debug, error, info};
 use std::{
     ffi::OsStr,
     fs,
@@ -267,7 +267,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Config: {}", config_str);
     let config_file = config_dir.join("config.json5");
     let mut f = File::create(&config_file).expect("Should be able to create the config file");
-    write!(f, "{}", config_str).expect("Should be able to write the config file");
+    write!(f, "{config_str}").expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
     let ic_backup_path =
@@ -393,27 +393,30 @@ pub fn test(env: TestEnv) {
     let mut hash_mismatch = false;
     for i in 0..60 {
         info!(log, "Checking logs for hash mismatch...");
-        if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
-            for en in dirs {
-                info!(log, "DirEntry in logs: {:?}", en);
-                match en {
-                    Ok(d) => {
-                        let contents = fs::read_to_string(d.path())
-                            .expect("Should have been able to read the log file");
-                        if i == 15 {
-                            println!("{}", contents);
-                        }
+        match fs::read_dir(backup_dir.join("logs")) {
+            Ok(dirs) => {
+                for en in dirs {
+                    info!(log, "DirEntry in logs: {:?}", en);
+                    match en {
+                        Ok(d) => {
+                            let contents = fs::read_to_string(d.path())
+                                .expect("Should have been able to read the log file");
+                            if i == 15 {
+                                println!("{contents}");
+                            }
 
-                        if contents.contains(DIVERGENCE_LOG_STR) {
-                            hash_mismatch = true;
-                            break;
+                            if contents.contains(DIVERGENCE_LOG_STR) {
+                                hash_mismatch = true;
+                                break;
+                            }
                         }
+                        Err(e) => error!(log, "Error opening log file: {:?}", e),
                     }
-                    Err(e) => error!(log, "Error opening log file: {:?}", e),
                 }
             }
-        } else {
-            error!(log, "Error reading log file directory")
+            _ => {
+                error!(log, "Error reading log file directory")
+            }
         }
         if hash_mismatch {
             break;
@@ -441,7 +444,7 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
     if lcp == 0 {
         return None;
     }
-    Some(dir.join(format!("checkpoints/{:016x}", lcp)))
+    Some(dir.join(format!("checkpoints/{lcp:016x}")))
 }
 
 fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {

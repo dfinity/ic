@@ -31,17 +31,15 @@ pub fn calculate_rewards_v0(
         let node_operator_id = PrincipalId::try_from(&node_operator.node_operator_principal_id)
             .map_err(|e| {
                 format!(
-                    "Node Operator key '{:?}' cannot be parsed as a PrincipalId: '{}'",
-                    key_string, e
+                    "Node Operator key '{key_string:?}' cannot be parsed as a PrincipalId: '{e}'"
                 )
             })?;
 
         let node_provider_id = PrincipalId::try_from(&node_operator.node_provider_principal_id)
             .map_err(|e| {
                 format!(
-                    "Node Operator with key '{}' has a node_provider_principal_id \
-                                 that cannot be parsed as a PrincipalId: '{}'",
-                    node_operator_id, e
+                    "Node Operator with key '{node_operator_id}' has a node_provider_principal_id \
+                                 that cannot be parsed as a PrincipalId: '{e}'"
                 )
             })?;
 

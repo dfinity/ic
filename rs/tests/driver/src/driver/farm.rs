@@ -8,15 +8,15 @@ use std::{
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use crate::driver::log_events;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::{read_dependency_to_string, HasFarmUrl};
+use crate::driver::test_env_api::{HasFarmUrl, read_dependency_to_string};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha2::Sha256;
-use reqwest::blocking::{multipart, Client, RequestBuilder};
+use reqwest::blocking::{Client, RequestBuilder, multipart};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use slog::info;
-use slog::{error, warn, Logger};
+use slog::{Logger, error, warn};
 use std::fmt;
 use std::io::Write;
 use thiserror::Error;
@@ -83,7 +83,7 @@ impl Farm {
     }
 
     pub fn acquire_playnet_certificate(&self, group_name: &str) -> FarmResult<PlaynetCertificate> {
-        let path = format!("group/{}/playnet/certificate", group_name);
+        let path = format!("group/{group_name}/playnet/certificate");
         let rb = self.post(&path);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb)?;
@@ -102,7 +102,7 @@ impl Farm {
             .override_host_features
             .clone()
             .unwrap_or_else(|| spec.required_host_features.clone());
-        let path = format!("group/{}", group_name);
+        let path = format!("group/{group_name}");
         let ttl = ttl.map(|ttl| ttl.as_secs() as u32);
         let spec = spec.add_meta(group_base_name);
         let body = CreateGroupRequest { ttl, spec };
@@ -142,7 +142,7 @@ impl Farm {
     }
 
     pub fn claim_file(&self, group_name: &str, file_id: &FileId) -> FarmResult<ClaimResult> {
-        let path = format!("group/{}/file/{}", group_name, file_id);
+        let path = format!("group/{group_name}/file/{file_id}");
         let rb = self.put(&path);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         match self.retry_until_success(rbb) {
@@ -168,7 +168,7 @@ impl Farm {
             "Uploading file: {} of size {} bytes ...", filename, size
         );
         let rb = self
-            .post(&format!("group/{}/file", group_name))
+            .post(&format!("group/{group_name}/file"))
             .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
         let path = (&path).to_owned();
         let rbb = || {
@@ -184,8 +184,7 @@ impl Farm {
         if file_ids.len() != 1 || !file_ids.contains_key(filename) {
             return Err(FarmError::InvalidResponse {
                 message: format!(
-                    "Response has invalid length or does not contain file id for '{}'",
-                    filename
+                    "Response has invalid length or does not contain file id for '{filename}'"
                 ),
             });
         }
@@ -199,10 +198,7 @@ impl Farm {
         template_name: &str,
         image_specs: Vec<AttachImageSpec>,
     ) -> FarmResult<()> {
-        let path = format!(
-            "group/{}/vm/{}/drive-templates/{}",
-            group_name, vm_name, template_name
-        );
+        let path = format!("group/{group_name}/vm/{vm_name}/drive-templates/{template_name}");
         let req = self.put(&path);
         let attach_drives_req = AttachDrivesRequest {
             drives: image_specs,
@@ -214,17 +210,17 @@ impl Farm {
     }
 
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
-        let path = format!("group/{}/vm/{}/start", group_name, vm_name);
+        let path = format!("group/{group_name}/vm/{vm_name}/start");
         let rb = self.put(&path);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb)?;
-        let url = self.url_from_path(&format!("group/{}/vm/{}/console/", group_name, vm_name)[..]);
+        let url = self.url_from_path(&format!("group/{group_name}/vm/{vm_name}/console/")[..]);
         emit_vm_console_link_event(&self.logger, url, vm_name);
         Ok(())
     }
 
     pub fn destroy_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
-        let path = format!("group/{}/vm/{}/destroy", group_name, vm_name);
+        let path = format!("group/{group_name}/vm/{vm_name}/destroy");
         let rb = self.put(&path);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb)?;
@@ -232,7 +228,7 @@ impl Farm {
     }
 
     pub fn reboot_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
-        let path = format!("group/{}/vm/{}/reboot", group_name, vm_name);
+        let path = format!("group/{group_name}/vm/{vm_name}/reboot");
         let rb = self.put(&path);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb)?;
@@ -249,7 +245,7 @@ impl Farm {
         {
             warn!(self.logger, "Failed to bump TTL before deleting group.");
         }
-        let path = format!("group/{}", group_name);
+        let path = format!("group/{group_name}");
         let mut req = self.delete(&path);
         req = req.timeout(Duration::from_secs(130)); // longer than VM soft shutdown timeout (120s)
         match req.send() {
@@ -271,7 +267,7 @@ impl Farm {
         group_name: &str,
         dns_records: Vec<DnsRecord>,
     ) -> FarmResult<String> {
-        let path = format!("group/{}/dns", group_name);
+        let path = format!("group/{group_name}/dns");
         let rb = Self::json(self.post(&path), &dns_records);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb)?;
@@ -288,7 +284,7 @@ impl Farm {
         group_name: &str,
         dns_records: Vec<DnsRecord>,
     ) -> FarmResult<String> {
-        let path = format!("group/{}/playnet/dns", group_name);
+        let path = format!("group/{group_name}/playnet/dns");
         let rb = Self::json(self.post(&path), &dns_records);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb)?;

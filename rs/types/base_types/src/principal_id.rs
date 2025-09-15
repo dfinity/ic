@@ -192,7 +192,7 @@ impl TryFrom<u8> for PrincipalIdClass {
             2 => Ok(PrincipalIdClass::SelfAuthenticating),
             3 => Ok(PrincipalIdClass::Derived),
             4 => Ok(PrincipalIdClass::Anonymous),
-            garbage => Err(format!("{} is not a valid principal ID class.", garbage)),
+            garbage => Err(format!("{garbage} is not a valid principal ID class.")),
         }
     }
 }

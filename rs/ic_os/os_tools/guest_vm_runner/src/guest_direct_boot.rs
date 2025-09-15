@@ -1,6 +1,6 @@
+use crate::GuestVMType;
 use crate::boot_args::read_boot_args;
 use crate::guest_vm_config::DirectBootConfig;
-use crate::GuestVMType;
 use anyhow::Context;
 use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
@@ -522,10 +522,12 @@ mod tests {
 
         let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
 
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Could not mount grub partition"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Could not mount grub partition")
+        );
     }
 
     #[tokio::test]
@@ -538,10 +540,12 @@ mod tests {
 
         let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
 
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Could not mount boot partition A"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Could not mount boot partition A")
+        );
     }
 
     #[tokio::test]
@@ -570,12 +574,14 @@ mod tests {
             .without_kernel_files()
             .build();
 
-        assert!(setup
-            .prepare_direct_boot(GuestVMType::Default)
-            .await
-            .expect_err("prepare_direct_boot should fail")
-            .to_string()
-            .contains("vmlinuz"));
+        assert!(
+            setup
+                .prepare_direct_boot(GuestVMType::Default)
+                .await
+                .expect_err("prepare_direct_boot should fail")
+                .to_string()
+                .contains("vmlinuz")
+        );
     }
 
     #[tokio::test]
@@ -599,12 +605,14 @@ mod tests {
             .with_boot_args("args_a", "args_b")
             .build();
 
-        assert!(setup
-            .prepare_direct_boot(GuestVMType::Upgrade)
-            .await
-            .expect("prepare_direct_boot failed")
-            .expect("prepare_direct_boot returned None")
-            .kernel_cmdline
-            .contains("args_b"));
+        assert!(
+            setup
+                .prepare_direct_boot(GuestVMType::Upgrade)
+                .await
+                .expect("prepare_direct_boot failed")
+                .expect("prepare_direct_boot returned None")
+                .kernel_cmdline
+                .contains("args_b")
+        );
     }
 }

@@ -2,7 +2,7 @@ use crate::{
     governance::{governance_minting_account, neuron_subaccount},
     neuron::Neuron,
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{GovernanceError, governance_error::ErrorType},
 };
 
 use ic_nervous_system_canisters::ledger::IcpLedger;
@@ -41,7 +41,7 @@ impl BurnNeuronFeesOperation {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Failed to burn fees: {}", err),
+                    format!("Failed to burn fees: {err}"),
                 )
             })?;
 
@@ -119,7 +119,7 @@ impl NeuronStakeTransferOperation {
                     .expect("Source neuron not found after failing to transfer stake");
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Failed to transfer stake: {}", err),
+                    format!("Failed to transfer stake: {err}"),
                 )
             })?;
 
@@ -192,7 +192,7 @@ impl MintIcpOperation {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Failed to mint ICP: {}", err),
+                    format!("Failed to mint ICP: {err}"),
                 )
             })?;
         Ok(())
