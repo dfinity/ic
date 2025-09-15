@@ -738,7 +738,7 @@ mod tests {
                 Height::new(1),
                 &proposal_context,
                 &payload,
-                &[past_payload.clone()],
+                std::slice::from_ref(&past_payload),
             );
 
             match validation_result {

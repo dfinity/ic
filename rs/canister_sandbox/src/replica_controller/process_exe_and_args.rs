@@ -142,13 +142,13 @@ fn current_binary_path() -> Option<PathBuf> {
 fn check_binary_signature(binary_path: PathBuf) -> bool {
     let mut signature_found = false;
 
-    if let Ok(data) = std::fs::read(binary_path) {
-        if let Ok(obj_file) = object::File::parse(&*data) {
-            signature_found = obj_file.sections().any(|section| {
+    if let Ok(data) = std::fs::read(binary_path)
+        && let Ok(obj_file) = object::File::parse(&*data)
+    {
+        signature_found = obj_file.sections().any(|section| {
                 matches!(section.name(), Ok(name) if name == crate::SANDBOX_SECTION_NAME)
                     && matches!(section.data(), Ok(data) if data.starts_with(&crate::SANDBOX_MAGIC_BYTES))
             });
-        }
     }
     signature_found
 }
