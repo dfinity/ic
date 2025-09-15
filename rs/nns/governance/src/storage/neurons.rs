@@ -903,6 +903,10 @@ where
 
 // This is copied from candid/src. Seems like their definition should be public,
 // but it's not. Seems to be an oversight.
+//
+// TODO: this is being displayed as dead code even though it is used
+// in `lazy_static!`
+#[allow(dead_code)]
 const PRINCIPAL_MAX_LENGTH_IN_BYTES: usize = 29;
 
 // For range scanning.

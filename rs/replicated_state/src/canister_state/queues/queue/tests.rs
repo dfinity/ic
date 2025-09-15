@@ -4,6 +4,7 @@ use super::*;
 use crate::canister_state::DEFAULT_QUEUE_CAPACITY;
 use crate::canister_state::queues::pb_queues;
 use assert_matches::assert_matches;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use proptest::prelude::*;

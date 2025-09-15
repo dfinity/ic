@@ -11059,6 +11059,9 @@ lazy_static! {
     };
 }
 
+//TODO: this is displayed as unused even though it is used in
+// `lazy_static!`
+#[allow(dead_code)]
 const BASKET_COUNT: u64 = 3;
 
 lazy_static! {
@@ -11743,6 +11746,9 @@ lazy_static! {
     );
 }
 
+//TODO: this is displayed as dead code even though it is used
+//in `lazy_static!`
+#[allow(dead_code)]
 const NEURONS_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 
 /// Failure when settling the Neurons' fund should result in the Lifecycle remaining
