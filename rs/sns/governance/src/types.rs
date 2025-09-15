@@ -53,7 +53,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
     hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH,
 };
-use ic_nervous_system_common_validation::validate_proposal_url;
+use ic_nervous_system_common_validation::validate_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
@@ -1607,7 +1607,7 @@ impl SnsMetadata {
     }
 
     pub fn validate_url(url: &str) -> Result<(), String> {
-        validate_proposal_url(
+        validate_url(
             url,
             Self::MIN_URL_LENGTH,
             Self::MAX_URL_LENGTH,
