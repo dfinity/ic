@@ -136,7 +136,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 150
@@ -366,7 +366,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -410,7 +410,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -432,7 +432,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -464,7 +464,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -605,7 +605,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
@@ -624,7 +624,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -662,7 +662,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
@@ -700,7 +700,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:29d1de60923ff4d3aa10812bba4291014a279957abca52678643ff8287a0f59f
       options: >-
         -e NODE_NAME
     timeout-minutes: 30
