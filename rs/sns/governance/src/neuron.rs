@@ -1,12 +1,12 @@
 use crate::{
     logs::ERROR,
     pb::v1::{
+        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, ProposalId, Topic, Vote,
         governance_error::ErrorType,
         manage_neuron,
         neuron::{DissolveState, FolloweesForTopic, TopicFollowees},
         proposal::Action,
-        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, ProposalId, Topic, Vote,
     },
 };
 use ic_base_types::PrincipalId;
@@ -167,11 +167,13 @@ impl Neuron {
             Ok(())
         } else {
             let caller_permissions = self.permissions_for_principal(caller);
-            Err(GovernanceError::new_with_message(ErrorType::NotAuthorized,
-            format!(
-                "Caller '{caller:?}' is not authorized to modify permissions {permissions_to_change} for neuron '{}' as it does not have any of {sufficient_permissions:?}. (Caller's permissions are {caller_permissions})",
-                self.id.as_ref().expect("Neuron must have a NeuronId"),
-            )))
+            Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "Caller '{caller:?}' is not authorized to modify permissions {permissions_to_change} for neuron '{}' as it does not have any of {sufficient_permissions:?}. (Caller's permissions are {caller_permissions})",
+                    self.id.as_ref().expect("Neuron must have a NeuronId"),
+                ),
+            ))
         }
     }
 
@@ -353,8 +355,7 @@ impl Neuron {
 
             debug_assert!(
                 followee_vote.is_ok(),
-                "Cannot convert ballot vote to Vote for {:?}",
-                ballot
+                "Cannot convert ballot vote to Vote for {ballot:?}"
             );
 
             let Ok(followee_vote) = Vote::try_from(ballot.vote) else {
@@ -584,7 +585,7 @@ impl Neuron {
                 if current_dd > desired_dd {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
-                        "Can't set a dissolve delay that is smaller than the current dissolve delay."
+                        "Can't set a dissolve delay that is smaller than the current dissolve delay.",
                     ));
                 }
 
@@ -773,8 +774,7 @@ impl Neuron {
             return Err(GovernanceError::new_with_message(
                 ErrorType::AccessControlList,
                 format!(
-                    "PrincipalId {} was missing permissions {:?} when removing {:?}",
-                    principal_id, missing_permissions, permission_types_to_remove
+                    "PrincipalId {principal_id} was missing permissions {missing_permissions:?} when removing {permission_types_to_remove:?}"
                 ),
             ));
         }
@@ -846,7 +846,7 @@ impl NeuronId {
             Ok(subaccount) => Ok(subaccount),
             Err(e) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidNeuronId,
-                format!("Could not convert NeuronId to Subaccount {}", e),
+                format!("Could not convert NeuronId to Subaccount {e}"),
             )),
         }
     }
@@ -882,7 +882,7 @@ impl FromStr for NeuronId {
             Ok(id) => Ok(NeuronId { id }),
             Err(e) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidNeuronId,
-                format!("Could not convert {} to NeuronId", e),
+                format!("Could not convert {e} to NeuronId"),
             )),
         }
     }

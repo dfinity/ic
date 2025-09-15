@@ -8,7 +8,7 @@ use dfn_core::println;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 
@@ -17,10 +17,7 @@ impl Registry {
         &mut self,
         payload: DeployGuestosToAllSubnetNodesPayload,
     ) {
-        println!(
-            "{}do_deploy_guestos_to_all_subnet_nodes: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_deploy_guestos_to_all_subnet_nodes: {payload:?}");
 
         check_replica_version_is_blessed(self, &payload.replica_version_id);
 

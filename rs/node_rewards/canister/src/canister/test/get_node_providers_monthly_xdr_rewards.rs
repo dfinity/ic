@@ -1,5 +1,5 @@
-use crate::canister::test::test_utils::{setup_thread_local_canister_for_test, CANISTER_TEST};
 use crate::canister::NodeRewardsCanister;
+use crate::canister::test::test_utils::{CANISTER_TEST, setup_thread_local_canister_for_test};
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
@@ -13,7 +13,7 @@ use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardRate, NodeRewardRates, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_keys::{
-    make_data_center_record_key, make_node_operator_record_key, NODE_REWARDS_TABLE_KEY,
+    NODE_REWARDS_TABLE_KEY, make_data_center_record_key, make_node_operator_record_key,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;
@@ -535,7 +535,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     let mut np2_expected_reward_ch = 0;
     let mut node_reward_ch = 22000000.0;
     for _ in 0..14 {
-        println!("node_reward CH {}", node_reward_ch);
+        println!("node_reward CH {node_reward_ch}");
         np2_expected_reward_ch += node_reward_ch as u64;
         node_reward_ch *= 0.7;
     }
@@ -561,7 +561,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     let mut np2_expected_reward_de = 0;
     let mut node_reward_de = 22000000.0;
     for _ in 0..11 {
-        println!("node_reward DE {}", node_reward_de);
+        println!("node_reward DE {node_reward_de}");
         np2_expected_reward_de += node_reward_de as u64;
         node_reward_de *= 0.7;
     }
@@ -597,7 +597,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     );
 
     for _ in 0..10 {
-        println!("node_reward CH {}", node_reward_ch);
+        println!("node_reward CH {node_reward_ch}");
         np2_expected_reward_ch += node_reward_ch as u64;
         node_reward_ch *= 0.7;
     }

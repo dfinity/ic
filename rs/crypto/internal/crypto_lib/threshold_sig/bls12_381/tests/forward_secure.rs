@@ -3,7 +3,7 @@
 //! Tests for combined forward secure encryption and ZK proofs
 
 use ic_crypto_internal_bls12_381_type::{G2Affine, Scalar};
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{Epoch, forward_secure::*};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng, RngCore};
@@ -19,11 +19,15 @@ fn output_of_mk_sys_params_is_expected_values() {
         assert_eq!(hex::encode(g2.serialize()), expected);
     }
 
-    assert_g2_equal(sys.f0(),
-                    "8422a9f8fdd31d70efea5a8fff9e0dab7707703cd0654d5b5c92a654b4cf60bbc74ea1b40b9eb6ef036f647ed196418c199c775a89be3e15c1df45cadd48e99e60ef0d7142132876eaf91c03c9f1fcabcec3a61b34e2341f38418d006e02f502");
+    assert_g2_equal(
+        sys.f0(),
+        "8422a9f8fdd31d70efea5a8fff9e0dab7707703cd0654d5b5c92a654b4cf60bbc74ea1b40b9eb6ef036f647ed196418c199c775a89be3e15c1df45cadd48e99e60ef0d7142132876eaf91c03c9f1fcabcec3a61b34e2341f38418d006e02f502",
+    );
 
-    assert_g2_equal(sys.h(),
-                    "a130c9e5530dc7d5f4bf5d40ad719f4a0d38e58502ab63ed27d3d9bdc545f21eb9cf18462a04b0fc943e0dd537aa2f2e0b140b0db9adef851e26721ef88caf1da5b20bb3593f9fb7a4312f0c0ea868d6b08d658d08ff832ff1df8d71471b61b6");
+    assert_g2_equal(
+        sys.h(),
+        "a130c9e5530dc7d5f4bf5d40ad719f4a0d38e58502ab63ed27d3d9bdc545f21eb9cf18462a04b0fc943e0dd537aa2f2e0b140b0db9adef851e26721ef88caf1da5b20bb3593f9fb7a4312f0c0ea868d6b08d658d08ff832ff1df8d71471b61b6",
+    );
 
     let mut sha256 = Sha256::new();
     for val in sys.f() {

@@ -13,8 +13,8 @@ pub enum TaskId {
 impl Display for TaskId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TaskId::Test(test_name) => write!(f, "{}", test_name),
-            TaskId::Timeout(task_id) => write!(f, "timeout({})", task_id),
+            TaskId::Test(test_name) => write!(f, "{test_name}"),
+            TaskId::Timeout(task_id) => write!(f, "timeout({task_id})"),
         }
     }
 }

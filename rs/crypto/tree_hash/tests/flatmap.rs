@@ -1,5 +1,5 @@
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{flatmap, FlatMap};
+use ic_crypto_tree_hash::{FlatMap, flatmap};
 use maplit::*;
 use rand::Rng;
 use std::collections::BTreeMap;
@@ -34,7 +34,7 @@ fn from_key_values() {
     let mut iter = map.iter();
     match iter.next() {
         Some((1, 10)) | Some((1, 11)) => {}
-        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {:?})", other),
+        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {other:?})"),
     }
     assert_eq!(Some((&2, &20)), iter.next());
     assert_eq!(Some((&3, &30)), iter.next());
@@ -51,7 +51,7 @@ fn flatmap_macro() {
     let mut iter = map.iter();
     match iter.next() {
         Some((1, 10)) | Some((1, 11)) => {}
-        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {:?})", other),
+        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {other:?})"),
     }
     assert_eq!(Some((&2, &20)), iter.next());
     assert_eq!(Some((&3, &30)), iter.next());

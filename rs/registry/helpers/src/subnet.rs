@@ -12,13 +12,13 @@ use ic_protobuf::{
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
-    make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_node_record_key,
+    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_types::{
-    registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId,
-    PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion, SubnetId,
+    Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion,
+    SubnetId, registry::RegistryClientError::DecodeError,
 };
 use std::{convert::TryFrom, time::Duration};
 
@@ -211,7 +211,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             .and_then(|subnet_id_proto| subnet_id_proto.principal_id)
             .map(|pr_id| {
                 PrincipalId::try_from(pr_id.raw).map_err(|err| DecodeError {
-                    error: format!("get_root_subnet_id() failed with {}", err),
+                    error: format!("get_root_subnet_id() failed with {err}"),
                 })
             })
             .transpose()?
@@ -227,7 +227,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         deserialize_registry_value::<SubnetRecord>(bytes)?
             .map(|subnet| {
                 get_node_ids_from_subnet_record(&subnet).map_err(|err| DecodeError {
-                    error: format!("get_node_ids_on_subnet() failed with {}", err),
+                    error: format!("get_node_ids_on_subnet() failed with {err}"),
                 })
             })
             .transpose()
@@ -284,7 +284,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             .and_then(|subnet| subnet.chain_key_config.map(ChainKeyConfig::try_from))
             .transpose()
             .map_err(|err| DecodeError {
-                error: format!("get_chain_key_config() failed with {}", err),
+                error: format!("get_chain_key_config() failed with {err}"),
             })
     }
 
@@ -500,7 +500,7 @@ impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
                     .map(|s| {
                         Ok(SubnetId::from(
                             PrincipalId::try_from(s.as_slice()).map_err(|err| DecodeError {
-                                error: format!("get_subnet_ids() failed with {}", err),
+                                error: format!("get_subnet_ids() failed with {err}"),
                             })?,
                         ))
                     })

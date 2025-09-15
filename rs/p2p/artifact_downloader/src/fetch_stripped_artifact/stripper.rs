@@ -4,8 +4,8 @@ use ic_types::{
 };
 
 use super::types::{
-    stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload},
     SignedIngressId,
+    stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload},
 };
 
 /// Provides functionality for stripping objects of given information.

@@ -20,8 +20,8 @@ Success::
 
 end::catalog[] */
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::upgrade::{
     fetch_unassigned_node_version, get_blessed_replica_versions,
@@ -29,8 +29,8 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
-        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted, AuthMean,
+        AuthMean, generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted,
     },
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};

@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use canister_test::PrincipalId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -22,7 +22,7 @@ use ic_system_test_driver::{
         bootstrap::{setup_nested_vms, start_nested_vms},
         farm::Farm,
         ic::{InternetComputer, Subnet},
-        ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
+        ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
         nested::{NestedNode, NestedVm, NestedVms},
         resource::{allocate_resources, get_resource_request_for_nested_nodes},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
@@ -40,7 +40,7 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url},
 };
 use ic_types::Height;
-use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
+use ic_types::{NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
 use regex::Regex;
 use reqwest::Client;
@@ -48,7 +48,7 @@ use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
