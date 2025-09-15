@@ -72,9 +72,11 @@ system_test(
 )
 
 # bazel test --test_output=streamed //rs/tests/node:launch_single_guest --test_timeout=3600 --test_arg=--debug-keepalive
+# ict testnet create launch_single_guest --lifetime-mins 3600
 system_test(
     name = "launch_single_guest",
     tags = [
+        "dynamic_testnet",
         "manual",
     ],
     deps = [
@@ -87,9 +89,11 @@ system_test(
 )
 
 # bazel test --test_output=streamed //rs/tests/node:launch_single_host --test_timeout=3600 --test_arg=--debug-keepalive
+# ict testnet create launch_single_host --lifetime-mins 3600
 system_test(
     name = "launch_single_host",
     tags = [
+        "dynamic_testnet",
         "manual",
     ],
     uses_guestos_img = False,
