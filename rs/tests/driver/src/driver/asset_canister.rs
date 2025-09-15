@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_agent::Agent;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::env;
 use tokio::task;
@@ -44,7 +44,7 @@ where
             move || {
                 app_node.create_and_install_canister_with_arg(
                     &env::var(wasm_env_var_name.clone())
-                        .unwrap_or_else(|_| panic!("{} not set", wasm_env_var_name)),
+                        .unwrap_or_else(|_| panic!("{wasm_env_var_name} not set")),
                     None,
                 )
             }

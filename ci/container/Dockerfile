@@ -151,7 +151,6 @@ RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-co
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./ci/container/files/docker.sh /usr/bin/docker
 
 USER ubuntu
 

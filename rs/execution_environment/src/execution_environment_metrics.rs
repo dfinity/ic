@@ -2,10 +2,10 @@ use ic_cycles_account_manager::{
     CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
 };
 use ic_error_types::ErrorCode;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private as ic00;
-use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
 use ic_types::messages::Response;
@@ -216,7 +216,7 @@ impl ExecutionEnvironmentMetrics {
     ) {
         let (outcome_label, status_label) = match res {
             Ok(_) => (FINISHED_OUTCOME_LABEL.into(), SUCCESS_STATUS_LABEL.into()),
-            Err(err_code) => (ERROR_OUTCOME_LABEL.into(), format!("{:?}", err_code)),
+            Err(err_code) => (ERROR_OUTCOME_LABEL.into(), format!("{err_code:?}")),
         };
 
         self.observe_message_with_label(method_name, duration, outcome_label, status_label)
@@ -333,7 +333,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
                 };
-                (format!("ic00_{}", method_name), speed_label)
+                (format!("ic00_{method_name}"), speed_label)
             }
             Err(_) => (
                 String::from("unknown_method"),

@@ -7,15 +7,15 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
     add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
-    manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
-    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
+    manage_neuron_response::Command as CommandResponse,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::{get_value, get_value_or_panic, prepare_add_node_payload},
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -82,10 +82,9 @@ fn test_add_and_remove_nodes_from_registry() {
             .unwrap()
         {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            some_error => panic!(
-                "Cannot find proposal id in response. The response is: {:?}",
-                some_error
-            ),
+            some_error => {
+                panic!("Cannot find proposal id in response. The response is: {some_error:?}")
+            }
         };
 
         // Wait for the proposal to be accepted and executed.
@@ -145,11 +144,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
         // Check if some fields are present
-        assert!(
-            node_record.http.is_some(),
-            "node_record : {:?}",
-            node_record
-        );
+        assert!(node_record.http.is_some(), "node_record : {node_record:?}");
 
         let proposal_payload = RemoveNodesPayload {
             node_ids: vec![node_id],
@@ -178,7 +173,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
         // Check if record is removed
-        assert!(node_record.is_none(), "node_record : {:?}", node_record);
+        assert!(node_record.is_none(), "node_record : {node_record:?}");
 
         Ok(())
     });

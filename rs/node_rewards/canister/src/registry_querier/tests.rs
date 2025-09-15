@@ -7,12 +7,12 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_canister_client::{
-    test_registry_data_stable_memory_impl, RegistryDataStableMemory, StableCanisterRegistryClient,
-    StorableRegistryKey, StorableRegistryValue,
+    RegistryDataStableMemory, StableCanisterRegistryClient, StorableRegistryKey,
+    StorableRegistryValue, test_registry_data_stable_memory_impl,
 };
 use ic_registry_keys::{
-    make_subnet_list_record_key, DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
@@ -88,7 +88,7 @@ fn generate_node_operator_key_value(
         dc_id,
         ..NodeOperatorRecord::default()
     };
-    let key = format!("{}{}", NODE_OPERATOR_RECORD_KEY_PREFIX, principal_id);
+    let key = format!("{NODE_OPERATOR_RECORD_KEY_PREFIX}{principal_id}");
 
     (key, value)
 }
@@ -99,7 +99,7 @@ fn generate_dc_key_value(dc_id: String) -> (String, DataCenterRecord) {
         region: "A".to_string(),
         ..DataCenterRecord::default()
     };
-    let key = format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id);
+    let key = format!("{DATA_CENTER_KEY_PREFIX}{dc_id}");
 
     (key, value)
 }
@@ -110,28 +110,35 @@ fn add_dummy_data() {
     let node_1_id = 1;
     let node_2_id = 2;
     let node_3_id = 3;
+    let node_4_id = 4;
     let no_1_id = 10;
     let np_1_id = 20;
     let no_2_id = 30;
+    let no_3_id = 40;
+    let np_2_id = 50;
 
     let (no_1_k, no_1_v) = generate_node_operator_key_value(no_1_id, np_1_id, dc_1_id.clone());
+    let (no_3_k, no_3_v) = generate_node_operator_key_value(no_3_id, np_2_id, dc_1_id.clone());
     let (dc_2_k, dc_2_v) = generate_dc_key_value(dc_2_id.clone());
     let (no_2_k, no_2_v) = generate_node_operator_key_value(no_2_id, np_1_id, dc_2_id);
     let (dc_1_k, dc_1_v) = generate_dc_key_value(dc_1_id);
     let (node_1_k, node_1_v) = generate_node_key_value(node_1_id, NodeRewardType::Type0, no_1_id);
     let (node_2_k, node_2_v) = generate_node_key_value(node_2_id, NodeRewardType::Type1, no_1_id);
     let (node_3_k, node_3_v) = generate_node_key_value(node_3_id, NodeRewardType::Type2, no_2_id);
+    let (node_4_k, node_4_v) = generate_node_key_value(node_4_id, NodeRewardType::Type2, no_3_id);
 
     add_record_helper(&dc_2_k, 39651, Some(dc_2_v), "2025-07-01");
     add_record_helper(&dc_1_k, 39652, Some(dc_1_v), "2025-07-02");
     add_record_helper(&no_1_k, 39653, Some(no_1_v), "2025-07-02");
     add_record_helper(&no_2_k, 39654, Some(no_2_v), "2025-07-02");
+    add_record_helper(&no_3_k, 39655, Some(no_3_v), "2025-07-02");
     add_record_helper(&node_1_k, 39662, Some(node_1_v), "2025-07-03");
     add_record_helper(&node_2_k, 39664, Some(node_2_v), "2025-07-04");
     add_record_helper(&node_1_k, 39666, None::<NodeRecord>, "2025-07-08");
     add_record_helper(&node_3_k, 39667, Some(node_3_v.clone()), "2025-07-11");
     add_record_helper(&node_3_k, 39670, None::<NodeRecord>, "2025-07-13");
     add_record_helper(&node_3_k, 39675, Some(node_3_v.clone()), "2025-07-15");
+    add_record_helper(&node_4_k, 39676, Some(node_4_v.clone()), "2025-07-16");
 
     // Removed and re-added node_3 same day
     let ts_removed = DayUtc::try_from("2025-07-16")
@@ -158,7 +165,7 @@ fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Ve
     rewardable_nodes
         .iter()
         .find(|n| n.node_id == node_id)
-        .unwrap_or_else(|| panic!("Node {} should be present", node_id))
+        .unwrap_or_else(|| panic!("Node {node_id} should be present"))
         .clone()
         .rewardable_days
 }
@@ -294,6 +301,7 @@ fn test_rewardable_nodes_deleted_nodes() {
         &*REGISTRY_STORE.with(|store| store.clone()),
         from,
         to,
+        None,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -342,6 +350,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
         &*REGISTRY_STORE.with(|store| store.clone()),
         from,
         to,
+        None,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -385,7 +394,7 @@ fn test_node_re_registered_after_deletion() {
 
     // Re-register node_1 after it was deleted
     let node_id = PrincipalId::new_node_test_id(node_1_id);
-    let node_key = format!("{}{}", NODE_RECORD_KEY_PREFIX, node_id);
+    let node_key = format!("{NODE_RECORD_KEY_PREFIX}{node_id}");
     let node_record = NodeRecord {
         node_reward_type: Some(NodeRewardType::Type0 as i32),
         node_operator_id: PrincipalId::new_user_test_id(no_1_id).to_vec(),
@@ -405,6 +414,7 @@ fn test_node_re_registered_after_deletion() {
         &*REGISTRY_STORE.with(|store| store.clone()),
         from,
         to,
+        None,
     )
     .expect("Failed to fetch rewardables");
 
@@ -423,6 +433,29 @@ fn test_node_re_registered_after_deletion() {
     ];
 
     assert_eq!(node_1_rewardable_days, expected_days);
+}
+
+#[test]
+fn test_rewardables_nodes_provider_filtered() {
+    let _client = client_for_tests();
+    let from = DayUtc::try_from("2025-07-12").unwrap();
+    let to = DayUtc::try_from("2025-07-17").unwrap();
+    let _reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
+    let np_2_id = PrincipalId::new_user_test_id(50);
+
+    let rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        from,
+        to,
+        Some(np_2_id),
+    )
+    .expect("Failed to fetch rewardable nodes");
+
+    assert_eq!(rewardables.len(), 1);
+    let np_2_rewardables = rewardables.get(&np_2_id).unwrap();
+    assert_eq!(np_2_rewardables.len(), 1);
+    let expected_node_4 = NodeId::from(PrincipalId::new_node_test_id(4));
+    assert_eq!(np_2_rewardables[0].node_id, expected_node_4);
 }
 
 #[test]
@@ -466,7 +499,6 @@ fn test_node_operator_data_returns_expected_data() {
     .unwrap();
     assert!(
         data.is_none(),
-        "Data should not exist for version {} because Operator was not yet added",
-        not_yet_added_no_version
+        "Data should not exist for version {not_yet_added_no_version} because Operator was not yet added"
     );
 }

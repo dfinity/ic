@@ -14,21 +14,21 @@ use ic_error_types::UserError;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer, IC_00,
     InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, OnLowWasmMemoryHookStatus, Payload, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
     UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
+use ic_replicated_state::canister_state::{NextExecution, execution_state::NextScheduledMethod};
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CryptoHashOfState, Cycles, NumInstructions};
 use ic_universal_canister::{
-    call_args, wasm, CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, call_args, wasm,
 };
 use more_asserts::assert_ge;
 use std::sync::OnceLock;
@@ -531,14 +531,13 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
     let ingress_induction_cost =
         match env.ingress_message_cost(sender, canister_id, method, payload) {
             IngressInductionCost::Fee { payer: _, cost } => cost,
-            cost => panic!("Unexpected ingress induction cost: {:?}", cost),
+            cost => panic!("Unexpected ingress induction cost: {cost:?}"),
         };
     assert_eq!(
         err.description(),
         format!(
-            "Canister {} is out of cycles: \
-             please top up the canister with at least {} additional cycles",
-            canister_id, ingress_induction_cost,
+            "Canister {canister_id} is out of cycles: \
+             please top up the canister with at least {ingress_induction_cost} additional cycles",
         )
     );
 
@@ -668,7 +667,7 @@ fn dts_scheduling_of_install_code() {
 
     for i in 0..n {
         let id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings.clone());
-        eprintln!("canister[{}] = {}", i, id);
+        eprintln!("canister[{i}] = {id}");
         canister.push(id);
     }
 
@@ -1195,7 +1194,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = UpdateSettingsArgs::new(aborted_canister_id, settings).encode();
                 (method, call_args().other_side(args))
             }),
-            // API is only accessible in non-replicated mode
+            // TODO(EXC-2112): fix this test.
+            // API is accessible both in replicated (only for canisters) and non-replicated (only for non-canisters) mode.
             Method::FetchCanisterLogs => {}
             Method::UploadChunk => test_supported(|aborted_canister_id| {
                 let args = UploadChunkArgs {

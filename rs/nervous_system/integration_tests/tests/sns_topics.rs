@@ -6,7 +6,7 @@ use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmittedProposal};
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_canister_on_subnet, nns, sns, universal_canister, NnsInstaller,
+    NnsInstaller, install_canister_on_subnet, nns, sns, universal_canister,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,

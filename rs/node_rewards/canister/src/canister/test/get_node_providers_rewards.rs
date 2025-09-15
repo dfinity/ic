@@ -1,30 +1,22 @@
-use crate::canister::test::test_utils::{
-    setup_thread_local_canister_for_test, TestState, CANISTER_TEST, VM,
-};
+use crate::api_conversion::to_candid_type;
 use crate::canister::NodeRewardsCanister;
+use crate::canister::test::test_utils::{
+    CANISTER_TEST, TestState, VM, setup_thread_local_canister_for_test,
+};
 use crate::metrics::MetricsManager;
-use crate::storage::HISTORICAL_REWARDS;
-use candid::Principal;
+use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
-use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetNodeProviderRewardsCalculationRequest, HistoricalRewardPeriod,
-};
+use ic_node_rewards_canister_api::provider_rewards_calculation::GetNodeProviderRewardsCalculationRequest;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
-};
-use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
-    NodeMetrics, SubnetMetricsKey, SubnetMetricsValue,
-};
-use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
-    NodeProviderRewards as NodeProviderRewardsProto, NodeProviderRewardsKey,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::{
-    make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
-    NODE_REWARDS_TABLE_KEY,
+    NODE_REWARDS_TABLE_KEY, make_data_center_record_key, make_node_operator_record_key,
+    make_node_record_key,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;
@@ -615,7 +607,7 @@ fn test_get_node_providers_rewards() {
     .unwrap();
 
     let inner_results = CANISTER_TEST
-        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request, None))
         .unwrap();
     let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
         serde_json::from_str(EXPECTED_TEST_1).unwrap();
@@ -628,81 +620,6 @@ fn test_get_node_providers_rewards() {
         },
     };
     assert_eq!(result_endpoint, Ok(expected));
-
-    HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
-        let p1 = test_provider_id(1);
-        let p2 = test_provider_id(2);
-        let mut key = NodeProviderRewardsKey {
-            principal_id: Some(p1),
-            start_day: Some(from.into()),
-            end_day: Some(to.into()),
-        };
-
-        let p1_rewards = historical_rewards.get(&key).unwrap();
-        key.principal_id = Some(p2);
-        let p2_rewards = historical_rewards.get(&key).unwrap();
-
-        assert_eq!(
-            inner_results
-                .provider_results
-                .get(&p1)
-                .cloned()
-                .map(|r| r.into()),
-            Some(p1_rewards)
-        );
-        assert_eq!(
-            inner_results
-                .provider_results
-                .get(&p2)
-                .cloned()
-                .map(|r| r.into()),
-            Some(p2_rewards)
-        );
-    })
-}
-
-#[test]
-fn test_get_historical_reward_periods() {
-    let reward_periods = btreemap! {
-        "2024-01-01" => "2024-01-31",
-        "2024-02-01" => "2024-02-28",
-    }
-    .into_iter()
-    .map(|(from, to)| {
-        (
-            DayUtc::try_from(from).unwrap(),
-            DayUtc::try_from(to).unwrap(),
-        )
-    })
-    .collect::<BTreeMap<DayUtc, DayUtc>>();
-
-    let providers: Vec<PrincipalId> = (0..10).map(|idx| test_provider_id(idx as u64)).collect();
-
-    HISTORICAL_REWARDS.with_borrow_mut(|historical_rewards| {
-        for (from, to) in reward_periods.clone() {
-            for provider in providers.clone() {
-                let key = NodeProviderRewardsKey {
-                    principal_id: Some(provider),
-                    start_day: Some(from.into()),
-                    end_day: Some(to.into()),
-                };
-                let rewards = NodeProviderRewardsProto::default();
-                historical_rewards.insert(key, rewards);
-            }
-        }
-    });
-
-    let providers: Vec<Principal> = providers.into_iter().map(|p| p.0).collect();
-
-    let got = NodeRewardsCanister::get_historical_reward_periods().unwrap();
-    for (from, to) in reward_periods {
-        let expected = HistoricalRewardPeriod {
-            from_nanos: from.get(),
-            to_nanos: to.get(),
-            providers_rewarded: providers.clone(),
-        };
-        assert!(got.contains(&expected));
-    }
 }
 
 #[test]
@@ -735,7 +652,6 @@ fn test_get_node_provider_rewards_calculation_historical() {
             from_nanos: from.unix_ts_at_day_end(),
             to_nanos: to.unix_ts_at_day_end(),
             provider_id: provider_id.0,
-            historical: true,
         };
 
         let got = NodeRewardsCanister::get_node_provider_rewards_calculation::<TestState>(
@@ -746,7 +662,7 @@ fn test_get_node_provider_rewards_calculation_historical() {
 
         assert_eq!(
             got,
-            expected_rewards.into(),
+            to_candid_type(expected_rewards),
             "Mismatch for provider {:?}",
             provider_id
         );

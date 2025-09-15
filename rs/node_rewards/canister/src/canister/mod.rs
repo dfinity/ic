@@ -1,34 +1,30 @@
+use crate::api_conversion::to_candid_type;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
-use crate::storage::{HISTORICAL_REWARDS, HISTORICAL_SUBNETS_FR, VM};
-use ic_base_types::SubnetId;
+use crate::storage::VM;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
-    GetNodeProviderRewardsCalculationResponse, HistoricalRewardPeriod,
+    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
-};
-use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
-    DayUtc, NodeProviderRewardsKey, SubnetsFailureRateKey, SubnetsFailureRateValue,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_registry_canister_client::{
-    get_decoded_value, CanisterRegistryClient, RegistryDataStableMemory,
+    CanisterRegistryClient, RegistryDataStableMemory, get_decoded_value,
 };
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
-use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
+use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_rewards_v0};
 use ic_types::RegistryVersion;
-use itertools::Itertools;
 use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
 use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;
 use rewards_calculation::types::RewardPeriod;
@@ -77,7 +73,7 @@ impl NodeRewardsCanister {
     pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
         self.registry_client
             .get_value(key.as_ref(), self.registry_client.get_latest_version())
-            .map_err(|e| format!("Failed to get registry value: {:?}", e))
+            .map_err(|e| format!("Failed to get registry value: {e:?}"))
     }
 
     pub async fn schedule_registry_sync(
@@ -125,6 +121,7 @@ impl NodeRewardsCanister {
     fn calculate_rewards<S: RegistryDataStableMemory>(
         &self,
         request: GetNodeProvidersRewardsRequest,
+        provider_filter: Option<PrincipalId>,
     ) -> Result<RewardsCalculatorResults, String> {
         let reward_period = RewardPeriod::new(request.from_nanos.into(), request.to_nanos.into())
             .map_err(|e| e.to_string())?;
@@ -141,6 +138,7 @@ impl NodeRewardsCanister {
             &*self.registry_client,
             reward_period.from,
             reward_period.to,
+            provider_filter,
         )
         .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
 
@@ -150,10 +148,9 @@ impl NodeRewardsCanister {
             daily_metrics_by_subnet,
             provider_rewardable_nodes,
         };
-        let result = rewards_calculation::rewards_calculator::calculate_rewards(input)
-            .map_err(|e| format!("Could not calculate rewards: {e:?}"));
 
-        result
+        rewards_calculation::rewards_calculator::calculate_rewards(input)
+            .map_err(|e| format!("Could not calculate rewards: {e:?}"))
     }
 }
 
@@ -191,8 +188,7 @@ impl NodeRewardsCanister {
             registry_client.sync_registry_stored().await.map_err(|e| {
                 format!(
                     "Could not sync registry store to latest version, \
-                    please try again later: {:?}",
-                    e
+                    please try again later: {e:?}"
                 )
             })?;
 
@@ -237,12 +233,12 @@ impl NodeRewardsCanister {
             .map_err(|e| {
                 format!(
                     "Could not sync registry store to latest version, \
-                    please try again later: {:?}",
-                    e
+                    please try again later: {e:?}"
                 )
             })?;
         NodeRewardsCanister::schedule_metrics_sync(canister).await;
-        let result = canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
+        let result =
+            canister.with_borrow(|canister| canister.calculate_rewards::<S>(request, None))?;
         let rewards_xdr_permyriad = result
             .provider_results
             .iter()
@@ -250,30 +246,6 @@ impl NodeRewardsCanister {
                 (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)
             })
             .collect();
-
-        HISTORICAL_SUBNETS_FR.with_borrow_mut(|historical_subnets_fr| {
-            for ((day, subnet_id), subnet_fr_percent) in result.subnets_fr {
-                let key = SubnetsFailureRateKey {
-                    day: Some(day.into()),
-                    subnet_id: Some(subnet_id.get()),
-                };
-                let value = SubnetsFailureRateValue {
-                    subnet_fr_percent: Some(subnet_fr_percent.into()),
-                };
-                historical_subnets_fr.insert(key, value);
-            }
-        });
-
-        HISTORICAL_REWARDS.with_borrow_mut(|historical_rewards| {
-            for (provider_id, provider_rewards) in result.provider_results {
-                let key = NodeProviderRewardsKey {
-                    principal_id: Some(provider_id),
-                    end_day: Some(result.end_day.into()),
-                    start_day: Some(result.start_day.into()),
-                };
-                historical_rewards.insert(key, provider_rewards.into());
-            }
-        });
 
         Ok(NodeProvidersRewards {
             rewards_xdr_permyriad,
@@ -284,70 +256,20 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
-        let provider_id = ic_base_types::PrincipalId::from(request.provider_id);
-        if request.historical {
-            let reward_key = NodeProviderRewardsKey {
-                principal_id: Some(provider_id),
-                end_day: Some(DayUtc {
-                    value: Some(request.to_nanos),
-                }),
-                start_day: Some(DayUtc {
-                    value: Some(request.from_nanos),
-                }),
-            };
-            HISTORICAL_REWARDS
-                .with_borrow(|historical_rewards| historical_rewards.get(&reward_key))
-                .ok_or(format!(
-                    "No historical rewards found for node provider {}",
-                    provider_id
-                ))
-        } else {
-            let request_inner = GetNodeProvidersRewardsRequest {
-                from_nanos: request.from_nanos,
-                to_nanos: request.to_nanos,
-            };
-            let mut result =
-                canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
-            let node_provider_rewards = result.provider_results.remove(&provider_id).ok_or(
-                format!("No rewards found for node provider {}", provider_id),
-            )?;
+        let provider_id = PrincipalId::from(request.provider_id);
+        let request_inner = GetNodeProvidersRewardsRequest {
+            from_nanos: request.from_nanos,
+            to_nanos: request.to_nanos,
+        };
+        let mut result = canister.with_borrow(|canister| {
+            canister.calculate_rewards::<S>(request_inner, Some(provider_id))
+        })?;
+        let node_provider_rewards = result
+            .provider_results
+            .remove(&provider_id)
+            .ok_or(format!("No rewards found for node provider {provider_id}"))?;
 
-            Ok(node_provider_rewards.into())
-        }
-    }
-
-    pub fn get_historical_reward_periods() -> GetHistoricalRewardPeriodsResponse {
-        Ok(HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
-            historical_rewards
-                .keys()
-                .filter_map(|reward_key| {
-                    match (
-                        reward_key.principal_id,
-                        reward_key.start_day,
-                        reward_key.end_day,
-                    ) {
-                        (
-                            Some(principal_id),
-                            Some(DayUtc {
-                                value: Some(ts_start),
-                            }),
-                            Some(DayUtc {
-                                value: Some(ts_end),
-                            }),
-                        ) => Some((principal_id, ts_start, ts_end)),
-                        _ => None,
-                    }
-                })
-                .sorted_by_key(|(_, ts_start, ts_end)| (*ts_start, *ts_end))
-                .group_by(|(_, ts_start, ts_end)| (*ts_start, *ts_end))
-                .into_iter()
-                .map(|((ts_start, ts_end), group)| HistoricalRewardPeriod {
-                    from_nanos: ts_start,
-                    to_nanos: ts_end,
-                    providers_rewarded: group.map(|(principal_id, _, _)| principal_id.0).collect(),
-                })
-                .collect()
-        }))
+        Ok(to_candid_type(node_provider_rewards))
     }
 }
 

@@ -1,8 +1,8 @@
+use ic_types::NodeId;
 use ic_types::crypto::vetkd::{
     VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
     VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
 };
-use ic_types::NodeId;
 use std::collections::BTreeMap;
 
 pub trait VetKdProtocol {

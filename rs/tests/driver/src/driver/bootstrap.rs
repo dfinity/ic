@@ -9,24 +9,24 @@ use crate::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{AttachImageSpec, Farm, FarmResult, FileId},
         ic::{InternetComputer, Node},
-        nested::{NestedNode, NestedVms, NESTED_CONFIG_IMAGE_PATH},
+        nested::{NESTED_CONFIG_IMAGE_PATH, NestedNode, NestedVms},
         node_software_version::NodeSoftwareVersion,
         port_allocator::AddrType,
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
+            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
             get_build_setupos_config_image_tool, get_create_setupos_config_tool,
             get_guestos_img_version, get_guestos_initial_update_img_sha256,
             get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
-            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
     k8s::job::wait_for_job_completion,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
 };
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
@@ -40,7 +40,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -61,11 +61,12 @@ pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 
 const CONF_IMG_FNAME: &str = "config_disk.img";
 const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
+const DOGECOIND_ADDR_PATH: &str = "dogecoind_addr";
 const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.zst", CONF_IMG_FNAME)
+    format!("{CONF_IMG_FNAME}.zst")
 }
 
 pub fn init_ic(
@@ -80,6 +81,10 @@ pub fn init_ic(
 
     if let Some(bitcoind_addr) = &ic.bitcoind_addr {
         test_env.write_json_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
+    }
+
+    if let Some(dogecoind_addr) = &ic.dogecoind_addr {
+        test_env.write_json_object(DOGECOIND_ADDR_PATH, &dogecoind_addr)?;
     }
 
     if let Some(jaeger_addr) = &ic.jaeger_addr {
@@ -202,6 +207,10 @@ pub fn init_ic(
     );
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
+
+    if ic.skip_unassigned_record {
+        ic_config.skip_unassigned_record();
+    }
 
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
@@ -383,6 +392,7 @@ fn create_config_disk_image(
         malicious_behavior: None,
         query_stats_epoch_length: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         jaeger_addr: None,
         socks_proxy: None,
         hostname: None,
@@ -468,6 +478,11 @@ fn create_config_disk_image(
     // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
     if let Ok(bitcoind_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         config.bitcoind_addr = Some(bitcoind_addr.clone());
+    }
+
+    // The dogecoind_addr specifies the local dogecoin node that the dogecoin adapter should connect to in the system test environment.
+    if let Ok(dogecoind_addr) = test_env.read_json_object::<String, _>(DOGECOIND_ADDR_PATH) {
+        config.dogecoind_addr = Some(dogecoind_addr.clone());
     }
 
     // The jaeger_addr specifies the local Jaeger node that the nodes should connect to in the system test environment.
@@ -612,7 +627,7 @@ fn create_setupos_config_image(
     );
 
     // Create a unique temporary directory for this thread to avoid conflicts
-    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
+    let tmp_dir = env.get_path(format!("setupos_config_{name}"));
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_build_setupos_config_image_tool();

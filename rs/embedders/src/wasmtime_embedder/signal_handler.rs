@@ -2,10 +2,10 @@ use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 
 use ic_types::NumBytes;
 use libc::c_void;
-use memory_tracker::{signal_access_kind_and_address, SigsegvMemoryTracker};
+use memory_tracker::{SigsegvMemoryTracker, signal_access_kind_and_address};
 use std::convert::TryFrom;
 use std::sync::MutexGuard;
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::Ordering};
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
@@ -78,11 +78,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         let memory_tracker = memory_tracker.lock().unwrap();
         // Spawn a guard to report the total time spent in the handler.
         let _guard = scopeguard::guard(timer, |timer| {
-            let elapsed_nanos = timer.elapsed().as_nanos() as u64;
-            memory_tracker
-                .metrics
-                .sigsegv_handler_duration_nanos
-                .fetch_add(elapsed_nanos, Ordering::Relaxed);
+            memory_tracker.add_sigsegv_handler_duration(timer.elapsed());
         });
 
         // We handle SIGSEGV from the Wasm module heap ourselves.

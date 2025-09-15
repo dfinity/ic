@@ -1,11 +1,11 @@
 
 [package]
-name = "ic-query-stats"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-query-stats"
+version.workspace = true
 
 [dependencies]
 crossbeam-channel = { workspace = true }
@@ -21,7 +21,5 @@ slog = { workspace = true }
 
 [dev-dependencies]
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
-ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
-ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-types-test-utils = { path = "../types/types_test_utils" }

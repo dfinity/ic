@@ -2,17 +2,17 @@ mod wasmtime_simple;
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
     wasmtime_embedder::system_api::ApiType,
-    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
+    Cycles, NumBytes, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, NumBytes, PrincipalId,
 };
 use ic_wasm_transform::Module;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
@@ -133,7 +133,7 @@ fn compressed_test_contents(name: &str) -> Vec<u8> {
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
         name
     );
-    std::fs::read(&path).unwrap_or_else(|e| panic!("couldn't open file {}: {}", path, e))
+    std::fs::read(&path).unwrap_or_else(|e| panic!("couldn't open file {path}: {e}"))
 }
 
 fn default_max_size() -> NumBytes {

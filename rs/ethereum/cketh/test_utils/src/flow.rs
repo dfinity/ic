@@ -5,12 +5,13 @@ use crate::response::{
     transaction_count_response, transaction_receipt,
 };
 use crate::{
-    assert_reply, format_ethereum_address_to_eip_55, CkEthSetup, JsonRpcProvider,
-    DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
-    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX,
-    DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED,
+    CkEthSetup, DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER,
+    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT,
+    EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, JsonRpcProvider,
     LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
-    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
+    format_ethereum_address_to_eip_55,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
@@ -194,7 +195,7 @@ impl DepositCkEthWithSubaccountParams {
             assert_eq!(amount_hex.len(), 64);
             let subaccount = hex::encode(self.recipient_subaccount.unwrap_or([0; 32]));
             assert_eq!(amount_hex.len(), 64);
-            format!("0x{}{}", amount_hex, subaccount)
+            format!("0x{amount_hex}{subaccount}")
         };
 
         let topics = vec![
@@ -721,12 +722,12 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         let first_sent_tx = encode_transaction(first_tx.clone(), first_tx_sig);
         let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
         let transaction = EthTransaction {
-            transaction_hash: format!("{:?}", first_tx_hash),
+            transaction_hash: format!("{first_tx_hash:?}"),
         };
         let resubmitted_sent_tx = encode_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
         let resubmitted_tx_hash = hash_transaction(resubmitted_tx, resubmitted_tx_sig);
         let resubmitted_transaction = EthTransaction {
-            transaction_hash: format!("{:?}", resubmitted_tx_hash),
+            transaction_hash: format!("{resubmitted_tx_hash:?}"),
         };
 
         self.start_processing_withdrawals()
@@ -768,7 +769,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
             })
             .retrieve_transaction_receipt(|mock| {
                 mock.with_request_params(json!([resubmitted_tx_hash]))
-                    .respond_for_all_with(transaction_receipt(format!("{:?}", resubmitted_tx_hash)))
+                    .respond_for_all_with(transaction_receipt(format!("{resubmitted_tx_hash:?}")))
             })
             .expect_finalized_status(TxFinalizedStatus::Success {
                 transaction_hash: resubmitted_transaction.transaction_hash.clone(),
@@ -912,7 +913,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
             .retrieve_eth_status(self.withdrawal_request.withdrawal_id())
         {
             RetrieveEthStatus::TxSent(tx) => tx.transaction_hash,
-            other => panic!("BUG: unexpected transactions status {:?}", other),
+            other => panic!("BUG: unexpected transactions status {other:?}"),
         };
         FinalizedTransactionCountProcessWithdrawal {
             setup: self.setup,
@@ -1059,7 +1060,7 @@ fn decode_transaction(
     ))
     .map(|(tx, sig)| match tx {
         TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {:?}", tx),
+        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
     })
     .expect("BUG: failed to deserialize sent ETH transaction")
 }

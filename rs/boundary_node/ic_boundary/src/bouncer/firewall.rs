@@ -1,6 +1,6 @@
 use std::{collections::HashSet, net::IpAddr, str::FromStr, sync::Arc};
 
-use anyhow::{bail, Context, Error};
+use anyhow::{Context, Error, bail};
 use async_trait::async_trait;
 use nftables::{
     batch::Batch,
@@ -12,7 +12,7 @@ use nftables::{
 use serde_json::json;
 use tracing::debug;
 
-use super::{exec::Execute, Decision, Firewall};
+use super::{Decision, Firewall, exec::Execute};
 
 // Handles either IPv4 or IPv6 set.
 // It must pre-exist, can be created with e.g.

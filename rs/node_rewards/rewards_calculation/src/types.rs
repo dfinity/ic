@@ -30,7 +30,7 @@ impl TryFrom<&str> for DayUtc {
     type Error = ParseError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let dt = format!("{} 00:00:00", value);
+        let dt = format!("{value} 00:00:00");
         let naive = NaiveDateTime::parse_from_str(&dt, "%Y-%m-%d %H:%M:%S")?;
         let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, Utc);
         let ts = datetime.timestamp_nanos_opt().unwrap() as u64;
@@ -52,7 +52,7 @@ impl Display for DayUtc {
             .format("%d-%m-%Y")
             .to_string();
 
-        write!(f, "{}", dd_mm_yyyy)
+        write!(f, "{dd_mm_yyyy}")
     }
 }
 

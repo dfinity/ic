@@ -15,18 +15,18 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
-        assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        generate_blocks, get_btc_address, get_btc_client, send_to_btc_address, start_canister,
-        stop_canister, upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
-        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD,
+        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD, assert_account_balance,
+        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction, generate_blocks,
+        get_btc_address, get_rpc_client, send_to_btc_address, start_canister, stop_canister,
+        upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -44,7 +44,7 @@ pub fn test_btc_checker(env: TestEnv) {
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
 
     // Get access to btc replica.
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
@@ -164,10 +164,7 @@ pub fn test_btc_checker(env: TestEnv) {
         match update_balance_checker_unavailable {
             Err(UpdateBalanceError::TemporarilyUnavailable(_)) => (),
             other => {
-                panic!(
-                    "Expected the Bitcoin checker canister to be unavailable, got {:?}",
-                    other
-                );
+                panic!("Expected the Bitcoin checker canister to be unavailable, got {other:?}");
             }
         }
         start_canister(&btc_checker_canister).await;
@@ -186,8 +183,7 @@ pub fn test_btc_checker(env: TestEnv) {
         assert_eq!(
             update_balance_new_utxos.len(),
             2,
-            "BUG: should re-evaluate all UTXOs {:?}",
-            update_balance_new_utxos
+            "BUG: should re-evaluate all UTXOs {update_balance_new_utxos:?}"
         );
 
         for utxo_status in update_balance_new_utxos {

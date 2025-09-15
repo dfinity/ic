@@ -2,8 +2,8 @@
 
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification,
-    state_manager::StateManagerResult, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
+    consensus::certification::Certification, state_manager::StateManagerResult,
 };
 use phantom_newtype::BitMask;
 use std::collections::BTreeSet;
@@ -16,7 +16,9 @@ use thiserror::Error;
 pub enum PermanentStateHashError {
     #[error("state at height {0} has already been removed and cannot be recovered anymore")]
     StateRemoved(Height),
-    #[error("state at height {0} was committed with CertificationScope::Metadata, not CertificationScope::Full")]
+    #[error(
+        "state at height {0} was committed with CertificationScope::Metadata, not CertificationScope::Full"
+    )]
     StateNotFullyCertified(Height),
 }
 

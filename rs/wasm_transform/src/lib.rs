@@ -105,13 +105,13 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::BinaryReaderError(err) => {
-                write!(f, "Error from wasmparser: {}", err)
+                write!(f, "Error from wasmparser: {err}")
             }
             Error::UnknownVersion(ver) => {
-                write!(f, "Unknown version: {}", ver)
+                write!(f, "Unknown version: {ver}")
             }
             Error::UnknownSection { section_id } => {
-                write!(f, "Unknown section: {}", section_id)
+                write!(f, "Unknown section: {section_id}")
             }
             Error::MissingFunctionEnd { func_range } => {
                 write!(
@@ -126,16 +126,11 @@ impl std::fmt::Display for Error {
             } => {
                 write!(
                     f,
-                    "Incorrect data count. Declared: {}, actual: {}",
-                    declared_count, actual_count
+                    "Incorrect data count. Declared: {declared_count}, actual: {actual_count}"
                 )
             }
             Error::ConversionError(s) => {
-                write!(
-                    f,
-                    "Unable to convert wasmparser type to wasm-encoder: {}",
-                    s
-                )
+                write!(f, "Unable to convert wasmparser type to wasm-encoder: {s}")
             }
             Error::IncorrectCodeCounts {
                 function_section_count,
@@ -144,15 +139,17 @@ impl std::fmt::Display for Error {
             } => {
                 write!(
                     f,
-                    "Incorrect code counts. Function section count: {}, code section declared count: {}, code section actual count: {}",
-                    function_section_count, code_section_declared_count, code_section_actual_count
+                    "Incorrect code counts. Function section count: {function_section_count}, code section declared count: {code_section_declared_count}, code section actual count: {code_section_actual_count}"
                 )
             }
             Error::MultipleStartSections => {
                 write!(f, "Multiple start sections")
             }
             Error::InvalidMemoryReservedByte { func_range } => {
-                write!(f, "Found a `memory.*` instruction with an invalid reserved byte in function at {:?}", func_range)
+                write!(
+                    f,
+                    "Found a `memory.*` instruction with an invalid reserved byte in function at {func_range:?}"
+                )
             }
             Error::UnknownInstruction => {
                 write!(f, "Fonud an unknown instruction")
@@ -400,7 +397,7 @@ impl<'a> Module<'a> {
                     .ty()
                     .subtype(&wasm_encoder::SubType::try_from(subtype.clone()).map_err(
                         |_err| {
-                            Error::ConversionError(format!("Failed to convert type: {:?}", subtype))
+                            Error::ConversionError(format!("Failed to convert type: {subtype:?}"))
                         },
                     )?);
             }
@@ -433,7 +430,7 @@ impl<'a> Module<'a> {
             let mut tables = wasm_encoder::TableSection::new();
             for (table_ty, init) in self.tables {
                 let table_ty = wasm_encoder::TableType::try_from(table_ty).map_err(|_err| {
-                    Error::ConversionError(format!("Failed to convert type: {:?}", table_ty))
+                    Error::ConversionError(format!("Failed to convert type: {table_ty:?}"))
                 })?;
                 match init {
                     None => tables.table(table_ty),
@@ -497,7 +494,7 @@ impl<'a> Module<'a> {
                         }
                         wasm_encoder::Elements::Expressions(
                             wasm_encoder::RefType::try_from(*ty).map_err(|_err| {
-                                Error::ConversionError(format!("Failed to convert type: {:?}", ty))
+                                Error::ConversionError(format!("Failed to convert type: {ty:?}"))
                             })?,
                             Cow::Borrowed(&temp_const_exprs),
                         )
@@ -545,7 +542,7 @@ impl<'a> Module<'a> {
                     converted_locals.push((
                         c,
                         wasm_encoder::ValType::try_from(t).map_err(|_err| {
-                            Error::ConversionError(format!("Falied to convert type: {:?}", t))
+                            Error::ConversionError(format!("Falied to convert type: {t:?}"))
                         })?,
                     ));
                 }

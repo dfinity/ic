@@ -12,9 +12,9 @@ use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    make_key_ids_for_all_schemes, ChainSignatureRequest,
+    ChainSignatureRequest, make_key_ids_for_all_schemes,
 };
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
@@ -22,15 +22,15 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, SubnetSnapshot,
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    SubnetSnapshot, get_guestos_img_version,
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetricsProvider, RequestOutcome,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, get_app_subnet_and_node, MessageCanister};
+use ic_system_test_driver::util::{MessageCanister, block_on, get_app_subnet_and_node};
 use ic_types::Height;
 use slog::info;
 

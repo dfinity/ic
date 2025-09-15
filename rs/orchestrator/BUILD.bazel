@@ -94,7 +94,8 @@ rust_test(
     name = "orchestrator_test",
     compile_data = [
         "testdata/nftables_assigned_replica.conf.golden",
-        "testdata/nftables_boundary_node.conf.golden",
+        "testdata/nftables_boundary_node_app_subnet.conf.golden",
+        "testdata/nftables_boundary_node_system_subnet.conf.golden",
         "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
     ],
     crate = ":lib",
