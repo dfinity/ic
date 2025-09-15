@@ -9827,7 +9827,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-suite-state-machine-tests",
- "ic-ledger-suite-state-machine-tests-types",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-rosetta-api",
@@ -9922,7 +9922,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
- "ic-ledger-suite-state-machine-tests-types",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-nns-test-utils-golden-nns-state",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
@@ -10032,7 +10032,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
- "ic-ledger-suite-state-machine-tests-types",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
@@ -10471,7 +10471,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-ledger-suite-state-machine-tests-types",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
  "ic-rosetta-test-utils",
@@ -10488,7 +10488,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-ledger-suite-state-machine-tests-types"
+name = "ic-ledger-suite-state-machine-tests-constants"
 version = "0.9.0"
 
 [[package]]
@@ -12983,7 +12983,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-ledger-suite-state-machine-tests-types",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-nns-common",
@@ -16514,7 +16514,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
- "ic-ledger-suite-state-machine-tests-types",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
