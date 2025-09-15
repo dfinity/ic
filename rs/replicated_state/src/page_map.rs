@@ -210,14 +210,23 @@ pub enum PersistenceError {
         page_size: usize,
     },
     /// Overlay data is broken.
-    InvalidOverlay { path: String, message: String },
+    InvalidOverlay {
+        path: String,
+        message: String,
+    },
     /// (Slice) size is not equal to page size.
-    BadPageSize { expected: usize, actual: usize },
+    BadPageSize {
+        expected: usize,
+        actual: usize,
+    },
     /// Some overlay file has a larger version number than the replica supports
     VersionMismatch {
         path: String,
         file_version: u32,
         supported: OverlayVersion,
+    },
+    NonEmptyDelta {
+        delta_size: usize,
     },
 }
 
@@ -276,6 +285,9 @@ impl std::fmt::Display for PersistenceError {
                 "Unsupported overlay version for {}: file version {}, max supported {:?}",
                 path, file_version, supported,
             ),
+            PersistenceError::NonEmptyDelta { delta_size } => {
+                write!(f, "The page delta is not empty (size = {})", delta_size)
+            }
         }
     }
 }
@@ -859,6 +871,29 @@ impl PageMap {
     /// Returns the number of delta pages included in this PageMap.
     pub fn num_delta_pages(&self) -> usize {
         self.page_delta.len()
+    }
+
+    /// Returns a clean copy of this PageMap, i.e. a PageMap without any page delta
+    /// and using a fresh page allocator.
+    ///
+    /// Returns an error if the page map has a non-empty page delta.
+    pub fn clean_copy(
+        &self,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Result<Self, PersistenceError> {
+        if !self.page_delta_is_empty() {
+            return Err(PersistenceError::NonEmptyDelta {
+                delta_size: self.page_delta.len(),
+            });
+        }
+        Ok(Self {
+            storage: self.storage.clone(),
+            base_height: self.base_height,
+            page_delta: Default::default(),
+            unflushed_delta: Default::default(),
+            has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
+            page_allocator: PageAllocator::new(fd_factory),
+        })
     }
 }
 

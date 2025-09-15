@@ -2038,34 +2038,38 @@ impl CanisterManager {
             }
             Some(snapshot) => {
                 // Verify the provided `snapshot_id` belongs to a canister controlled by the sender.
+                // Only perform the check if target canister to load the snapshot
+                // is not the same as the one owning the snapshot.
                 let snapshot_canister_id = snapshot.canister_id();
-                match state.canister_state(&snapshot_canister_id) {
-                    None => {
-                        // The below case should never happen as if the snapshot still exists, it
-                        // should be associated with an existing canister. If it happens, it indicates
-                        // a bug, so log an error message for investigation.
-                        snapshot_exists_without_associated_canister.inc();
-                        error!(
+                if snapshot_canister_id != canister_id {
+                    match state.canister_state(&snapshot_canister_id) {
+                        None => {
+                            // The below case should never happen as if the snapshot still exists, it
+                            // should be associated with an existing canister. If it happens, it indicates
+                            // a bug, so log an error message for investigation.
+                            snapshot_exists_without_associated_canister.inc();
+                            error!(
                             self.log,
                             "[EXC-BUG]: Canister {} does not exist although there's a snapshot {} associated with it.",
                             snapshot_canister_id,
                             snapshot_id,
                         );
-                        return (
-                            Err(CanisterManagerError::CanisterNotFound(snapshot_canister_id)),
-                            NumInstructions::new(0),
-                        );
-                    }
-                    Some(canister_state) => {
-                        if !canister_state.controllers().contains(&sender) {
                             return (
-                                Err(CanisterManagerError::CanisterSnapshotNotController {
-                                    sender,
-                                    canister_id,
-                                    snapshot_id,
-                                }),
+                                Err(CanisterManagerError::CanisterNotFound(snapshot_canister_id)),
                                 NumInstructions::new(0),
                             );
+                        }
+                        Some(canister_state) => {
+                            if !canister_state.controllers().contains(&sender) {
+                                return (
+                                    Err(CanisterManagerError::CanisterSnapshotNotController {
+                                        sender,
+                                        canister_id,
+                                        snapshot_id,
+                                    }),
+                                    NumInstructions::new(0),
+                                );
+                            }
                         }
                     }
                 }
@@ -2160,8 +2164,45 @@ impl CanisterManager {
             }
 
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
-            new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
-            new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
+
+            if canister_id == snapshot.canister_id() {
+                new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
+                new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
+            } else {
+                let new_stable_memory = match Memory::try_from((
+                    &execution_snapshot.stable_memory,
+                    Arc::clone(&self.fd_factory),
+                )) {
+                    Ok(memory) => memory,
+                    Err(_) => {
+                        return (
+                            Err(CanisterManagerError::CanisterSnapshotNotLoadable {
+                                canister_id,
+                                snapshot_id,
+                            }),
+                            instructions_used,
+                        );
+                    }
+                };
+                new_execution_state.stable_memory = new_stable_memory;
+
+                let new_wasm_memory = match Memory::try_from((
+                    &execution_snapshot.wasm_memory,
+                    Arc::clone(&self.fd_factory),
+                )) {
+                    Ok(memory) => memory,
+                    Err(_) => {
+                        return (
+                            Err(CanisterManagerError::CanisterSnapshotNotLoadable {
+                                canister_id,
+                                snapshot_id,
+                            }),
+                            instructions_used,
+                        );
+                    }
+                };
+                new_execution_state.wasm_memory = new_wasm_memory;
+            }
             (instructions_used, Some(new_execution_state))
         };
 

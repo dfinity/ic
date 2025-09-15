@@ -458,6 +458,10 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    CanisterSnapshotNotLoadable {
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
     CanisterSnapshotExecutionStateNotFound {
         canister_id: CanisterId,
     },
@@ -654,6 +658,13 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CanisterSnapshotNotController { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "Only a controller of the canister that the snapshot belongs to can load it."
+                        .to_string(),
+                    doc_link: "".to_string(),
+                }
+            }
+            CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Snapshot is not currently loadable on the specified canister. Try again later."
                         .to_string(),
                     doc_link: "".to_string(),
                 }
@@ -1016,6 +1027,15 @@ impl From<CanisterManagerError> for UserError {
                     format!(
                         "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}.{additional_help}",
                         snapshot_id, canister_id, sender,
+                    )
+                )
+            }
+            CanisterSnapshotNotLoadable { canister_id, snapshot_id } => {
+                Self::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Snapshot {} is not currently loadable on the specified canister {}. Try again later.",
+                        snapshot_id, canister_id,
                     )
                 )
             }

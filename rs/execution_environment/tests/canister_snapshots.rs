@@ -783,7 +783,7 @@ const COUNTER_GROW_CANISTER_WAT: &str = r#"
     )
     (call $msg_reply)
   )
-  
+
   (func $write
     ;; grow by a page
     (i32.const 1)
@@ -930,6 +930,12 @@ fn load_canister_snapshot_works_on_another_canister() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_1, None))
         .unwrap()
         .snapshot_id();
+
+    // Checkpoint the state before loading the snapshot to ensure that
+    // there no outstanding page delta in the shared page map by the
+    // two canisters (the one owning the snapshot and the one loading it).
+    // This limitation will be lifted in the future.
+    env.checkpointed_tick();
 
     // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` succeeds.
     env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
