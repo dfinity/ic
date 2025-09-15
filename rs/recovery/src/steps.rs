@@ -1075,7 +1075,7 @@ echo "$artifacts_hash" > {sha_file:?}
         // We use debug formatting because it escapes the paths in case they contain spaces.
         format!(
             r#"
-Recovery artifacts with checksum {artifacts_short_hash} were successfully created in {output_dir:?}.
+Recovery artifacts with short hash {artifacts_short_hash} were successfully created in {output_dir:?}.
 Now please:
   - Upload {tar_file:?} to:
     - https://download.dfinity.systems/recovery/{artifacts_short_hash}/{tar_name}
@@ -1109,7 +1109,13 @@ impl Step for CreateNNSRecoveryTarStep {
 
         match exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))? {
             Some(sha256) => {
-                let artifacts_short_hash = sha256.trim().get(..6).unwrap_or("");
+                let artifacts_short_hash =
+                    sha256
+                        .trim()
+                        .get(..6)
+                        .ok_or(RecoveryError::invalid_output_error(format!(
+                            "Cannot get short hash of {sha256}"
+                        )))?;
                 info!(self.logger, "{}", self.get_next_steps(artifacts_short_hash));
             }
             _ => {

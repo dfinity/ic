@@ -64,7 +64,7 @@ perform_recovery() {
         return 1
     fi
 
-    echo "Using expected recovery hash: $expected_recovery_short_hash"
+    echo "Using expected recovery short hash: $expected_recovery_short_hash"
 
     echo "Downloading recovery artifact..."
     base_urls=(

@@ -131,9 +131,9 @@ pub fn setup(env: TestEnv) {
     let recovery_short_hash = read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
         .unwrap()
         .trim()
-        .chars()
-        .take(6)
-        .collect::<String>();
+        .get(..6)
+        .unwrap()
+        .to_string();
 
     uvm_serve_recovery_artifacts(
         &env,

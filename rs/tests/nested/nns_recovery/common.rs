@@ -330,17 +330,14 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
 
     info!(logger, "Setup UVM to serve recovery artifacts");
     let artifacts_path = output_dir.join("recovery.tar.zst");
-    let artifacts_short_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
+    let artifacts_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
         .unwrap()
         .trim()
-        .to_string()
-        .chars()
-        .take(6)
-        .collect::<String>();
+        .to_string();
     impersonate_upstreams::uvm_serve_recovery_artifacts(
         &env,
         &artifacts_path,
-        &artifacts_short_hash,
+        &artifacts_hash[..6],
     )
     .expect("Failed to serve recovery artifacts from UVM");
 
@@ -373,7 +370,6 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
             let env = env.clone();
             let vm = vm.clone();
             let recovery_img_hash = recovery_img_hash.clone();
-            let artifacts_short_hash = artifacts_short_hash.clone();
 
             handles.spawn(async move {
                 simulate_node_provider_action(
@@ -382,7 +378,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
                     &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash[..6],
-                    &artifacts_short_hash,
+                    &artifacts_hash[..6],
                 )
                 .await
             });
