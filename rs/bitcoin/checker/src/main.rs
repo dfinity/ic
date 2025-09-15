@@ -1,12 +1,12 @@
-use bitcoin::{consensus::Decodable, Address, Transaction};
+use bitcoin::{Address, Transaction, consensus::Decodable};
 use candid::Nat;
-use fetch::{check_for_blocked_input_addresses, FetchEnv, FetchResult, TryFetchResult};
+use fetch::{FetchEnv, FetchResult, TryFetchResult, check_for_blocked_input_addresses};
 use ic_btc_checker::{
-    blocklist::is_blocked, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg, CheckMode,
-    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionQueryArgs,
-    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, CheckTransactionStrArgs, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, RETRY_MAX_RESPONSE_BYTES,
+    BtcNetwork, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckAddressArgs, CheckAddressResponse, CheckArg, CheckMode, CheckTransactionArgs,
+    CheckTransactionIrrecoverableError, CheckTransactionQueryArgs, CheckTransactionQueryResponse,
+    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
+    CheckTransactionStrArgs, RETRY_MAX_RESPONSE_BYTES, blocklist::is_blocked,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
@@ -14,8 +14,8 @@ use ic_cdk::call::Error;
 use ic_cdk::management_canister::TransformArgs;
 use ic_http_types as http;
 use ic_management_canister_types::HttpRequestResult;
-use logs::{Log, LogEntry, Priority, DEBUG, WARN};
-use state::{get_config, set_config, Config, FetchGuardError, FetchTxStatus, HttpGetTxError};
+use logs::{DEBUG, Log, LogEntry, Priority, WARN};
+use state::{Config, FetchGuardError, FetchTxStatus, HttpGetTxError, get_config, set_config};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
