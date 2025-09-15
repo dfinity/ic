@@ -9,24 +9,24 @@ mod tests {
 
 use super::CheckpointError;
 use crate::{
+    BundledManifest, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
+    LABEL_VALUE_REUSED, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS,
     manifest::hash::{meta_manifest_hasher, sub_manifest_hasher},
     state_sync::types::{
-        encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-        DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
-        MAX_SUPPORTED_STATE_SYNC_VERSION,
+        ChunkInfo, DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        FileGroupChunks, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest, MetaManifest,
+        encode_manifest,
     },
-    BundledManifest, ManifestMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
-    LABEL_VALUE_REUSED, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use bit_vec::BitVec;
-use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
+use hash::{ManifestHash, chunk_hasher, file_hasher, manifest_hasher};
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
-use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
-use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
+use ic_state_layout::{CANISTER_FILE, CheckpointLayout, ReadOnly, UNVERIFIED_CHECKPOINT_MARKER};
+use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
+use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
 use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -106,10 +106,9 @@ impl fmt::Display for ManifestValidationError {
                 max_supported_version,
             } => write!(
                 f,
-                "manifest version {} not supported, maximum supported version {}",
-                manifest_version, max_supported_version,
+                "manifest version {manifest_version} not supported, maximum supported version {max_supported_version}",
             ),
-            Self::InconsistentManifest { reason } => write!(f, "inconsistent manifest: {}", reason),
+            Self::InconsistentManifest { reason } => write!(f, "inconsistent manifest: {reason}"),
         }
     }
 }
@@ -154,16 +153,14 @@ impl fmt::Display for ChunkValidationError {
                 actual_size,
             } => write!(
                 f,
-                "chunk {} size mismatch, expected {}, got {}",
-                chunk_ix, expected_size, actual_size
+                "chunk {chunk_ix} size mismatch, expected {expected_size}, got {actual_size}"
             ),
             Self::InvalidChunkIndex {
                 chunk_ix,
                 actual_length,
             } => write!(
                 f,
-                "chunk index {} is out of the vector length {}",
-                chunk_ix, actual_length
+                "chunk index {chunk_ix} is out of the vector length {actual_length}"
             ),
         }
     }
@@ -840,9 +837,11 @@ pub fn compute_manifest(
         files.retain(|FileWithSize(p, _)| {
             checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
         });
-        assert!(!files
-            .iter()
-            .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)));
+        assert!(
+            !files
+                .iter()
+                .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER))
+        );
     }
 
     let chunk_actions = match opt_manifest_delta {
@@ -1284,7 +1283,7 @@ pub fn diff_manifest(
         let chunk_info = manifest_old
             .chunk_table
             .get(*chunk_index)
-            .unwrap_or_else(|| panic!("Invalid chunk index {}", chunk_index));
+            .unwrap_or_else(|| panic!("Invalid chunk index {chunk_index}"));
 
         chunk_info.file_index as usize
     };
@@ -1388,7 +1387,7 @@ pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
             .map_err(|v| CheckpointError::ProtoError {
                 path: path.to_path_buf(),
                 field: "SystemMetadata::state_sync_version".into(),
-                proto_err: format!("Replica does not implement state sync version {}", v),
+                proto_err: format!("Replica does not implement state sync version {v}"),
             })?,
         &cp_layout,
         DEFAULT_CHUNK_SIZE,

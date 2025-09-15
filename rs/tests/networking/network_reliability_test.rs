@@ -40,7 +40,7 @@ use ic_system_test_driver::{
 };
 use rand::distributions::{Distribution, Uniform};
 use rand_chacha::ChaCha8Rng;
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::cmp::max;
 use std::io::{self};
 use std::thread::{self, JoinHandle};
@@ -152,7 +152,10 @@ pub fn test(env: TestEnv, config: Config) {
         .unwrap()
         .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
     info!(&log, "Installation of counter canisters has succeeded.");
-    info!(&log, "Step 3: Instantiate and start one workload per subnet using a subset of 1/3 of the nodes as targets.");
+    info!(
+        &log,
+        "Step 3: Instantiate and start one workload per subnet using a subset of 1/3 of the nodes as targets."
+    );
     let workload_app_nodes_count = config.nodes_app_subnet / 3;
     info!(
         &log,
@@ -232,7 +235,7 @@ pub fn test(env: TestEnv, config: Config) {
             .join()
             .expect("Thread execution failed.")
             .unwrap_or_else(|err| {
-                panic!("Node stressing failed err={}", err);
+                panic!("Node stressing failed err={err}");
             });
         info!(&log, "{:?}", stress_info);
     }
@@ -251,9 +254,11 @@ pub fn test(env: TestEnv, config: Config) {
         load_metrics_app.requests_count_below_threshold(DURATION_THRESHOLD);
     let min_expected_success_count = config.rps * config.runtime.as_secs() as usize;
     assert_eq!(load_metrics_app.failure_calls(), 0);
-    assert!(requests_count_below_threshold_app
-        .iter()
-        .all(|(_, count)| *count as usize == min_expected_success_count));
+    assert!(
+        requests_count_below_threshold_app
+            .iter()
+            .all(|(_, count)| *count as usize == min_expected_success_count)
+    );
     let agent_app = subnet_app
         .nodes()
         .next()
@@ -379,9 +384,8 @@ fn fraction_of_duration(time: Duration, fraction: f64) -> Duration {
 fn reset_tc_ssh_command() -> String {
     format!(
         r#"set -euo pipefail
-    sudo tc qdisc del dev {device} root 2> /dev/null || true
-    "#,
-        device = DEVICE_NAME
+    sudo tc qdisc del dev {DEVICE_NAME} root 2> /dev/null || true
+    "#
     )
 }
 

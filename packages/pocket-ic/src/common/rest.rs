@@ -114,11 +114,11 @@ impl std::fmt::Display for RawEffectivePrincipal {
             RawEffectivePrincipal::None => write!(f, "None"),
             RawEffectivePrincipal::SubnetId(subnet_id) => {
                 let principal = Principal::from_slice(subnet_id);
-                write!(f, "SubnetId({})", principal)
+                write!(f, "SubnetId({principal})")
             }
             RawEffectivePrincipal::CanisterId(canister_id) => {
                 let principal = Principal::from_slice(canister_id);
-                write!(f, "CanisterId({})", principal)
+                write!(f, "CanisterId({principal})")
             }
         }
     }
@@ -224,7 +224,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -235,7 +235,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Started { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -246,7 +246,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Busy { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -255,7 +255,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse error: {}", e),
+                        message: format!("Could not parse error: {e}"),
                     },
                 }
             }
@@ -752,8 +752,7 @@ impl ExtendedSubnetConfigSet {
             if let Some(config) = subnet {
                 if !matches!(config.state_config, SubnetStateConfig::New) {
                     return Err(format!(
-                        "The {} subnet must be empty when specifying the `{}` ICP feature.",
-                        subnet_desc, icp_feature
+                        "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
                     ));
                 }
             }

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use regex::Regex;
 use std::fmt;
 use std::fs;
@@ -19,7 +19,7 @@ impl fmt::Display for HardwareGen {
             HardwareGen::Gen2 => "Gen2".into(),
             HardwareGen::Unknown => "GenUnknown".into(),
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -28,21 +28,18 @@ fn parse_hardware_gen(cpu_model_line: &str) -> Result<HardwareGen> {
     let re = Regex::new(r"model name\s*:\s*AMD\s*EPYC\s+(\S+)\s+(\S+)\s+(\S+)")?;
     let captures = re
         .captures(cpu_model_line)
-        .with_context(|| format!("Detected non-AMD CPU: {}", cpu_model_line))?;
+        .with_context(|| format!("Detected non-AMD CPU: {cpu_model_line}"))?;
 
     let epyc_model_number = captures
         .get(1)
-        .with_context(|| format!("Could not parse AMD EPYC model number: {}", cpu_model_line))?;
+        .with_context(|| format!("Could not parse AMD EPYC model number: {cpu_model_line}"))?;
     let epyc_model_number = epyc_model_number.as_str();
 
     match epyc_model_number.chars().last() {
         Some('2') => Ok(HardwareGen::Gen1),
         Some('3') => Ok(HardwareGen::Gen2),
         Some(_) => {
-            eprintln!(
-                "CPU model other than EPYC Rome or Milan: {}",
-                cpu_model_line
-            );
+            eprintln!("CPU model other than EPYC Rome or Milan: {cpu_model_line}");
             Ok(HardwareGen::Unknown)
         }
         None => Err(anyhow!(

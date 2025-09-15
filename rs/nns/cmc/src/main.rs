@@ -8,23 +8,23 @@ use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
 use ic_cdk::{
-    api::call::{reply_raw, CallResult, ManualReply},
+    api::call::{CallResult, ManualReply, reply_raw},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
-    flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
-    WitnessGeneratorImpl,
+    HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
+    WitnessGeneratorImpl, flatmap,
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
-    IC_00,
+    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, IC_00,
+    Method,
 };
 use ic_nervous_system_common::{
-    serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS,
+    NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS, serve_metrics,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -37,17 +37,17 @@ use ic_nns_constants::{
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, BlockRes, Memo, Operation, SendArgs, Subaccount, Tokens,
-    Transaction, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, BlockIndex, BlockRes, DEFAULT_TRANSFER_FEE, Memo, Operation,
+    SendArgs, Subaccount, Tokens, Transaction,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use on_wire::IntoWire;
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, btree_map::Entry},
     convert::TryInto,
     thread::LocalKey,
     time::{Duration, SystemTime},
@@ -307,11 +307,10 @@ impl State {
         match stored_state_version.cmp(&current_state_version) {
             Ordering::Greater => {
                 return Err(format!(
-                    "[cycles] ERROR: stored state version {:?} is greater than the current state \
-                     version {:?}!  This likely means a rollback happened. This is not supported. \
-                     Please upgrade to a hotfix instead.",
-                    stored_state_version, current_state_version
-                ))
+                    "[cycles] ERROR: stored state version {stored_state_version:?} is greater than the current state \
+                     version {current_state_version:?}!  This likely means a rollback happened. This is not supported. \
+                     Please upgrade to a hotfix instead."
+                ));
             }
             Ordering::Less => {
                 // This is where you would put a function to do the migration, which would look something like this:
@@ -322,15 +321,13 @@ impl State {
                 // }
                 // Migrations should be deleted after execution to keep the codebase tidy.
                 return Err(format!(
-                    "[cycles] ERROR: stored state version {:?} is lesser than the current state \
-                     version {:?}! Did you forget to migrate the old to the current type?",
-                    stored_state_version, current_state_version
+                    "[cycles] ERROR: stored state version {stored_state_version:?} is lesser than the current state \
+                     version {current_state_version:?}! Did you forget to migrate the old to the current type?"
                 ));
             }
             Ordering::Equal => print(format!(
-                "[cycles] INFO: stored state version {:?} equals the current state version {:?}. \
+                "[cycles] INFO: stored state version {stored_state_version:?} equals the current state version {current_state_version:?}. \
                 Continuing to decode the stable storage ... ",
-                stored_state_version, current_state_version,
             )),
         };
         let state = deserializer.get_value::<State>().unwrap();
@@ -443,18 +440,26 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
         "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, minting account {}, and cycles ledger canister {}",
-        args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
-        args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
-        args.exchange_rate_canister.as_ref()
+        args.ledger_canister_id
+            .as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.governance_canister_id
+            .as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.exchange_rate_canister
+            .as_ref()
             .map(|x| match x {
                 ExchangeRateCanister::Set(id) => id.to_string(),
-                ExchangeRateCanister::Unset => "<unset>".to_string()
+                ExchangeRateCanister::Unset => "<unset>".to_string(),
             })
             .unwrap_or_else(|| "<none>".to_string()),
         args.minting_account_id
             .map(|x| x.to_string())
             .unwrap_or_else(|| "<none>".to_string()),
-        args.cycles_ledger_canister_id.as_ref()
+        args.cycles_ledger_canister_id
+            .as_ref()
             .map(|x| x.to_string())
             .unwrap_or_else(|| "<none>".to_string()),
     ));
@@ -513,17 +518,16 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
         }
         if !already_assigned.is_empty() {
             panic!(
-                "Subnets {:?} are already assigned to a type and cannot be authorized.",
-                already_assigned
+                "Subnets {already_assigned:?} are already assigned to a type and cannot be authorized."
             );
         }
 
         if let Some(who) = who {
             if subnets.is_empty() {
-                print(format!("[cycles] removing subnet list for {}", who));
+                print(format!("[cycles] removing subnet list for {who}"));
                 state.authorized_subnets.remove(&who);
             } else {
-                print(format!("[cycles] setting subnet list for {}", who));
+                print(format!("[cycles] setting subnet list for {who}"));
                 state.authorized_subnets.insert(who, subnets);
             }
         } else {
@@ -569,7 +573,7 @@ fn add_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
 
         match subnet_types_to_subnets.entry(subnet_type.clone()) {
             Entry::Vacant(entry) => {
-                print(format!("[cycles] Adding new subnet type: {}", subnet_type));
+                print(format!("[cycles] Adding new subnet type: {subnet_type}"));
                 entry.insert(BTreeSet::new());
                 Ok(())
             }
@@ -593,7 +597,7 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
                         subnets.iter().copied().collect(),
                     )))
                 } else {
-                    print(format!("[cycles] Removing subnet type: {}", subnet_type));
+                    print(format!("[cycles] Removing subnet type: {subnet_type}"));
                     // Type does not have any assigned subnets, so it can be removed.
                     subnet_types_to_subnets.remove(&subnet_type);
                     Ok(())
@@ -697,8 +701,7 @@ fn add_subnets_to_type(
         match subnet_types_to_subnets.entry(subnet_type.clone()) {
             Entry::Occupied(mut entry) => {
                 print(format!(
-                    "[cycles] Adding subnets {:?} to type: {}",
-                    subnets, subnet_type
+                    "[cycles] Adding subnets {subnets:?} to type: {subnet_type}"
                 ));
                 let existing_subnets = entry.get_mut();
                 existing_subnets.extend(subnets);
@@ -743,8 +746,7 @@ fn remove_subnets_from_type(
 
                 // Subnets can now safely be removed from the type.
                 print(format!(
-                    "[cycles] Removing subnets {:?} from type: {}",
-                    subnets, subnet_type
+                    "[cycles] Removing subnets {subnets:?} from type: {subnet_type}"
                 ));
                 let existing_subnets = entry.get_mut();
                 for subnet in subnets.iter() {
@@ -858,7 +860,7 @@ fn convert_conversion_rate_to_payload(
     serializer.self_describe().unwrap();
     mixed_hash_tree
         .serialize(&mut serializer)
-        .unwrap_or_else(|e| ic_cdk::trap(format!("failed to serialize a hash tree: {}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("failed to serialize a hash tree: {e}")));
 
     serializer.into_inner()
 }
@@ -1011,8 +1013,7 @@ fn do_set_icp_xdr_conversion_rate(
     proposed_conversion_rate: IcpXdrConversionRate,
 ) -> Result<(), String> {
     print(format!(
-        "[cycles] conversion rate update: {:?}",
-        proposed_conversion_rate
+        "[cycles] conversion rate update: {proposed_conversion_rate:?}"
     ));
 
     if proposed_conversion_rate.xdr_permyriad_per_icp == 0 {
@@ -1256,8 +1257,7 @@ async fn notify_mint_cycles(
         return Err(NotifyError::Other {
             error_code: NotifyErrorCode::DepositMemoTooLong as u64,
             error_message: format!(
-                "Memo length {} exceeds the maximum length of {}",
-                deposit_memo_len, MAX_MEMO_LENGTH
+                "Memo length {deposit_memo_len} exceeds the maximum length of {MAX_MEMO_LENGTH}"
             ),
         });
     }
@@ -1469,9 +1469,8 @@ fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
     let err = NotifyError::Other {
         error_code: NotifyErrorCode::Unauthorized as u64,
         error_message: format!(
-            "{} is not authorized to call notify_create_canister on behalf \
-             of {}. (Do not retry, because the same result will occur.)",
-            caller, creator,
+            "{caller} is not authorized to call notify_create_canister on behalf \
+             of {creator}. (Do not retry, because the same result will occur.)",
         ),
     };
 
@@ -1533,9 +1532,8 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
     let raw_block = match b {
         None => {
             return Err(NotifyError::InvalidTransaction(format!(
-                "Block {} not found",
-                block_index
-            )))
+                "Block {block_index} not found"
+            )));
         }
         Some(Ok(block)) => block,
         Some(Err(canister_id)) => {
@@ -1549,20 +1547,18 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
                 })?;
             b.ok_or_else(|| {
                 failed_to_fetch_block(format!(
-                    "Block {} not found in archive {}",
-                    block_index, canister_id
+                    "Block {block_index} not found in archive {canister_id}"
                 ))
             })?
             .map_err(|redirect_canister_id| {
                 failed_to_fetch_block(format!(
-                    "Unexpected response from archive (redirected to {})",
-                    redirect_canister_id
+                    "Unexpected response from archive (redirected to {redirect_canister_id})"
                 ))
             })?
         }
     };
     Block::decode(raw_block)
-        .map_err(|e| failed_to_fetch_block(format!("Failed to decode block: {}", e)))
+        .map_err(|e| failed_to_fetch_block(format!("Failed to decode block: {e}")))
 }
 
 fn memo_to_intent_str(memo: Memo) -> String {
@@ -1617,7 +1613,7 @@ async fn fetch_transaction(
         _ => {
             return Err(NotifyError::InvalidTransaction(
                 "Notification transaction must be of type Transfer".into(),
-            ))
+            ));
         }
     };
 
@@ -1627,8 +1623,7 @@ async fn fetch_transaction(
     );
     if to != expected_to {
         return Err(NotifyError::InvalidTransaction(format!(
-            "Destination account in the block ({}) different than in the notification ({})",
-            to, expected_to_subaccount,
+            "Destination account in the block ({to}) different than in the notification ({expected_to_subaccount})",
         )));
     }
 
@@ -1859,8 +1854,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             // of the special meaningful values.
             NotifiedCreateCanister(_) | NotifiedMint(_) | NotifiedTopUp(_) => {
                 Err(NotifyError::InvalidTransaction(format!(
-                    "Block has already been processed: {:?}",
-                    prior_block_status,
+                    "Block has already been processed: {prior_block_status:?}",
                 )))
             }
         };
@@ -1943,8 +1937,7 @@ async fn process_create_canister(
     let sub = Subaccount::from(&controller);
 
     print(format!(
-        "Creating canister with controller {} with {} cycles.",
-        controller, cycles,
+        "Creating canister with controller {controller} with {cycles} cycles.",
     ));
 
     // Create the canister. If this fails, refund. Either way,
@@ -2003,8 +1996,7 @@ async fn process_top_up(
     let sub = Subaccount::from(&canister_id);
 
     print(format!(
-        "Topping up canister {} by {} cycles.",
-        canister_id, cycles
+        "Topping up canister {canister_id} by {cycles} cycles."
     ));
 
     match deposit_cycles(canister_id, cycles, true, limiter_to_use).await {
@@ -2026,20 +2018,17 @@ async fn process_top_up(
 /// Burning doesn't return errors - we don't want to reject the transaction
 /// notification because then it could be retried.
 async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
-    let msg = format!(
-        "Burning of {} ICPTs from subaccount {}",
-        amount, from_subaccount
-    );
+    let msg = format!("Burning of {amount} ICPTs from subaccount {from_subaccount}");
     let minting_account_id = with_state(|state| state.minting_account_id);
     if minting_account_id.is_none() {
-        print(format!("{} failed: minting_account_id not set", msg));
+        print(format!("{msg} failed: minting_account_id not set"));
         return;
     }
     let minting_account_id = minting_account_id.unwrap();
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
     if amount < DEFAULT_TRANSFER_FEE {
-        print(format!("{}: amount too small ({})", msg, amount));
+        print(format!("{msg}: amount too small ({amount})"));
         return;
     }
 
@@ -2054,10 +2043,10 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
     let res: CallResult<BlockIndex> = call_protobuf(ledger_canister_id, "send_pb", send_args).await;
 
     match res {
-        Ok(block) => print(format!("{} done in block {}.", msg, block)),
+        Ok(block) => print(format!("{msg} done in block {block}.")),
         Err((code, err)) => {
             let code = code as i32;
-            print(format!("{} failed with code {}: {:?}", msg, code, err))
+            print(format!("{msg} failed with code {code}: {err:?}"))
         }
     }
 }
@@ -2106,11 +2095,11 @@ async fn refund_icp(
             let code = code as i32;
             NotifyError::Other {
                 error_code: NotifyErrorCode::RefundFailed as u64,
-                error_message: format!("Refund to {} failed with code {}: {}", to, code, err),
+                error_message: format!("Refund to {to} failed with code {code}: {err}"),
             }
         })?;
 
-        print(format!("Refund to {} done in block {}.", to, block));
+        print(format!("Refund to {to} done in block {block}."));
 
         refund_block_index = Some(block);
     }
@@ -2212,10 +2201,7 @@ async fn do_create_canister(
                         subnet_types_to_subnets
                             .get(&subnet_type)
                             .map(|set| set.iter().cloned().collect())
-                            .ok_or(format!(
-                                "Provided subnet type {} does not exist",
-                                subnet_type
-                            ))
+                            .ok_or(format!("Provided subnet type {subnet_type} does not exist"))
                     }
                     None => Ok(get_subnets_for(&controller_id)),
                 })
@@ -2239,7 +2225,9 @@ async fn do_create_canister(
                 {
                     Ok(vec![subnet])
                 } else {
-                    Err(format!("Subnet {} does not exist or {} is not authorized to deploy to that subnet.", subnet, controller_id))
+                    Err(format!(
+                        "Subnet {subnet} does not exist or {controller_id} is not authorized to deploy to that subnet."
+                    ))
                 }
             }),
         },
@@ -2296,15 +2284,14 @@ async fn do_create_canister(
                     "Creating canister in subnet {} failed with code {}: {}",
                     subnet_id, code as i32, msg
                 );
-                print(format!("[cycles] {}", err));
+                print(format!("[cycles] {err}"));
                 last_err = Some(err);
                 continue;
             }
         };
 
         print(format!(
-            "[cycles] created canister {} in subnet {}",
-            canister_id, subnet_id
+            "[cycles] created canister {canister_id} in subnet {subnet_id}"
         ));
 
         return Ok(canister_id);
@@ -2430,7 +2417,7 @@ async fn update_exchange_rate() {
             UpdateExchangeRateError::InvalidRate(_)
             | UpdateExchangeRateError::FailedToRetrieveRate(_)
             | UpdateExchangeRateError::FailedToSetRate(_) => {
-                print(format!("[cycles] {}", error));
+                print(format!("[cycles] {error}"));
             }
             UpdateExchangeRateError::Disabled
             | UpdateExchangeRateError::NotReadyToGetRate(_)
@@ -2641,16 +2628,14 @@ mod tests {
         let on_behalf_of_self_result = authorize(creator);
         assert!(
             on_behalf_of_self_result.is_ok(),
-            "{:#?}",
-            on_behalf_of_self_result,
+            "{on_behalf_of_self_result:#?}",
         );
 
         let eve = PrincipalId::new_user_test_id(898_071_769);
         let on_behalf_of_other_result = authorize(eve);
         assert!(
             on_behalf_of_other_result.is_err(),
-            "{:#?}",
-            on_behalf_of_other_result,
+            "{on_behalf_of_other_result:#?}",
         );
         let err = on_behalf_of_other_result.unwrap_err();
         match &err {
@@ -2661,29 +2646,25 @@ mod tests {
                 assert_eq!(
                     *error_code,
                     NotifyErrorCode::Unauthorized as u64,
-                    "{:#?}",
-                    err,
+                    "{err:#?}",
                 );
 
                 let error_message = error_message.to_lowercase();
                 for key_word in ["authorize", "on behalf"] {
                     assert!(
                         error_message.contains(key_word),
-                        "{} not in {:#?}",
-                        key_word,
-                        err,
+                        "{key_word} not in {err:#?}",
                     );
                 }
             }
 
-            _ => panic!("{:#?}", err),
+            _ => panic!("{err:#?}"),
         }
 
         let caller_is_nns_dapp_result = authorize(PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID));
         assert!(
             caller_is_nns_dapp_result.is_ok(),
-            "{:#?}",
-            caller_is_nns_dapp_result,
+            "{caller_is_nns_dapp_result:#?}",
         );
 
         // Also allow nns-dapp backend canister ID used in test.
@@ -2691,8 +2672,7 @@ mod tests {
             authorize(PrincipalId::from_str("qsgjb-riaaa-aaaaa-aaaga-cai").unwrap());
         assert!(
             caller_is_nns_dapp_result.is_ok(),
-            "{:#?}",
-            caller_is_nns_dapp_result,
+            "{caller_is_nns_dapp_result:#?}",
         );
     }
 
@@ -3180,7 +3160,7 @@ mod tests {
 
     #[test]
     fn test_candid_interface_compatibility() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{CandidSource, service_equal};
         use std::path::PathBuf;
 
         candid::export_service!();
@@ -3259,16 +3239,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "77", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3290,16 +3268,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "78", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3320,16 +3296,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "0", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3349,16 +3323,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "0", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }

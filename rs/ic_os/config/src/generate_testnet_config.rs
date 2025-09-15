@@ -150,7 +150,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         }),
         (None, None, None) => None,
         _ => {
-            anyhow::bail!("Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration.");
+            anyhow::bail!(
+                "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration."
+            );
         }
     };
 
@@ -255,7 +257,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 /// Any required config fields that aren't specified will receive dummy values.
 pub fn generate_testnet_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let guestos_config = create_guestos_config(config)?;
-    println!("GuestOSConfig: {:?}", guestos_config);
+    println!("GuestOSConfig: {guestos_config:?}");
     Ok(guestos_config)
 }
 
@@ -367,8 +369,7 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("Failed to parse deterministic_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -422,8 +423,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse fixed_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -459,8 +459,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse ipv4_address"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -478,8 +477,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse ipv4_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 }

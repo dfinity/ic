@@ -15,16 +15,16 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::Height;
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::KeyPurpose;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptType,
 };
-use ic_types::crypto::AlgorithmId;
-use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
-use ic_types::Height;
 use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -33,8 +33,8 @@ use std::sync::Arc;
 
 mod retain_keys_for_transcripts {
     use super::*;
-    use crate::sign::canister_threshold_sig::idkg::retain_active_keys::retain_keys_for_transcripts;
     use crate::sign::canister_threshold_sig::idkg::retain_active_keys::IDkgTranscriptInternal;
+    use crate::sign::canister_threshold_sig::idkg::retain_active_keys::retain_keys_for_transcripts;
     use ic_crypto_internal_csp::key_id::KeyId;
     use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
     use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
@@ -194,7 +194,9 @@ mod retain_keys_for_transcripts {
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
             // from rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/tests/data/transcript_random.hex:
-            internal_transcript_raw: hex_to_byte_vec("a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f6ea168506564657273656ea166706f696e747383582201024be7c27cb1efce8378bc1d8385c409bfc620ddc702aac1664e6c71680a1b0e2858220102ec466b3c1ae94746014ff54624efb1773689b1f615752164208e77dd13b8308158220102d4c87220329fe8165d678c5556d29f067e1694af40585cb70e1b565c0895a5ed"),
+            internal_transcript_raw: hex_to_byte_vec(
+                "a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f6ea168506564657273656ea166706f696e747383582201024be7c27cb1efce8378bc1d8385c409bfc620ddc702aac1664e6c71680a1b0e2858220102ec466b3c1ae94746014ff54624efb1773689b1f615752164208e77dd13b8308158220102d4c87220329fe8165d678c5556d29f067e1694af40585cb70e1b565c0895a5ed",
+            ),
         }
     }
 }

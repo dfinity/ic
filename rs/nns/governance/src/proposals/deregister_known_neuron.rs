@@ -1,7 +1,7 @@
 use crate::{
     is_deregister_known_neuron_enabled,
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, DeregisterKnownNeuron, GovernanceError},
+    pb::v1::{DeregisterKnownNeuron, GovernanceError, governance_error::ErrorType},
 };
 
 impl DeregisterKnownNeuron {

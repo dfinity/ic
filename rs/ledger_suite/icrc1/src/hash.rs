@@ -73,7 +73,7 @@ fn hash_value(value: &Value) -> Result<Hash, String> {
         Value::Bool(_) => Err("RI hash is not defined for booleans".to_string()),
         Value::Null => Err("RI hash is not defined for NULL".to_string()),
         Value::Float(_) => Err("RI hash is not defined for floats".to_string()),
-        _ => Err(format!("unsupported value type: {:?}", value)),
+        _ => Err(format!("unsupported value type: {value:?}")),
     }
 }
 

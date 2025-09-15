@@ -27,7 +27,7 @@
 
 use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_state_machine_tests::StateMachine;
 use ic_types::{Cycles, PrincipalId};
 
@@ -65,7 +65,7 @@ fn setup_env(total_canisters: usize) -> StateMachine {
             PrincipalId::new_anonymous(),
             *canister_id,
             "create_canisters",
-            format!("{}", CANISTERS_PER_CREATOR).as_bytes().to_vec(),
+            format!("{CANISTERS_PER_CREATOR}").as_bytes().to_vec(),
         );
         ingress_ids.push(ingress_id);
     }

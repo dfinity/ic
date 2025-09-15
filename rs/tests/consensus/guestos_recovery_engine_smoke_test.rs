@@ -21,7 +21,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{Result, anyhow, ensure};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams::{
         get_upstreams_uvm_ipv6, setup_upstreams_uvm, spoof_node_dns, uvm_serve_recovery_artifacts,
@@ -35,8 +35,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Node, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path_from_env, read_dependency_from_env_to_string, secs,
-            HasTopologySnapshot, IcNodeContainer, SshSession,
+            HasTopologySnapshot, IcNodeContainer, SshSession, get_dependency_path_from_env,
+            read_dependency_from_env_to_string, secs,
         },
     },
     retry_with_msg, systest,
@@ -49,7 +49,7 @@ fn verify_content(ssh_session: &Session, remote_file_path: &str, expected_b64: &
     // we read their base64 encoding and compare those.
     let actual_b64 = execute_bash_command(
         ssh_session,
-        format!("base64 {} | tr -d '\\n'", remote_file_path),
+        format!("base64 {remote_file_path} | tr -d '\\n'"),
     )
     .map_err(|e| anyhow!(e))?;
     ensure!(
@@ -72,8 +72,7 @@ fn verify_permissions_recursively(
         ssh_session,
         format!(
             // File type | Permissions | Owner | Group | File Name
-            "find {} -exec stat -c '%F|%A|%U|%G|%n' {{}} \\;",
-            folder_path
+            "find {folder_path} -exec stat -c '%F|%A|%U|%G|%n' {{}} \\;"
         ),
     )
     .map_err(|e| anyhow!(e))?;

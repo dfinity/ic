@@ -2,22 +2,21 @@ mod common;
 
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
-use ic_crypto_tree_hash::{lookup_path, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MixedHashTree, lookup_path};
 use ic_interfaces_registry::RegistryRecord;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, maybe_upgrade_to_self, UpgradeTestingScenario},
+    itest_helpers::{UpgradeTestingScenario, local_test_on_nns_subnet, maybe_upgrade_to_self},
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_registry_nns_data_provider::certification::decode_hash_tree;
 use ic_registry_transport::{
-    insert,
+    MockGetChunk, insert,
     pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryGetChangesSinceRequest},
-    MockGetChunk,
 };
 use ic_types::RegistryVersion;
 use prost::Message;
@@ -143,7 +142,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
     fn count_deltas(tree: &LabeledTree<Vec<u8>>) -> usize {
         match lookup_path(tree, &[&b"delta"[..]]).unwrap() {
             LabeledTree::SubTree(children) => children.len(),
-            _ => panic!("unexpected data tree shape: {:?}", tree),
+            _ => panic!("unexpected data tree shape: {tree:?}"),
         }
     }
     fn has_delta(tree: &LabeledTree<Vec<u8>>, version: u64) -> bool {
@@ -158,7 +157,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
             builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
             for v in 1..(3 * MAX_VERSIONS_PER_QUERY / 2) {
                 let mutation_request = RegistryAtomicMutateRequest {
-                    mutations: vec![insert(format!("key{}", v), "value")],
+                    mutations: vec![insert(format!("key{v}"), "value")],
                     preconditions: vec![],
                 };
                 builder.push_init_mutate_request(mutation_request);

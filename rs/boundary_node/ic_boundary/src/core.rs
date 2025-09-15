@@ -6,25 +6,25 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{Context, Error, anyhow, bail};
 use arc_swap::ArcSwapOption;
 use axum::{
+    Router,
     extract::Request,
     middleware,
     response::IntoResponse,
     routing::method_routing::{any, get, post},
-    Router,
 };
 use axum_extra::middleware::option_layer;
 use candid::{DecoderConfig, Principal};
-use ic_agent::{agent::EnvelopeContent, identity::AnonymousIdentity, Agent, Identity, Signature};
+use ic_agent::{Agent, Identity, Signature, agent::EnvelopeContent, identity::AnonymousIdentity};
 use ic_bn_lib::{
     http::{
         self as bnhttp,
         shed::{
+            ShedResponse,
             sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
             system::{SystemInfo, SystemLoadShedderLayer},
-            ShedResponse,
         },
     },
     prometheus::Registry,
@@ -46,15 +46,15 @@ use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry}
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::messages::MessageId;
-use nix::unistd::{getpgid, setpgid, Pid};
+use nix::unistd::{Pid, getpgid, setpgid};
 use rustls::client::danger::ServerCertVerifier;
 use tokio::{
     select,
     signal::unix::SignalKind,
-    sync::{watch, Mutex},
+    sync::{Mutex, watch},
 };
-use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
-use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
+use tower::{ServiceBuilder, limit::ConcurrencyLimitLayer, util::MapResponseLayer};
+use tower_http::{ServiceBuilderExt, compression::CompressionLayer, request_id::MakeRequestUuid};
 use tracing::warn;
 
 use crate::{
@@ -65,17 +65,17 @@ use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     http::{
-        handlers::{self, logs_canister, LogsState},
+        PATH_CALL, PATH_CALL_V3, PATH_HEALTH, PATH_QUERY, PATH_READ_STATE, PATH_STATUS,
+        PATH_SUBNET_READ_STATE,
+        handlers::{self, LogsState, logs_canister},
         middleware::{
-            cache::{cache_middleware, CacheState},
+            cache::{CacheState, cache_middleware},
             cors::{self},
             geoip::{self},
             process::{self},
-            retry::{retry_request, RetryParams},
+            retry::{RetryParams, retry_request},
             validate::{self, UUID_REGEX},
         },
-        PATH_CALL, PATH_CALL_V3, PATH_HEALTH, PATH_QUERY, PATH_READ_STATE, PATH_STATUS,
-        PATH_SUBNET_READ_STATE,
     },
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParamsCheck, MetricParamsPersist,
@@ -83,12 +83,12 @@ use crate::{
         WithMetricsSnapshot,
     },
     persist::{Persist, Persister},
-    rate_limiting::{generic, RateLimit},
+    rate_limiting::{RateLimit, generic},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
-        generate_stub_snapshot, generate_stub_subnet, RegistryReplicatorRunner, RegistrySnapshot,
-        SnapshotPersister, Snapshotter,
+        RegistryReplicatorRunner, RegistrySnapshot, SnapshotPersister, Snapshotter,
+        generate_stub_snapshot, generate_stub_subnet,
     },
     tls_verify::TlsVerifier,
 };
@@ -130,7 +130,9 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if !(cli.registry.registry_local_store_path.is_none()
         ^ cli.registry.registry_stub_replica.is_empty())
     {
-        bail!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified");
+        bail!(
+            "Local store path and Stub Replica are mutually exclusive and at least one of them must be specified"
+        );
     }
 
     #[cfg(feature = "tls")]

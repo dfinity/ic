@@ -132,8 +132,8 @@ mod test {
     use std::{sync::Arc, time::Duration};
 
     use axum::{
-        body::Body, http::Request, middleware, response::IntoResponse,
-        routing::method_routing::post, Extension, Router,
+        Extension, Router, body::Body, http::Request, middleware, response::IntoResponse,
+        routing::method_routing::post,
     };
     use candid::Principal;
     use http::StatusCode;

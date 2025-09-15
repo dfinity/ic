@@ -11,12 +11,12 @@ use slog::info;
 
 pub mod util;
 use util::{
-    assert_version_compatibility, check_hostos_version, elect_guestos_version,
-    elect_hostos_version, get_blessed_guestos_versions, get_host_boot_id,
-    get_unassigned_nodes_config, setup_ic_infrastructure, setup_nested_vm_group,
-    setup_vector_targets_for_vm, simple_setup_nested_vm_group, start_nested_vm_group,
-    update_nodes_hostos_version, update_unassigned_nodes, wait_for_expected_guest_version,
-    wait_for_guest_version, NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, assert_version_compatibility,
+    check_hostos_version, elect_guestos_version, elect_hostos_version,
+    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
+    setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
+    simple_setup_nested_vm_group, start_nested_vm_group, update_nodes_hostos_version,
+    update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
 };
 
 use anyhow::bail;
@@ -160,7 +160,10 @@ pub fn upgrade_hostos(env: TestEnv) {
     ));
     info!(logger, "Elected target HostOS version");
 
-    info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
+    info!(
+        logger,
+        "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade..."
+    );
     let host_boot_id_pre_upgrade = get_host_boot_id(&host);
     info!(
         logger,
@@ -253,7 +256,10 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         .await
         .expect("guest didn't come up as expected");
 
-        info!(logger, "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted...");
+        info!(
+            logger,
+            "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted..."
+        );
         let host_boot_id_pre_reboot = get_host_boot_id(&host);
         info!(
             logger,
@@ -279,8 +285,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             "Remounting /boot as read-write and updating boot_args file"
         );
         let boot_args_command = format!(
-            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot",
-            target_version, target_short_hash
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={target_version} version-hash={target_short_hash}\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
         );
         host.block_on_bash_script(&boot_args_command)
             .expect("Failed to update boot_args file");

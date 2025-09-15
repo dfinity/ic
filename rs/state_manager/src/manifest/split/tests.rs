@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, SnapshotId};
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
-use ic_types::{state_sync::CURRENT_STATE_SYNC_VERSION, Height};
+use ic_types::{Height, state_sync::CURRENT_STATE_SYNC_VERSION};
 
 /// Expected hash of a zero length file.
 const EMPTY_FILE_HASH: [u8; 32] = [
@@ -24,8 +24,7 @@ fn manifest_builder_out_of_order_files() {
         builder.build(),
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "file paths are not sorted: {}, {}",
-                SYSTEM_METADATA_FILE, SPLIT_MARKER_FILE
+                "file paths are not sorted: {SYSTEM_METADATA_FILE}, {SPLIT_MARKER_FILE}"
             )
         })
     );
@@ -41,8 +40,7 @@ fn manifest_builder_duplicate_files() {
         builder.build(),
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "file paths are not sorted: {}, {}",
-                SYSTEM_METADATA_FILE, SYSTEM_METADATA_FILE
+                "file paths are not sorted: {SYSTEM_METADATA_FILE}, {SYSTEM_METADATA_FILE}"
             )
         })
     );
@@ -58,8 +56,7 @@ fn manifest_builder_out_of_order_generated_files() {
         builder.build(),
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "file paths are not sorted: {}, {}",
-                SYSTEM_METADATA_FILE, SPLIT_MARKER_FILE
+                "file paths are not sorted: {SYSTEM_METADATA_FILE}, {SPLIT_MARKER_FILE}"
             )
         })
     );
@@ -112,8 +109,7 @@ fn split_manifest_unassigned_canister() {
     assert_eq!(
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "canister {} is mapped to neither subnet A' ({}) nor subnet B ({})",
-                canister_id, SUBNET_0, SUBNET_1
+                "canister {canister_id} is mapped to neither subnet A' ({SUBNET_0}) nor subnet B ({SUBNET_1})"
             )
         }),
         split_manifest(
@@ -239,7 +235,7 @@ fn split_manifest_3_canisters() {
     let mut assign_ranges = |ranges: Vec<CanisterIdRange>, subnet_id: SubnetId| {
         CanisterIdRanges::try_from(ranges.clone())
             .and_then(|ranges| routing_table.assign_ranges(ranges, subnet_id))
-            .map_err(|e| format!("Failed to assign ranges {:?}: {:?}", ranges, e))
+            .map_err(|e| format!("Failed to assign ranges {ranges:?}: {e:?}"))
     };
     // Start off with everything assigned to `SUBNET_0`.
     assign_ranges(

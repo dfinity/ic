@@ -29,10 +29,7 @@ fn test_integer_polynomial_evaluation_is_correct(x: u32, polynomial: &[u32], y: 
     assert_eq!(
         evaluate_integer_polynomial(x, polynomial),
         y,
-        "Expected f({:?})={:?} for polynomial with coefficients {:?}",
-        x,
-        y,
-        polynomial
+        "Expected f({x:?})={y:?} for polynomial with coefficients {polynomial:?}"
     );
 }
 #[test]

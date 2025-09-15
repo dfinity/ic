@@ -4,7 +4,7 @@ use dfn_core::over;
 #[unsafe(export_name = "canister_query greeting")]
 fn greeting() {
     over(candid, |(name, age): (String, u16)| {
-        format!("Hello {}, you are {} years old", name, age)
+        format!("Hello {name}, you are {age} years old")
     })
 }
 
