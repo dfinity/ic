@@ -215,7 +215,7 @@ async fn proxy(
     }
 }
 
-fn remove_csp(haystack: &[u8]) -> Cow<[u8]> {
+fn remove_csp(haystack: &[u8]) -> Cow<'_, [u8]> {
     static RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r#"(?<pre>.*)upgrade-insecure-requests;?(?<post>.*)"#).unwrap());
     RE.replace(haystack, b"$pre$post")

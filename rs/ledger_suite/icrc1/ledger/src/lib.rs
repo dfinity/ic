@@ -382,7 +382,7 @@ impl std::cmp::Ord for AccountSpender {
 }
 
 impl Storable for AccountSpender {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("AccountSpender encoding should always succeed");
         Cow::Owned(buf)
@@ -438,7 +438,7 @@ impl std::cmp::Ord for Expiration {
 }
 
 impl Storable for Expiration {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("Expiration encoding should always succeed");
         Cow::Owned(buf)
@@ -465,7 +465,7 @@ struct StorableAllowance {
 }
 
 impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
         Cow::Owned(buf)

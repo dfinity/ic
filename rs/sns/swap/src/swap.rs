@@ -3596,7 +3596,7 @@ impl SnsNeuronRecipe {
 }
 
 impl Storable for Ticket {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.encode_to_vec().into()
     }
 

@@ -113,7 +113,7 @@ impl StorableWasm for Archive {
 }
 
 impl Storable for StoredWasm {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf)
             .expect("failed to encode a StorableWasm to bytes");
@@ -133,7 +133,7 @@ impl Storable for StoredWasm {
 }
 
 impl Storable for TaskExecution {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf)
             .expect("failed to encode a TaskExecution to bytes");
@@ -153,7 +153,7 @@ impl Storable for TaskExecution {
 }
 
 impl Storable for Task {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf).expect("failed to encode a Task to bytes");
         Cow::Owned(buf)
