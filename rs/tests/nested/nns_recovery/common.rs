@@ -370,6 +370,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
             let env = env.clone();
             let vm = vm.clone();
             let recovery_img_hash = recovery_img_hash.clone();
+            let artifacts_hash = artifacts_hash.clone();
 
             handles.spawn(async move {
                 simulate_node_provider_action(
