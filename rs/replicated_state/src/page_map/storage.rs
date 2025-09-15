@@ -214,7 +214,7 @@ impl Storage {
         self.init_or_die().get_page(page_index)
     }
 
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         self.init_or_die().get_base_memory_instructions()
     }
 
@@ -332,7 +332,7 @@ impl StorageImpl {
     }
 
     /// For base overlays and regular base we pre-mmap all data in constructor.
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         match &self.base {
             BaseFile::Base(base) => base.get_memory_instructions(),
             BaseFile::Overlay(overlays) => MemoryInstructions {
