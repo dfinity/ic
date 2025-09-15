@@ -8,7 +8,6 @@ use ic_btc_checker::{
     blocklist, BtcNetwork, CheckMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
-use ic_cdk::api::call::RejectionCode;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::str::FromStr;
@@ -54,10 +53,7 @@ impl FetchEnv for MockEnv {
         self.replies
             .borrow_mut()
             .pop_front()
-            .unwrap_or(Err(HttpGetTxError::Rejected {
-                code: RejectionCode::SysTransient,
-                message: "no more reply".to_string(),
-            }))
+            .unwrap_or(Err(HttpGetTxError::Rejected("no more reply".to_string())))
     }
     fn cycles_accept(&self, cycles: u128) -> u128 {
         let mut available = self.available_cycles.borrow_mut();
@@ -529,10 +525,7 @@ async fn test_check_fetched() {
         FetchTxStatus::Error(FetchTxStatusError {
             provider: provider.clone(),
             max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
-            error: HttpGetTxError::Rejected {
-                code: RejectionCode::SysTransient,
-                message: "no more reply".to_string(),
-            },
+            error: HttpGetTxError::Rejected("no more reply".to_string()),
         }),
     );
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));
