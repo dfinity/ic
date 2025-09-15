@@ -72,7 +72,7 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/test_utils",
     "//rs/ledger_suite/icrc1/tokens_u256",
-    "//rs/ledger_suite/tests/sm-tests/types:ic-ledger-suite-state-machine-tests-types",
+    "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/test_utils",

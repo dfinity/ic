@@ -14,7 +14,7 @@ use ic_ledger_suite_state_machine_tests::{
     extract_icrc21_message_string, icrc21_consent_message, modify_field, send_approval,
     send_transfer, send_transfer_from, setup, supported_standards, total_supply, transfer,
 };
-use ic_ledger_suite_state_machine_tests_types::FEE;
+use ic_ledger_suite_state_machine_tests_constants::FEE;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,

@@ -1,6 +1,6 @@
 [package]
-name = "ic-ledger-suite-state-machine-tests-types"
-description = "Types for StateMachines based tests for ledger suite canisters"
+name = "ic-ledger-suite-state-machine-tests-constants"
+description = "Constants for StateMachines based tests for ledger suite canisters"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

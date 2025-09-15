@@ -63,7 +63,7 @@ DEV_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
     "//rs/ledger_suite/icrc1/test_utils",
     "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
-    "//rs/ledger_suite/tests/sm-tests/types:ic-ledger-suite-state-machine-tests-types",
+    "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
     "//rs/rosetta-api/icp/test_utils",
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",

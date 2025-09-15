@@ -7,7 +7,7 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_suite_state_machine_tests::MINTER;
-use ic_ledger_suite_state_machine_tests_types::{
+use ic_ledger_suite_state_machine_tests_constants::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
     INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
     TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
