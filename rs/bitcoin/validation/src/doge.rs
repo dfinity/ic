@@ -118,8 +118,8 @@ impl HeaderValidator for DogecoinHeaderValidator {
 
     fn checkpoints(&self) -> &[(BlockHeight, &str)] {
         match self.network() {
-            Self::Network::Dogecoin => crate::constants::DOGECOIN,
-            Self::Network::Testnet => crate::constants::TESTNET_DOGECOIN,
+            Self::Network::Dogecoin => crate::constants::DOGECOIN_MAINNET,
+            Self::Network::Testnet => crate::constants::DOGECOIN_TESTNET,
             Self::Network::Regtest => &[],
             _ => &[],
         }

@@ -21,7 +21,7 @@ pub const SECONDS_IN_ONE_YEAR: i64 = 31_557_600;
 
 /// Bitcoin mainnet checkpoints
 #[rustfmt::skip]
-const BITCOIN: &[(BlockHeight, &str)] = &[
+const BITCOIN_MAINNET: &[(BlockHeight, &str)] = &[
     (11_111, "0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d",),
     (33_333, "000000002dd5588a74784eaa7ab0507a18ad16a236e7b1ce69f00d7ddfb5d0a6",),
     (74_000, "0000000000573993a3c9e41ce34471c079dcf5f52a0e824a81e7f953b8661a20",),
@@ -56,19 +56,19 @@ const BITCOIN: &[(BlockHeight, &str)] = &[
 
 /// Bitcoin testnet checkpoints
 #[rustfmt::skip]
-const TESTNET: &[(BlockHeight, &str)] = &[
+const BITCOIN_TESTNET: &[(BlockHeight, &str)] = &[
     (546, "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70")
 ];
 
 /// Bitcoin testnet checkpoints
 #[rustfmt::skip]
-const TESTNET4: &[(BlockHeight, &str)] = &[
+const BITCOIN_TESTNET4: &[(BlockHeight, &str)] = &[
     (64000, "000000000deb369dca3115f66e208733066f44c8cc177edd4b5f86869e6355b5")
 ];
 
 /// Dogecoin mainnet checkpoints
 #[rustfmt::skip]
-pub(crate) const DOGECOIN: &[(BlockHeight, &str)] = &[
+pub(crate) const DOGECOIN_MAINNET: &[(BlockHeight, &str)] = &[
     (0, "1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691"),
     (104679, "35eb87ae90d44b98898fec8c39577b76cb1eb08e1261cfc10706c8ce9a1d01cf"),
     (145000, "cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72"),
@@ -96,7 +96,7 @@ pub(crate) const DOGECOIN: &[(BlockHeight, &str)] = &[
 
 /// Dogecoin testnet checkpoints
 #[rustfmt::skip]
-pub(crate) const TESTNET_DOGECOIN: &[(BlockHeight, &str)] = &[
+pub(crate) const DOGECOIN_TESTNET: &[(BlockHeight, &str)] = &[
     (0, "bb0a78264637406b6360aad926284d544d7049f45189db5664f3c4d07350559e"),
     (483173, "a804201ca0aceb7e937ef7a3c613a9b7589245b10cc095148c4ce4965b0b73b5"),
     (591117, "5f6b93b2c28cedf32467d900369b8be6700f0649388a7dbfd3ebd4a01b1ffad8"),
@@ -155,9 +155,9 @@ pub fn pow_limit_bits(network: &Network) -> CompactTarget {
 /// Checkpoints used to validate blocks at certain heights.
 pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
     let points = match network {
-        Network::Bitcoin => BITCOIN,
-        Network::Testnet => TESTNET,
-        Network::Testnet4 => TESTNET4,
+        Network::Bitcoin => BITCOIN_MAINNET,
+        Network::Testnet => BITCOIN_TESTNET,
+        Network::Testnet4 => BITCOIN_TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
         _ => &[],
@@ -175,9 +175,9 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
 
 pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) -> BlockHeight {
     let points = match network {
-        Network::Bitcoin => BITCOIN,
-        Network::Testnet => TESTNET,
-        Network::Testnet4 => TESTNET4,
+        Network::Bitcoin => BITCOIN_MAINNET,
+        Network::Testnet => BITCOIN_TESTNET,
+        Network::Testnet4 => BITCOIN_TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
         _ => &[],
