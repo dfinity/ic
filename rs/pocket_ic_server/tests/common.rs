@@ -56,14 +56,14 @@ pub fn start_server_helper(
     }
     let out = cmd.spawn().expect("Failed to start PocketIC binary");
     let url = loop {
-        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
-            && port_string.contains("\n")
-        {
-            let port: u16 = port_string
-                .trim_end()
-                .parse()
-                .expect("Failed to parse port to number");
-            break Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap();
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
+            if port_string.contains("\n") {
+                let port: u16 = port_string
+                    .trim_end()
+                    .parse()
+                    .expect("Failed to parse port to number");
+                break Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap();
+            }
         }
         std::thread::sleep(Duration::from_millis(20));
     };

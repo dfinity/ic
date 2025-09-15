@@ -942,44 +942,44 @@ impl PocketIcSubnets {
         };
         self.subnet_configs.push(subnet_config.clone());
 
-        if let Some(icp_features) = self.icp_features.clone()
-            && update_system_canisters
-        {
-            // using `let IcpFeatures { }` with explicit field names
-            // to force an update after adding a new field to `IcpFeatures`
-            let IcpFeatures {
-                registry,
-                cycles_minting,
-                icp_token,
-                cycles_token,
-                nns_governance,
-                sns,
-                ii,
-                nns_ui,
-            } = icp_features;
-            if let Some(ref config) = registry {
-                self.update_registry(config);
-            }
-            if let Some(ref config) = cycles_minting {
-                self.update_cmc(config, &subnet_kind);
-            }
-            if let Some(ref config) = icp_token {
-                self.deploy_icp_token(config);
-            }
-            if let Some(ref config) = cycles_token {
-                self.deploy_cycles_token(config);
-            }
-            if let Some(ref config) = nns_governance {
-                self.deploy_nns_governance(config);
-            }
-            if let Some(ref config) = sns {
-                self.deploy_sns(config);
-            }
-            if let Some(ref config) = ii {
-                self.deploy_ii(config);
-            }
-            if let Some(ref config) = nns_ui {
-                self.deploy_nns_ui(config);
+        if let Some(icp_features) = self.icp_features.clone() {
+            if update_system_canisters {
+                // using `let IcpFeatures { }` with explicit field names
+                // to force an update after adding a new field to `IcpFeatures`
+                let IcpFeatures {
+                    registry,
+                    cycles_minting,
+                    icp_token,
+                    cycles_token,
+                    nns_governance,
+                    sns,
+                    ii,
+                    nns_ui,
+                } = icp_features;
+                if let Some(ref config) = registry {
+                    self.update_registry(config);
+                }
+                if let Some(ref config) = cycles_minting {
+                    self.update_cmc(config, &subnet_kind);
+                }
+                if let Some(ref config) = icp_token {
+                    self.deploy_icp_token(config);
+                }
+                if let Some(ref config) = cycles_token {
+                    self.deploy_cycles_token(config);
+                }
+                if let Some(ref config) = nns_governance {
+                    self.deploy_nns_governance(config);
+                }
+                if let Some(ref config) = sns {
+                    self.deploy_sns(config);
+                }
+                if let Some(ref config) = ii {
+                    self.deploy_ii(config);
+                }
+                if let Some(ref config) = nns_ui {
+                    self.deploy_nns_ui(config);
+                }
             }
         }
 
@@ -2391,16 +2391,19 @@ impl PocketIc {
                         }
                     }
                     for other_subnet_kind in SubnetKind::iter() {
-                        if subnet_kind != other_subnet_kind
-                            && let Some(mut other_subnet_kind_ranges) =
+                        if subnet_kind != other_subnet_kind {
+                            if let Some(mut other_subnet_kind_ranges) =
                                 subnet_kind_canister_range(other_subnet_kind)
-                        {
-                            other_subnet_kind_ranges.sort();
-                            if !are_disjoint(other_subnet_kind_ranges.iter(), sorted_ranges.iter())
                             {
-                                return Err(format!(
-                                    "The actual subnet canister ranges {sorted_ranges:?} for the subnet kind {subnet_kind:?} are not disjoint from the canister ranges {other_subnet_kind_ranges:?} for a different subnet kind {other_subnet_kind:?}."
-                                ));
+                                other_subnet_kind_ranges.sort();
+                                if !are_disjoint(
+                                    other_subnet_kind_ranges.iter(),
+                                    sorted_ranges.iter(),
+                                ) {
+                                    return Err(format!(
+                                        "The actual subnet canister ranges {sorted_ranges:?} for the subnet kind {subnet_kind:?} are not disjoint from the canister ranges {other_subnet_kind_ranges:?} for a different subnet kind {other_subnet_kind:?}."
+                                    ));
+                                }
                             }
                         }
                     }
@@ -2586,10 +2589,10 @@ fn subnet_kind_canister_range(subnet_kind: SubnetKind) -> Option<Vec<CanisterIdR
 fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
     use rest::SubnetKind::*;
     for subnet_kind in [NNS, II, Bitcoin, Fiduciary, SNS] {
-        if let Some(ranges) = subnet_kind_canister_range(subnet_kind)
-            && ranges.iter().any(|r| r.contains(&canister_id))
-        {
-            return subnet_kind;
+        if let Some(ranges) = subnet_kind_canister_range(subnet_kind) {
+            if ranges.iter().any(|r| r.contains(&canister_id)) {
+                return subnet_kind;
+            }
         }
     }
     Application
@@ -3157,10 +3160,10 @@ impl Operation for Tick {
                 .collect_vec()
         });
 
-        if let Some(ref bm_per_subnet) = blockmakers_per_subnet
-            && let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet)
-        {
-            return error;
+        if let Some(ref bm_per_subnet) = blockmakers_per_subnet {
+            if let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet) {
+                return error;
+            }
         }
 
         for subnet in pic.subnets.get_all() {
@@ -3336,13 +3339,15 @@ impl Operation for IngressMessageStatus {
         let subnet = route(pic, self.message_id.effective_principal.clone(), false);
         match subnet {
             Ok(subnet) => {
-                if let Some(caller) = self.caller
-                    && let Some(actual_caller) = subnet.ingress_caller(&self.message_id.msg_id)
-                    && caller != actual_caller.get().0
-                {
-                    return OpOut::Error(PocketIcError::Forbidden(
-                        "The user tries to access Request ID not signed by the caller.".to_string(),
-                    ));
+                if let Some(caller) = self.caller {
+                    if let Some(actual_caller) = subnet.ingress_caller(&self.message_id.msg_id) {
+                        if caller != actual_caller.get().0 {
+                            return OpOut::Error(PocketIcError::Forbidden(
+                                "The user tries to access Request ID not signed by the caller."
+                                    .to_string(),
+                            ));
+                        }
+                    }
                 }
                 match subnet.ingress_status(&self.message_id.msg_id) {
                     IngressStatus::Known {

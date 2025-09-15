@@ -284,12 +284,12 @@ impl State {
         percentage_to_spawn: Option<u32>,
         controller: Option<PrincipalId>,
     ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_spawn
-            && !(1..=100).contains(&pct)
-        {
-            let msg = format!("Invalid percentage to spawn: {pct}");
-            let err = ApiError::InvalidTransaction(false, msg.into());
-            return Err(err);
+        if let Some(pct) = percentage_to_spawn {
+            if !(1..=100).contains(&pct) {
+                let msg = format!("Invalid percentage to spawn: {pct}");
+                let err = ApiError::InvalidTransaction(false, msg.into());
+                return Err(err);
+            }
         }
         self.flush()?;
         self.actions.push(Request::Spawn(Spawn {
@@ -326,12 +326,12 @@ impl State {
         neuron_index: u64,
         percentage_to_stake: Option<u32>,
     ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_stake
-            && !(1..=100).contains(&pct)
-        {
-            let msg = format!("Invalid percentage to stake: {pct}");
-            let err = ApiError::InvalidTransaction(false, msg.into());
-            return Err(err);
+        if let Some(pct) = percentage_to_stake {
+            if !(1..=100).contains(&pct) {
+                let msg = format!("Invalid percentage to stake: {pct}");
+                let err = ApiError::InvalidTransaction(false, msg.into());
+                return Err(err);
+            }
         }
         self.flush()?;
         self.actions.push(Request::StakeMaturity(StakeMaturity {

@@ -135,11 +135,11 @@ impl BootstrapOptions {
                 .context("Failed to copy IC crypto directory")?;
         }
 
-        if let Some(ic_state) = &self.ic_state
-            && ic_state.exists()
-        {
-            Self::copy_dir_recursively(ic_state, &bootstrap_dir.path().join("ic_state"))
-                .context("Failed to copy IC state directory")?;
+        if let Some(ic_state) = &self.ic_state {
+            if ic_state.exists() {
+                Self::copy_dir_recursively(ic_state, &bootstrap_dir.path().join("ic_state"))
+                    .context("Failed to copy IC state directory")?;
+            }
         }
 
         if let Some(ic_registry_local_store) = &self.ic_registry_local_store {

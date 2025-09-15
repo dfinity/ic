@@ -105,10 +105,10 @@ pub async fn noop_self_call_if_over_instructions(
         make_noop_call().await;
     }
 
-    if let Some(upper_bound) = call_context_threshold
-        && is_call_context_over_threshold(upper_bound)
-    {
-        return Err(OverCallContextError { limit: upper_bound });
+    if let Some(upper_bound) = call_context_threshold {
+        if is_call_context_over_threshold(upper_bound) {
+            return Err(OverCallContextError { limit: upper_bound });
+        }
     }
 
     Ok(())
