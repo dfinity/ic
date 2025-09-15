@@ -1128,7 +1128,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             }),
             Method::CanisterMetadata => test_supported(|aborted_canister_id| {
                 let args =
-                    CanisterMetadataRequest::new(aborted_canister_id, "test".to_string()).encode();
+                    CanisterMetadataRequest::new(aborted_canister_id, "git_commit_id".to_string())
+                        .encode();
                 (method, call_args().other_side(args))
             }),
             // No effective canister id.
