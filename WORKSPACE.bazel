@@ -143,6 +143,12 @@ crate_universe_dependencies()
 
 rust_register_toolchains(
     edition = "2024",
+    extra_rustc_flags = {
+        "aarch64-unknown-linux-gnu": [
+            "-C",
+            "link-arg=-fuse-ld=lld",
+        ],
+    },
     strip_level = {"x86_64-unknown-linux-gnu": {
         "dbg": "none",
         "fastbuild": "none",
