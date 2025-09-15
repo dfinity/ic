@@ -8,8 +8,9 @@ use crate::{
 };
 use actix_rt::time::interval;
 use actix_web::{
+    App, HttpResponse, HttpServer,
     dev::{Server, ServerHandle},
-    get, post, web, App, HttpResponse, HttpServer,
+    get, post, web,
 };
 
 use rosetta_core::metrics::RosettaMetrics;
@@ -19,11 +20,11 @@ use std::{
     mem::replace,
     path::PathBuf,
     sync::{
+        Arc,
         atomic::{
             AtomicBool,
             Ordering::{Relaxed, SeqCst},
         },
-        Arc,
     },
     time::{Duration, Instant},
 };
@@ -294,11 +295,8 @@ impl RosettaApiServer {
                     web::JsonConfig::default()
                         .limit(4 * 1024 * 1024)
                         .error_handler(move |e, _| {
-                            errors::convert_to_error(&ApiError::invalid_request(format!(
-                                "{:#?}",
-                                e
-                            )))
-                            .into()
+                            errors::convert_to_error(&ApiError::invalid_request(format!("{e:#?}")))
+                                .into()
                         }),
                 ))
                 .app_data(web::Data::new(req_handler.clone()))
@@ -339,7 +337,7 @@ impl RosettaApiServer {
                 &listen_port_file,
                 &server.addrs().first().unwrap().port().to_string(),
             )
-            .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {}", e));
+            .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {e}"));
         }
 
         let server = server.run();

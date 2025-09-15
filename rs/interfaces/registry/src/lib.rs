@@ -1,6 +1,6 @@
 //! The registry public interface.
 use ic_types::{
-    registry::RegistryClientError, registry::RegistryDataProviderError, time::Time, RegistryVersion,
+    RegistryVersion, registry::RegistryClientError, registry::RegistryDataProviderError, time::Time,
 };
 pub use prost::Message as RegistryValue;
 use serde::{Deserialize, Serialize};

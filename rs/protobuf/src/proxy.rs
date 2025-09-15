@@ -155,40 +155,34 @@ impl From<bincode::Error> for ProxyDecodeError {
 impl std::fmt::Display for ProxyDecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::DecodeError(err) => write!(f, "Protobuf decoding error: {}", err),
-            Self::CborDecodeError(err) => write!(f, "CBOR decoding error: {}", err),
-            Self::MissingField(name) => write!(f, "Missing required struct field: {}", name),
+            Self::DecodeError(err) => write!(f, "Protobuf decoding error: {err}"),
+            Self::CborDecodeError(err) => write!(f, "CBOR decoding error: {err}"),
+            Self::MissingField(name) => write!(f, "Missing required struct field: {name}"),
             Self::ValueOutOfRange { typ, err } => {
-                write!(f, "Value out of range for type {}: {}", typ, err)
+                write!(f, "Value out of range for type {typ}: {err}")
             }
-            Self::InvalidPrincipalId(err) => write!(f, "{}", err),
-            Self::InvalidCanisterId(err) => write!(f, "{}", err),
+            Self::InvalidPrincipalId(err) => write!(f, "{err}"),
+            Self::InvalidCanisterId(err) => write!(f, "{err}"),
             Self::InvalidDigestLength { expected, actual } => write!(
                 f,
-                "Digest: expected a blob of length {}, got {}",
-                expected, actual
+                "Digest: expected a blob of length {expected}, got {actual}"
             ),
             Self::InvalidMessageId { expected, actual } => write!(
                 f,
-                "MessageID: expected a blob of length {}, got {}",
-                expected, actual
+                "MessageID: expected a blob of length {expected}, got {actual}"
             ),
-            Self::ReplicaVersionParseError(err) => write!(f, "{}", err),
+            Self::ReplicaVersionParseError(err) => write!(f, "{err}"),
             Self::DuplicateEntry { key, v1, v2 } => write!(
                 f,
-                "Entry {:?} repeats multiple times. Previous: {}, current: {}",
-                key, v1, v2
+                "Entry {key:?} repeats multiple times. Previous: {v1}, current: {v2}"
             ),
             Self::UnknownCertificationVersion(version) => write!(
                 f,
-                "Replica does not implement certification version {}",
-                version
+                "Replica does not implement certification version {version}"
             ),
-            Self::UnknownStateSyncVersion(version) => write!(
-                f,
-                "Replica does not implement state sync version {}",
-                version
-            ),
+            Self::UnknownStateSyncVersion(version) => {
+                write!(f, "Replica does not implement state sync version {version}")
+            }
             Self::Other(msg) => f.write_str(msg),
         }
     }

@@ -3,8 +3,8 @@ use ic_interfaces::self_validating_payload::{
     SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError,
 };
 use ic_types::{
-    batch::{SelfValidatingPayload, ValidationContext},
     NumBytes,
+    batch::{SelfValidatingPayload, ValidationContext},
 };
 
 #[derive(Default)]

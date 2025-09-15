@@ -2,16 +2,16 @@ use ic_crypto_prng::RandomnessPurpose::{
     BlockmakerRanking, CommitteeSampling, DkgCommitteeSampling, ExecutionThread,
 };
 use ic_crypto_prng::{Csprng, RandomnessPurpose};
+use ic_types::Randomness;
 use ic_types::consensus::RandomBeacon;
 use ic_types::consensus::RandomBeaconContent;
 use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
 };
 use ic_types::signature::ThresholdSignature;
-use ic_types::Randomness;
 use ic_types::{
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     Height, ReplicaVersion,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use rand::RngCore;

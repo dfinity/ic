@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use super::{deterministic_total_bytes, total_bytes, DeterministicHeapBytes, HeapBytes};
+use super::{DeterministicHeapBytes, HeapBytes, deterministic_total_bytes, total_bytes};
 
 #[test]
 fn empty_deterministic_total_bytes() {

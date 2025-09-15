@@ -53,12 +53,12 @@ impl fmt::Display for Reason {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OutOfCycles => write!(fmt, "the canister is out of cycles"),
-            Self::CanisterError(msg) => write!(fmt, "canister error: {}", msg),
+            Self::CanisterError(msg) => write!(fmt, "canister error: {msg}"),
             Self::Rejected(msg) => {
-                write!(fmt, "the management canister rejected the call: {}", msg)
+                write!(fmt, "the management canister rejected the call: {msg}")
             }
-            Reason::TransientInternalError(msg) => write!(fmt, "transient internal error: {}", msg),
-            Reason::InternalError(msg) => write!(fmt, "internal error: {}", msg),
+            Reason::TransientInternalError(msg) => write!(fmt, "transient internal error: {msg}"),
+            Reason::InternalError(msg) => write!(fmt, "internal error: {msg}"),
         }
     }
 }
@@ -73,8 +73,7 @@ impl Reason {
             | RejectionCode::SysFatal
             | RejectionCode::DestinationInvalid
             | RejectionCode::Unknown => Self::InternalError(format!(
-                "rejection code: {:?}, rejection message: {}",
-                reject_code, reject_message
+                "rejection code: {reject_code:?}, rejection message: {reject_message}"
             )),
         }
     }
@@ -87,7 +86,7 @@ pub async fn sign_with_ecdsa(
     message_hash: [u8; 32],
 ) -> Result<[u8; 64], CallError> {
     use ic_cdk::api::management_canister::ecdsa::{
-        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+        EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument, sign_with_ecdsa,
     };
 
     let result = sign_with_ecdsa(SignWithEcdsaArgument {
@@ -105,8 +104,7 @@ pub async fn sign_with_ecdsa(
             let signature_length = reply.signature.len();
             Ok(<[u8; 64]>::try_from(reply.signature).unwrap_or_else(|_| {
                 panic!(
-                    "BUG: invalid signature from management canister. Expected 64 bytes but got {} bytes",
-                    signature_length
+                    "BUG: invalid signature from management canister. Expected 64 bytes but got {signature_length} bytes"
                 )
             }))
         }

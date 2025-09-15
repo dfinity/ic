@@ -1,7 +1,7 @@
 use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
-    ecdsa_p256_signature_from_der_bytes, user_public_key_from_bytes, KeyBytesContentType,
+    KeyBytesContentType, ecdsa_p256_signature_from_der_bytes, user_public_key_from_bytes,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use simple_asn1::oid;

@@ -64,7 +64,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
@@ -189,7 +189,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 
     let ssh_status = ssh.wait().unwrap();
     if !ssh_status.success() {
-        panic!("SSH to {} failed with: {}", hostname, ssh_status);
+        panic!("SSH to {hostname} failed with: {ssh_status}");
     }
 }
 
@@ -297,7 +297,7 @@ pub fn setup(env: TestEnv, config: Config) {
 
     // deploys the ic-gateway/s
     for i in 0..NUM_IC_GATEWAYS {
-        let ic_gateway_name = format!("ic-gateway-{}", i);
+        let ic_gateway_name = format!("ic-gateway-{i}");
         IcGatewayVm::new(&ic_gateway_name)
             .with_required_host_features(vec![HostFeature::Performance])
             .start(&env)

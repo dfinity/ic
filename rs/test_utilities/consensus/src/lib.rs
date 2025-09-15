@@ -8,22 +8,22 @@ use ic_interfaces::{
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
+    Height, Time,
     batch::ValidationContext,
     consensus::{
-        dkg::DkgSummary,
-        idkg::{IDkgBlockReader, IDkgStats, RequestId},
         Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable, HasHeight,
         HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload,
+        dkg::DkgSummary,
+        idkg::{IDkgBlockReader, IDkgStats, RequestId},
     },
     crypto::{
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
         canister_threshold_sig::idkg::{IDkgDealingSupport, IDkgTranscriptParams},
         crypto_hash,
         threshold_sig::ni_dkg::NiDkgTag,
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
-    Height, Time,
 };
 use phantom_newtype::Id;
 use std::{sync::RwLock, time::Duration};
@@ -39,11 +39,7 @@ macro_rules! assert_changeset_matches_pattern {
 #[macro_export]
 macro_rules! matches_pattern {
     ($v:expr, $p:pat) => {
-        if let $p = $v {
-            true
-        } else {
-            false
-        }
+        if let $p = $v { true } else { false }
     };
 }
 

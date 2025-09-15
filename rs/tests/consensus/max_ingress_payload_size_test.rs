@@ -19,8 +19,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use assert_matches::assert_matches;
-use ic_agent::agent_error::HttpErrorPayload;
 use ic_agent::AgentError;
+use ic_agent::agent_error::HttpErrorPayload;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{

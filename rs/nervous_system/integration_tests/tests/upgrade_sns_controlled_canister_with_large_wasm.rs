@@ -9,7 +9,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::{
     find_neuron_with_majority_voting_power, wait_for_proposal_execution,
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns, sns, NnsInstaller,
+    NnsInstaller, cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns, sns,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -22,7 +22,7 @@ use ic_sns_cli::upgrade_sns_controlled_canister::{
     self, RefundAfterSnsControlledCanisterUpgradeArgs, UpgradeSnsControlledCanisterArgs,
     UpgradeSnsControlledCanisterInfo,
 };
-use ic_sns_governance_api::pb::v1::{proposal, ChunkedCanisterWasm, UpgradeSnsControlledCanister};
+use ic_sns_governance_api::pb::v1::{ChunkedCanisterWasm, UpgradeSnsControlledCanister, proposal};
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::Tokens;
 use pocket_ic::ErrorCode::CanisterNotFound;
@@ -196,7 +196,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         chunked_canister_wasm,
     }) = action
     else {
-        panic!("unexpected proposal action {:?}", action);
+        panic!("unexpected proposal action {action:?}");
     };
     assert_eq!(canister_id, Some(target_canister_id.into()));
     assert_eq!(new_canister_wasm, Vec::<u8>::new()); // Deprecated field, no longer in use.
