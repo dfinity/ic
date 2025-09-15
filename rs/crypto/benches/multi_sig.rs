@@ -22,6 +22,7 @@ fn bench_multi_sig(criterion: &mut Criterion) {
 fn bench_multi_sig_n_signers(criterion: &mut Criterion, num_of_signers: usize) {
     let group_name = format!("crypto_multi_sig_{num_of_signers}_signers");
     let group = &mut criterion.benchmark_group(group_name);
+    group.warm_up_time(std::time::Duration::from_millis(1));
 
     let rng = &mut reproducible_rng();
 

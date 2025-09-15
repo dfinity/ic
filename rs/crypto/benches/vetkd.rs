@@ -40,6 +40,8 @@ fn vetkd_bench(criterion: &mut Criterion) {
             "crypto_vetkd_{subnet_size}_nodes_threshold_{threshold}_remote_vault",
         ));
 
+        group.warm_up_time(std::time::Duration::from_millis(1));
+
         let (config, env) = setup_with_random_ni_dkg_config(&dkg_tag, subnet_size, rng);
         assert_eq!(config.threshold().get().get(), threshold as u32);
 

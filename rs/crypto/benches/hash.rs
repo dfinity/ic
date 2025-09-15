@@ -15,6 +15,7 @@ criterion_group!(benches, bench_hash);
 
 fn bench_hash(criterion: &mut Criterion) {
     let group = &mut criterion.benchmark_group("crypto_hash");
+    group.warm_up_time(std::time::Duration::from_millis(1));
 
     let rng = &mut reproducible_rng();
 
@@ -38,7 +39,6 @@ fn bench_hash(criterion: &mut Criterion) {
     );
 
     group.sample_size(10);
-    group.warm_up_time(std::time::Duration::from_millis(1));
     group.measurement_time(Duration::from_secs(7));
     bench_sha256(group, "sha256_10_MiB", 10 * MEBIBYTE, rng);
     bench_sha256_chunked(
