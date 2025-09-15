@@ -61,7 +61,7 @@ impl Registry {
     /// not a member of any subnet.
     fn find_subnet_for_old_node(&self, old_node_id: PrincipalId) -> Result<SubnetId, SwapError> {
         find_subnet_for_node(
-            &self,
+            self,
             NodeId::new(old_node_id),
             &self.get_subnet_list_record(),
         )
