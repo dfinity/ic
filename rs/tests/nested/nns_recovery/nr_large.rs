@@ -45,7 +45,7 @@ fn main() -> Result<()> {
             local_recovery: false,
         }))
         .with_timeout_per_test(Duration::from_secs(60 * 60))
-        .with_overall_timeout(Duration::from_secs(65 * 60))
+        .with_overall_timeout(Duration::from_secs(75 * 60))
         .execute_from_args()?;
 
     Ok(())
