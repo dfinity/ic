@@ -100,21 +100,23 @@ fn test_ii_nns_ui() {
         .build();
 
     // A basic smoke test.
-    for (canister_id, expected_str) in [
+    let nns_dapp_canister_id = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
+    let nns_dapp_title = "Network Nervous System";
+    let internet_identity_canister_id =
+        Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+    let internet_identity_title = "Internet Identity";
+    for (canister_id, expected_title) in [
+        (nns_dapp_canister_id.to_string(), nns_dapp_title),
         (
-            "qoctq-giaaa-aaaaa-aaaea-cai",
-            "<title>Network Nervous System</title>",
-        ),
-        (
-            "rdmx6-jaaaa-aaaaa-aaadq-cai",
-            "<title>Internet Identity</title>",
+            internet_identity_canister_id.to_string(),
+            internet_identity_title,
         ),
     ] {
         let (client, url) =
             frontend_canister(&pic, Principal::from_text(canister_id).unwrap(), false, "/");
         let resp = client.get(url).send().unwrap();
         let body = String::from_utf8(decode_gzipped_bytes(resp.bytes().unwrap().to_vec())).unwrap();
-        assert!(body.contains(expected_str));
+        assert!(body.contains(&format!("<title>{}</title>", expected_title)));
     }
 }
 
