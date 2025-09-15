@@ -32,6 +32,7 @@ fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
+            .warm_up_time(std::time::Duration::from_millis(1))
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 

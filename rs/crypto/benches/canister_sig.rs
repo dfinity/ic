@@ -14,6 +14,7 @@ fn crypto_canister_sig_verify(criterion: &mut Criterion) {
 
 fn crypto_canister_sig_verify_impl(criterion: &mut Criterion, group_suffix: &str) {
     let group = &mut criterion.benchmark_group(format!("crypto_canister_sig_{group_suffix}"));
+    group.warm_up_time(std::time::Duration::from_millis(1));
 
     let rng = &mut reproducible_rng();
 

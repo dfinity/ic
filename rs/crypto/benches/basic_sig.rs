@@ -50,6 +50,8 @@ fn crypto_basicsig_ed25519(criterion: &mut Criterion) {
             let group =
                 &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
 
+            group.warm_up_time(std::time::Duration::from_millis(1));
+
             if vault_type == VaultType::default() {
                 crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
                 crypto_ed25519_basicsig_verify(group, msg_size, rng, vault_type);
@@ -67,6 +69,7 @@ fn crypto_basicsig_p256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        group.warm_up_time(std::time::Duration::from_millis(1));
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
@@ -78,6 +81,7 @@ fn crypto_basicsig_secp256k1(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        group.warm_up_time(std::time::Duration::from_millis(1));
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
@@ -89,6 +93,7 @@ fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        group.warm_up_time(std::time::Duration::from_millis(1));
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
