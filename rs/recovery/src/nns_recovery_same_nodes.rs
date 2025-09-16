@@ -152,12 +152,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
             StepType::StopReplica => {
-                print_height_info(
-                    &self.logger,
-                    &self.recovery.registry_helper,
-                    self.params.subnet_id,
-                );
-
                 if self.params.download_state_node.is_none() {
                     self.params.download_state_node =
                         read_optional(&self.logger, "Enter download IP (admin access required):");
@@ -165,6 +159,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::DownloadConsensusPool => {
+                print_height_info(
+                    &self.logger,
+                    &self.recovery.registry_helper,
+                    self.params.subnet_id,
+                );
+
                 if self.params.download_pool_node.is_none() {
                     self.params.download_pool_node = read_optional(
                         &self.logger,
