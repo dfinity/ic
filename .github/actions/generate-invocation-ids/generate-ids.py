@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     maybe_json = sys.argv[1]
 
-    logger.info("Received input:\n%s", maybe_json)
+    logger.debug("Received input:\n%s", maybe_json)
 
     try:
         parsed = json.loads(maybe_json)
