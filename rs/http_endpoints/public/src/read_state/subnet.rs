@@ -18,7 +18,6 @@ use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::Path;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::ReplicaLogger;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -46,7 +45,6 @@ pub enum Version {
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
-    logger: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -55,7 +53,6 @@ pub(crate) struct SubnetReadStateService {
 }
 
 pub struct SubnetReadStateServiceBuilder {
-    logger: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -78,7 +75,6 @@ impl SubnetReadStateServiceBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         nns_subnet_id: SubnetId,
         version: Version,
-        logger: ReplicaLogger,
     ) -> Self {
         Self {
             health_status: None,
@@ -86,7 +82,6 @@ impl SubnetReadStateServiceBuilder {
             state_reader,
             nns_subnet_id,
             version,
-            logger,
         }
     }
 
@@ -107,7 +102,6 @@ impl SubnetReadStateServiceBuilder {
             state_reader: self.state_reader,
             nns_subnet_id: self.nns_subnet_id,
             version: self.version,
-            logger: self.logger,
         };
         Router::new().route_service(
             SubnetReadStateService::route(self.version),
@@ -124,7 +118,6 @@ impl SubnetReadStateServiceBuilder {
 pub(crate) async fn read_state_subnet(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SubnetReadStateService {
-        logger,
         health_status,
         nns_delegation_reader,
         state_reader,
@@ -183,7 +176,6 @@ pub(crate) async fn read_state_subnet(
             delegation_from_nns,
             certified_state_reader.as_ref(),
             maybe_nns_subnet_filter,
-            &logger,
         )
     })
     .await;

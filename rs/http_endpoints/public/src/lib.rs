@@ -367,7 +367,6 @@ pub fn start_server(
             state_reader.clone(),
             nns_subnet_id,
             version,
-            log.clone(),
         )
         .with_health_status(health_status.clone())
         .build_router()

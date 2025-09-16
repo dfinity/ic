@@ -245,7 +245,6 @@ pub(crate) async fn canister_read_state(
             delegation_from_nns,
             certified_state_reader.as_ref(),
             maybe_nns_subnet_filter,
-            &log,
         )
     })
     .await;
