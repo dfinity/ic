@@ -1,10 +1,10 @@
 //! The DKG public interface.
 use crate::validation::ValidationError;
 use ic_types::{
+    Height,
     consensus::dkg::{
         self, DkgPayloadCreationError, DkgPayloadValidationFailure, InvalidDkgPayloadReason,
     },
-    Height,
 };
 
 /// Dkg errors.

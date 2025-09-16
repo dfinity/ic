@@ -1,5 +1,5 @@
 use candid::{CandidType, Decode, Encode, Principal};
-use candid_parser::utils::{service_equal, CandidSource};
+use candid_parser::utils::{CandidSource, service_equal};
 use canister_test::*;
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -12,13 +12,13 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
 };
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs,
-    Block, BlockArg, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
+    AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs, Block, BlockArg,
+    BlockRange, BlockRes, CandidBlock, DEFAULT_TRANSFER_FEE, GetBlocksArgs, GetBlocksError,
     GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Memo,
     NotifyCanisterArgs, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs,
     Subaccount, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    TransferFeeArgs, tokens_from_proto,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::bytes;
@@ -318,11 +318,13 @@ fn upgrade_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(PrincipalId::from(minting_account_principal).into())
-                    .initial_values(accounts)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(PrincipalId::from(minting_account_principal).into())
+                        .initial_values(accounts)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -396,15 +398,12 @@ fn archive_blocks_small_test() {
 
         // 12 blocks
         let accounts = make_accounts(4, 3);
-        println!("[test] accounts: {:?}", accounts);
+        println!("[test] accounts: {accounts:?}");
 
         // For this test we will use a tiny node size. This is because
         // we want multiple archive nodes to be created.
         let blocks_per_archive_node = 2;
-        println!(
-            "[test] blocks per archive node: {}",
-            blocks_per_archive_node
-        );
+        println!("[test] blocks per archive node: {blocks_per_archive_node}");
         // The tiny maximum message size will force archiving one block at a
         // time.
         let max_message_size_bytes = 192;
@@ -480,7 +479,7 @@ fn archive_blocks_small_test() {
         // Then loop over these nodes and fetch all blocks.
         let mut blocks_from_archive = vec![];
         for n in nodes {
-            println!("[test] retrieving blocks from {}. calling iter_blocks()", n);
+            println!("[test] retrieving blocks from {n}. calling iter_blocks()");
             let node = Canister::new(&r, n);
 
             assert_eq!(
@@ -639,7 +638,7 @@ fn archive_blocks_large_test() {
         // Then loop over these nodes and fetch all blocks.
         let mut blocks_from_archive = vec![];
         for n in nodes {
-            println!("[test] retrieving blocks from {}. calling iter_blocks()", n);
+            println!("[test] retrieving blocks from {n}. calling iter_blocks()");
             let node = Canister::new(&r, n);
 
             let mut blocks = {
@@ -770,14 +769,16 @@ fn notify_trap_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -786,15 +787,17 @@ fn notify_trap_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .initial_values(accounts)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .initial_values(accounts)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -859,15 +862,18 @@ fn notify_trap_test() {
             .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
 
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 0"));
+        assert!(
+            get_metrics(&ledger_canister)
+                .await
+                .contains("ledger_notify_method_calls 0")
+        );
 
         for r in [r1, r2, r3] {
             assert!(
-                r.as_ref().unwrap_err().contains("Please migrate to the CMC notify flow"),
-                "Notifying after duration should return an error containing \"Please migrate to the CMC notify flow\". Instead got {:?}",
-                r
+                r.as_ref()
+                    .unwrap_err()
+                    .contains("Please migrate to the CMC notify flow"),
+                "Notifying after duration should return an error containing \"Please migrate to the CMC notify flow\". Instead got {r:?}"
             );
         }
 
@@ -899,12 +905,14 @@ fn sub_account_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(CanisterId::from_u64(0).into())
-                    .initial_values(initial_values)
-                    .send_whitelist(send_whitelist)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(CanisterId::from_u64(0).into())
+                        .initial_values(initial_values)
+                        .send_whitelist(send_whitelist)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -982,11 +990,13 @@ fn check_anonymous_can_send() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(CanisterId::from_u64(0).into())
-                    .initial_values(initial_values)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(CanisterId::from_u64(0).into())
+                        .initial_values(initial_values)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -1021,11 +1031,13 @@ fn transfer_fee_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(PrincipalId::new_user_test_id(0).into())
-                    .transfer_fee(transfer_fee)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(PrincipalId::new_user_test_id(0).into())
+                        .transfer_fee(transfer_fee)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -1071,15 +1083,17 @@ fn transaction_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .initial_values(accounts)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .initial_values(accounts)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -1387,7 +1401,7 @@ fn get_block_test() {
 
         let icp_ledger::protobuf::ArchiveIndexResponse { entries } =
             ledger.query_("get_archive_index_pb", protobuf, ()).await?;
-        println!("[test] archive_index: {:?}", entries);
+        println!("[test] archive_index: {entries:?}");
 
         Ok(())
     })
@@ -1716,14 +1730,16 @@ fn test_ledger_candid_interface_endpoint() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -1758,20 +1774,22 @@ fn test_archives_endpoint() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(minting_canister_id.into())
-                    .archive_options(ArchiveOptions {
-                        trigger_threshold: 0,
-                        num_blocks_to_archive: 1000,
-                        node_max_memory_size_bytes: None,
-                        max_message_size_bytes: None,
-                        controller_id: minting_canister_id.into(),
-                        more_controller_ids: None,
-                        cycles_for_archive_creation: Some(0),
-                        max_transactions_per_response: None,
-                    })
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(minting_canister_id.into())
+                        .archive_options(ArchiveOptions {
+                            trigger_threshold: 0,
+                            num_blocks_to_archive: 1000,
+                            node_max_memory_size_bytes: None,
+                            max_message_size_bytes: None,
+                            controller_id: minting_canister_id.into(),
+                            more_controller_ids: None,
+                            cycles_for_archive_creation: Some(0),
+                            max_transactions_per_response: None,
+                        })
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -1826,15 +1844,17 @@ fn test_transfer_candid() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .initial_values(accounts)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .initial_values(accounts)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -2004,15 +2024,17 @@ fn test_transfer_u64_overflow() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .initial_values(accounts)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .initial_values(accounts)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -2079,15 +2101,17 @@ fn transfer_fee_pb_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .transfer_fee(Tokens::from_e8s(12345))
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .transfer_fee(Tokens::from_e8s(12345))
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;
@@ -2121,16 +2145,18 @@ fn send_dfx_test() {
             .cargo_bin("ledger-canister", &[])
             .install(&r)
             .bytes(
-                Encode!(&LedgerCanisterInitPayload::builder()
-                    .minting_account(
-                        CanisterId::try_from(minting_account.get_principal_id())
-                            .unwrap()
-                            .into(),
-                    )
-                    .transfer_fee(Tokens::from_e8s(12345))
-                    .initial_values(accounts)
-                    .build()
-                    .unwrap())
+                Encode!(
+                    &LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .transfer_fee(Tokens::from_e8s(12345))
+                        .initial_values(accounts)
+                        .build()
+                        .unwrap()
+                )
                 .unwrap(),
             )
             .await?;

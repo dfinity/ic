@@ -24,7 +24,7 @@ pub fn derive_node_id(node_signing_pk: &PublicKeyProto) -> Result<NodeId, Invali
 
     let pk = PublicKey::deserialize_raw(&raw_key[..]).map_err(|e| {
         InvalidNodePublicKey::MalformedRawBytes {
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
     let der_pk = pk.serialize_rfc8410_der();

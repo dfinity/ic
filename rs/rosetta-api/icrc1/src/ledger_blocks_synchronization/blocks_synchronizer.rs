@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_types)]
 use crate::common::storage::storage_client::StorageClient;
 use crate::common::storage::types::RosettaBlock;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use candid::{Decode, Encode, Nat};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
@@ -95,7 +95,10 @@ fn derive_synchronization_gaps(
 
     // The database should have at most one gap. Otherwise the database file was edited and it can no longer be guaranteed that it contains valid blocks.
     if gap.len() > 1 {
-        bail!("The database has {} gaps. More than one gap means the database has been tampered with and can no longer be guaranteed to contain valid blocks",gap.len());
+        bail!(
+            "The database has {} gaps. More than one gap means the database has been tampered with and can no longer be guaranteed to contain valid blocks",
+            gap.len()
+        );
     } else if gap.is_empty() {
         // The block counter is off
         storage_client.reset_blocks_counter()?;
@@ -472,11 +475,7 @@ async fn fetch_blocks_interval(
             .iter()
             .filter_map(
                 |(key, value)| {
-                    if value.is_none() {
-                        Some(*key)
-                    } else {
-                        None
-                    }
+                    if value.is_none() { Some(*key) } else { None }
                 },
             )
             .collect::<Vec<u64>>()

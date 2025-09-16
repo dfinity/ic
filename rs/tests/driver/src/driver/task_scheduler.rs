@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime};
 
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 
 use crate::driver::action_graph::ActionGraph;
 use crate::driver::event::TaskId;

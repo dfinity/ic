@@ -1,13 +1,13 @@
 use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
+use ic_ledger_core::block::BlockType;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
-use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
+use ic_ledger_suite_state_machine_tests::{TransactionGenerationParameters, generate_transactions};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
@@ -361,10 +361,7 @@ impl Setup {
                 );
             }
             (true, Err(err)) => {
-                panic!(
-                    "should successfully downgrade ledger to mainnet version: {}",
-                    err
-                );
+                panic!("should successfully downgrade ledger to mainnet version: {err}");
             }
         }
         self.check_ledger_metrics();
@@ -391,7 +388,7 @@ impl Setup {
         let metrics = retrieve_metrics(&self.state_machine, LEDGER_CANISTER_ID);
         println!("Ledger metrics:");
         for metric in metrics {
-            println!("  {}", metric);
+            println!("  {metric}");
         }
         let upgrade_instructions = parse_metric(
             &self.state_machine,
@@ -400,9 +397,7 @@ impl Setup {
         );
         assert!(
             upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
-            "Upgrade instructions ({}) should be less than the instruction limit ({})",
-            upgrade_instructions,
-            CANISTER_UPGRADE_INSTRUCTION_LIMIT
+            "Upgrade instructions ({upgrade_instructions}) should be less than the instruction limit ({CANISTER_UPGRADE_INSTRUCTION_LIMIT})"
         );
     }
 

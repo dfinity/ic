@@ -14,7 +14,7 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use prost::Message;
 use serde_json::Value;
@@ -43,17 +43,18 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_canister_ranges_key,
-    make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key,
+    FirewallRulesScope, ROOT_SUBNET_ID_KEY, make_api_boundary_node_record_key,
+    make_blessed_replica_versions_key, make_canister_ranges_key, make_data_center_record_key,
+    make_firewall_rules_record_key, make_node_operator_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_list_record_key,
-    make_unassigned_nodes_config_record_key, FirewallRulesScope, ROOT_SUBNET_ID_KEY,
+    make_unassigned_nodes_config_record_key,
 };
 use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, RoutingTable, WellFormedError,
-    CANISTER_IDS_PER_SUBNET,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
+    routing_table_insert_subnet,
 };
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryMutation;
@@ -82,7 +83,7 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
 /// initial nodes multiplied by this value.
-pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 4;
+pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 40;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
@@ -889,7 +890,9 @@ impl IcConfig {
                     InitializeError::IoError {
                         source: io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            format!("input is not a DER-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}."),
+                            format!(
+                                "input is not a DER-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}."
+                            ),
                         ),
                     }
                 })?;

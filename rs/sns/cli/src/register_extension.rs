@@ -11,15 +11,14 @@ use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelect
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_management_canister_types_private::BoundedVec;
 use ic_nervous_system_agent::{
-    management_canister,
-    sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
-    CallCanisters, Request,
+    CallCanisters, Request, management_canister,
+    sns::{self, Sns, governance::SubmittedProposal, root::SnsCanisters},
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
 use ic_sns_governance_api::{
     pb::v1::{
-        proposal::Action, ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId,
-        RegisterExtension,
+        ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId, RegisterExtension,
+        proposal::Action,
     },
     precise_value::parse_precise_value,
 };
@@ -235,10 +234,9 @@ pub async fn create_extension_canister<C: CallCanisters>(
     .map_err(|err| {
         if let CreateCanisterError::InsufficientFunds { balance } = err {
             let err = format!(
-                "Requested creating the {} canister with {} cycles, but the caller identity has \
-                 only {} cycles on the cycles ledger. Please buy more cycles using \
+                "Requested creating the {name} canister with {cycles_amount} cycles, but the caller identity has \
+                 only {balance} cycles on the cycles ledger. Please buy more cycles using \
                  `dfx cycles convert --amount AMOUNT --network NETWORK` and try again.",
-                name, cycles_amount, balance,
             );
             anyhow::anyhow!(err)
         } else {
@@ -506,7 +504,7 @@ pub async fn cycles_ledger_create_canister<C: CallCanisters>(
 
 fn format_full_hash(hash: &[u8]) -> String {
     hash.iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("")
 }

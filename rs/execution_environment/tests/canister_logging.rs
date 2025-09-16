@@ -11,11 +11,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{
-    ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    CanisterId, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, NumInstructions, ingress::WasmResult,
 };
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
@@ -278,9 +278,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call() {
         "fetch_canister_logs API is only accessible to end users in non-replicated mode";
     assert!(
         reject_message.contains(expected_message),
-        "Expected: {}\nActual: {}",
-        expected_message,
-        reject_message
+        "Expected: {expected_message}\nActual: {reject_message}"
     );
 }
 
@@ -1342,8 +1340,7 @@ fn test_logging_debug_print_over_dts() {
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
-            "Expect no log messages after round #{}",
-            i
+            "Expect no log messages after round #{i}"
         );
         env.advance_time(TIME_STEP);
         env.tick();
@@ -1397,8 +1394,7 @@ fn test_logging_trap_over_dts() {
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
-            "Expect no log messages after round #{}",
-            i
+            "Expect no log messages after round #{i}"
         );
         env.advance_time(TIME_STEP);
         env.tick();
@@ -1492,8 +1488,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
-            "Expect no log messages after round #{}",
-            i
+            "Expect no log messages after round #{i}"
         );
         env.tick();
         env.advance_time(TIME_STEP);

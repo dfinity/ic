@@ -1,10 +1,10 @@
 use crate::{
     neuron::Neuron,
     pb::v1::{
-        governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
         Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
         NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
         XdrConversionRate as XdrConversionRatePb,
+        governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };
 use ic_nns_governance_api::{
@@ -252,7 +252,7 @@ pub fn split_governance_proto(
 
     let xdr_conversion_rate =
         XdrConversionRate::try_from(xdr_conversion_rate).unwrap_or_else(|err| {
-            panic!("Deserialization failed for XdrConversionRate: {}", err);
+            panic!("Deserialization failed for XdrConversionRate: {err}");
         });
 
     let rng_seed = rng_seed

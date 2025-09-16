@@ -107,15 +107,13 @@ impl<T> MetricsAssert<T> {
         let matches = self.find_metrics_matching(pattern);
         assert!(
             matches.is_empty(),
-            "Expected not to find any metric matching '{}', but found the following matches:\n{:?}",
-            pattern,
-            matches
+            "Expected not to find any metric matching '{pattern}', but found the following matches:\n{matches:?}"
         );
         self
     }
 
     fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
-        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {}", pattern));
+        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {pattern}"));
         self.metrics
             .iter()
             .filter(|line| regex.is_match(line))
@@ -163,7 +161,7 @@ mod pocket_ic_query_call {
     use super::*;
     use candid::Principal;
     use ic_management_canister_types::CanisterId;
-    use pocket_ic::{nonblocking, PocketIc, RejectResponse};
+    use pocket_ic::{PocketIc, RejectResponse, nonblocking};
 
     /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
     /// HTTP requests are made through an instance of [`PocketIc`].

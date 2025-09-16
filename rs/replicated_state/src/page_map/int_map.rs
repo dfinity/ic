@@ -667,10 +667,10 @@ where
 
                 (Some((lk, lv)), Some((rk, rv))) => {
                     if lk != rk {
-                        return Err(format!("Key divergence: {:#?} != {:#?}", lk, rk));
+                        return Err(format!("Key divergence: {lk:#?} != {rk:#?}"));
                     }
                     if let Err(err) = lv.validate_eq(rv) {
-                        return Err(format!("Value divergence @{:#?}: {}", lk, err));
+                        return Err(format!("Value divergence @{lk:#?}: {err}"));
                     }
                 }
 
@@ -679,7 +679,7 @@ where
                         "Length divergence: {} != {}",
                         self.len(),
                         rhs.len()
-                    ))
+                    ));
                 }
             }
         }

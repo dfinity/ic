@@ -3,16 +3,16 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_interfaces_certified_stream_store::EncodeStreamError;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, testing::CanisterQueuesTesting};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
+    Cycles,
     messages::{CallbackId, Payload, RequestOrResponse},
     xnet::{StreamHeader, StreamIndexedQueue},
-    Cycles,
 };
 use maplit::btreemap;
 use std::sync::Arc;
@@ -398,8 +398,7 @@ where
         }
     }
     Err(format!(
-        "Exit condition not met after {} iterations.",
-        max_iterations
+        "Exit condition not met after {max_iterations} iterations."
     ))
 }
 
@@ -663,26 +662,26 @@ impl std::fmt::Debug for SubnetSplittingTestState {
         writeln!(f, "[")?;
         if let Some((header, messages)) = &self.stream {
             writeln!(f, "   stream:")?;
-            writeln!(f, "      {:?}", header)?;
+            writeln!(f, "      {header:?}")?;
             if !messages.is_empty() {
-                writeln!(f, "      {:?}", messages)?;
+                writeln!(f, "      {messages:?}")?;
             }
         }
         if let Some(messages) = &self.local_queue {
             if !messages.is_empty() {
-                writeln!(f, "   local queue: {:?}", messages)?;
+                writeln!(f, "   local queue: {messages:?}")?;
             }
         }
         if let Some((header, messages)) = &self.reverse_stream {
             writeln!(f, "   reverse stream:")?;
-            writeln!(f, "      {:?}", header)?;
+            writeln!(f, "      {header:?}")?;
             if !messages.is_empty() {
-                writeln!(f, "      {:?}", messages)?;
+                writeln!(f, "      {messages:?}")?;
             }
         }
         if let Some(messages) = &self.remote_queue {
             if !messages.is_empty() {
-                writeln!(f, "   remote queue: {:?}", messages)?;
+                writeln!(f, "   remote queue: {messages:?}")?;
             }
         }
         writeln!(
@@ -1042,8 +1041,7 @@ fn state_machine_subnet_splitting_test() {
 
     let print_test_states = || {
         format!(
-            "old_subnet_proxy inductions:\n{:#?}\nnew_subnet_proxy inductions:\n{:#?}",
-            old_test_states, new_test_states,
+            "old_subnet_proxy inductions:\n{old_test_states:#?}\nnew_subnet_proxy inductions:\n{new_test_states:#?}",
         )
     };
 

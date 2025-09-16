@@ -24,7 +24,7 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
+use ic_ingress_manager::{IngressManager, RandomStateKind, bouncer::IngressBouncer};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::ConsensusPoolCache,
@@ -45,16 +45,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseShare},
     consensus::{
-        certification::CertificationMessage, dkg, idkg::IDkgMessage, CatchUpPackage,
-        ConsensusMessage, HasHeight,
+        CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage, dkg,
+        idkg::IDkgMessage,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     replica_config::ReplicaConfig,
-    Height, NodeId, SubnetId,
 };
 use std::{
     net::{IpAddr, SocketAddr},

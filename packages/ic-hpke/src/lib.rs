@@ -90,7 +90,7 @@
 
 use hpke::rand_core::{CryptoRng, RngCore};
 use hpke::{
-    aead::AesGcm256, kdf::HkdfSha384, kem::DhP384HkdfSha384, Deserializable, Kem, Serializable,
+    Deserializable, Kem, Serializable, aead::AesGcm256, kdf::HkdfSha384, kem::DhP384HkdfSha384,
 };
 
 /*

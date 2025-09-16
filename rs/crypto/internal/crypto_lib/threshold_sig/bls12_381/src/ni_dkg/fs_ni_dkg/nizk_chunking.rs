@@ -3,7 +3,7 @@
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_SIZE, NUM_CHUNKS};
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash,
+    HashedMap, UniqueHash, random_oracle, random_oracle_to_scalar,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};

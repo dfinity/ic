@@ -1,22 +1,22 @@
 pub mod proto;
 
 use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
 };
 use ic_types::{
+    CanisterId, ExecutionRound, Height, NodeId, RegistryVersion, Time,
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
         canister_threshold_sig::{
-            idkg::IDkgTranscript, EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
+            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, idkg::IDkgTranscript,
         },
-        threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, id::ni_dkg_target_id},
     },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
-    RegistryVersion, Time,
+    node_id_into_protobuf, node_id_try_from_option,
 };
 use phantom_newtype::Id;
 use std::{

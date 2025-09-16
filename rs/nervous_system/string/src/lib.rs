@@ -38,7 +38,7 @@ pub fn clamp_string_len(s: &str, max_len: usize) -> String {
 }
 
 pub fn clamp_debug_len(object: &impl Debug, max_len: usize) -> String {
-    clamp_string_len(&format!("{:#?}", object), max_len)
+    clamp_string_len(&format!("{object:#?}"), max_len)
 }
 
 #[cfg(test)]

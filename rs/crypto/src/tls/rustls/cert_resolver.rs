@@ -1,8 +1,8 @@
 use rustls::{
+    SignatureScheme,
     client::ResolvesClientCert,
     server::{ClientHello, ResolvesServerCert},
     sign::CertifiedKey,
-    SignatureScheme,
 };
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;

@@ -4,9 +4,9 @@
 
 use async_trait::async_trait;
 use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
+use ic_types::RegistryVersion;
 use ic_types::registry::RegistryClientError;
 use ic_types::registry::RegistryClientError::DecodeError;
-use ic_types::RegistryVersion;
 use std::collections::{BTreeMap, HashSet};
 
 mod stable_canister_client;
@@ -122,7 +122,7 @@ pub fn get_decoded_value<T: prost::Message + Default>(
         .get_value(key, version)?
         .map(|bytes| {
             T::decode(bytes.as_slice()).map_err(|e| DecodeError {
-                error: format!("{:?}", e),
+                error: format!("{e:?}"),
             })
         })
         .transpose()

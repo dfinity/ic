@@ -6,16 +6,16 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_crypto_utils_threshold_sig::{verify_combined, verify_combined_with_cache};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_types::{
+    CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
     consensus::certification::CertificationContent,
     crypto::{
-        threshold_sig::ThresholdSigPublicKey, CombinedThresholdSig, CombinedThresholdSigOf,
-        CryptoHash,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,
+        threshold_sig::ThresholdSigPublicKey,
     },
     messages::{Blob, Certificate},
-    CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
 };
 use serde::Deserialize;
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use tree_deserializer::{LabeledTreeDeserializer, types::Leb128EncodedU64};
 
 #[cfg(test)]
 mod tests;
@@ -51,9 +51,9 @@ pub enum CertificateValidationError {
 impl fmt::Display for CertificateValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DeserError(err) => write!(f, "failed to deserialize certificate: {}", err),
+            Self::DeserError(err) => write!(f, "failed to deserialize certificate: {err}"),
             Self::InvalidSignature(err) => {
-                write!(f, "failed to verify threshold signature: {}", err)
+                write!(f, "failed to verify threshold signature: {err}")
             }
             Self::CertifiedDataMismatch {
                 certified,
@@ -65,7 +65,7 @@ impl fmt::Display for CertificateValidationError {
                 hex::encode(&computed[..])
             ),
 
-            Self::MalformedHashTree(err) => write!(f, "hash tree in not well-formed: {}", err),
+            Self::MalformedHashTree(err) => write!(f, "hash tree in not well-formed: {err}"),
             Self::MultipleSubnetDelegationsNotAllowed => write!(
                 f,
                 "expected certificate with a maximum of one delegations but found nested delegations in the certificate"
@@ -76,10 +76,12 @@ impl fmt::Display for CertificateValidationError {
                     "canister id does not match the canister id range specified in the certificate"
                 )
             }
-            Self::SubnetIdMismatch { provided_subnet_id, delegation_subnet_id } => write!(
+            Self::SubnetIdMismatch {
+                provided_subnet_id,
+                delegation_subnet_id,
+            } => write!(
                 f,
-                "provided subnet id {} does not match subnet id in delegation {}",
-                provided_subnet_id, delegation_subnet_id,
+                "provided subnet id {provided_subnet_id} does not match subnet id in delegation {delegation_subnet_id}",
             ),
         }
     }
@@ -159,8 +161,7 @@ fn verify_certified_data_internal(
     ))
     .map_err(|err| {
         CertificateValidationError::DeserError(format!(
-            "failed to unpack replica state from a labeled tree: {}",
-            err
+            "failed to unpack replica state from a labeled tree: {err}"
         ))
     })?;
 
@@ -170,8 +171,7 @@ fn verify_certified_data_internal(
         .map(|canister| canister.certified_data.clone())
         .ok_or_else(|| {
             CertificateValidationError::MalformedHashTree(format!(
-                "cannot find certified_data for canister {} in the tree",
-                canister_id
+                "cannot find certified_data for canister {canister_id} in the tree"
             ))
         })?;
 
@@ -246,8 +246,7 @@ pub fn verify_certificate_for_subnet_read_state(
             .map(SubnetId::from)
             .map_err(|err| {
                 CertificateValidationError::DeserError(format!(
-                    "failed to parse delegation subnet id: {}",
-                    err
+                    "failed to parse delegation subnet id: {err}"
                 ))
             })?;
         if subnet_id != &delegation_subnet_id {
@@ -281,8 +280,7 @@ fn verify_certificate_internal(
             .map(SubnetId::from)
             .map_err(|err| {
                 CertificateValidationError::DeserError(format!(
-                    "failed to parse delegation subnet id: {}",
-                    err
+                    "failed to parse delegation subnet id: {err}"
                 ))
             })?;
         verify_delegation_certificate(
@@ -341,15 +339,13 @@ pub fn verify_delegation_certificate(
         SubnetCertificateData::deserialize(LabeledTreeDeserializer::new(&replica_labeled_tree))
             .map_err(|err| {
                 CertificateValidationError::DeserError(format!(
-                    "failed to unpack replica state from a labeled tree: {}",
-                    err
+                    "failed to unpack replica state from a labeled tree: {err}"
                 ))
             })?;
 
     let subnet_info = subnet_state.subnet.get(subnet_id).ok_or_else(|| {
         CertificateValidationError::MalformedHashTree(format!(
-            "cannot find subnet information for subnet {} in the tree",
-            subnet_id
+            "cannot find subnet information for subnet {subnet_id} in the tree"
         ))
     })?;
 
@@ -373,8 +369,7 @@ pub fn verify_delegation_certificate(
         if let Some(canister_ranges) = &subnet_info.canister_ranges {
             let canister_id_ranges = serde_cbor::from_slice(canister_ranges).map_err(|err| {
                 CertificateValidationError::DeserError(format!(
-                    "failed to unpack canister range: {}",
-                    err
+                    "failed to unpack canister range: {err}"
                 ))
             })?;
 
@@ -390,8 +385,7 @@ pub fn verify_delegation_certificate(
                     .get(subnet_id)
                     .ok_or_else(|| {
                         CertificateValidationError::MalformedHashTree(format!(
-                            "cannot find canister ranges for subnet {} in the tree",
-                            subnet_id
+                            "cannot find canister ranges for subnet {subnet_id} in the tree"
                         ))
                     })?;
 
@@ -419,7 +413,7 @@ pub fn verify_delegation_certificate(
     }
 
     let public_key = parse_threshold_sig_key_from_der(&subnet_info.public_key).map_err(|err| {
-        CertificateValidationError::DeserError(format!("failed to deserialize public key: {}", err))
+        CertificateValidationError::DeserError(format!("failed to deserialize public key: {err}"))
     })?;
     Ok(public_key)
 }
@@ -451,15 +445,14 @@ pub fn validate_subnet_delegation_certificate_with_cache(
 
 fn parse_certificate(certificate: &[u8]) -> Result<Certificate, CertificateValidationError> {
     serde_cbor::from_slice(certificate).map_err(|err| {
-        CertificateValidationError::DeserError(format!("failed to decode certificate: {}", err))
+        CertificateValidationError::DeserError(format!("failed to decode certificate: {err}"))
     })
 }
 
 fn parse_tree(tree: MixedHashTree) -> Result<LabeledTree<Vec<u8>>, CertificateValidationError> {
     LabeledTree::<Vec<u8>>::try_from(tree).map_err(|err| {
         CertificateValidationError::MalformedHashTree(format!(
-            "failed to convert hash tree to labeled tree: {:?}",
-            err
+            "failed to convert hash tree to labeled tree: {err:?}"
         ))
     })
 }

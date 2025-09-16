@@ -17,6 +17,9 @@ on the process that this file is part of, see
   https://forum.dfinity.org/t/subnet-rental-canister-work-on-next-phase-has-started/52803
   (This is also discussed under the heading "Swiss subnet".)
 
+* Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
+  proposal.
+
 ## Changed
 
 ## Deprecated
