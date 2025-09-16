@@ -290,14 +290,16 @@ mod tests {
 
         // Test case 1: No recovery file exists initially
         // The function should return the recovery hash and create the recovery file
-        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
-        assert_eq!(recovery_hash, Some("test123".to_string()));
+        let recovery_config = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_config, Some(RecoveryConfig {
+            recovery_hash: "test123".to_string(),
+        }));
         assert!(recovery_file_path.exists());
 
         // Test case 2: Recovery file now exists
         // The function should return None since GuestOS has already been recovered
-        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
-        assert_eq!(recovery_hash, None);
+        let recovery_config = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_config, None);
     }
 
     #[test]
@@ -306,7 +308,7 @@ mod tests {
         let recovery_file_path = temp_dir.path().join("guestos_recovered");
 
         let mock_cmdline = "root=/dev/sda1 dummy";
-        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
-        assert_eq!(recovery_hash, None);
+        let recovery_config = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_config, None);
     }
 }
