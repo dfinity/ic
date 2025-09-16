@@ -105,7 +105,7 @@ fn check_postcondition<T>(t: T) -> T {
 }
 
 fn check_anonymous_caller() {
-    if ic_cdk::caller() == Principal::anonymous() {
+    if ic_cdk::api::msg_caller() == Principal::anonymous() {
         panic!("anonymous caller not allowed")
     }
 }
@@ -180,7 +180,7 @@ fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrieva
 fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
     read_state(|s| {
         s.known_utxos_for_account(&Account {
-            owner: args.owner.unwrap_or(ic_cdk::caller()),
+            owner: args.owner.unwrap_or(ic_cdk::api::msg_caller()),
             subaccount: args.subaccount,
         })
     })

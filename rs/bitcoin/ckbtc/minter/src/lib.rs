@@ -1460,7 +1460,7 @@ pub struct IcCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
     fn caller(&self) -> Principal {
-        ic_cdk::caller()
+        ic_cdk::api::msg_caller()
     }
 
     fn id(&self) -> Principal {

@@ -147,7 +147,7 @@ impl From<ParseAddressError> for RetrieveBtcWithApprovalError {
 }
 
 pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
-    let caller = ic_cdk::caller();
+    let caller = ic_cdk::api::msg_caller();
 
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
@@ -255,7 +255,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
 pub async fn retrieve_btc_with_approval(
     args: RetrieveBtcWithApprovalArgs,
 ) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
-    let caller = ic_cdk::caller();
+    let caller = ic_cdk::api::msg_caller();
 
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcWithApprovalError::TemporarilyUnavailable)?;
