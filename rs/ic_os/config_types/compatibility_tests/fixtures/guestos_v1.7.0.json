@@ -32,7 +32,6 @@
     "inject_ic_crypto": false,
     "inject_ic_state": false,
     "inject_ic_registry_local_store": false,
-    "recovery_hash": null,
     "guestos_dev_settings": {
       "backup_spool": null,
       "malicious_behavior": null,
@@ -51,5 +50,6 @@
   },
   "trusted_execution_environment_config": {
     "sev_cert_chain_pem": "-----BEGIN CERTIFICATE----------END CERTIFICATE-----"
-  }
+  },
+  "recovery_config": null
 }

@@ -109,5 +109,6 @@ fn generate_default_guestos_config() -> GuestOSConfig {
         trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
             sev_cert_chain_pem,
         }),
+        recovery_config: None,
     }
 }

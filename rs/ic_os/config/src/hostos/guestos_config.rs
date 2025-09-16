@@ -2,7 +2,7 @@ use anyhow::Context;
 use anyhow::{Result, bail, ensure};
 use config_types::{
     DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType,
-    HostOSConfig, Ipv6Config, TrustedExecutionEnvironmentConfig,
+    HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
@@ -75,11 +75,10 @@ pub fn generate_guestos_config(
             sev_cert_chain_pem: certificate_chain,
         });
 
-    let mut guestos_settings = hostos_config.guestos_settings.clone();
     let hostos_cmdline_content = std::fs::read_to_string("/proc/cmdline")
         .context("Failed to read HostOS boot args from /proc/cmdline")?;
 
-    guestos_settings.recovery_hash = guestos_recovery_hash(
+    let recovery_config = guestos_recovery_hash(
         &hostos_cmdline_content,
         DEFAULT_GUESTOS_RECOVERY_FILE_PATH.as_ref(),
     )?;
@@ -88,10 +87,11 @@ pub fn generate_guestos_config(
         config_version: hostos_config.config_version.clone(),
         network_settings: guestos_network_settings,
         icos_settings: hostos_config.icos_settings.clone(),
-        guestos_settings,
+        guestos_settings: hostos_config.guestos_settings.clone(),
         guest_vm_type,
         upgrade_config,
         trusted_execution_environment_config,
+        recovery_config,
     };
 
     Ok(guestos_config)
@@ -118,13 +118,15 @@ fn node_ipv6_address(
 fn guestos_recovery_hash(
     hostos_cmdline_content: &str,
     recovery_file_path: &Path,
-) -> Result<Option<String>> {
+) -> Result<Option<RecoveryConfig>> {
     let hostos_cmdline = hostos_cmdline_content.parse::<KernelCommandLine>()?;
 
     if let Some(recovery_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
         if !recovery_file_path.exists() {
             mark_hostos_recovered(recovery_file_path)?;
-            Ok(Some(recovery_hash_value))
+            Ok(Some(RecoveryConfig {
+                recovery_hash: recovery_hash_value,
+            }))
         } else {
             Ok(None)
         }

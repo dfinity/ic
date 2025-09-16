@@ -8,7 +8,7 @@ readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
 
 function read_config_variables() {
-    expected_recovery_hash=$(get_config_value '.guestos_settings.recovery_hash')
+    expected_recovery_hash=$(get_config_value '.recovery_config.recovery_hash')
 }
 
 # Completes the recovery process by downloading and applying the recovery artifacts

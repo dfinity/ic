@@ -107,8 +107,7 @@ pub struct GenerateTestnetConfigClapArgs {
     pub inject_ic_state: Option<bool>,
     #[arg(long)]
     pub inject_ic_registry_local_store: Option<bool>,
-    #[arg(long)]
-    pub recovery_hash: Option<String>,
+
     // GuestOSDevSettings arguments
     #[arg(long)]
     pub backup_retention_time_seconds: Option<u64>,
@@ -130,6 +129,10 @@ pub struct GenerateTestnetConfigClapArgs {
     pub hostname: Option<String>,
     #[arg(long)]
     pub generate_ic_boundary_tls_cert: Option<String>,
+
+    // GuestOSRecoveryConfig arguments
+    #[arg(long)]
+    pub recovery_hash: Option<String>,
 
     // Output path
     #[arg(long)]

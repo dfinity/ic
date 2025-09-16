@@ -100,6 +100,8 @@ pub struct GuestOSConfig {
     /// environment is enabled in icos_settings.enable_trusted_execution_environment
     #[serde(default)]
     pub trusted_execution_environment_config: Option<TrustedExecutionEnvironmentConfig>,
+    /// The hash of the recovery artifacts to be used in the event of a manual recovery.
+    pub recovery_config: Option<RecoveryConfig>,
 }
 
 #[serde_as]
@@ -196,8 +198,6 @@ pub struct GuestOSSettings {
     /// When given, this provides the initial state of the registry.
     /// If not given, the node will fetch (initial) registry state from the NNS.
     pub inject_ic_registry_local_store: bool,
-    /// The hash of the recovery artifacts to be used in the event of a manual recovery.
-    pub recovery_hash: Option<String>,
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 
@@ -216,6 +216,13 @@ pub struct GuestOSDevSettings {
     // Generate and inject a self-signed TLS certificate and key for ic-boundary
     // for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
+}
+
+/// GuestOS recovery configuration used in the event of a manual recovery.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct RecoveryConfig {
+    /// The hash of the recovery artifacts to be used in the event of a manual recovery.
+    pub recovery_hash: String,
 }
 
 /// Configures the usage of the backup spool directory.

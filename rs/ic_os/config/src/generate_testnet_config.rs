@@ -33,7 +33,6 @@ pub struct GenerateTestnetConfigArgs {
     pub inject_ic_crypto: Option<bool>,
     pub inject_ic_state: Option<bool>,
     pub inject_ic_registry_local_store: Option<bool>,
-    pub recovery_hash: Option<String>,
 
     // GuestOSDevSettings arguments
     pub backup_retention_time_seconds: Option<u64>,
@@ -46,6 +45,9 @@ pub struct GenerateTestnetConfigArgs {
     pub socks_proxy: Option<String>,
     pub hostname: Option<String>,
     pub generate_ic_boundary_tls_cert: Option<String>,
+
+    // GuestOSRecoveryConfig arguments
+    pub recovery_hash: Option<String>,
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -235,7 +237,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         inject_ic_crypto: inject_ic_crypto.unwrap_or(false),
         inject_ic_state: inject_ic_state.unwrap_or(false),
         inject_ic_registry_local_store: inject_ic_registry_local_store.unwrap_or(false),
-        recovery_hash,
         guestos_dev_settings,
     };
 
@@ -248,6 +249,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         guest_vm_type: GuestVMType::Default,
         upgrade_config: GuestOSUpgradeConfig::default(),
         trusted_execution_environment_config: None,
+        recovery_config: recovery_hash.map(|hash| RecoveryConfig {
+            recovery_hash: hash,
+        }),
     };
 
     Ok(guestos_config)
