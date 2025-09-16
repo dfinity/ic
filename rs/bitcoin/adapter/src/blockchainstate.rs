@@ -44,7 +44,7 @@ pub type SerializedBlock = Vec<u8>;
 /// The BlockChainState caches all the Bitcoin headers, some of the Bitcoin blocks.
 /// The BlockChainState also maintains the child relationhips between the headers.
 pub struct BlockchainState<Network: BlockchainNetwork> {
-    /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
+    /// This field stores all the Bitcoin headers using a HashMap containing BlockHash and the corresponding header.
     header_cache: Arc<dyn HeaderCache<Header = Network::Header> + Send>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
@@ -165,7 +165,7 @@ where
             })
         })
         .await
-        .map_err(|err| AddHeaderError::Internal(format!("{}", err)))?
+        .map_err(|err: tokio::task::JoinError| AddHeaderError::Internal(format!("{}", err)))?
     }
 
     /// This method adds a new block to the `block_cache`
