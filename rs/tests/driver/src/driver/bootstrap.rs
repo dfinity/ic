@@ -434,15 +434,23 @@ pub fn setup_and_start_nested_vms(
 }
 
 fn validate_version_config(env: &TestEnv) {
+    // When a GuestOS image is also in use...
     if let Ok(guestos_version) = try_get_guestos_img_version() {
-        if (guestos_version != get_setupos_img_version())
-            && UnassignedRecordConfig::try_read_attribute(env).is_err()
-        {
-            panic!(
-                "Initial GuestOS and SetupOS versions do not match! \
-                If this is intended, set `without_unassigned_config` (avoid) \
-                or `with_unassigned_config` (ignore) on your IC."
-            );
+        // ...and the versions do not match...
+        if guestos_version != get_setupos_img_version() {
+            // ...panic, unless an appropriate UnassignedRecordConfig is set.
+            if let Ok(config) = UnassignedRecordConfig::try_read_attribute(env) {
+                info!(
+                    env.logger(),
+                    "Version mismatch allowed by UnassignedRecordConfig: '{config:?}'"
+                );
+            } else {
+                panic!(
+                    "Initial GuestOS and SetupOS versions do not match! \
+                    If this is intended, set `without_unassigned_config` (avoid) \
+                    or `with_unassigned_config` (ignore) on your IC."
+                );
+            }
         }
     }
 }
