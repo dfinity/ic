@@ -6,7 +6,7 @@ description: |
 inputs:
   targets:
     description: |
-      YAML list of targets to generate UUIDs for. Each item must have:
+      JSON list of targets to generate UUIDs for. Each item must have:
         name: display name (e.g. Build, Test)
         output_id: GitHub Actions output variable
       Example:
