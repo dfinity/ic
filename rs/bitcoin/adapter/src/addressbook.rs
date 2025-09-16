@@ -132,17 +132,18 @@ impl AddressBook {
             .map(|seed| format_addr(seed, self.port))
             .collect::<Vec<_>>();
         let ipv6_only = self.ipv6_only;
-        let mut addresses = tokio::task::spawn_blocking(move || {
-            dns_seeds
-                .into_iter()
-                .flat_map(|seed| {
-                    seed.to_socket_addrs().map_or(vec![], |v| {
-                        v.filter(|addr| !ipv6_only || addr.is_ipv6()).collect()
-                    })
+        let tasks = dns_seeds
+            .into_iter()
+            .map(|seed| tokio::task::spawn_blocking(move || seed.to_socket_addrs()));
+        let mut addresses = futures::future::try_join_all(tasks)
+            .await?
+            .into_iter()
+            .flat_map(|addr| {
+                addr.map_or(vec![], |v| {
+                    v.filter(|addr| !ipv6_only || addr.is_ipv6()).collect()
                 })
-                .collect::<Vec<SocketAddr>>()
-        })
-        .await?;
+            })
+            .collect::<Vec<SocketAddr>>();
         addresses.shuffle(&mut rng);
         self.seed_queue = addresses.into_iter().collect();
         Ok(())
