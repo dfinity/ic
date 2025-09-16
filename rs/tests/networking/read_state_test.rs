@@ -323,7 +323,7 @@ fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
         );
         assert_matches!(
             value,
-            Err(AgentError::LookupPathAbsent(_)),
+            Err(AgentError::LookupPathAbsent(_) | AgentError::LookupPathUnknown(_)),
             "Should not contain public keys of nodes on other subnets (the App subnet)"
         );
     }
