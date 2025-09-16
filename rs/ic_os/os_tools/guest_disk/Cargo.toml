@@ -1,6 +1,6 @@
 [package]
 name = "guest_disk"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
