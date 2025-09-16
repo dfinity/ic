@@ -163,11 +163,12 @@ impl StateSyncCache {
     /// be called in the `drop` function of `sync`, so changing the state is
     /// safe.
     pub fn push(&mut self, sync: &mut IncompleteState) {
+        let mut sync_state = sync.state.lock().unwrap();
         // We start by clearing the old entry
         // This avoids any edge cases where we replace the cache with a new entry at the
         // same height (and path)
         if let Some(ref entry) = self.entry {
-            match sync.state {
+            match *sync_state {
                 DownloadState::Blank => {
                     // Keep what we have
                 }
@@ -179,7 +180,7 @@ impl StateSyncCache {
             };
         }
 
-        match std::mem::replace(&mut sync.state, DownloadState::Blank) {
+        match std::mem::replace(&mut *sync_state, DownloadState::Blank) {
             DownloadState::Loading {
                 meta_manifest: _,
                 manifest,

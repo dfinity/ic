@@ -130,7 +130,7 @@ fn incomplete_state_for_tests(
     // a manifest (in production), or later in this function (in tests)
     assert!(!result.root.exists());
 
-    result.state = state;
+    result.state = Arc::new(Mutex::new(state));
     // if Loading, populate the scratchpad with a file named after the seed
     // contained in manifest
     if let DownloadState::Loading {
@@ -138,7 +138,7 @@ fn incomplete_state_for_tests(
         ref manifest,
         state_sync_file_group: _,
         fetch_chunks: _,
-    } = &result.state
+    } = &*result.state.lock().unwrap()
     {
         std::fs::create_dir(&result.root).unwrap();
         let mut _file =

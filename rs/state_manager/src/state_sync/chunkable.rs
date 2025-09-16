@@ -80,7 +80,7 @@ pub(crate) struct IncompleteState {
     state_layout: StateLayout,
     height: Height,
     root_hash: CryptoHashOfState,
-    state: DownloadState,
+    state: Arc<Mutex<DownloadState>>,
     manifest_with_checkpoint_layout: Option<(Manifest, CheckpointLayout<ReadOnly>)>,
     metrics: StateManagerMetrics,
     started_at: Instant,
@@ -96,7 +96,7 @@ impl Drop for IncompleteState {
         // If state sync is aborted before completion we need to
         // measure the total duration here
         let elapsed = self.started_at.elapsed();
-        match &self.state {
+        match &*self.state.lock().unwrap() {
             DownloadState::Blank => {
                 self.metrics
                     .state_sync_metrics
@@ -147,7 +147,7 @@ impl Drop for IncompleteState {
 
         // We need to record the download state before passing self to the cache, as
         // passing it to the cache might alter the download state
-        let description = match self.state {
+        let description = match *self.state.lock().unwrap() {
             DownloadState::Blank => "aborted before receiving any chunks",
             DownloadState::Prep { .. } => "aborted before receiving the entire manifest",
             DownloadState::Loading { .. } => "aborted before receiving all the chunks",
@@ -213,7 +213,7 @@ impl IncompleteState {
             state_layout,
             height,
             root_hash,
-            state: DownloadState::Blank,
+            state: Arc::new(Mutex::new(DownloadState::Blank)),
             manifest_with_checkpoint_layout: state_sync.state_manager.latest_manifest(),
             metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
@@ -770,6 +770,30 @@ impl IncompleteState {
         metrics.remaining.sub(1);
     }
 
+    // pub(crate) fn get_chunk(
+    //     log: &ReplicaLogger,
+    //     metrics: &StateSyncMetrics,
+    //     root: &Path,
+    //     ix: usize,
+    //     manifest: &Manifest,
+    // ) -> Vec<u8> {
+    //     let chunk = &manifest.chunk_table[ix];
+    //     let file_index = chunk.file_index as usize;
+    //     let path = root.join(&mainfest.file_table[file_index].relative_path);
+
+    //     let f = std::fs::OpenOptions::new()
+    //         .open(&path)
+    //         .unwrap_or_else(|err| {
+    //             fatal!(
+    //                 log,
+    //                 "Failed to open file {} for reading: {}",
+    //                 path.display(),
+    //                 err
+    //             )
+    //         });
+    //     f.read_at(chunk.size_bytes, chunk.offset).unwrap()
+    // }
+
     // Return wether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
     #[must_use]
     fn make_checkpoint(
@@ -856,7 +880,7 @@ impl IncompleteState {
     /// Preallocates the files listed in the manifest and copies the chunks
     /// that we have locally.
     /// Returns a set of chunks that still need to be fetched
-    fn initialize_state_on_disk(&mut self, manifest_new: &Manifest) -> HashSet<usize> {
+    fn initialize_state_on_disk(&self, manifest_new: &Manifest) -> HashSet<usize> {
         Self::preallocate_layout(&self.log, &self.root, manifest_new);
 
         let state_sync_size_fetch = self
@@ -1141,7 +1165,7 @@ fn maliciously_alter_chunk_data(
 
 impl Chunkable<StateSyncMessage> for IncompleteState {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
-        match self.state {
+        match *self.state.lock().unwrap() {
             DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
             DownloadState::Prep {
                 meta_manifest: _,
@@ -1171,7 +1195,8 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
         #[cfg(feature = "malicious_code")]
         let chunk = maliciously_alter_chunk_data(chunk, chunk_id, &mut self.malicious_flags);
         let ix = chunk_id.get();
-        match &mut self.state {
+        let mut self_state = self.state.lock().unwrap();
+        match &mut *self_state {
             DownloadState::Complete => {
                 debug!(
                     self.log,
@@ -1221,7 +1246,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         ..MANIFEST_CHUNK_ID_OFFSET + manifest_chunks_len as u32)
                         .collect();
 
-                    self.state = DownloadState::Prep {
+                    *self_state = DownloadState::Prep {
                         meta_manifest,
                         manifest_in_construction: Default::default(),
                         manifest_chunks,
@@ -1335,7 +1360,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             self.height,
                             &self.state_layout,
                         ) {
-                            self.state = DownloadState::Complete;
+                            *self_state = DownloadState::Complete;
                             return Ok(());
                         }
 
@@ -1345,7 +1370,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             manifest.clone(),
                             Arc::new(meta_manifest.clone()),
                         );
-                        self.state = DownloadState::Complete;
+                        *self_state = DownloadState::Complete;
                         self.state_sync_refs
                             .cache
                             .write()
@@ -1374,7 +1399,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             fetch_chunks.insert(chunk_id as usize);
                         }
                         let num_fetch_chunks = fetch_chunks.len();
-                        self.state = DownloadState::Loading {
+                        *self_state = DownloadState::Loading {
                             meta_manifest,
                             manifest,
                             state_sync_file_group,
@@ -1514,7 +1539,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         self.height,
                         &self.state_layout,
                     ) {
-                        self.state = DownloadState::Complete;
+                        *self_state = DownloadState::Complete;
                         return Ok(());
                     }
 
@@ -1524,7 +1549,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         manifest.clone(),
                         Arc::new(meta_manifest.clone()),
                     );
-                    self.state = DownloadState::Complete;
+                    *self_state = DownloadState::Complete;
 
                     self.state_sync_refs
                         .cache
