@@ -368,6 +368,7 @@ fn encode_dissolve_delay_buckets<W, T>(
     T: Metric + Copy,
 {
     for (k, v) in half_year_buckets.iter() {
+        // @todo
         let lower_bound_months = k * 6;
         let upper_bound_months = (1 + k) * 6;
         builder = builder
@@ -459,7 +460,11 @@ pub fn encode_metrics(
     )?;
     w.encode_gauge(
         "governance_seconds_since_latest_reward_event",
-        (governance.env.now() - governance.latest_reward_event().actual_timestamp_seconds) as f64,
+        (governance
+            .env
+            .now()
+            .saturating_sub(governance.latest_reward_event().actual_timestamp_seconds))
+            as f64,
         "Seconds since the latest reward event",
     )?;
     w.encode_gauge(
