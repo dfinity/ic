@@ -299,10 +299,10 @@ jobs:
         with:
           targets: |
             [{
-              "name": "Test",
-              "output_id": "test_id",
+              "name": "Build",
+              "output_id": "build_id",
             }
-            ${{ needs.config.outputs.full_macos_build == 'true' && ', { "name": "Build", "output_id": "build_id" }' || '' }}
+            ${{ needs.config.outputs.full_macos_build == 'true' && ', { "name": "Test", "output_id": "test_id" }' || '' }}
             ]
 
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
