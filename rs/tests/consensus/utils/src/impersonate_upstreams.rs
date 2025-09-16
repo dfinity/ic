@@ -6,6 +6,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{SshSession, get_dependency_path, scp_send_to},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
+use slog::info;
 
 const UNIVERSAL_VM_NAME: &str = "upstreams";
 
@@ -86,7 +87,19 @@ pub fn uvm_serve_recovery_artifacts(
         env,
         artifacts_path,
         Path::new(&format!("recovery/{artifacts_hash}/recovery.tar.zst")),
-    )
+    );
+
+    let uvm = get_upstreams_uvm(env);
+    info!(
+        env.logger(),
+        "Remote checksum: {}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            sha256sum {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst
+        "#
+        ))?
+    );
+    Ok(())
 }
 
 fn uvm_serve_file(env: &TestEnv, local_path: &Path, uri: &Path) -> Result<()> {

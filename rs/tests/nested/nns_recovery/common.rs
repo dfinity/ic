@@ -339,6 +339,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         .unwrap()
         .trim()
         .to_string();
+    info!(logger, "Recovery artifacts SHA256: {}", &artifacts_hash);
     impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
         .expect("Failed to serve recovery artifacts from UVM");
 
