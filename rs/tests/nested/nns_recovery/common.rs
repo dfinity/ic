@@ -146,6 +146,11 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
+    info!(
+        logger,
+        "Recovery GuestOS image SHA256: {}", &recovery_img_hash
+    );
+
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
 
