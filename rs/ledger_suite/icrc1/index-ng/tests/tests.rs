@@ -15,7 +15,7 @@ use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerU
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
 };
-use ic_rosetta_test_utils::test_http_request_decoding_quota;
+use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
