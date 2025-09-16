@@ -1,4 +1,4 @@
-use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::exponential_buckets};
 use prometheus::{Histogram, IntCounter, IntGauge};
 
 #[derive(Clone, Debug)]

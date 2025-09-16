@@ -3,17 +3,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{consensus::Encodable, BlockHash};
+use bitcoin::{BlockHash, consensus::Encodable};
 use ic_metrics::MetricsRegistry;
 use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
 use crate::{
+    BlockchainManagerRequest, BlockchainState,
     blockchainstate::SerializedBlock,
     common::{BlockHeight, BlockchainHeader, BlockchainNetwork},
     metrics::GetSuccessorMetrics,
-    BlockchainManagerRequest, BlockchainState,
 };
 
 // Max size of the `GetSuccessorsResponse` message.
@@ -127,7 +127,7 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
-                .map_or(0, |cached| cached.height);
+                .map_or(0, |cached| cached.data.height);
 
             let allow_multiple_blocks = self.network.are_multiple_blocks_allowed(anchor_height);
             let blocks = get_successor_blocks(
@@ -222,9 +222,9 @@ fn get_successor_blocks<Network: BlockchainNetwork>(
     let mut successor_blocks = vec![];
     // Block hashes that should be looked at in subsequent breadth-first searches.
     let mut response_block_size: usize = 0;
-    let mut queue: VecDeque<&BlockHash> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.iter().collect())
+        .map(|c| c.children.into_iter().collect())
         .unwrap_or_default();
 
     let max_blocks_bytes = network.max_blocks_bytes();
@@ -237,9 +237,9 @@ fn get_successor_blocks<Network: BlockchainNetwork>(
 
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
-        if !seen.contains(block_hash) {
+        if !seen.contains(&block_hash) {
             // Retrieve the block from the cache.
-            let Some(block) = state.get_block(block_hash) else {
+            let Some(block) = state.get_block(&block_hash) else {
                 // If the block is not in the cache, we skip it and all its subtree.
                 // We don't want to return orphaned blocks to the canister.
                 continue;
@@ -252,14 +252,14 @@ fn get_successor_blocks<Network: BlockchainNetwork>(
             {
                 break;
             }
-            successor_blocks.push((*block_hash, block));
+            successor_blocks.push((block_hash, block));
             response_block_size += block_size;
         }
 
         queue.extend(
             state
-                .get_cached_header(block_hash)
-                .map(|header| header.children.iter())
+                .get_cached_header(&block_hash)
+                .map(|header| header.children.into_iter())
                 .unwrap_or_default(),
         );
     }
@@ -284,9 +284,9 @@ fn get_next_headers<Network: BlockchainNetwork>(
         .chain(blocks.iter().map(|(hash, _)| *hash))
         .collect();
 
-    let mut queue: VecDeque<&BlockHash> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.iter().collect())
+        .map(|c| c.children.into_iter().collect())
         .unwrap_or_default();
 
     let max_in_flight_blocks = network.max_in_flight_blocks();
@@ -296,9 +296,9 @@ fn get_next_headers<Network: BlockchainNetwork>(
             break;
         }
 
-        if let Some(header_node) = state.get_cached_header(block_hash) {
-            if !seen.contains(block_hash) {
-                next_headers.push(header_node.header.clone());
+        if let Some(header_node) = state.get_cached_header(&block_hash) {
+            if !seen.contains(&block_hash) {
+                next_headers.push(header_node.data.header.clone());
             }
             queue.extend(header_node.children.iter());
         }
@@ -313,7 +313,7 @@ mod test {
 
     use std::sync::{Arc, Mutex};
 
-    use bitcoin::{consensus::Decodable, Block};
+    use bitcoin::{Block, consensus::Decodable};
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 
@@ -628,15 +628,13 @@ mod test {
             let (_, maybe_err) = blockchain.add_headers(&main_chain);
             assert!(
                 maybe_err.is_none(),
-                "Error was found in main chain: {:#?}",
-                maybe_err
+                "Error was found in main chain: {maybe_err:#?}"
             );
 
             let (_, maybe_err) = blockchain.add_headers(&side_chain);
             assert!(
                 maybe_err.is_none(),
-                "Error was found in side chain: {:#?}",
-                maybe_err
+                "Error was found in side chain: {maybe_err:#?}"
             );
             blockchain.add_block(main_block_2).expect("invalid block");
 
@@ -812,8 +810,7 @@ mod test {
         assert!(
             bitcoin::Network::Bitcoin
                 .are_multiple_blocks_allowed(BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
-            "Multiple blocks are allowed at {}",
-            BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            "Multiple blocks are allowed at {BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT}"
         );
         assert!(
             !bitcoin::Network::Bitcoin.are_multiple_blocks_allowed(900_000),

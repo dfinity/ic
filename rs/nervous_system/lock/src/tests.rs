@@ -12,7 +12,7 @@ async fn disallow_more_than_on_call_at_a_time(id: u64) -> bool {
     let release_on_drop = acquire(&TRACKER, id);
     if let Err(original_id) = release_on_drop {
         // Abort. Do not do real work.
-        eprintln!("{} already in progress.", original_id);
+        eprintln!("{original_id} already in progress.");
         return false;
     }
 
@@ -73,10 +73,7 @@ async fn try_file_operation(file_path: String, operation: FileOperation) -> bool
     let release_on_drop = acquire_for(&FILE_LOCKS, file_path.clone(), operation);
     if let Err(existing_operation) = release_on_drop {
         // Abort. Do not do real work.
-        eprintln!(
-            "File '{}' already has {:?} operation in progress.",
-            file_path, existing_operation
-        );
+        eprintln!("File '{file_path}' already has {existing_operation:?} operation in progress.");
         return false;
     }
 

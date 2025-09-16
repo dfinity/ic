@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
 use crate::invariants::common::{
-    assert_valid_urls_and_hash, get_api_boundary_node_records_from_snapshot,
-    get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
+    get_api_boundary_node_records_from_snapshot, get_subnet_ids_from_snapshot,
+    get_value_from_snapshot,
 };
 
 use ic_base_types::SubnetId;

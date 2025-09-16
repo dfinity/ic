@@ -47,29 +47,26 @@ impl fmt::Display for CspThresholdSignError {
         match self {
             CspThresholdSignError::SecretKeyNotFound { algorithm, key_id } => write!(
                 f,
-                "The secret key with key id {:?} and algorithm id {:?} was not found in the \
-                secret key store.",
-                key_id, algorithm
+                "The secret key with key id {key_id:?} and algorithm id {algorithm:?} was not found in the \
+                secret key store."
             ),
             CspThresholdSignError::UnsupportedAlgorithm { algorithm } => write!(
                 f,
                 "The algorithm of the public key from the threshold signature data \
-            store is not supported: {:?}",
-                algorithm
+            store is not supported: {algorithm:?}"
             ),
             CspThresholdSignError::WrongSecretKeyType {} => {
                 write!(f, "The secret key has a wrong type")
             }
             CspThresholdSignError::MalformedSecretKey { algorithm } => write!(
                 f,
-                "Unable to parse the secret key with algorithm id {:?}",
-                algorithm
+                "Unable to parse the secret key with algorithm id {algorithm:?}"
             ),
             CspThresholdSignError::TransientInternalError { internal_error } => {
-                write!(f, "Transient internal error: {}", internal_error)
+                write!(f, "Transient internal error: {internal_error}")
             }
             CspThresholdSignError::KeyIdInstantiationError(message) => {
-                write!(f, "KeyID instantiation error: {}", message)
+                write!(f, "KeyID instantiation error: {message}")
             }
         }
     }

@@ -20,25 +20,25 @@ impl fmt::Display for DkgVerifyDealingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let prefix = "Failed to verify dealing: ";
         match self {
-            DkgVerifyDealingError::NotADealer(error) => write!(f, "{}{}", prefix, error),
+            DkgVerifyDealingError::NotADealer(error) => write!(f, "{prefix}{error}"),
             DkgVerifyDealingError::FsEncryptionPublicKeyNotInRegistry(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
-            DkgVerifyDealingError::Registry(error) => write!(f, "{}{}", prefix, error),
+            DkgVerifyDealingError::Registry(error) => write!(f, "{prefix}{error}"),
             DkgVerifyDealingError::MalformedFsEncryptionPublicKey(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             DkgVerifyDealingError::MalformedResharingTranscriptInConfig(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
-            DkgVerifyDealingError::InvalidDealingError(error) => write!(f, "{}{}", prefix, error),
+            DkgVerifyDealingError::InvalidDealingError(error) => write!(f, "{prefix}{error}"),
         }
     }
 }
 
 impl fmt::Debug for DkgVerifyDealingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 

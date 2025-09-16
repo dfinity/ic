@@ -4,7 +4,7 @@ use std::str::FromStr;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -385,8 +385,7 @@ fn route_chain_key_message(
     match requested_subnet {
         Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
             None => Err(ResolveDestinationError::ChainKeyError(format!(
-                "Requested threshold key {} from unknown subnet {}",
-                key_id, subnet_id
+                "Requested threshold key {key_id} from unknown subnet {subnet_id}"
             ))),
             Some(subnet_topology) => {
                 if subnet_topology.chain_keys_held.contains(key_id) {
@@ -399,8 +398,7 @@ fn route_chain_key_message(
                                 Ok((*subnet_id).get())
                             } else {
                                 Err(ResolveDestinationError::ChainKeyError(format!(
-                                    "Subnet {} is not enabled to use threshold key {}",
-                                    subnet_id, key_id,
+                                    "Subnet {subnet_id} is not enabled to use threshold key {key_id}",
                                 )))
                             }
                         }
@@ -427,8 +425,7 @@ fn route_chain_key_message(
                 ChainKeySubnetKind::HoldsEnabledKey => {
                     let keys = format_keys(network_topology.chain_key_enabled_subnets.keys());
                     Err(ResolveDestinationError::ChainKeyError(format!(
-                        "Requested unknown or disabled threshold key: {}, existing enabled keys: {}",
-                        key_id, keys
+                        "Requested unknown or disabled threshold key: {key_id}, existing enabled keys: {keys}"
                     )))
                 }
                 ChainKeySubnetKind::OnlyHoldsKey => {
@@ -441,8 +438,7 @@ fn route_chain_key_message(
                     }
                     let keys = format_keys(keys.iter());
                     Err(ResolveDestinationError::ChainKeyError(format!(
-                        "Requested unknown threshold key: {}, existing keys: {}",
-                        key_id, keys
+                        "Requested unknown threshold key: {key_id}, existing keys: {keys}"
                     )))
                 }
             }
@@ -969,10 +965,7 @@ mod tests {
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
-                    format!(
-                        "Subnet {} is not enabled to use threshold key {}",
-                        subnet_id, key_id,
-                    )
+                    format!("Subnet {subnet_id} is not enabled to use threshold key {key_id}",)
                 ),
                 _ => panic!("Unexpected result."),
             };
@@ -1020,7 +1013,9 @@ mod tests {
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
-                    format!("Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",)
+                    format!(
+                        "Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",
+                    )
                 ),
                 _ => panic!("Unexpected result."),
             };

@@ -1,7 +1,7 @@
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -164,7 +164,7 @@ impl CanisterAgent {
         .await;
         RequestOutcome::new(
             result,
-            format!("{}+retries", label),
+            format!("{label}+retries"),
             start_time.elapsed(),
             attempts.load(Ordering::Relaxed),
         )

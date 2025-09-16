@@ -58,8 +58,7 @@ impl MEGaPublicKey {
     ) -> CanisterThresholdSerializationResult<Self> {
         let point = EccPoint::deserialize(curve, value).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize MEGaPublicKey: {:?}",
-                e
+                "failed to deserialize MEGaPublicKey: {e:?}"
             ))
         })?;
         Ok(Self { point })

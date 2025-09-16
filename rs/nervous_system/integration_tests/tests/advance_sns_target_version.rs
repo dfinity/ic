@@ -1,12 +1,12 @@
 use ic_nervous_system_agent::helpers::await_with_timeout;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::{
     self,
     governance::{
-        set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
-        EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+        EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+        set_automatically_advance_target_version_flag,
     },
 };
-use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, nns},
@@ -14,9 +14,9 @@ use ic_nervous_system_integration_tests::{
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
 use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
 use ic_sns_governance_api::pb::v1::{
-    governance::Versions,
-    upgrade_journal_entry::{upgrade_outcome, upgrade_started, UpgradeStepsReset},
     Empty,
+    governance::Versions,
+    upgrade_journal_entry::{UpgradeStepsReset, upgrade_outcome, upgrade_started},
 };
 use ic_sns_governance_api::{
     pb::v1 as sns_pb,

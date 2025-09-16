@@ -1,15 +1,15 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
-use bitcoin::{consensus::Decodable, BlockHash};
+use bitcoin::{BlockHash, consensus::Decodable};
 use clap::Parser;
 use ic_btc_adapter::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 use ic_btc_service::{
-    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
-    BtcServiceGetSuccessorsResponse,
+    BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
+    btc_service_client::BtcServiceClient,
 };
 use tokio::{
     net::UnixStream,
-    time::{sleep, Instant},
+    time::{Instant, sleep},
 };
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
@@ -83,7 +83,7 @@ async fn run<Network: BlockchainNetwork>(network: Network, uds_path: PathBuf) {
             Err(status) => match status.code() {
                 tonic::Code::Cancelled | tonic::Code::Unavailable => continue,
                 _ => {
-                    println!("status = {:?}", status);
+                    println!("status = {status:?}");
                     sleep(interval_sleep_ms).await;
                     continue;
                 }

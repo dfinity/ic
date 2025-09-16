@@ -1,9 +1,9 @@
 use criterion::{
-    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
+    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
 };
 use ic_crypto_tree_hash::{
-    flatmap, lookup_path, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, LabeledTree::*,
-    MixedHashTree, WitnessGenerator,
+    FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, LabeledTree::*, MixedHashTree,
+    WitnessGenerator, flatmap, lookup_path,
 };
 use ic_crypto_tree_hash_test_utils::{
     hash_tree_builder_from_labeled_tree, mixed_hash_tree_digest_recursive,

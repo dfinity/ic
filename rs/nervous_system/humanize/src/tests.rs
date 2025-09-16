@@ -85,18 +85,18 @@ fn test_parse_percentage() {
 
     // Dot must be surrounded.
     let result = parse_percentage("0.%");
-    assert!(result.is_err(), "{:?}", result);
+    assert!(result.is_err(), "{result:?}");
 
     let result = parse_percentage(".1%");
-    assert!(result.is_err(), "{:?}", result);
+    assert!(result.is_err(), "{result:?}");
 
     // Too many decimal places.
     let result = parse_percentage("0.009%");
-    assert!(result.is_err(), "{:?}", result);
+    assert!(result.is_err(), "{result:?}");
 
     // Percent sign required.
     let result = parse_percentage("1.0");
-    assert!(result.is_err(), "{:?}", result);
+    assert!(result.is_err(), "{result:?}");
 }
 
 #[test]

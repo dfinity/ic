@@ -1,10 +1,10 @@
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    build_params_from_previous, generate_ecdsa_presig_quadruple, setup_masked_random_params,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, build_params_from_previous,
+    generate_ecdsa_presig_quadruple, setup_masked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptOperation};
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptOperation};
 
 #[test]
 fn should_have_expected_size_for_idkg_transcripts() {
@@ -27,10 +27,7 @@ fn should_have_expected_size_for_idkg_transcripts() {
         let allowed_overhead = 1.05;
 
         let tb = transcript_bytes(transcript);
-        println!(
-            "{} transcript is {} bytes expected {}",
-            what, tb, expected_size
-        );
+        println!("{what} transcript is {tb} bytes expected {expected_size}");
         assert!(tb >= expected_size);
         assert!(tb as f64 <= expected_size as f64 * allowed_overhead);
     }

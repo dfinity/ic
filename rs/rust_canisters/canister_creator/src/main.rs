@@ -1,5 +1,5 @@
 use candid::Decode;
-use dfn_core::{api, CanisterId};
+use dfn_core::{CanisterId, api};
 use dfn_macro::update;
 use futures::future::join_all;
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterInstallMode, Payload};
@@ -71,7 +71,7 @@ async fn create_canisters(number_of_canisters: usize) {
             Ok(canisters) => canisters
                 .iter()
                 .for_each(|canister_id| add_canister_id(*canister_id)),
-            Err((_, err)) => api::print(format!("Failed to create a canister: {}", err)),
+            Err((_, err)) => api::print(format!("Failed to create a canister: {err}")),
         }
         remaining_canisters -= batch;
     }

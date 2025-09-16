@@ -22,8 +22,8 @@ use ic_error_types::RejectCode;
 use ic_management_canister_types_private::IC_00;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
-    CallbackId, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
-    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, Ingress, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext, Request,
+    RequestOrResponse, Response,
 };
 use ic_types::{CanisterId, CountBytes, Cycles, NumBytes, Time};
 use ic_validate_eq::ValidateEq;
@@ -594,15 +594,14 @@ impl InboundMessageStore for MessageStoreImpl {
 
                     // Request or stale reference.
                     (Some(RequestOrResponse::Request(_)), None, None) | (None, None, None) => {
-                        return Ok(())
+                        return Ok(());
                     }
 
                     // Two or more of the above. This should never happen.
                     _ => {
                         return Err(format!(
-                            "CanisterQueues: Multiple responses for {:?}",
-                            reference
-                        ))
+                            "CanisterQueues: Multiple responses for {reference:?}"
+                        ));
                     }
                 };
 
@@ -610,8 +609,7 @@ impl InboundMessageStore for MessageStoreImpl {
                     Ok(())
                 } else {
                     Err(format!(
-                        "CanisterQueues: Duplicate inbound response callback: {:?}",
-                        callback_id
+                        "CanisterQueues: Duplicate inbound response callback: {callback_id:?}"
                     ))
                 }
             })?;
@@ -798,10 +796,11 @@ impl CanisterQueues {
                         } else {
                             // This must be a duplicate best-effort response (since `SystemState` has
                             // aleady checked for a matching callback). Silently drop it.
-                            debug_assert!(self
-                                .callbacks_with_enqueued_response
-                                .get(&response.originator_reply_callback)
-                                .is_some());
+                            debug_assert!(
+                                self.callbacks_with_enqueued_response
+                                    .get(&response.originator_reply_callback)
+                                    .is_some()
+                            );
                             return Ok(false);
                         }
                     }
@@ -852,8 +851,7 @@ impl CanisterQueues {
         // slot or an enqueued response.
         let Some((input_queue, _)) = self.canister_queues.get_mut(respondent) else {
             return Err(format!(
-                "No input queue for expired callback: {}",
-                callback_id
+                "No input queue for expired callback: {callback_id}"
             ));
         };
 
@@ -872,8 +870,7 @@ impl CanisterQueues {
             // should never happen.
             self.callbacks_with_enqueued_response.remove(&callback_id);
             return Err(format!(
-                "No reserved response slot for expired callback: {}",
-                callback_id
+                "No reserved response slot for expired callback: {callback_id}"
             ));
         }
 
@@ -929,10 +926,11 @@ impl CanisterQueues {
 
             if let Some(msg_) = &msg {
                 if let Some(callback_id) = msg_.response_callback_id() {
-                    assert!(self
-                        .callbacks_with_enqueued_response
-                        .remove(&callback_id)
-                        .is_some());
+                    assert!(
+                        self.callbacks_with_enqueued_response
+                            .remove(&callback_id)
+                            .is_some()
+                    );
                 }
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
@@ -1589,10 +1587,11 @@ impl CanisterQueues {
                 // an active (i.e. existent and not paused/aborted) callback. This is OK, as we
                 // could not have started executing a response (whether reject or reply) for a
                 // request that was still in an output queue.
-                assert!(self
-                    .callbacks_with_enqueued_response
-                    .insert(response.originator_reply_callback, ())
-                    .is_none());
+                assert!(
+                    self.callbacks_with_enqueued_response
+                        .insert(response.originator_reply_callback, ())
+                        .is_none()
+                );
                 let reference = self.store.insert_inbound(response.into());
                 Arc::make_mut(input_queue).push_response(reference);
 
