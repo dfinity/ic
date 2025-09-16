@@ -306,7 +306,7 @@ impl NodeRewardsCanister {
     }
 
     fn is_rewardable_nodes_day_cached(&self, day: &DayUtc) -> bool {
-        self.registry_version_for_day(day).map_or(false, |version| {
+        self.registry_version_for_day(day).is_ok_and(|version| {
             let mut start_key = RewardableNodesKey::min_key();
             start_key.registry_version = version.get();
             let mut end_key = RewardableNodesKey::max_key();
