@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::{DataProvider, PerformanceBasedAlgorithm};
 use crate::types::DayUtc;
@@ -52,15 +50,17 @@ impl RewardsCalculationV1 {
     }
 }
 
+#[cfg(test)]
 mod tests {
-    #![allow(dead_code)]
     use crate::performance_based_algorithm::test_utils::{
         build_daily_metrics, create_rewards_table_for_region_test, generate_rewardable_nodes,
-        test_node_id, test_subnet_id, RewardableNode,
+        test_node_id, test_subnet_id,
     };
     use crate::performance_based_algorithm::v1::RewardsCalculationV1;
-    use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
-    use crate::performance_based_algorithm::{AdjustedRewardsResults, BaseRewardsResults};
+    use crate::performance_based_algorithm::{
+        AdjustedRewardsResults, BaseRewardsResults, PerformanceBasedAlgorithm,
+    };
+    use crate::types::RewardableNode;
     use ic_protobuf::registry::node::v1::NodeRewardType;
     use maplit::btreemap;
     use rust_decimal_macros::dec;

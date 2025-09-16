@@ -53,8 +53,11 @@ async fn main() {
     )
     .await;
     let err_msg = response.unwrap_err();
-    assert!(err_msg
-        .contains("message_inspection_failed: method call is prohibited in the current context"));
+    assert!(
+        err_msg.contains(
+            "message_inspection_failed: method call is prohibited in the current context"
+        )
+    );
     // Initialize metrics extractor for the canister, which helps to make indirect assertions about canister state
     let metrics_extractor = MetricsExtractor {
         canister_id,

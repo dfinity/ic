@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version,
@@ -9,16 +9,15 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::{
-        get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::assert_assigned_replica_version,
 };
 use ic_recovery::{
-    get_node_metrics,
+    RecoveryArgs, get_node_metrics,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     util::DataLocation,
-    RecoveryArgs,
 };
 use ic_system_test_driver::{
     driver::{
@@ -38,7 +37,7 @@ use nested::util::{
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
@@ -66,7 +65,7 @@ pub struct SetupConfig {
 pub struct TestConfig {}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
-    (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
+    (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
 pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
@@ -144,7 +143,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         std::fs::read(&recovery_img_path).expect("Failed to read recovery GuestOS image");
     let recovery_img_hash = Sha256::digest(&recovery_img)
         .iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
     nested::registration(env.clone());
@@ -322,7 +321,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
     }
     info!(
         logger,
@@ -385,7 +384,10 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         handles.join_all().await;
     });
 
-    info!(logger, "Ensure every node uses the new replica version, is healthy and the subnet is making progress");
+    info!(
+        logger,
+        "Ensure every node uses the new replica version, is healthy and the subnet is making progress"
+    );
     let nns_subnet =
         block_on(topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)))
             .expect("Could not obtain updated registry.")

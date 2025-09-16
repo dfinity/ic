@@ -1,6 +1,6 @@
 use crate::eth_rpc::Hash;
 use crate::lifecycle::EthereumNetwork;
-use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
+use crate::logs::{INFO, PrintProxySink, TRACE_HTTP};
 use crate::numeric::TransactionCount;
 use crate::state::State;
 use candid::Nat;

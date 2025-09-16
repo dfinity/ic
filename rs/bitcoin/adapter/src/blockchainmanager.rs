@@ -1,23 +1,24 @@
 use crate::{
-    blockchainstate::{AddHeaderError, BlockchainState},
+    Channel, Command, ProcessNetworkMessageError,
+    blockchainstate::BlockchainState,
     common::{
         BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork, MINIMUM_VERSION_NUMBER,
     },
+    header_cache::AddHeaderError,
     metrics::RouterMetrics,
-    Channel, Command, ProcessNetworkMessageError,
 };
 use bitcoin::{
+    BlockHash,
     block::Header as PureHeader,
     hashes::Hash as _,
     p2p::{
-        message::{NetworkMessage, MAX_INV_SIZE},
+        message::{MAX_INV_SIZE, NetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
     },
-    BlockHash,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -258,9 +259,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
         // If the inv message is received from a peer that is not connected, then reject it.
         trace!(
             self.logger,
-            "Received inv message from {} : Inventory {:?}",
-            addr,
-            inventory
+            "Received inv message from {} : Inventory {:?}", addr, inventory
         );
 
         let peer = self
@@ -358,18 +357,15 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                 None => blockchain_state.get_cached_header(&last_block_hash),
             };
 
-            if let Some(last) = maybe_last_header {
-                if last.height > peer.height {
-                    peer.tip = last.header.block_hash();
-                    peer.height = last.height;
-                    trace!(
-                        self.logger,
-                        "Peer {}'s height = {}, tip = {}",
-                        addr,
-                        peer.height,
-                        peer.tip
-                    );
-                }
+            if let Some(last) = &maybe_last_header
+                && last.data.height > peer.height
+            {
+                peer.tip = last.data.header.block_hash();
+                peer.height = last.data.height;
+                trace!(
+                    self.logger,
+                    "Peer {}'s height = {}, tip = {}", addr, peer.height, peer.tip
+                );
             }
 
             match maybe_err {
@@ -382,6 +378,10 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                 Some(AddHeaderError::PrevHeaderNotCached(stop_hash)) => {
                     Some((blockchain_state.locator_hashes(), stop_hash))
                 }
+                Some(AddHeaderError::Internal(_)) => {
+                    // Error writing the header cache, stop getting more headers
+                    None
+                }
                 None => {
                     if let Some(last) = maybe_last_header {
                         // If the headers length is less than the max headers size (2000), it is likely that the end
@@ -389,7 +389,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                         if headers.len() < MAX_HEADERS_SIZE {
                             None
                         } else {
-                            Some((vec![last.header.block_hash()], BlockHash::all_zeros()))
+                            Some((vec![last.data.header.block_hash()], BlockHash::all_zeros()))
                         }
                     } else {
                         None
@@ -598,9 +598,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
 
             trace!(
                 self.logger,
-                "Sending getdata to {} : Inventory {:?}",
-                peer.socket,
-                selected_inventory
+                "Sending getdata to {} : Inventory {:?}", peer.socket, selected_inventory
             );
 
             //Send 'getdata' request for the inventory to the peer.
@@ -724,7 +722,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
             let mut blockchain = self.blockchain.lock().unwrap();
             let anchor_height = blockchain
                 .get_cached_header(&anchor)
-                .map_or(0, |c| c.height);
+                .map_or(0, |c| c.data.height);
             let filter_height = anchor_height
                 .checked_add(1)
                 .expect("prune by block height: overflow occurred");
@@ -733,11 +731,11 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
             blockchain.prune_blocks_below_height(filter_height);
 
             self.getdata_request_info.retain(|b, _| {
-                blockchain.get_cached_header(b).map_or(0, |c| c.height) >= filter_height
+                blockchain.get_cached_header(b).map_or(0, |c| c.data.height) >= filter_height
             });
 
             self.block_sync_queue.retain(|b| {
-                blockchain.get_cached_header(b).map_or(0, |c| c.height) >= filter_height
+                blockchain.get_cached_header(b).map_or(0, |c| c.data.height) >= filter_height
             });
         };
 
@@ -773,11 +771,11 @@ pub mod test {
     use crate::common::test_common::TestState;
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
-    use bitcoin::{block::Header as BlockHeader, p2p::message::NetworkMessage, BlockHash};
     use bitcoin::{Block, Network};
+    use bitcoin::{BlockHash, block::Header as BlockHeader, p2p::message::NetworkMessage};
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
-        generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
+        BLOCK_1_ENCODED, BLOCK_2_ENCODED, generate_headers, generate_large_block_blockchain,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -907,9 +905,11 @@ pub mod test {
 
         // Add headers to the blockchain state.
         let message = NetworkMessage::Headers(chain.clone());
-        assert!(blockchain_manager
-            .process_bitcoin_network_message(&mut channel, addr1, &message)
-            .is_ok());
+        assert!(
+            blockchain_manager
+                .process_bitcoin_network_message(&mut channel, addr1, &message)
+                .is_ok()
+        );
 
         blockchain_manager.add_peer(&mut channel, &addr2);
         let command = channel
@@ -961,13 +961,15 @@ pub mod test {
         // Remove the `getheaders` message from the channel generated by `add_peer`.
         channel.pop_front();
 
-        assert!(blockchain_manager
-            .process_bitcoin_network_message(
-                &mut channel,
-                sockets[0],
-                &NetworkMessage::Headers(chain.clone())
-            )
-            .is_ok());
+        assert!(
+            blockchain_manager
+                .process_bitcoin_network_message(
+                    &mut channel,
+                    sockets[0],
+                    &NetworkMessage::Headers(chain.clone())
+                )
+                .is_ok()
+        );
 
         assert_eq!(
             blockchain_manager
@@ -993,9 +995,11 @@ pub mod test {
                 .map(|hash| Inventory::Block(*hash))
                 .collect(),
         );
-        assert!(blockchain_manager
-            .process_bitcoin_network_message(&mut channel, sockets[0], &message)
-            .is_ok());
+        assert!(
+            blockchain_manager
+                .process_bitcoin_network_message(&mut channel, sockets[0], &message)
+                .is_ok()
+        );
         if let Some(command) = channel.pop_front() {
             assert_eq!(
                 command.address.unwrap(),
@@ -1346,23 +1350,27 @@ pub mod test {
             .insert(block_1.block_hash());
         assert_eq!(blockchain_manager.block_sync_queue.len(), 1);
 
-        assert!(blockchain_manager
-            .blockchain
-            .lock()
-            .unwrap()
-            .get_block(&block_2_hash)
-            .is_some());
+        assert!(
+            blockchain_manager
+                .blockchain
+                .lock()
+                .unwrap()
+                .get_block(&block_2_hash)
+                .is_some()
+        );
 
         assert_eq!(blockchain_manager.peer_info.len(), 1);
 
         blockchain_manager.make_idle();
         assert_eq!(blockchain_manager.block_sync_queue.len(), 0);
-        assert!(blockchain_manager
-            .blockchain
-            .lock()
-            .unwrap()
-            .get_block(&block_2_hash)
-            .is_none());
+        assert!(
+            blockchain_manager
+                .blockchain
+                .lock()
+                .unwrap()
+                .get_block(&block_2_hash)
+                .is_none()
+        );
         assert_eq!(blockchain_manager.peer_info.len(), 0);
     }
 
@@ -1386,8 +1394,7 @@ pub mod test {
             .collect::<Vec<_>>();
         assert_eq!(
             enqueued_blocks, next_hashes,
-            "{:#?} != {:#?}",
-            enqueued_blocks, next_hashes
+            "{enqueued_blocks:#?} != {next_hashes:#?}"
         );
     }
 
@@ -1419,7 +1426,7 @@ pub mod test {
         {
             let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
-            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            assert_eq!(headers_added.len(), next_headers.len(), "{maybe_err:#?}");
             blockchain.add_block(block).expect("unable to add block");
         }
         blockchain_manager.enqueue_new_blocks_to_download(next_headers);
@@ -1432,8 +1439,7 @@ pub mod test {
             .collect::<Vec<_>>();
         assert_eq!(
             enqueued_blocks, next_hashes,
-            "{:#?} != {:#?}",
-            enqueued_blocks, next_hashes
+            "{enqueued_blocks:#?} != {next_hashes:#?}"
         );
     }
 
@@ -1457,7 +1463,7 @@ pub mod test {
         {
             let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
-            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            assert_eq!(headers_added.len(), next_headers.len(), "{maybe_err:#?}");
             blockchain.add_block(block_3).expect("unable to add block");
         }
 
@@ -1485,12 +1491,14 @@ pub mod test {
                 .expect("next_hashes should contain 1 block hash")
         );
         // Block 3 should be removed from the cache as it is the anchor.
-        assert!(blockchain_manager
-            .blockchain
-            .lock()
-            .unwrap()
-            .get_block(&next_hashes[2])
-            .is_none());
+        assert!(
+            blockchain_manager
+                .blockchain
+                .lock()
+                .unwrap()
+                .get_block(&next_hashes[2])
+                .is_none()
+        );
     }
 
     #[test]
@@ -1514,7 +1522,7 @@ pub mod test {
         {
             let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
-            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            assert_eq!(headers_added.len(), next_headers.len(), "{maybe_err:#?}");
             blockchain.add_block(block_5).expect("unable to add block");
         }
 
@@ -1544,12 +1552,14 @@ pub mod test {
                 .expect("next_hashes should contain 1 block hash")
         );
         // Block 5 should still be in the cache.
-        assert!(blockchain_manager
-            .blockchain
-            .lock()
-            .unwrap()
-            .get_block(&next_hashes[4])
-            .is_some());
+        assert!(
+            blockchain_manager
+                .blockchain
+                .lock()
+                .unwrap()
+                .get_block(&next_hashes[4])
+                .is_some()
+        );
     }
 
     /// Test to check that the retry queue is always used to retrieve the next block hash.
@@ -1626,7 +1636,7 @@ pub mod test {
             let request = blockchain_manager
                 .getheaders_requests
                 .get_mut(&addr)
-                .unwrap_or_else(|| panic!("{} should have a request", addr));
+                .unwrap_or_else(|| panic!("{addr} should have a request"));
             request.sent_at = None;
         }
 

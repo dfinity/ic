@@ -8,10 +8,9 @@
 use candid::Principal;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_management_canister_types::NodeMetrics;
-use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
+use ic_stable_structures::storable::Bound;
 use prost::Message;
-use rewards_calculation::types::SubnetMetricsDailyKey;
 use std::borrow::Cow;
 
 pub mod api_conversion;
@@ -118,15 +117,6 @@ impl From<SubnetId> for pb::v1::SubnetIdKey {
 impl From<pb::v1::SubnetIdKey> for SubnetId {
     fn from(subnet_id: pb::v1::SubnetIdKey) -> Self {
         subnet_id.subnet_id.unwrap().into()
-    }
-}
-
-impl From<pb::v1::SubnetMetricsKey> for SubnetMetricsDailyKey {
-    fn from(key: pb::v1::SubnetMetricsKey) -> Self {
-        Self {
-            day: key.timestamp_nanos.into(),
-            subnet_id: SubnetId::from(key.subnet_id.unwrap()),
-        }
     }
 }
 

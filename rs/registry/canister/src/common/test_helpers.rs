@@ -17,7 +17,7 @@ use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation::Type,
 };
 use ic_registry_transport::{insert, upsert};
 use ic_test_utilities_types::ids::subnet_test_id;

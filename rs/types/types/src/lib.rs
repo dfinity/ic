@@ -94,13 +94,13 @@ pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;
 pub use ic_base_types::{
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId, CanisterIdBlobParseError,
-    NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId, PrincipalIdBlobParseError,
-    PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
+    PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_management_canister_types_private::GlobalTimer;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;

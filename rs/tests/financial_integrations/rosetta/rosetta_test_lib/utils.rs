@@ -2,11 +2,12 @@ use crate::governance_client::GovernanceClient;
 use crate::{ledger_client::LedgerClient, rosetta_client::RosettaApiClient};
 use candid::Principal;
 use ic_icrc1_test_utils::KeyPairGenerator;
-use ic_ledger_core::{block::BlockIndex, Tokens};
+use ic_ledger_core::{Tokens, block::BlockIndex};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{Neuron, neuron::DissolveState};
 use ic_rosetta_api::{
+    DEFAULT_TOKEN_SYMBOL,
     convert::{
         from_hex, from_model_account_identifier, from_transaction_operation_results,
         neuron_account_from_public_key, neuron_subaccount_bytes_from_public_key,
@@ -16,16 +17,17 @@ use ic_rosetta_api::{
     errors,
     errors::ApiError,
     models::{
-        amount::{signed_amount, tokens_to_amount},
-        operation::OperationType,
         ConstructionCombineResponse, ConstructionParseResponse,
         ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
         ConstructionSubmitResponse, CurveType, Error, Error as RosettaError, PublicKey, Signature,
         SignatureType, SignedTransaction,
+        amount::{signed_amount, tokens_to_amount},
+        operation::OperationType,
     },
     request::{
-        request_result::RequestResult, transaction_operation_results::TransactionOperationResults,
-        transaction_results::TransactionResults, Request,
+        Request, request_result::RequestResult,
+        transaction_operation_results::TransactionOperationResults,
+        transaction_results::TransactionResults,
     },
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
@@ -33,19 +35,18 @@ use ic_rosetta_api::{
         Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
     transaction_id::TransactionIdentifier,
-    DEFAULT_TOKEN_SYMBOL,
 };
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_types::{time, PrincipalId};
+use ic_types::{PrincipalId, time};
 use icp_ledger::{AccountIdentifier, Operation};
-use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom, thread_rng};
 use rosetta_core::{
     convert::principal_id_from_public_key,
     models::{RosettaSupportedKeyPair, Secp256k1KeyPair},
     objects::ObjectMap,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     str::FromStr,
@@ -253,7 +254,7 @@ where
         let rs1: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
         let rs2 = operations_to_requests(&parse_response.operations, false, DEFAULT_TOKEN_SYMBOL)
             .unwrap();
-        assert_eq!(rs1, rs2, "Requests differs: {:?} vs {:?}", rs1, rs2);
+        assert_eq!(rs1, rs2, "Requests differs: {rs1:?} vs {rs2:?}");
     }
 
     if !accept_suggested_fee {
@@ -543,7 +544,7 @@ where
                     CurveType::Secp256K1 => Ok(SignatureType::Ecdsa),
                     sig_type => Err(ApiError::InvalidRequest(
                         false,
-                        format!("Sginature Type {} not supported byt rosetta", sig_type).into(),
+                        format!("Sginature Type {sig_type} not supported byt rosetta").into(),
                     )),
                 }
                 .unwrap(),
@@ -734,8 +735,7 @@ pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
 
     assert_eq!(
         err.0.code, code,
-        "rosetta error {:?} does not have code: {}",
-        err, code
+        "rosetta error {err:?} does not have code: {code}"
     );
     let details = err.0.details.as_ref().unwrap();
     assert!(
@@ -745,9 +745,7 @@ pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
             .as_str()
             .unwrap()
             .contains(text),
-        "rosetta error {:?} does not contain '{}'",
-        err,
-        text
+        "rosetta error {err:?} does not contain '{text}'"
     );
 }
 
@@ -796,9 +794,7 @@ pub async fn raw_construction(ros: &RosettaApiClient, operation: &str, req: Valu
     let output: ObjectMap = serde_json::from_slice(&res.0).unwrap();
     assert!(
         res.1.is_success(),
-        "Result of {} should be a success, got: {:?}",
-        operation,
-        output
+        "Result of {operation} should be a success, got: {output:?}"
     );
     output
 }

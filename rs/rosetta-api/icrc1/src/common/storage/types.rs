@@ -13,8 +13,8 @@ use icrc_ledger_types::{
     icrc1::{account::Account, transfer::Memo},
 };
 use rosetta_core::identifiers::BlockIdentifier;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
 use rusqlite::ToSql;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
 use serde::ser::StdError;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
@@ -410,7 +410,9 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                 })
             }
             found => {
-                bail!("Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}")
+                bail!(
+                    "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
+                )
             }
         }
     }
@@ -617,8 +619,8 @@ mod tests {
         generic_transaction_from_generic_block,
     };
     use ic_icrc1_test_utils::blocks_strategy;
-    use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
+    use ic_icrc1_tokens_u256::U256;
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::BlockType;
     use ic_ledger_core::tokens::TokensType;

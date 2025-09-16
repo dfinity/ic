@@ -4,11 +4,11 @@ use ic_interfaces::{
     validation::ValidationError,
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    batch::slice_to_messages, consensus::idkg::VetKdKeyShare,
-    crypto::vetkd::VetKdEncryptedKeyShare, messages::CallbackId, NodeId,
+    NodeId, batch::slice_to_messages, consensus::idkg::VetKdKeyShare,
+    crypto::vetkd::VetKdEncryptedKeyShare, messages::CallbackId,
 };
 use std::collections::{BTreeMap, HashSet};
 

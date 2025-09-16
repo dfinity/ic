@@ -2,10 +2,10 @@ use super::*;
 use ic_base_types::NumSeconds;
 use ic_canonical_state::MAX_SUPPORTED_CERTIFICATION_VERSION;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
+use ic_replicated_state::{ReplicatedState, Stream, testing::ReplicatedStateTesting};
 use ic_test_utilities_state::{arb_stream, new_canister_state};
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
-use ic_types::{xnet::StreamSlice, Cycles};
+use ic_types::{Cycles, xnet::StreamSlice};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -48,8 +48,7 @@ fn stream_encode_decode_roundtrip(
     assert_eq!(
         decode_stream_slice(&bytes[..]),
         Ok((subnet, stream_slice)),
-        "failed to decode tree {:?}",
-        tree_encoding
+        "failed to decode tree {tree_encoding:?}"
     );
 }
 
@@ -97,6 +96,6 @@ fn stream_encode_with_size_limit(
                 None => assert_eq!(stream_slice, actual_slice),
             }
         }
-        Err(e) => panic!("Failed to decode tree {:?}: {}", tree_encoding, e),
+        Err(e) => panic!("Failed to decode tree {tree_encoding:?}: {e}"),
     }
 }

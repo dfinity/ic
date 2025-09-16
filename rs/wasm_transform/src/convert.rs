@@ -21,8 +21,7 @@ pub(super) mod parser_to_internal {
         let rest = ops.next();
         let (Some(first), Some(Ok(wasmparser::Operator::End)), None) = (first, end, rest) else {
             return Err(Error::ConversionError(format!(
-                "Invalid const expression: {:?}",
-                const_expr
+                "Invalid const expression: {const_expr:?}"
             )));
         };
         use wasmparser::Operator::*;
@@ -43,8 +42,7 @@ pub(super) mod parser_to_internal {
             | RefFunc { .. }
             | GlobalGet { .. } => Ok(first),
             other => Err(Error::ConversionError(format!(
-                "Invalid const expression operator: {:?}",
-                other
+                "Invalid const expression operator: {other:?}"
             ))),
         }
     }
@@ -123,7 +121,7 @@ pub(super) mod internal_to_encoder {
             wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,
             wasmparser::BlockType::Type(ty) => {
                 wasm_encoder::BlockType::Result(wasm_encoder::ValType::try_from(ty).map_err(
-                    |_err| Error::ConversionError(format!("Failed to convert type: {:?}", ty)),
+                    |_err| Error::ConversionError(format!("Failed to convert type: {ty:?}")),
                 )?)
             }
             wasmparser::BlockType::FuncType(f) => wasm_encoder::BlockType::FunctionType(f),

@@ -13,7 +13,7 @@ use crate::{
 };
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
@@ -26,14 +26,14 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
 use ic_types::{
-    crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgTag, NiDkgTargetId},
-            ThresholdSigPublicKey, ThresholdSigPublicKeyBytesConversionError,
-        },
-        CryptoError,
-    },
     Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
+    crypto::{
+        CryptoError,
+        threshold_sig::{
+            ThresholdSigPublicKey, ThresholdSigPublicKeyBytesConversionError,
+            ni_dkg::{NiDkgTag, NiDkgTargetId},
+        },
+    },
 };
 use serde::Deserialize;
 use thiserror::Error;
