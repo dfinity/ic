@@ -10,6 +10,7 @@ use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
+use ic_cdk::management_canister::SignCallError;
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult,
 };
@@ -40,6 +41,24 @@ impl CallError {
         CallError {
             method: String::from(method),
             reason: Reason::from_reject(code, msg),
+        }
+    }
+
+    pub fn from_sign_error(error: SignCallError) -> Self {
+        let reason = match error {
+            SignCallError::SignCostError(e) => {
+                //no signatures were made
+                Reason::Rejected(e.to_string())
+            }
+            SignCallError::CallFailed(e) => {
+                //no signatures were made
+                Reason::Rejected(e.to_string())
+            }
+            SignCallError::CandidDecodeFailed(e) => Reason::CanisterError(e.to_string()),
+        };
+        Self {
+            method: "sign_with_ecdsa".to_string(),
+            reason,
         }
     }
 }

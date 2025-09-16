@@ -10,6 +10,7 @@ use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::bitcoin;
+use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -1506,21 +1507,17 @@ impl CanisterRuntime for IcCanisterRuntime {
         derivation_path: DerivationPath,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        use ic_cdk::api::management_canister::ecdsa::{
-            EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
-        };
-
-        ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
+        ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
             message_hash: message_hash.to_vec(),
             derivation_path: derivation_path.into_inner(),
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
+            key_id: ic_cdk::management_canister::EcdsaKeyId {
+                curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
                 name: key_name.clone(),
             },
         })
         .await
-        .map(|(result,)| result.signature)
-        .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
+        .map(|result| result.signature)
+        .map_err(CallError::from_sign_error)
     }
 
     async fn send_transaction(
