@@ -73,7 +73,12 @@ impl ConnectionHandle {
             observe_conn_error(err, "open_bi", &self.metrics.connection_handle_errors_total);
         })?;
 
-        let mut send_stream_guard = ResetStreamOnDrop::new(send_stream);
+        let mut send_stream_guard = ResetStreamOnDrop::new(
+            send_stream,
+            self.metrics
+                .connection_handle_outgoing_streams_total
+                .clone(),
+        );
         let send_stream = &mut send_stream_guard.send_stream;
 
         let priority = request
@@ -185,6 +190,7 @@ mod tests {
     use ic_p2p_test_utils::{
         SkipServerVerification, generate_self_signed_cert, turmoil::CustomUdp,
     };
+    use prometheus::IntGauge;
     use quinn::{
         ClientConfig, Endpoint, EndpointConfig, ReadError, ReadToEndError,
         crypto::rustls::QuicClientConfig,
@@ -296,7 +302,9 @@ mod tests {
                 .unwrap();
 
             let (send_stream, _recv_stream) = connection.open_bi().await.unwrap();
-            let mut drop_guard = ResetStreamOnDrop::new(send_stream);
+            let metric = IntGauge::new("test", "test").unwrap();
+            let mut drop_guard = ResetStreamOnDrop::new(send_stream, metric.clone());
+            assert_eq!(metric.get(), 1);
             let send_stream = &mut drop_guard.send_stream;
             send_stream
                 .write_chunk(Bytes::from(&b"hello wo"[..]))
@@ -314,6 +322,7 @@ mod tests {
             };
 
             drop(drop_guard);
+            assert_eq!(metric.get(), 0);
             client_completed.wait().await;
 
             Ok(())
