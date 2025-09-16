@@ -7,7 +7,7 @@
 //! -x target not stopped
 //! - not enough cycles for migration
 //! -x rate-limited
-//! - disabled
+//! -x disabled
 //!
 
 use std::time::Duration;
@@ -379,6 +379,34 @@ async fn validation_fails_rate_limited() {
     .unwrap();
 
     let Err(ValidationError::RateLimited) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+}
+
+#[tokio::test]
+async fn validation_fails_disabled() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        system_controller,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    // disable canister API
+    pic.update_call(
+        MIGRATION_CANISTER_ID.into(),
+        system_controller,
+        "disable_api",
+        Encode!().unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let Err(ValidationError::MigrationsDisabled) =
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
     else {
         panic!()
