@@ -36,8 +36,10 @@ fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
 
     let pop = pop.serialize();
 
-    assert_eq!(hex::encode(pop.pop_key),
-               "a915dacc6fdafdd3774d4906354c75c500ad13197852947a1cbe59617b07e450e89c2443b048ec1c52007e051a9eeeff");
+    assert_eq!(
+        hex::encode(pop.pop_key),
+        "a915dacc6fdafdd3774d4906354c75c500ad13197852947a1cbe59617b07e450e89c2443b048ec1c52007e051a9eeeff"
+    );
     assert_eq!(
         hex::encode(pop.challenge),
         "3432885d429c95abef62b00ff3d2cbce64d4563eb84bac2f5d4c1ed877e9cde0"

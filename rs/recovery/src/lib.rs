@@ -21,10 +21,10 @@ use ic_replay::{
     cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
     player::StateParams,
 };
-use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
+use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use ssh_helper::SshHelper;
 use std::{env, io::ErrorKind};
 use std::{
@@ -37,7 +37,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str, DataLocation};
+use util::{DataLocation, block_on, parse_hex_str};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -412,8 +412,7 @@ impl Recovery {
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
         let version_record = format!(
-            r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
-            sha256, upgrade_url
+            r#"{{ "release_package_sha256_hex": "{sha256}", "release_package_urls": ["{upgrade_url}"] }}"#
         );
         Ok(self.get_replay_step(
             subnet_id,
@@ -424,8 +423,7 @@ impl Recovery {
                     update_subnet_record: true,
                 }),
                 descr: format!(
-                    r#" add-and-bless-replica-version --update-subnet-record "{}" {}"#,
-                    upgrade_version, version_record
+                    r#" add-and-bless-replica-version --update-subnet-record "{upgrade_version}" {version_record}"#
                 ),
             }),
             None,
@@ -445,7 +443,7 @@ impl Recovery {
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
-            RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
+            RecoveryError::invalid_output_error(format!("Failed to parse canister id: {e}"))
         })?;
         Ok(self.get_replay_step(
             subnet_id,
@@ -551,20 +549,17 @@ impl Recovery {
     /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
     pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
         let version_string = version.to_string();
-        let url_base = format!(
-            "https://download.dfinity.systems/ic/{}/guest-os/update-img/",
-            version_string
-        );
+        let url_base =
+            format!("https://download.dfinity.systems/ic/{version_string}/guest-os/update-img/");
 
         let image_name = "update-img.tar.zst";
-        let upgrade_url_string = format!("{}{}", url_base, image_name);
-        let invalid_url = |url, e| {
-            RecoveryError::invalid_output_error(format!("Invalid Url string: {}, {}", url, e))
-        };
+        let upgrade_url_string = format!("{url_base}{image_name}");
+        let invalid_url =
+            |url, e| RecoveryError::invalid_output_error(format!("Invalid Url string: {url}, {e}"));
         let upgrade_url =
             Url::parse(&upgrade_url_string).map_err(|e| invalid_url(upgrade_url_string, e))?;
 
-        let sha_url_string = format!("{}SHA256SUMS", url_base);
+        let sha_url_string = format!("{url_base}SHA256SUMS");
         let sha_url = Url::parse(&sha_url_string).map_err(|e| invalid_url(sha_url_string, e))?;
 
         // fetch the `SHA256SUMS` file
@@ -689,36 +684,34 @@ impl Recovery {
     /// Returns the status of a replica. It is requested from a public API.
     pub async fn get_replica_status(url: Url) -> RecoveryResult<HttpStatusResponse> {
         let joined_url = url.clone().join("api/v2/status").map_err(|e| {
-            RecoveryError::invalid_output_error(format!("failed to join URLs: {}", e))
+            RecoveryError::invalid_output_error(format!("failed to join URLs: {e}"))
         })?;
 
         let response = reqwest::Client::builder()
             .timeout(time::Duration::from_secs(6))
             .build()
             .map_err(|e| {
-                RecoveryError::invalid_output_error(format!("cannot build a reqwest client: {}", e))
+                RecoveryError::invalid_output_error(format!("cannot build a reqwest client: {e}"))
             })?
             .get(joined_url)
             .send()
             .await
             .map_err(|err| {
-                RecoveryError::invalid_output_error(format!("Failed to create request: {}", err))
+                RecoveryError::invalid_output_error(format!("Failed to create request: {err}"))
             })?;
 
         let cbor_response = serde_cbor::from_slice(&response.bytes().await.map_err(|e| {
             RecoveryError::invalid_output_error(format!(
-                "failed to convert a response to bytes: {}",
-                e
+                "failed to convert a response to bytes: {e}"
             ))
         })?)
         .map_err(|e| {
-            RecoveryError::invalid_output_error(format!("response is not encoded as cbor: {}", e))
+            RecoveryError::invalid_output_error(format!("response is not encoded as cbor: {e}"))
         })?;
 
         serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response).map_err(|e| {
             RecoveryError::invalid_output_error(format!(
-                "failed to deserialize a response to HttpStatusResponse: {}",
-                e
+                "failed to deserialize a response to HttpStatusResponse: {e}"
             ))
         })
     }
@@ -738,10 +731,9 @@ impl Recovery {
         recovery_height: Height,
         state_hash: String,
     ) -> RecoveryResult<()> {
-        let node_url = Url::parse(&format!("http://[{}]:8080/", node_ip)).map_err(|err| {
+        let node_url = Url::parse(&format!("http://[{node_ip}]:8080/")).map_err(|err| {
             RecoveryError::invalid_output_error(format!(
-                "Could not parse node URL for IP {}: {}",
-                node_ip, err
+                "Could not parse node URL for IP {node_ip}: {err}"
             ))
         })?;
 
@@ -855,7 +847,7 @@ impl Recovery {
             .arg("-cvf")
             .arg(
                 self.work_dir
-                    .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE)),
+                    .join(format!("{IC_REGISTRY_LOCAL_STORE}.tar.zst")),
             )
             .arg(".");
 
@@ -955,7 +947,7 @@ impl Recovery {
 pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {
     let response = tokio::time::timeout(
         Duration::from_secs(5),
-        reqwest::get(format!("http://[{}]:9090", ip)),
+        reqwest::get(format!("http://[{ip}]:9090")),
     )
     .await;
     let res = match response {
@@ -1044,8 +1036,7 @@ pub fn get_member_ips(
 
     let Some(node_ids) = node_ids else {
         return Err(RecoveryError::RegistryError(format!(
-            "no node ids found in the registry version {} for subnet_id {}",
-            registry_version, subnet_id
+            "no node ids found in the registry version {registry_version} for subnet_id {subnet_id}"
         )));
     };
 
@@ -1061,8 +1052,7 @@ pub fn get_member_ips(
             node_record.http.map(|http| {
                 http.ip_addr.parse().map_err(|err| {
                     RecoveryError::UnexpectedError(format!(
-                        "couldn't parse ip address from the registry: {:?}",
-                        err
+                        "couldn't parse ip address from the registry: {err:?}"
                     ))
                 })
             })

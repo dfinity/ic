@@ -99,32 +99,27 @@ fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
     let test_cases = [
         (
             None,
-            Err(vec!["neuron_minimum_dissolve_delay_to_vote_seconds must be set.".to_string()]),
+            Err(vec![
+                "neuron_minimum_dissolve_delay_to_vote_seconds must be set.".to_string(),
+            ]),
         ),
         (
             Some(LOWER_BOUND_SECONDS - 1),
-            Err(vec![
-                format!("neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.", LOWER_BOUND_SECONDS -1)
-            ]),
+            Err(vec![format!(
+                "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.",
+                LOWER_BOUND_SECONDS - 1
+            )]),
         ),
         (
             Some(UPPER_BOUND_SECONDS + 1),
-            Err(vec![
-                format!("neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.", UPPER_BOUND_SECONDS + 1)
-            ]),
+            Err(vec![format!(
+                "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.",
+                UPPER_BOUND_SECONDS + 1
+            )]),
         ),
-        (
-            Some(DEFAULT_SECONDS),
-            Ok(()),
-        ),
-        (
-            Some(LOWER_BOUND_SECONDS),
-            Ok(()),
-        ),
-        (
-            Some(UPPER_BOUND_SECONDS),
-            Ok(()),
-        ),
+        (Some(DEFAULT_SECONDS), Ok(())),
+        (Some(LOWER_BOUND_SECONDS), Ok(())),
+        (Some(UPPER_BOUND_SECONDS), Ok(())),
     ];
 
     for (delay_seconds, expected_result) in test_cases {

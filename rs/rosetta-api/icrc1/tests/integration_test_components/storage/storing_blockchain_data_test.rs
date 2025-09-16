@@ -4,20 +4,20 @@ use crate::common::local_replica::create_and_install_custom_icrc_ledger;
 use crate::common::local_replica::test_identity;
 use crate::common::local_replica::{create_and_install_icrc_ledger, get_custom_agent};
 use candid::{Decode, Encode, Nat};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::PrincipalId;
+use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
+use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, RecurrencyMode};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::InitArgsBuilder;
 use ic_icrc1_ledger::Tokens;
+use ic_icrc1_test_utils::ArgWithCaller;
+use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::valid_transactions_strategy;
-use ic_icrc1_test_utils::ArgWithCaller;
-use ic_icrc1_test_utils::LedgerEndpointArg;
-use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
-use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
-use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, RecurrencyMode};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_agent::CallMode;
@@ -330,10 +330,12 @@ fn test_burn_and_mint_fee() {
                 .unwrap(),
             Nat::from(850u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
         );
-        assert!(storage_client
-            .get_account_balance(&FEE_COLLECTOR)
-            .unwrap()
-            .is_none()); // no fee collector in the first 2 blocks
+        assert!(
+            storage_client
+                .get_account_balance(&FEE_COLLECTOR)
+                .unwrap()
+                .is_none()
+        ); // no fee collector in the first 2 blocks
 
         // Create mint and burn blocks with fees and fee collector, and add them to the ledger
         let block2 = BlockBuilder::new(2, 3000)

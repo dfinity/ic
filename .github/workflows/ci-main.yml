@@ -90,6 +90,20 @@ jobs:
           fi
 
 
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
+              skip_didc_checks="true"
+          else
+              skip_didc_checks="false"
+          fi
+
+
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
+              skip_buf_checks="true"
+          else
+              skip_buf_checks="false"
+          fi
+
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -108,6 +122,14 @@ jobs:
           echo "full_macos_build: $full_macos_build"
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_didc_checks: $skip_didc_checks"
+          echo "skip_didc_checks=$skip_didc_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_didc_checks\` | \`$skip_didc_checks\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_buf_checks: $skip_buf_checks"
+          echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
@@ -118,10 +140,6 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 150
-    env:
-      # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-      OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-      CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -166,6 +184,12 @@ jobs:
             targets_args=()
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
+            fi
+            if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_didc_checks")
+            fi
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_buf_checks")
             fi
             if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
               targets_args+=(
@@ -268,6 +292,11 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
+      # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
+      # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
+      - name: Install lld
+        run: |
+          sudo apt install lld
       - name: Build and Test
         run: |
           # run pocket-ic tests

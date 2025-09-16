@@ -18,10 +18,7 @@ impl Registry {
         &mut self,
         payload: DeployGuestosToAllUnassignedNodesPayload,
     ) {
-        println!(
-            "{}do_deploy_guestos_to_all_unassigned_nodes: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_deploy_guestos_to_all_unassigned_nodes: {payload:?}");
 
         let update_unassigned_nodes_config_payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: None,

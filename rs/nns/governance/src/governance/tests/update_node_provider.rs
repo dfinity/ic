@@ -2,7 +2,7 @@ use crate::governance::tests::{MockEnvironment, StubCMC, StubIcpLedger};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
-    pb::v1::{governance_error::ErrorType, UpdateNodeProvider},
+    pb::v1::{UpdateNodeProvider, governance_error::ErrorType},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::NodeProvider;
@@ -50,7 +50,7 @@ fn test_update_node_provider_with_valid_reward_account_right_length() {
     let result = governance.update_node_provider(&node_provider_id, update);
 
     // Assert
-    assert!(result.is_ok(), "Expected update to succeed: {:?}", result);
+    assert!(result.is_ok(), "Expected update to succeed: {result:?}");
 
     // Verify the reward account was updated
     let updated_node_provider = governance.get_node_provider(&node_provider_id).unwrap();
@@ -83,9 +83,11 @@ fn test_update_node_provider_with_invalid_reward_account_bad_checksum() {
     let error = result.unwrap_err();
     assert_eq!(error.error_type(), ErrorType::PreconditionFailed);
     assert!(error.error_message.contains("Invalid reward_account"));
-    assert!(error
-        .error_message
-        .contains("account identifier is not valid"));
+    assert!(
+        error
+            .error_message
+            .contains("account identifier is not valid")
+    );
 }
 
 #[test]

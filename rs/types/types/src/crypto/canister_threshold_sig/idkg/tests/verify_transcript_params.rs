@@ -229,7 +229,7 @@ fn should_fail_on_ineligible_signer() {
 
     assert_matches!(result, Err(e)
             if e.contains(&format!("ineligible signers (non-receivers) for \
-                           dealer index {}: {{{}}}", first_dealer_index, non_receiver))
+                           dealer index {first_dealer_index}: {{{non_receiver}}}"))
     );
 }
 

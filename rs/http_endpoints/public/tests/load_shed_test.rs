@@ -1,9 +1,9 @@
 pub mod common;
 
 use crate::common::{
-    default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, HttpEndpointBuilder,
-    MockIngressPoolThrottler,
+    HttpEndpointBuilder, MockIngressPoolThrottler, default_certified_state_reader,
+    default_get_latest_state, default_latest_certified_height, default_read_certified_state,
+    get_free_localhost_socket_addr,
 };
 use async_trait::async_trait;
 use axum::body::Body;
@@ -14,7 +14,7 @@ use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::read_state;
 use ic_http_endpoints_test_agent::{
-    self, wait_for_status_healthy, Call, CanisterReadState, IngressMessage, Query,
+    self, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
@@ -23,8 +23,8 @@ use ic_types::{ingress::WasmResult, time::current_time};
 use rstest::rstest;
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -88,8 +88,7 @@ fn test_load_shedding_query(
         assert_eq!(
             StatusCode::OK,
             response.status(),
-            "Received unexpected response: {:?}",
-            response
+            "Received unexpected response: {response:?}"
         );
 
         let response = load_shedded_request.await.unwrap();
@@ -303,7 +302,7 @@ fn test_load_shedding_pprof() {
     let pprof_base_req = move || {
         Request::builder()
             .method(Method::GET)
-            .uri(format!("http://{}/_/pprof", addr))
+            .uri(format!("http://{addr}/_/pprof"))
             .body(Body::empty())
             .expect("request builder")
     };

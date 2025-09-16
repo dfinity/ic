@@ -33,7 +33,7 @@ mod tests;
 
 use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve, HashToField};
 use itertools::multiunzip;
-use pairing::group::{ff::Field, Group};
+use pairing::group::{Group, ff::Field};
 use paste::paste;
 use rand::{CryptoRng, Rng, RngCore};
 use std::sync::Arc;

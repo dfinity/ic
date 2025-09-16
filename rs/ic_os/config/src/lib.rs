@@ -5,7 +5,7 @@ pub mod setupos;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::Path;
 

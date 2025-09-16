@@ -486,11 +486,7 @@ pub fn cost_sign_with_ecdsa(data: &[u8], ecdsa_curve: u32) -> Result<Vec<u8>, u3
             bytes.as_mut_ptr() as u32,
         )
     };
-    if result == 0 {
-        Ok(bytes)
-    } else {
-        Err(result)
-    }
+    if result == 0 { Ok(bytes) } else { Err(result) }
 }
 pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Result<Vec<u8>, u32> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
@@ -502,11 +498,7 @@ pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Result<Vec<u8>, u3
             bytes.as_mut_ptr() as u32,
         )
     };
-    if result == 0 {
-        Ok(bytes)
-    } else {
-        Err(result)
-    }
+    if result == 0 { Ok(bytes) } else { Err(result) }
 }
 pub fn cost_vetkd_derive_key(data: &[u8], vetkd_curve: u32) -> Result<Vec<u8>, u32> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
@@ -518,11 +510,7 @@ pub fn cost_vetkd_derive_key(data: &[u8], vetkd_curve: u32) -> Result<Vec<u8>, u
             bytes.as_mut_ptr() as u32,
         )
     };
-    if result == 0 {
-        Ok(bytes)
-    } else {
-        Err(result)
-    }
+    if result == 0 { Ok(bytes) } else { Err(result) }
 }
 
 use std::panic;

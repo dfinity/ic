@@ -78,7 +78,9 @@ impl DashboardClient {
                     continue;
                 }
                 error_status => {
-                    panic!("Error when retrieving proposal {proposal_id}. Received response {response:?} with status code {error_status}")
+                    panic!(
+                        "Error when retrieving proposal {proposal_id}. Received response {response:?} with status code {error_status}"
+                    )
                 }
             }
         }

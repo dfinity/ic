@@ -1,14 +1,14 @@
 use crate::{
     governance::{
-        test_data::CREATE_SERVICE_NERVOUS_SYSTEM, Governance,
-        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, Governance,
+        test_data::CREATE_SERVICE_NERVOUS_SYSTEM,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
-        manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-        proposal::Action,
         ExecuteNnsFunction, Followees, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics,
         NnsFunction, Proposal, ProposalRewardStatus, ProposalStatus, Topic, WaitForQuietState,
+        manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
+        proposal::Action,
     },
     test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
@@ -19,8 +19,8 @@ use futures::FutureExt;
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
-    proposal::Action as ApiAction, Governance as ApiGovernance, ListProposalInfoResponse,
-    NetworkEconomics as ApiNetworkEconomics, ProposalInfo, Vote,
+    Governance as ApiGovernance, ListProposalInfoResponse, NetworkEconomics as ApiNetworkEconomics,
+    ProposalInfo, Vote, proposal::Action as ApiAction,
 };
 use ic_types::PrincipalId;
 use lazy_static::lazy_static;
@@ -638,8 +638,7 @@ fn test_omit_large_fields() {
     );
     assert!(
         create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 
     let response = governance.list_proposals(
@@ -651,8 +650,7 @@ fn test_omit_large_fields() {
     );
     assert!(
         create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 
     let response = governance.list_proposals(
@@ -664,7 +662,6 @@ fn test_omit_large_fields() {
     );
     assert!(
         !create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 }

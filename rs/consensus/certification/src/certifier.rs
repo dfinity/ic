@@ -1,7 +1,7 @@
 use crate::{CertificationCrypto, VerifierImpl};
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, aggregate, bouncer_metrics::BouncerMetrics,
-    membership::Membership, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
+    MINIMUM_CHAIN_LENGTH, active_high_threshold_nidkg_id, aggregate,
+    bouncer_metrics::BouncerMetrics, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},
@@ -11,20 +11,20 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, error, trace, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, debug, error, trace};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CryptoHashOfPartialState, Height,
     artifact::CertificationMessageId,
     consensus::{
+        Committee, HasCommittee, HasHeight,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
-        Committee, HasCommittee, HasHeight,
     },
     crypto::Signed,
     replica_config::ReplicaConfig,
-    CryptoHashOfPartialState, Height,
 };
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{cell::RefCell, sync::Arc, time::Instant};
@@ -500,7 +500,7 @@ impl CertifierImpl {
         ) {
             Ok(()) => Some(ChangeAction::MoveToValidated(msg)),
             Err(ValidationError::InvalidArtifact(err)) => {
-                Some(ChangeAction::HandleInvalid(msg, format!("{:?}", err)))
+                Some(ChangeAction::HandleInvalid(msg, format!("{err:?}")))
             }
             Err(ValidationError::ValidationFailed(err)) => {
                 debug!(
@@ -575,7 +575,7 @@ impl CertifierImpl {
                     {
                         Ok(()) => ChangeAction::MoveToValidated(msg),
                         Err(ValidationError::InvalidArtifact(err)) => {
-                            ChangeAction::HandleInvalid(msg, format!("{:?}", err))
+                            ChangeAction::HandleInvalid(msg, format!("{err:?}"))
                         }
                         Err(ValidationError::ValidationFailed(err)) => {
                             debug!(self.log, "Couldn't verify share signature: {:?}", err);
@@ -592,7 +592,7 @@ impl CertifierImpl {
 mod tests {
     use super::*;
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_interfaces::{
         certification::CertificationPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -601,18 +601,18 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        CryptoHashOfPartialState, Height,
         artifact::CertificationMessageId,
         consensus::certification::{
             Certification, CertificationContent, CertificationMessage, CertificationMessageHash,
             CertificationShare,
         },
         crypto::{
-            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             CryptoHash, CryptoHashOf,
+            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         },
         signature::*,
         time::UNIX_EPOCH,
-        CryptoHashOfPartialState, Height,
     };
 
     fn to_unvalidated(message: CertificationMessage) -> UnvalidatedArtifact<CertificationMessage> {
@@ -1280,12 +1280,7 @@ mod tests {
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
 
-                assert_eq!(
-                    change_set.len(),
-                    2,
-                    "unexpected changeset: {:?}",
-                    change_set
-                );
+                assert_eq!(change_set.len(), 2, "unexpected changeset: {change_set:?}");
 
                 assert!(
                     change_set

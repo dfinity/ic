@@ -42,7 +42,7 @@ impl FromStr for StateSource {
             "fiduciary" => Ok(StateSource::Fiduciary),
             "nns" => Ok(StateSource::Nns),
             "sns" => Ok(StateSource::Sns),
-            _ => Err(format!("Unknown state source: {}", s)),
+            _ => Err(format!("Unknown state source: {s}")),
         }
     }
 }
@@ -65,8 +65,7 @@ pub fn maybe_download_and_untar_golden_state_or_panic(state_source: StateSource)
             let destination_dir = TempDir::new_in(&existing_state_dir).unwrap();
             if !existing_state.exists() {
                 panic!(
-                    "USE_EXISTING_STATE_DIR is set to {:?}, but {:?} does not exist",
-                    existing_state_dir_name, existing_state
+                    "USE_EXISTING_STATE_DIR is set to {existing_state_dir_name:?}, but {existing_state:?} does not exist"
                 );
             }
             std::fs::rename(&existing_state, &destination_dir).unwrap();
@@ -95,7 +94,7 @@ fn download_and_untar_golden_state_or_panic(state_source: StateSource) -> TempDi
 
 pub fn download_golden_state_or_panic(state_source: StateSource, destination: &Path) {
     let source = state_source.to_argument();
-    println!("Downloading {} to {:?} ...", source, destination);
+    println!("Downloading {source} to {destination:?} ...");
 
     // Actually download.
     let scp_out = Command::new("scp")
@@ -105,23 +104,23 @@ pub fn download_golden_state_or_panic(state_source: StateSource, destination: &P
         .arg(source.clone())
         .arg(destination)
         .output()
-        .unwrap_or_else(|err| panic!("Could not scp from {:?} because: {:?}!", source, err));
+        .unwrap_or_else(|err| panic!("Could not scp from {source:?} because: {err:?}!"));
 
     // Inspect result.
     if !scp_out.status.success() {
-        panic!("Could not scp from {}\n{:#?}", source, scp_out);
+        panic!("Could not scp from {source}\n{scp_out:#?}");
     }
 
     let size = std::fs::metadata(destination)
         .map(|metadata| {
             let len = metadata.len() as f64;
             let len = len / (1 << 30) as f64;
-            format!("{:.2} GiB", len)
+            format!("{len:.2} GiB")
         })
         .unwrap_or_else(|_err| "???".to_string());
 
     let destination = destination.to_string_lossy();
-    println!("Downloaded {} to {}. size = {}", source, destination, size);
+    println!("Downloaded {source} to {destination}. size = {size}");
 }
 
 pub fn untar_state_archive_or_panic(
@@ -130,10 +129,7 @@ pub fn untar_state_archive_or_panic(
     state_dir: &str,
     create_temp_dir: impl Fn() -> TempDir,
 ) {
-    println!(
-        "Unpacking {} from {:?} to {:?}...",
-        state_dir, source, destination
-    );
+    println!("Unpacking {state_dir} from {source:?} to {destination:?}...");
 
     // TODO: Mathias reports having problems with this (or something similar) on Mac.
     let unpack_destination = create_temp_dir();
@@ -148,23 +144,20 @@ pub fn untar_state_archive_or_panic(
         .arg("--directory")
         .arg(unpack_destination)
         .output()
-        .unwrap_or_else(|err| panic!("Could not unpack {:?}: {}", source, err));
+        .unwrap_or_else(|err| panic!("Could not unpack {source:?}: {err}"));
 
     if !tar_out.status.success() {
-        panic!("Could not unpack {:?}\n{:#?}", source, tar_out);
+        panic!("Could not unpack {source:?}\n{tar_out:#?}");
     }
 
     // Move $UNTAR_DESTINATION/nns_state/ic_state to final output dir path, StateMachine's so-called
     // state_dir.
-    println!(
-        "Renaming {:?}/{}/ic_state to {:?}...",
-        unpack_destination, state_dir, destination
-    );
+    println!("Renaming {unpack_destination:?}/{state_dir}/ic_state to {destination:?}...");
     std::fs::rename(
-        format!("{}/{}/ic_state", unpack_destination, state_dir),
+        format!("{unpack_destination}/{state_dir}/ic_state"),
         destination,
     )
     .unwrap();
 
-    println!("Unpacked {:?} to {:?}", source, destination);
+    println!("Unpacked {source:?} to {destination:?}");
 }

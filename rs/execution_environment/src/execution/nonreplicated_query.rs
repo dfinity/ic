@@ -7,7 +7,7 @@
 
 use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
-use crate::{metrics::CallTreeMetricsNoOp, Hypervisor, NonReplicatedQueryKind};
+use crate::{Hypervisor, NonReplicatedQueryKind, metrics::CallTreeMetricsNoOp};
 use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;

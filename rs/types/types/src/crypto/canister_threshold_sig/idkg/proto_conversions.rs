@@ -1,3 +1,4 @@
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use crate::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
@@ -7,14 +8,13 @@ use crate::crypto::canister_threshold_sig::idkg::{
 use crate::crypto::canister_threshold_sig::{
     EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
 };
-use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
+use crate::{Height, NodeIndex, node_id_into_protobuf, node_id_try_from_option};
 use ic_base_types::{
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, RegistryVersion,
+    NodeId, RegistryVersion, subnet_id_into_protobuf, subnet_id_try_from_protobuf,
 };
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgComplaint as IDkgComplaintProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
@@ -442,7 +442,7 @@ fn idkg_transcript_params_struct(
     )
     .map_err(
         |e| InitialIDkgDealingsValidationError::DeserializationError {
-            error: format!("Error deserializing transcript params: {}", e),
+            error: format!("Error deserializing transcript params: {e}"),
         },
     )?;
     Ok(params)
@@ -487,13 +487,13 @@ fn idkg_transcript_struct(proto: &IDkgTranscriptProto) -> Result<IDkgTranscript,
     let receivers = BTreeSet::from_iter(receivers?.iter().cloned());
     let receivers = IDkgReceivers::new(receivers).map_err(|e| {
         InitialIDkgDealingsValidationError::DeserializationError {
-            error: format!("Error deserializing receivers: {}", e),
+            error: format!("Error deserializing receivers: {e}"),
         }
     })?;
     let transcript_type: IDkgTranscriptType = serde_cbor::from_slice(&proto.transcript_type)
         .map_err(
             |e| InitialIDkgDealingsValidationError::DeserializationError {
-                error: format!("Error deserializing IDkgTranscriptType: {}", e),
+                error: format!("Error deserializing IDkgTranscriptType: {e}"),
             },
         )?;
     let verified_dealings = verified_dealings_map(&proto.verified_dealings)?;

@@ -1,9 +1,9 @@
 use ic_crypto_internal_bls12_381_type::{
-    verify_bls_signature, G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Polynomial, Scalar,
+    G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Polynomial, Scalar, verify_bls_signature,
 };
 use ic_crypto_internal_bls12_381_vetkd::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{seq::SliceRandom, CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng, seq::SliceRandom};
 use std::collections::BTreeMap;
 
 #[derive(Copy, Clone, Debug)]
@@ -69,11 +69,7 @@ impl TransportSecretKey {
         let k_is_valid_sig =
             Gt::multipairing(&[(&k, G2Prepared::neg_generator()), (&msg, &dpk_prep)]).is_identity();
 
-        if k_is_valid_sig {
-            Some(k)
-        } else {
-            None
-        }
+        if k_is_valid_sig { Some(k) } else { None }
     }
 }
 
@@ -87,8 +83,10 @@ fn transport_key_gen_is_stable() {
         "32f7f581d6de3c06a822fd6e7e8265fbc00f8401696a5bdc34f5a6d2ff3f922f"
     );
 
-    assert_eq!(hex::encode(tsk.public_key().serialize()),
-               "ac9524f219f1f958f261c87577e49dbbf2182c4060d51f84b8a0efac33c3c7ba9cd0bc9f41edf434d6c8a8fe20077e50");
+    assert_eq!(
+        hex::encode(tsk.public_key().serialize()),
+        "ac9524f219f1f958f261c87577e49dbbf2182c4060d51f84b8a0efac33c3c7ba9cd0bc9f41edf434d6c8a8fe20077e50"
+    );
 }
 
 fn random_derivation_context<R: RngCore + CryptoRng>(rng: &mut R) -> DerivationContext {
@@ -105,14 +103,18 @@ fn key_derivation_outputs_expected_values() {
     let canister_id = b"test-canister-id";
 
     let context1 = DerivationContext::new(canister_id, &[]);
-    assert_eq!(hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context1).serialize()),
-               "af78a908589d332fc8b9d042807c483e73872e2aea7620bdb985b9289d5a99ebfd5ac0ec4844a4c542f6d0f12a716d941674953cef4f38dde601ce9792db8832557eaa051733c5541fa5017465d69b62cc4d93f2079fb8c050b4bd735ef75859");
+    assert_eq!(
+        hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context1).serialize()),
+        "af78a908589d332fc8b9d042807c483e73872e2aea7620bdb985b9289d5a99ebfd5ac0ec4844a4c542f6d0f12a716d941674953cef4f38dde601ce9792db8832557eaa051733c5541fa5017465d69b62cc4d93f2079fb8c050b4bd735ef75859"
+    );
 
     let context = b"test-context";
 
     let context2 = DerivationContext::new(canister_id, context);
-    assert_eq!(hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context2).serialize()),
-               "a20125b8cdfc57f71b6f67e557e82c1307c1af9f728573f3b682f3b1816684f3f6aed5d8dd40a309b457a25dab7d8a1416fc0e0973000321c0c1dd844d80a5708e81fdd8338ea6433f175992fa05ef343b1e7f89a09f3b5b7c0766ccb3c624cd");
+    assert_eq!(
+        hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context2).serialize()),
+        "a20125b8cdfc57f71b6f67e557e82c1307c1af9f728573f3b682f3b1816684f3f6aed5d8dd40a309b457a25dab7d8a1416fc0e0973000321c0c1dd844d80a5708e81fdd8338ea6433f175992fa05ef343b1e7f89a09f3b5b7c0766ccb3c624cd"
+    );
 }
 
 #[test]

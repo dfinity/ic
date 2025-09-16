@@ -6,9 +6,9 @@ use wasmtime::{
     RefType, Store, Table, TableType, Val, ValType,
 };
 use wast::{
+    QuoteWat, Wast, WastArg, WastDirective, Wat,
     parser::ParseBuffer,
     token::{Id, Span},
-    QuoteWat, Wast, WastArg, WastDirective, Wat,
 };
 
 /// Tests shouldn't be run on these files.
@@ -20,9 +20,9 @@ const FILES_TO_SKIP: &[&str] = &["names.wast"];
 mod convert {
     use wasmtime::Store;
     use wast::{
+        WastArg, WastRet,
         core::{AbstractHeapType, HeapType, NanPattern, V128Pattern, WastArgCore},
         token::{F32, F64},
-        WastArg, WastRet,
     };
 
     fn heap_type(heap_type: HeapType) -> wasmtime::Val {
@@ -39,28 +39,22 @@ mod convert {
                 | AbstractHeapType::NoExtern
                 | AbstractHeapType::None => {
                     panic!(
-                        "Unable to handle heap type {:?}. The GC proposal isn't supported",
-                        heap_type
+                        "Unable to handle heap type {heap_type:?}. The GC proposal isn't supported"
                     )
                 }
                 AbstractHeapType::Exn | AbstractHeapType::NoExn => {
                     panic!(
-                        "Unable to handle heap type {:?}. The exceptions proposal isn't supported",
-                        heap_type
+                        "Unable to handle heap type {heap_type:?}. The exceptions proposal isn't supported"
                     )
                 }
                 AbstractHeapType::Cont | AbstractHeapType::NoCont => {
                     panic!(
-                        "Unable to handle heap type {:?}. The stack switching proposal isn't supported",
-                        heap_type
+                        "Unable to handle heap type {heap_type:?}. The stack switching proposal isn't supported"
                     )
                 }
             },
             HeapType::Concrete(_) => {
-                panic!(
-                    "Unable to handle heap type {:?}. The GC proposal isn't supported",
-                    heap_type
-                )
+                panic!("Unable to handle heap type {heap_type:?}. The GC proposal isn't supported")
             }
         }
     }
@@ -82,14 +76,11 @@ mod convert {
                 Some(unsafe { wasmtime::AnyRef::from_raw(store, n).unwrap().into() })
             }
             WastArg::Component(_) => {
-                println!(
-                    "Component feature not enabled. Can't handle WastArg {:?}",
-                    arg
-                );
+                println!("Component feature not enabled. Can't handle WastArg {arg:?}");
                 None
             }
             _ => {
-                panic!("Unknown WastArg {:?}", arg);
+                panic!("Unknown WastArg {arg:?}");
             }
         }
     }
@@ -219,9 +210,9 @@ mod convert {
     }
 
     fn val_equal(left: &wasmtime::Val, right: &WastRet, store: &Store<()>) -> bool {
+        use WastRet::Core as C;
         use wasmtime::Val as V;
         use wast::core::WastRetCore as R;
-        use WastRet::Core as C;
 
         match (left, right) {
             (V::I32(l), C(R::I32(r))) => l == r,
@@ -401,7 +392,7 @@ impl<'a> TestState<'a> {
                 self.created
                     .iter()
                     .find(|(next_id, _)| *next_id == Some(id))
-                    .unwrap_or_else(|| panic!("Unable to find module matching id {:?}", id))
+                    .unwrap_or_else(|| panic!("Unable to find module matching id {id:?}"))
                     .1
             }
         }
@@ -477,10 +468,7 @@ fn span_location(span: Span, text: &str, path: &PathBuf) -> String {
         .split_terminator('\n')
         .next()
         .unwrap();
-    format!(
-        "Test failed in wast {:?} at line {}: {}",
-        path, line, line_text
-    )
+    format!("Test failed in wast {path:?} at line {line}: {line_text}")
 }
 
 fn location(wat: &QuoteWat, text: &str, path: &PathBuf) -> String {
@@ -627,7 +615,7 @@ fn run_directive<'a>(
                     .map(|_| ())
                     .map_err(error_to_string),
                 wast::WastExecute::Wat(Wat::Component(_)) | wast::WastExecute::Get { .. } => {
-                    return Ok(())
+                    return Ok(());
                 }
             };
             match error {
@@ -752,7 +740,7 @@ fn test_spec_file(
             &mut test_state,
             parsing_multi_memory_enabled,
         ) {
-            writeln!(error_string, "{}", e).unwrap();
+            writeln!(error_string, "{e}").unwrap();
         }
     }
     if !error_string.is_empty() {
@@ -771,7 +759,7 @@ fn run_testsuite(test_files: Vec<PathBuf>, config: &Config, parsing_multi_memory
     println!("Running spec tests on {} files", test_files.len());
     let mut errors = vec![];
     for path in test_files {
-        println!("Running tests on file {:?}", path);
+        println!("Running tests on file {path:?}");
         if let Err(e) = test_spec_file(&path, config, parsing_multi_memory_enabled) {
             errors.push(e);
         }
@@ -810,7 +798,7 @@ fn default_config() -> Config {
 /// Note that `e.to_string()` returns only the first level error,
 /// which is not sufficient in many cases.
 fn error_to_string(e: anyhow::Error) -> String {
-    format!("{:?}", e)
+    format!("{e:?}")
 }
 
 /// These tests run on data from the WebAssembly spec testsuite. The suite is not

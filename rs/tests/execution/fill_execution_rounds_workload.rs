@@ -21,13 +21,13 @@ use ic_system_test_driver::{
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer,
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
     systest,
-    util::{block_on, UniversalCanister},
+    util::{UniversalCanister, block_on},
 };
 use ic_universal_canister::PayloadBuilder;
 use slog::info;

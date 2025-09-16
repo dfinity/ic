@@ -57,12 +57,14 @@ fn test_the_anonymous_user_cannot_add_a_version() {
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: update_elected_hostos_versions"));
         // .. And the HostOS version should not exist.
-        assert!(get_value::<HostosVersionRecord>(
-            &registry,
-            make_hostos_version_key(&hostos_version_id).as_bytes()
-        )
-        .await
-        .is_none());
+        assert!(
+            get_value::<HostosVersionRecord>(
+                &registry,
+                make_hostos_version_key(&hostos_version_id).as_bytes()
+            )
+            .await
+            .is_none()
+        );
 
         // Go through an upgrade cycle, and verify that it still works the
         // same.
@@ -72,12 +74,14 @@ fn test_the_anonymous_user_cannot_add_a_version() {
             .await;
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: update_elected_hostos_versions"));
-        assert!(get_value::<HostosVersionRecord>(
-            &registry,
-            make_hostos_version_key(&hostos_version_id).as_bytes()
-        )
-        .await
-        .is_none());
+        assert!(
+            get_value::<HostosVersionRecord>(
+                &registry,
+                make_hostos_version_key(&hostos_version_id).as_bytes()
+            )
+            .await
+            .is_none()
+        );
 
         Ok(())
     });
@@ -124,12 +128,14 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_version() {
             .await
         );
         // But there should be no HostOS versions.
-        assert!(get_value::<HostosVersionRecord>(
-            &registry,
-            make_hostos_version_key(&hostos_version_id).as_bytes()
-        )
-        .await
-        .is_none());
+        assert!(
+            get_value::<HostosVersionRecord>(
+                &registry,
+                make_hostos_version_key(&hostos_version_id).as_bytes()
+            )
+            .await
+            .is_none()
+        );
 
         Ok(())
     });
@@ -307,12 +313,14 @@ fn test_cannot_add_invalid_version() {
             )
             .await
         );
-        assert!(get_value::<HostosVersionRecord>(
-            &registry,
-            make_hostos_version_key(&hostos_version_id).as_bytes()
-        )
-        .await
-        .is_none());
+        assert!(
+            get_value::<HostosVersionRecord>(
+                &registry,
+                make_hostos_version_key(&hostos_version_id).as_bytes()
+            )
+            .await
+            .is_none()
+        );
 
         // We can't add a version without any URLs.
         let hostos_version_id = "1".to_string();
@@ -331,12 +339,14 @@ fn test_cannot_add_invalid_version() {
             )
             .await
         );
-        assert!(get_value::<HostosVersionRecord>(
-            &registry,
-            make_hostos_version_key(&hostos_version_id).as_bytes()
-        )
-        .await
-        .is_none());
+        assert!(
+            get_value::<HostosVersionRecord>(
+                &registry,
+                make_hostos_version_key(&hostos_version_id).as_bytes()
+            )
+            .await
+            .is_none()
+        );
 
         // We can't add a version with a bad URL.
         let hostos_version_id = "1".to_string();
@@ -355,12 +365,14 @@ fn test_cannot_add_invalid_version() {
             )
             .await
         );
-        assert!(get_value::<HostosVersionRecord>(
-            &registry,
-            make_hostos_version_key(&hostos_version_id).as_bytes()
-        )
-        .await
-        .is_none());
+        assert!(
+            get_value::<HostosVersionRecord>(
+                &registry,
+                make_hostos_version_key(&hostos_version_id).as_bytes()
+            )
+            .await
+            .is_none()
+        );
 
         Ok(())
     });
@@ -601,12 +613,14 @@ fn test_the_governance_canister_can_remove_a_version() {
             )
             .await
         );
-        assert!(get_value::<HostosVersionRecord>(
-            &registry,
-            make_hostos_version_key(&hostos_version_id).as_bytes()
-        )
-        .await
-        .is_none());
+        assert!(
+            get_value::<HostosVersionRecord>(
+                &registry,
+                make_hostos_version_key(&hostos_version_id).as_bytes()
+            )
+            .await
+            .is_none()
+        );
 
         Ok(())
     });

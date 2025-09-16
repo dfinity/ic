@@ -31,8 +31,7 @@ pub mod util {
             assert_eq!(
                 crypto::individual_public_key(public_coefficients, index as NodeIndex),
                 crypto::public_key_from_secret_key(secret_key),
-                "Individual public key match failed for index {}",
-                index
+                "Individual public key match failed for index {index}"
             )
         }
     }
@@ -115,9 +114,7 @@ pub mod util {
             let some_individual_signature = signatures[0].clone();
             assert!(
                 !crypto::verify(message, &some_individual_signature, &public_key),
-                "Signature verification passed with incorrect signature: got {:?} expected {:?}",
-                some_individual_signature,
-                signature
+                "Signature verification passed with incorrect signature: got {some_individual_signature:?} expected {signature:?}"
             );
         }
         if public_coefficients.coefficients.len() > 1 {
