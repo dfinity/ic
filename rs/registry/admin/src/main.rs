@@ -60,7 +60,6 @@ use ic_nns_governance_api::{
         decode_make_proposal_response,
     },
     stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
-    subnet_rental::{RentalConditionId, SubnetRentalRequest},
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
     },
@@ -164,6 +163,7 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
+use subnet_rental_canister::{RentalConditionId, RentalRequest as SubnetRentalRequest};
 use types::{
     LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
     ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
@@ -5244,7 +5244,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
 /// Extracts a proposal payload from the provided command and uses it to submit
 /// a proposal to the governance canister.
 async fn propose_external_proposal_from_command<
-    C: CandidType + Serialize + Debug,
+    C: CandidType /* DO NOT MERGE - + Serialize */ + Debug,
     Command: ProposalMetadata + ProposalTitle + ProposalPayload<C>,
 >(
     cmd: Command,

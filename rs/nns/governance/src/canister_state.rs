@@ -3,7 +3,7 @@ use crate::governance::{
     Environment, Governance, HeapGrowthPotential, RandomnessGenerator, RngError,
 };
 use async_trait::async_trait;
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use ic_base_types::CanisterId;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
@@ -15,7 +15,6 @@ use ic_nns_common::types::ProposalId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance_api::bitcoin::BitcoinNetwork;
 use ic_nns_governance_api::bitcoin::BitcoinSetConfigProposal;
-use ic_nns_governance_api::subnet_rental::SubnetRentalProposalPayload;
 use ic_nns_governance_api::subnet_rental::SubnetRentalRequest;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use rand::{RngCore, SeedableRng};
@@ -25,6 +24,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 #[cfg(any(test, feature = "test"))]
 use std::sync::RwLock;
+use subnet_rental_canister::SubnetRentalProposalPayload;
 
 thread_local! {
     pub(crate) static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
@@ -333,6 +333,7 @@ fn get_effective_payload(
                 user,
                 rental_condition_id,
             } = payload;
+            let user = Principal::from(user);
             let proposal_creation_time_seconds = proposal_timestamp_seconds;
             let encoded_payload = Encode!(&SubnetRentalProposalPayload {
                 user,

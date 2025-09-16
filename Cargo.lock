@@ -11542,6 +11542,7 @@ dependencies = [
  "serde_bytes",
  "strum 0.26.3",
  "strum_macros 0.26.4",
+ "subnet_rental_canister",
 ]
 
 [[package]]
