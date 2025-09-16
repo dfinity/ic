@@ -2128,12 +2128,21 @@ impl Governance {
 
         let recipient_account_identifier = neuron_subaccount(recipient_subaccount);
 
-        let transfer_amount_doms = donor_cached_neuron_stake_e8s.saturating_sub(transaction_fee);
+        let Some(transfer_amount_e8s) = donor_cached_neuron_stake_e8s.checked_sub(transaction_fee)
+        else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Donor neuron stake of {} e8s is too small to cover the transaction fee of {} e8s",
+                    donor_cached_neuron_stake_e8s, transaction_fee
+                ),
+            ));
+        };
 
         let _ = self
             .ledger
             .transfer_funds(
-                transfer_amount_doms,
+                transfer_amount_e8s,
                 transaction_fee,
                 Some(donor_subaccount),
                 recipient_account_identifier,
@@ -2147,7 +2156,7 @@ impl Governance {
         self.with_neuron_mut(recipient_neuron_id, |recipient_neuron| {
             recipient_neuron.cached_neuron_stake_e8s = recipient_neuron
                 .cached_neuron_stake_e8s
-                .saturating_add(transfer_amount_doms);
+                .saturating_add(transfer_amount_e8s);
         })?;
 
         Ok(())
@@ -2374,7 +2383,7 @@ impl Governance {
         self.check_heap_can_grow()?;
 
         let &manage_neuron::Split {
-            amount_e8s: split_amount_e8s,
+            amount_e8s: _,
             memo,
         } = split;
 
@@ -2424,7 +2433,7 @@ impl Governance {
                      This is not allowed, because the parent has stake {} e8s. \
                      If the requested amount was subtracted from it, there would be less than \
                      the minimum allowed stake, which is {} e8s. ",
-                    split_amount_e8s, id.id, minted_stake_e8s, min_stake
+                    split.amount_e8s, id.id, minted_stake_e8s, min_stake
                 ),
             ));
         }
@@ -2497,12 +2506,12 @@ impl Governance {
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
             parent_neuron.cached_neuron_stake_e8s = parent_neuron
                 .cached_neuron_stake_e8s
-                .checked_sub(split_amount_e8s)
+                .checked_sub(split.amount_e8s)
                 .expect("Subtracting neuron stake underflows");
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { sn_amount : split_amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
+        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2522,7 +2531,7 @@ impl Governance {
                 .with_neuron_mut(id, |parent_neuron| {
                     parent_neuron.cached_neuron_stake_e8s = parent_neuron
                         .cached_neuron_stake_e8s
-                        .checked_add(split_amount_e8s)
+                        .checked_add(split.amount_e8s)
                         .expect("Neuron stake overflows");
                 })
                 .expect("Expected the parent neuron to exist");
@@ -2557,7 +2566,7 @@ impl Governance {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
         } = calculate_split_neuron_effect(
-            split_amount_e8s,
+            split.amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
@@ -7914,7 +7923,8 @@ impl Governance {
         let remainder_seconds = time_of_day_seconds % (15 * 60);
         // as `remaineder_seconds` is the residue of `time_of_day_seconds` over a natural number,
         // can never be bigger than that. Therefore, no risk of underflow.
-        let seconds_after_utc_midnight = Some(time_of_day_seconds - remainder_seconds);
+        let seconds_after_utc_midnight =
+            Some(time_of_day_seconds.saturating_sub(remainder_seconds));
 
         GlobalTimeOfDay {
             seconds_after_utc_midnight,
