@@ -254,7 +254,7 @@ pub fn setup_and_start_vms(
         let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
-        let recovery_short_hash = ic.get_recovery_short_hash_of_node(node.node_id);
+        let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behavior.clone());
         let tnet_node = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => tnet
@@ -273,7 +273,7 @@ pub fn setup_and_start_vms(
                 query_stats_epoch_length,
                 ipv4_config,
                 domain,
-                recovery_short_hash,
+                recovery_hash,
                 &t_env,
             )?;
 
@@ -364,7 +364,7 @@ fn create_config_disk_image(
     query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
-    recovery_short_hash: Option<String>,
+    recovery_hash: Option<String>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
@@ -387,7 +387,7 @@ fn create_config_disk_image(
         enable_trusted_execution_environment: None,
         use_node_operator_private_key: Some(true),
         use_ssh_authorized_keys: Some(true),
-        recovery_short_hash,
+        recovery_hash,
         inject_ic_crypto: Some(false),
         inject_ic_state: Some(false),
         inject_ic_registry_local_store: Some(false),

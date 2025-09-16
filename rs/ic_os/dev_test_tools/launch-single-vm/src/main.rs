@@ -215,7 +215,7 @@ fn main() {
             inject_ic_crypto: Some(false),
             inject_ic_state: Some(false),
             inject_ic_registry_local_store: Some(false),
-            recovery_short_hash: None,
+            recovery_hash: None,
             backup_retention_time_seconds: None,
             backup_purging_interval_seconds: None,
             malicious_behavior: None,

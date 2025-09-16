@@ -128,24 +128,18 @@ fn verify_permissions_recursively(
 
 pub fn setup(env: TestEnv) {
     setup_upstreams_uvm(&env);
-    let recovery_short_hash = read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
-        .unwrap()
-        .trim()
-        .get(..6)
-        .unwrap()
-        .to_string();
+    let recovery_hash = read_dependency_from_env_to_string("RECOVERY_HASH_PATH").unwrap();
 
     uvm_serve_recovery_artifacts(
         &env,
         &get_dependency_path_from_env("RECOVERY_ARTIFACTS_PATH"),
-        &recovery_short_hash,
+        &recovery_hash,
     )
     .unwrap();
 
     InternetComputer::new()
         .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_node(Node::new().with_recovery_short_hash(recovery_short_hash)),
+            Subnet::new(SubnetType::System).add_node(Node::new().with_recovery_hash(recovery_hash)),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");

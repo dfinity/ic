@@ -88,7 +88,7 @@ mod tests {
             inject_ic_crypto: false,
             inject_ic_state: false,
             inject_ic_registry_local_store: false,
-            recovery_short_hash: None,
+            recovery_hash: None,
             guestos_dev_settings: GuestOSDevSettings::default(),
         };
 

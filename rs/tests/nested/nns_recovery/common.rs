@@ -334,12 +334,8 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         .unwrap()
         .trim()
         .to_string();
-    impersonate_upstreams::uvm_serve_recovery_artifacts(
-        &env,
-        &artifacts_path,
-        &artifacts_hash[..6],
-    )
-    .expect("Failed to serve recovery artifacts from UVM");
+    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
+        .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_recovery_image(
@@ -379,7 +375,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
                     &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash[..6],
-                    &artifacts_hash[..6],
+                    &artifacts_hash,
                 )
                 .await
             });
@@ -449,7 +445,7 @@ async fn simulate_node_provider_action(
     host: &NestedVm,
     img_version: &str,
     img_short_hash: &str,
-    artifacts_short_hash: &str,
+    artifacts_hash: &str,
 ) {
     let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
 
@@ -461,7 +457,7 @@ async fn simulate_node_provider_action(
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_short_hash, &artifacts_short_hash
+        &img_version, &img_short_hash, &artifacts_hash
     );
     host.block_on_bash_script_async(&boot_args_command)
         .await

@@ -1061,7 +1061,6 @@ mkdir -p {output_dir:?}
 tar --zstd -cvf {tar_file:?} -C {work_dir:?} cup.proto {IC_REGISTRY_LOCAL_STORE}.tar.zst
 
 artifacts_hash="$(sha256sum {tar_file:?} | cut -d ' ' -f1)"
-artifacts_short_hash="${{artifacts_hash:0:6}}"
 echo "$artifacts_hash" > {sha_file:?}
             "#,
             output_dir = self.output_dir,
@@ -1071,17 +1070,17 @@ echo "$artifacts_hash" > {sha_file:?}
         )
     }
 
-    fn get_next_steps(&self, artifacts_short_hash: &str) -> String {
+    fn get_next_steps(&self, artifacts_hash: &str) -> String {
         // We use debug formatting because it escapes the paths in case they contain spaces.
         format!(
             r#"
-Recovery artifacts with short hash {artifacts_short_hash} were successfully created in {output_dir:?}.
+Recovery artifacts with hash {artifacts_hash} were successfully created in {output_dir:?}.
 Now please:
   - Upload {tar_file:?} to:
-    - https://download.dfinity.systems/recovery/{artifacts_short_hash}/{tar_name}
-    - https://download.dfinity.network/recovery/{artifacts_short_hash}/{tar_name}
+    - https://download.dfinity.systems/recovery/{artifacts_hash}/{tar_name}
+    - https://download.dfinity.network/recovery/{artifacts_hash}/{tar_name}
     - TODO: Update directions after recovery runbook complete
-  - Provide other Node Providers with the commit hash as version, the image hash, and the artifacts short hash. Ask them to reboot and follow the recovery instructions.
+  - Provide other Node Providers with the commit hash as version, the image hash, and the artifacts hash. Ask them to reboot and follow the recovery instructions.
             "#,
             output_dir = self.output_dir,
             tar_file = self.output_dir.join(self.get_tar_name()),
@@ -1109,14 +1108,7 @@ impl Step for CreateNNSRecoveryTarStep {
 
         match exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))? {
             Some(sha256) => {
-                let artifacts_short_hash =
-                    sha256
-                        .trim()
-                        .get(..6)
-                        .ok_or(RecoveryError::invalid_output_error(format!(
-                            "Cannot get short hash of {sha256}"
-                        )))?;
-                info!(self.logger, "{}", self.get_next_steps(artifacts_short_hash));
+                info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
             }
             _ => {
                 return Err(RecoveryError::invalid_output_error(format!(

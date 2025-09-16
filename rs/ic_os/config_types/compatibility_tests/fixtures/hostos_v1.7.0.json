@@ -38,7 +38,7 @@
     "inject_ic_crypto": false,
     "inject_ic_state": false,
     "inject_ic_registry_local_store": false,
-    "recovery_short_hash": null,
+    "recovery_hash": null,
     "guestos_dev_settings": {
       "backup_spool": null,
       "malicious_behavior": null,
