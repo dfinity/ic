@@ -71,7 +71,6 @@ system_test(
     ],
 )
 
-# bazel test --test_output=streamed //rs/tests/node:launch_single_guest --test_timeout=3600 --test_arg=--debug-keepalive
 # ict testnet create launch_single_guest --lifetime-mins 3600
 system_test(
     name = "launch_single_guest",
@@ -84,11 +83,9 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-        "@crate_index//:slog",
     ],
 )
 
-# bazel test --test_output=streamed //rs/tests/node:launch_single_host --test_timeout=3600 --test_arg=--debug-keepalive
 # ict testnet create launch_single_host --lifetime-mins 3600
 system_test(
     name = "launch_single_host",
@@ -102,6 +99,5 @@ system_test(
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-        "@crate_index//:slog",
     ],
 )
