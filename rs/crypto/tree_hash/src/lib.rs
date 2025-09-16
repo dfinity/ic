@@ -1307,3 +1307,27 @@ pub trait HashTreeBuilder {
     /// Does not `panic!`.
     fn witness_generator(&self) -> Option<Self::WitnessGenerator>;
 }
+
+/// A restricted match pattern that either allows a label or a wildcard with a list of exceptions.
+#[derive(Clone, Debug)]
+pub enum MatchPattern {
+    Label(Label),
+    AllLabelsExcept(Vec<Label>),
+}
+
+impl MatchPattern {
+    /// If it's a label, it needs to be an exact match. If it's a wildcard, it matches everyting except the listed labels.
+    pub fn is_match(&self, label: &Label) -> bool {
+        match self {
+            MatchPattern::Label(l) => l == label,
+            MatchPattern::AllLabelsExcept(labels) => !labels.iter().any(|l| l == label),
+        }
+    }
+}
+
+/// A tree similar to `LabeledTree<()>` with `MatchPattern` instead of labels.
+#[derive(Clone, Debug)]
+pub enum MatchPatternTree {
+    Leaf,
+    SubTree(Vec<(MatchPattern, MatchPatternTree)>),
+}

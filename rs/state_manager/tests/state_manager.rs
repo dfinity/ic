@@ -1,9 +1,10 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
+use ic_canonical_state::encoding::encode_subnet_canister_ranges;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, LookupStatus, MixedHashTree, Path as LabelPath, flatmap,
-    sparse_labeled_tree_from_paths,
+    Label, LabeledTree, LookupStatus, MatchPattern, MatchPatternTree, MixedHashTree,
+    Path as LabelPath, flatmap, sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
@@ -16,6 +17,7 @@ use ic_management_canister_types_private::{
     TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -5116,6 +5118,106 @@ fn certified_read_can_produce_proof_of_absence() {
                                 label("status") => Leaf(b"replied".to_vec()),
                                 label("reply") => Leaf(b"done".to_vec()),
                             }),
+                    })
+            })
+        );
+    })
+}
+
+#[test]
+fn certified_read_can_exclude_canister_ranges() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+
+        let mut subnets = BTreeMap::new();
+        let mut routing_table = RoutingTable::new();
+
+        for i in 0..4 {
+            let subnet_id = subnet_test_id(i);
+            subnets.insert(
+                subnet_id,
+                SubnetTopology {
+                    public_key: vec![i as u8; 133],
+                    nodes: Default::default(),
+                    subnet_type: SubnetType::Application,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                },
+            );
+            routing_table
+                .insert(
+                    CanisterIdRange {
+                        start: canister_test_id(1000 * i + 1),
+                        end: canister_test_id(1000 * (i + 1)),
+                    },
+                    subnet_id,
+                )
+                .unwrap();
+        }
+
+        let network_topology = NetworkTopology {
+            subnets,
+            routing_table: Arc::new(routing_table),
+            ..Default::default()
+        };
+
+        state.metadata.network_topology = network_topology;
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
+
+        let path = SubTree(flatmap! {
+            label("subnet") => Leaf(())
+        });
+        let delivered_certification = certify_height(&state_manager, height(1));
+
+        // Drop all `canister_ranges` leafs except for `some_subnet_id`
+        let some_subnet_id = subnet_test_id(1);
+        let exclusion = MatchPatternTree::Leaf;
+        let exclusion = MatchPatternTree::SubTree(vec![(
+            MatchPattern::Label("canister_ranges".into()),
+            exclusion,
+        )]);
+        let exclusion = MatchPatternTree::SubTree(vec![(
+            MatchPattern::AllLabelsExcept(vec![label(some_subnet_id.get_ref())]),
+            exclusion,
+        )]);
+        let exclusion =
+            MatchPatternTree::SubTree(vec![(MatchPattern::Label("subnet".into()), exclusion)]);
+
+        let (_state, mixed_tree, cert) = state_manager
+            .read_certified_state_with_exclusion(&path, Some(&exclusion))
+            .expect("failed to read certified state");
+
+        assert_eq!(cert, delivered_certification);
+        assert_eq!(
+            tree_payload(mixed_tree),
+            SubTree(flatmap! {
+                label("subnet") =>
+                    SubTree(flatmap! {
+                        label(subnet_test_id(0).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("public_key") => Leaf(vec![0_u8; 133]),
+                            }),
+                        label(subnet_test_id(1).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("canister_ranges") => Leaf(
+                                    encode_subnet_canister_ranges(
+                                        Some(&vec![(canister_test_id(1001).get(), canister_test_id(2000).get())])
+                                    )
+                                ),
+                                label("public_key") => Leaf(vec![1_u8; 133]),
+                            }),
+                        label(subnet_test_id(2).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("public_key") => Leaf(vec![2_u8; 133]),
+                            }),
+                        label(subnet_test_id(3).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("public_key") => Leaf(vec![3_u8; 133]),
+                            })
                     })
             })
         );

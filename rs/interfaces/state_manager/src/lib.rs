@@ -1,6 +1,6 @@
 //! The state manager public interface.
 
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternTree, MixedHashTree};
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
     consensus::certification::Certification, state_manager::StateManagerResult,
@@ -328,6 +328,14 @@ pub trait CertifiedStateSnapshot: Send + Sync {
     fn read_certified_state(
         &self,
         paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        self.read_certified_state_with_exclusion(paths, None)
+    }
+
+    fn read_certified_state_with_exclusion(
+        &self,
+        paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternTree>,
     ) -> Option<(MixedHashTree, Certification)>;
 }
 
@@ -393,6 +401,17 @@ pub trait StateReader: Send + Sync {
     fn read_certified_state(
         &self,
         paths: &LabeledTree<()>,
+    ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
+        self.read_certified_state_with_exclusion(paths, None)
+    }
+
+    /// An extension of [`Self::read_certified_state`] which additonally also takes a tree of exclusions.
+    /// If a path is mentioned both in `paths` and `exclusion` it is pruned in the returned [`MixedHashTree`].
+    /// This might be useful for cases where large subtrees are requested, but a small number of leafs should be omitted.
+    fn read_certified_state_with_exclusion(
+        &self,
+        paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternTree>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)>;
 
     /// Returns a CertifiedStateSnapshot corresponding to the latest certified state.
