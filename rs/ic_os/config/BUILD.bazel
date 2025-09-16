@@ -32,7 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:walkdir",
 ]
 
-DEV_DEPENDENCIES = [
+TEST_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:once_cell",
     "@crate_index//:tempfile",
@@ -89,13 +89,13 @@ rust_test(
     crate_features = ["dev"],
     data = glob(["golden/*"]),
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
-    deps = DEV_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
 )
 
 rust_test(
     name = "config_lib_test",
     crate = ":config_lib",
-    deps = DEV_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
 )
 
 rust_binary(
@@ -125,5 +125,14 @@ rust_test(
     name = "config_test",
     crate = ":config_dev",
     crate_features = ["dev"],
-    deps = DEV_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "config_test_prod",
+    compile_data = [
+        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
+    ],
+    crate = ":config",
+    deps = TEST_DEPENDENCIES,
 )

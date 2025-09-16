@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
+use config::setupos::create_setupos_config;
 use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use network::resolve_mgmt_mac;
@@ -74,6 +75,9 @@ pub fn main() -> Result<()> {
                 enable_trusted_execution_environment,
             } = get_config_ini_settings(&config_ini_path)?;
 
+            // get deployment.json variables
+            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
+
             // create NetworkSettings
             let deterministic_config = DeterministicIpv6Config {
                 prefix: ipv6_prefix,
@@ -102,10 +106,8 @@ pub fn main() -> Result<()> {
                 domain_name,
             };
 
-            // get deployment.json variables
-            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
-
-            let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
+            let mgmt_mac =
+                resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac.as_deref())?;
 
             if let Some(ref node_reward_type) = node_reward_type {
                 let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
@@ -119,49 +121,23 @@ pub fn main() -> Result<()> {
                 println!("Node reward type is not set. Skipping validation.");
             }
 
-            let icos_settings = ICOSSettings {
+            let use_node_operator_private_key =
+                Path::new("/config/node_operator_private_key.pem").exists();
+            let use_ssh_authorized_keys = Path::new("/config/ssh_authorized_keys").exists();
+
+            let setupos_config = create_setupos_config(
                 node_reward_type,
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.deployment_environment,
-                logging: Logging {},
-                use_nns_public_key: false,
-                nns_urls: deployment_json_settings.nns.urls.clone(),
-                use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
-                    .exists(),
+                deployment_json_settings.deployment.deployment_environment,
+                &deployment_json_settings.nns.urls,
+                deployment_json_settings.vm_resources,
                 enable_trusted_execution_environment,
-                use_ssh_authorized_keys: Path::new("/config/ssh_authorized_keys").exists(),
-                icos_dev_settings: ICOSDevSettings::default(),
-            };
-
-            let setupos_settings = SetupOSSettings;
-
-            // Only allow choosing VM memory for dev.
-            #[cfg(feature = "dev")]
-            let memory = deployment_json_settings
-                .vm_resources
-                .memory
-                .unwrap_or(PROD_GUEST_VM_MEMORY);
-
-            #[cfg(not(feature = "dev"))]
-            let memory = PROD_GUEST_VM_MEMORY;
-
-            let hostos_settings = HostOSSettings {
-                vm_memory: memory,
-                vm_cpu: deployment_json_settings.vm_resources.cpu,
-                vm_nr_of_vcpus: deployment_json_settings.vm_resources.nr_of_vcpus,
+                use_node_operator_private_key,
+                use_ssh_authorized_keys,
                 verbose,
-            };
-
-            let guestos_settings = GuestOSSettings::default();
-
-            let setupos_config = SetupOSConfig {
-                config_version: CONFIG_VERSION.to_string(),
                 network_settings,
-                icos_settings,
-                setupos_settings,
-                hostos_settings,
-                guestos_settings,
-            };
+            );
+
             // SetupOSConfig is safe to log; it does not contain any secret material
             println!("SetupOSConfig: {setupos_config:?}");
 
