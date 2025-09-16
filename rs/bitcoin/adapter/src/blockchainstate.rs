@@ -40,7 +40,7 @@ pub type SerializedBlock = Vec<u8>;
 /// The BlockChainState caches all the Bitcoin headers, some of the Bitcoin blocks.
 /// The BlockChainState also maintains the child relationhips between the headers.
 pub struct BlockchainState<Network: BlockchainNetwork> {
-    /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
+    /// This field stores all the Bitcoin headers using a HashMap containing BlockHash and the corresponding header.
     header_cache: Box<dyn HeaderCache<Header = Network::Header> + Send>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
