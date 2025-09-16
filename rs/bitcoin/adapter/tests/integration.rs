@@ -194,7 +194,9 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
         .parse()
         .unwrap();
     if let AdapterState::Active = adapter_state {
-        // We send this request to make sure the adapter is not idle.
+        // Send this request to make sure the adapter is not idle.
+        // Retry until the request goes through, because the adapter may not be fully
+        // started yet.
         for _ in 0..10 {
             let res = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
             if res.is_err() {
@@ -247,31 +249,6 @@ fn wait_for_connection<T: RpcClientType>(client: &RpcClient<T>, connection_count
         }
     }
 }
-
-/*
-fn wait_for_connection_<T: RpcClientType>(
-    client: &RpcClient<T>,
-    connection_count: usize,
-    rt_handle: &tokio::runtime::Handle,
-) {
-    let mut tries = 0;
-    while client.get_connection_count().unwrap() != connection_count {
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        tries += 1;
-        if tries > 5 {
-            rt_handle.block_on(async {
-                let dump = rt_handle.dump().await;
-                for (i, task) in dump.tasks().iter().enumerate() {
-                    let trace = task.trace();
-                    println!("TASK {i}:");
-                    println!("{trace}\n");
-                }
-            });
-            panic!("Timeout in wait_for_connection");
-        }
-    }
-}
-*/
 
 // This is an expensive operation. Should only be used when checking for an upper bound on the number of connections.
 fn exact_connections<T: RpcClientType>(client: &RpcClient<T>, connection_count: usize) {
@@ -380,13 +357,6 @@ fn sync_blocks<T: RpcClientType>(
             Err(err) => panic!("{err:?}"),
         }
         tries += 1;
-        eprintln!(
-            "synced blocks = {} <= {}, tries {} <= {}",
-            blocks.len(),
-            max_num_blocks,
-            tries,
-            max_tries
-        );
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
