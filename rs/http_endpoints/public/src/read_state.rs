@@ -56,7 +56,7 @@ enum DeprecatedCanisterRangesFilter {
     /// Will keep all paths of the form `/subnet/<subnet_id>/canister_ranges` for all subnet ids.
     KeepAll,
     /// Will prune all paths of the form `/subnet/<subnet_id>/canister_ranges` for all subnet ids
-    ///  except the provided [`SubnetId`].
+    /// except the provided [`SubnetId`].
     KeepOnly(SubnetId),
 }
 
@@ -64,8 +64,6 @@ fn get_certificate_and_create_response(
     mut paths: Vec<Path>,
     delegation_from_nns: Option<CertificateDelegation>,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
-    // if `Some(root_subnet_id)`, we will prune the paths `/subnet/<subnet_id>/canister_ranges` for all
-    // subnet ids except the `root_subnet_id`.
     deprecated_canister_ranges_filter: DeprecatedCanisterRangesFilter,
 ) -> axum::response::Response {
     // Create labeled tree. This may be an expensive operation and by
