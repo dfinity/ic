@@ -74,7 +74,7 @@ xxd
 # Install >=9.1 qemu
 qemu-system-x86/plucky # Top level
 
-# Install >=2024-05-24 OVMF
+# Install >=2025 OVMF
 ovmf/plucky # Top level
 
 # Install >=10.5.0 libvirt
