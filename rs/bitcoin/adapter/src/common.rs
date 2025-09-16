@@ -112,10 +112,10 @@ impl FromStr for AdapterNetwork {
             if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
                 return Ok(network.into());
             }
-        } else if let Some(s) = s.strip_prefix("bitcoin:") {
-            if let Ok(network) = bitcoin::Network::from_str(s) {
-                return Ok(network.into());
-            }
+        } else if let Some(s) = s.strip_prefix("bitcoin:")
+            && let Ok(network) = bitcoin::Network::from_str(s)
+        {
+            return Ok(network.into());
         }
         Err(format!("unknown network name {s}"))
     }
@@ -184,9 +184,9 @@ impl BlockchainHeaderValidator for DogecoinHeaderValidator {
 }
 
 /// Trait that implements differences between Bitcoin and Dogecoin networks.
-pub trait BlockchainNetwork: Copy {
+pub trait BlockchainNetwork: Copy + 'static {
     /// Header type.
-    type Header: BlockchainHeader;
+    type Header: BlockchainHeader + Send + Sync;
     /// Block type.
     type Block: BlockchainBlock<Header = Self::Header>;
     /// Validator used to validate blockchain headers
@@ -305,7 +305,7 @@ pub trait BlockchainHeader: Decodable + Encodable + Clone {
     fn block_hash(&self) -> BlockHash;
     /// Return previous block hash.
     fn prev_block_hash(&self) -> BlockHash;
-    /// Check if the merkle root in block header matches what is computed.
+    /// Return the total work of the block.
     fn work(&self) -> Work;
     /// Return the 80-byte header.
     fn into_pure_header(self) -> PureHeader;

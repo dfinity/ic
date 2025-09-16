@@ -1,10 +1,11 @@
 use crate::common::BlockchainHeaderValidator;
 use crate::{
     Channel, Command, ProcessNetworkMessageError,
-    blockchainstate::{AddHeaderError, BlockchainState},
+    blockchainstate::BlockchainState,
     common::{
         BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork, MINIMUM_VERSION_NUMBER,
     },
+    header_cache::AddHeaderError,
     metrics::RouterMetrics,
 };
 use bitcoin::{
@@ -356,15 +357,15 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                 None => blockchain_state.get_cached_header(&last_block_hash),
             };
 
-            if let Some(last) = maybe_last_header {
-                if last.height > peer.height {
-                    peer.tip = last.header.block_hash();
-                    peer.height = last.height;
-                    trace!(
-                        self.logger,
-                        "Peer {}'s height = {}, tip = {}", addr, peer.height, peer.tip
-                    );
-                }
+            if let Some(last) = &maybe_last_header
+                && last.data.height > peer.height
+            {
+                peer.tip = last.data.header.block_hash();
+                peer.height = last.data.height;
+                trace!(
+                    self.logger,
+                    "Peer {}'s height = {}, tip = {}", addr, peer.height, peer.tip
+                );
             }
 
             match maybe_err {
@@ -377,6 +378,10 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                 Some(AddHeaderError::PrevHeaderNotCached(stop_hash)) => {
                     Some((blockchain_state.locator_hashes(), stop_hash))
                 }
+                Some(AddHeaderError::Internal(_)) => {
+                    // Error writing the header cache, stop getting more headers
+                    None
+                }
                 None => {
                     if let Some(last) = maybe_last_header {
                         // If the headers length is less than the max headers size (2000), it is likely that the end
@@ -384,7 +389,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                         if headers.len() < MAX_HEADERS_SIZE {
                             None
                         } else {
-                            Some((vec![last.header.block_hash()], BlockHash::all_zeros()))
+                            Some((vec![last.data.header.block_hash()], BlockHash::all_zeros()))
                         }
                     } else {
                         None
@@ -717,7 +722,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
             let mut blockchain = self.blockchain.lock().unwrap();
             let anchor_height = blockchain
                 .get_cached_header(&anchor)
-                .map_or(0, |c| c.height);
+                .map_or(0, |c| c.data.height);
             let filter_height = anchor_height
                 .checked_add(1)
                 .expect("prune by block height: overflow occurred");
@@ -726,11 +731,11 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
             blockchain.prune_blocks_below_height(filter_height);
 
             self.getdata_request_info.retain(|b, _| {
-                blockchain.get_cached_header(b).map_or(0, |c| c.height) >= filter_height
+                blockchain.get_cached_header(b).map_or(0, |c| c.data.height) >= filter_height
             });
 
             self.block_sync_queue.retain(|b| {
-                blockchain.get_cached_header(b).map_or(0, |c| c.height) >= filter_height
+                blockchain.get_cached_header(b).map_or(0, |c| c.data.height) >= filter_height
             });
         };
 

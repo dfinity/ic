@@ -1,3 +1,4 @@
+use crate::common::frontend_canister;
 use candid::{CandidType, Encode, Nat, Principal};
 use flate2::read::GzDecoder;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -11,16 +12,16 @@ use pocket_ic::{
     update_candid_as,
 };
 use reqwest::StatusCode;
-use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::Read;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tempfile::TempDir;
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
+
+mod common;
 
 fn test_canister_wasm() -> Vec<u8> {
     let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
@@ -49,39 +50,6 @@ fn all_icp_features() -> IcpFeatures {
         sns: Some(IcpFeaturesConfig::DefaultConfig),
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
-    }
-}
-
-// The `nns_ui` feature requires auto progress and HTTP gateway
-// so we only enable this feature for frontend canister tests.
-fn all_icp_features_but_nns_ui() -> IcpFeatures {
-    IcpFeatures {
-        registry: Some(IcpFeaturesConfig::DefaultConfig),
-        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
-        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
-        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
-        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
-        sns: Some(IcpFeaturesConfig::DefaultConfig),
-        ii: Some(IcpFeaturesConfig::DefaultConfig),
-        nns_ui: None,
-    }
-}
-
-fn resolving_client(pic: &PocketIc, host: String) -> Client {
-    // Windows doesn't automatically resolve localhost subdomains.
-    if cfg!(windows) {
-        Client::builder()
-            .resolve(
-                &host,
-                SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    pic.get_server_url().port().unwrap(),
-                ),
-            )
-            .build()
-            .unwrap()
-    } else {
-        Client::new()
     }
 }
 
@@ -117,7 +85,8 @@ fn nns_ui_requires_other_icp_features() {
         .build();
 }
 
-fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
+#[test]
+fn test_ii_nns_ui() {
     let instance_http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
         port: None,
@@ -130,45 +99,43 @@ fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
         .with_http_gateway(instance_http_gateway_config)
         .build();
 
-    // Start HTTP gateway and derive an endpoint to request the frontend canister via the HTTP gateway.
-    let mut endpoint = pic.url().unwrap();
-    assert_eq!(endpoint.host_str().unwrap(), "localhost");
-    let host = format!("{frontend_canister_id}.localhost");
-    endpoint.set_host(Some(&host)).unwrap();
-
     // A basic smoke test.
-    let client = resolving_client(&pic, host);
-    let resp = client.get(endpoint).send().unwrap();
-    let body = String::from_utf8(decode_gzipped_bytes(resp.bytes().unwrap().to_vec())).unwrap();
-    assert!(body.contains(expected_str));
-}
-
-#[test]
-fn test_nns_ui() {
     let nns_dapp_canister_id = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
-
-    frontend_smoke_test(
-        nns_dapp_canister_id,
-        "<title>Network Nervous System</title>",
-    );
-}
-
-#[test]
-fn test_ii() {
-    let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
-
-    frontend_smoke_test(ii_canister_id, "<title>Internet Identity</title>");
+    let nns_dapp_title = "Network Nervous System";
+    let internet_identity_canister_id =
+        Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+    let internet_identity_title = "Internet Identity";
+    for (canister_id, expected_title) in [
+        (nns_dapp_canister_id.to_string(), nns_dapp_title),
+        (
+            internet_identity_canister_id.to_string(),
+            internet_identity_title,
+        ),
+    ] {
+        let (client, url) =
+            frontend_canister(&pic, Principal::from_text(canister_id).unwrap(), false, "/");
+        let resp = client.get(url).send().unwrap();
+        let body = String::from_utf8(decode_gzipped_bytes(resp.bytes().unwrap().to_vec())).unwrap();
+        assert!(body.contains(&format!("<title>{}</title>", expected_title)));
+    }
 }
 
 #[test]
 fn test_no_canister_http_without_auto_progress() {
+    let instance_http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
     let pic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(all_icp_features())
+        .with_http_gateway(instance_http_gateway_config)
         .build();
 
     // No canister http outcalls should be made
     // (because we did not enable auto progress when creating the PocketIC instance
-    // and the system canisters should be configured to make no canister http outcalls
+    // and system canisters should be configured to make no canister http outcalls
     // in this case).
     // We advance time and execute a few more rounds in case they were only made on timers.
     for _ in 0..10 {
@@ -188,8 +155,12 @@ fn test_sns() {
         sns_subnet_ids: Vec<Principal>,
     }
 
+    let icp_features = IcpFeatures {
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .build();
 
     // Test that the SNS subnet ID has been set properly.
@@ -435,8 +406,13 @@ fn test_nns_governance() {
         hasher.finalize().to_vec().try_into().unwrap()
     }
 
+    let icp_features = IcpFeatures {
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .build();
 
     let user_id = Principal::from_slice(&[42; 29]); // arbitrary test user id
@@ -607,8 +583,12 @@ fn test_icp_ledger() {
         subaccount: Option<Vec<u8>>,
     }
 
+    let icp_features = IcpFeatures {
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .build();
     let user_id = Principal::from_slice(&[42; 29]); // arbitrary test user id
 
@@ -717,8 +697,12 @@ fn test_cycles_ledger() {
     let test_identity = Principal::from_slice(&[42; 29]);
     let cycles_ledger_id = Principal::from_text("um5iw-rqaaa-aaaaq-qaaba-cai").unwrap();
 
+    let icp_features = IcpFeatures {
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .with_application_subnet()
         .build();
 
@@ -908,9 +892,13 @@ fn check_cmc_state(pic: &PocketIc, expect_fiduciary: bool) {
 
 #[test]
 fn test_cmc_fiduciary_subnet() {
+    let icp_features = IcpFeatures {
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
         .with_fiduciary_subnet()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .build();
 
     check_cmc_state(&pic, true);
@@ -918,9 +906,13 @@ fn test_cmc_fiduciary_subnet() {
 
 #[test]
 fn test_cmc_fiduciary_subnet_creation() {
+    let icp_features = IcpFeatures {
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .build();
 
     check_cmc_state(&pic, false);
@@ -932,11 +924,15 @@ fn test_cmc_fiduciary_subnet_creation() {
 
 #[test]
 fn test_cmc_state() {
+    let icp_features = IcpFeatures {
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let state = PocketIcState::new();
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_fiduciary_subnet()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .with_state(state)
         .build();
 
@@ -1053,10 +1049,14 @@ fn get_subnet_from_registry(pic: &PocketIc, canister_id: Principal) -> Principal
 
 #[test]
 fn read_registry() {
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let state = PocketIcState::new();
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(icp_features)
         .with_state(state)
         .build();
 
@@ -1123,7 +1123,7 @@ fn with_all_icp_features_and_nns_state() {
         .into();
 
     let _pic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_icp_features(all_icp_features())
         .with_nns_state(state_dir_path_buf)
         .build();
 }
