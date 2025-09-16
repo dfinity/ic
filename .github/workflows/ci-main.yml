@@ -331,15 +331,6 @@ jobs:
       - name: Install lld
         run: |
           sudo apt install lld
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
       - name: Build and Test
         run: |
           # run pocket-ic tests
@@ -347,7 +338,6 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //packages/pocket-ic:all \
               //rs/pocket_ic_server:test \
               //rs/pocket_ic_server:gateway \
@@ -373,15 +363,6 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |
@@ -406,7 +387,6 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
-            --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
             --test_tag_filters="test_macos,test_macos_slow" \
             "${bazel_targets[@]}"
 
