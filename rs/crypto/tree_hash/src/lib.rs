@@ -1312,7 +1312,7 @@ pub trait HashTreeBuilder {
 #[derive(Clone, Debug)]
 pub enum MatchPattern {
     Label(Label),
-    Wildcard(Vec<Label>),
+    AllLabelsExcept(Vec<Label>),
 }
 
 impl MatchPattern {
@@ -1320,7 +1320,7 @@ impl MatchPattern {
     pub fn is_match(&self, label: &Label) -> bool {
         match self {
             MatchPattern::Label(l) => l == label,
-            MatchPattern::Wildcard(labels) => !labels.iter().any(|l| l == label),
+            MatchPattern::AllLabelsExcept(labels) => !labels.iter().any(|l| l == label),
         }
     }
 }

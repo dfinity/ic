@@ -5181,7 +5181,7 @@ fn certified_read_can_exclude_canister_ranges() {
             exclusion,
         )]);
         let exclusion = MatchPatternTree::SubTree(vec![(
-            MatchPattern::Wildcard(vec![label(some_subnet_id.get_ref())]),
+            MatchPattern::AllLabelsExcept(vec![label(some_subnet_id.get_ref())]),
             exclusion,
         )]);
         let exclusion =

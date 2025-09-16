@@ -24,6 +24,11 @@ mock! {
 
         fn latest_certified_height(&self) -> Height;
 
+        fn read_certified_state(
+            &self,
+            _paths: &LabeledTree<()>,
+        ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
+
         fn read_certified_state_with_exclusion<'a>(
             &self,
             _paths: &'a LabeledTree<()>,
