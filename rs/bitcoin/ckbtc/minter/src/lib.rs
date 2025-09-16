@@ -9,7 +9,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin;
+use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
@@ -131,7 +131,7 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-pub type GetUtxosRequest = bitcoin::GetUtxosRequest;
+pub type GetUtxosRequest = bitcoin_canister::GetUtxosRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
@@ -140,8 +140,8 @@ pub struct GetUtxosResponse {
     pub next_page: Option<Page>,
 }
 
-impl From<bitcoin::GetUtxosResponse> for GetUtxosResponse {
-    fn from(response: bitcoin::GetUtxosResponse) -> Self {
+impl From<bitcoin_canister::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: bitcoin_canister::GetUtxosResponse) -> Self {
         Self {
             utxos: response
                 .utxos
@@ -174,12 +174,12 @@ pub enum Network {
     Regtest,
 }
 
-impl From<Network> for bitcoin::BitcoinNetwork {
+impl From<Network> for bitcoin_canister::Network {
     fn from(network: Network) -> Self {
         match network {
-            Network::Mainnet => bitcoin::BitcoinNetwork::Mainnet,
-            Network::Testnet => bitcoin::BitcoinNetwork::Testnet,
-            Network::Regtest => bitcoin::BitcoinNetwork::Regtest,
+            Network::Mainnet => bitcoin_canister::Network::Mainnet,
+            Network::Testnet => bitcoin_canister::Network::Testnet,
+            Network::Regtest => bitcoin_canister::Network::Regtest,
         }
     }
 }
@@ -1341,7 +1341,10 @@ pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
     use tasks::{pop_if_ready, run_task};
 
     if let Some(task) = pop_if_ready(&runtime) {
-        ic_cdk::spawn(run_task(task, runtime));
+        // Remark: spawn_017_compat is not needed since there is no code after `spawn` in the timer.
+        // See https://github.com/dfinity/cdk-rs/blob/0.18.3/ic-cdk/V18_GUIDE.md#futures-ordering-changes
+        #[allow(clippy::disallowed_methods)]
+        ic_cdk::futures::spawn(run_task(task, runtime));
     }
 }
 
@@ -1473,7 +1476,7 @@ impl CanisterRuntime for IcCanisterRuntime {
     }
 
     fn global_timer_set(&self, timestamp: u64) {
-        ic_cdk::api::set_global_timer(timestamp);
+        ic_cdk::api::global_timer_set(timestamp);
     }
 
     async fn bitcoin_get_utxos(
@@ -1685,4 +1688,4 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
     }
 }
 
-pub type GetUtxosCache = CacheWithExpiration<bitcoin::GetUtxosRequest, GetUtxosResponse>;
+pub type GetUtxosCache = CacheWithExpiration<bitcoin_canister::GetUtxosRequest, GetUtxosResponse>;

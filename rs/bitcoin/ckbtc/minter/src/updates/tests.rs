@@ -16,7 +16,6 @@ mod update_balance {
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, storage};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
-    use ic_cdk::api::call::RejectionCode;
     use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
