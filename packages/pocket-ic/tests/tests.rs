@@ -1,3 +1,4 @@
+use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
 #[cfg(not(windows))]
 use ic_base_types::{PrincipalId, SubnetId};
@@ -35,15 +36,14 @@ use pocket_ic::{
     },
     query_candid, start_server, update_candid,
 };
-use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::net::{IpAddr, Ipv4Addr};
+#[cfg(not(windows))]
+use std::net::SocketAddr;
 use std::{
     io::Read,
-    net::SocketAddr,
     sync::OnceLock,
     time::{Duration, SystemTime},
 };
@@ -62,6 +62,8 @@ use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
 
+mod common;
+
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
 
@@ -74,36 +76,6 @@ enum RejectionCode {
     CanisterReject,
     CanisterError,
     Unknown,
-}
-
-fn frontend_canister(
-    pic: &PocketIc,
-    canister_id: Principal,
-    raw: bool,
-    path: impl ToString,
-) -> (Client, Url) {
-    let mut url = pic.url().unwrap();
-    assert_eq!(url.host_str().unwrap(), "localhost");
-    let maybe_raw = if raw { ".raw" } else { "" };
-    let host = format!("{canister_id}{maybe_raw}.localhost");
-    url.set_host(Some(&host)).unwrap();
-    url.set_path(&path.to_string());
-    // Windows doesn't automatically resolve localhost subdomains.
-    let client = if cfg!(windows) {
-        Client::builder()
-            .resolve(
-                &host,
-                SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    pic.get_server_url().port().unwrap(),
-                ),
-            )
-            .build()
-            .unwrap()
-    } else {
-        Client::new()
-    };
-    (client, url)
 }
 
 // Create a counter canister and charge it with 2T cycles.
