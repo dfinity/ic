@@ -148,7 +148,7 @@ if [ -z "$BAZEL_BUILD_INVOCATION_ID" ]; then
     BAZEL_COMMON_ARGS+=(--invocation_id="$BAZEL_BUILD_INVOCATION_ID")
 fi
 
-bazel build --invocation_id="$BAZEL_BUILD_INVOCATION_ID" "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
+bazel build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
 
 query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 
