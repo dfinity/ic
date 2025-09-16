@@ -331,7 +331,6 @@ mod test {
     use super::*;
     use crate::common::test_common::TestState;
     use ic_btc_adapter_test_utils::{block_1, block_2, generate_header, generate_headers};
-    use ic_btc_validation::ValidateHeaderError;
     use std::collections::HashSet;
 
     fn run_in_memory(network: Network, test_fn: impl Fn(BlockchainState<Network>)) {
