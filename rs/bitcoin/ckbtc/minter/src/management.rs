@@ -143,7 +143,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
             Ok(res)
         } else {
             crate::metrics::GET_UTXOS_CACHE_MISSES.with(|cell| cell.set(cell.get() + 1));
-            runtime.bitcoin_get_utxos(req.clone()).await.inspect(|res| {
+            runtime.bitcoin_get_utxos(&req).await.inspect(|res| {
                 *now = runtime.time();
                 crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone(), *now))
             })
@@ -184,9 +184,8 @@ pub async fn get_utxos<R: CanisterRuntime>(
 }
 
 /// Fetches a subset of UTXOs for the specified address.
-pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    // TODO XC-455: take only reference instead of ownership of GetUtxosRequest
-    bitcoin_canister::bitcoin_get_utxos(&request)
+pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
+    bitcoin_canister::bitcoin_get_utxos(request)
         .await
         .map(GetUtxosResponse::from)
         .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_utxos", err))

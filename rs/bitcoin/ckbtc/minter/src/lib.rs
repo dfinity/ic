@@ -1427,7 +1427,7 @@ pub trait CanisterRuntime {
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
-        request: GetUtxosRequest,
+        request: &GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
@@ -1481,7 +1481,7 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn bitcoin_get_utxos(
         &self,
-        request: GetUtxosRequest,
+        request: &GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }
