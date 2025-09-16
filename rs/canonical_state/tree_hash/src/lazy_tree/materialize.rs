@@ -95,6 +95,6 @@ fn exclusion_for_label<'a>(
         None | Some(MatchPatternTree::Leaf) => None,
         Some(MatchPatternTree::SubTree(patterns)) => patterns
             .iter()
-            .find_map(|(pattern, subtree)| pattern.is_match(&label).then_some(subtree)),
+            .find_map(|(pattern, subtree)| pattern.is_match(label).then_some(subtree)),
     }
 }
