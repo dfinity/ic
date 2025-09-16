@@ -1,4 +1,4 @@
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree, MatchPatternTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternTree, MixedHashTree};
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
 };

@@ -3,7 +3,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     generate_key_transcript, setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree, MatchPatternTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternTree, MixedHashTree};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
