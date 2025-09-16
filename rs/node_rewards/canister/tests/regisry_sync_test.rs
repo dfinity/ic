@@ -30,26 +30,10 @@ async fn test_registry_value_syncing() {
 
     // This is the value from invariant_compliant_mutation
     let test_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(999));
-    // We don't use agents here because this method is test-only, so we won't
-    // support it beyond this one test.
-    let response = pocket_ic
-        .query_call(
-            canister_id,
-            PrincipalId::new_anonymous().0,
-            "get_registry_value",
-            Encode!(&make_subnet_record_key(test_subnet_id)).unwrap(),
-        )
-        .await
-        .unwrap();
 
-    let decoded = Decode!(&response, Result<Option<Vec<u8>>, String>).unwrap();
-    assert_eq!(decoded, Ok(None));
-
-    // Advance time and tick so the sync will run
-    for _ in 0..60 {
-        pocket_ic.advance_time(Duration::from_secs(60 * 5)).await;
-        pocket_ic.tick().await;
-    }
+    // Registry will be synced immediatly after the canister is installed
+    pocket_ic.advance_time(Duration::from_secs(60 * 5)).await;
+    pocket_ic.tick().await;
 
     let response = pocket_ic
         .query_call(
