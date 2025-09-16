@@ -242,11 +242,11 @@ jobs:
             fi
 
             # Values map to `output_id` in `gen-uuids` step
-            declare -A invocation_keys=(
+            declare -A invocation_ids=(
               [build]="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
               [test]="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
             )
-            for bazel_cmd in "${!invocation_keys[@]}"; do
+            for bazel_cmd in "${!invocation_ids[@]}"; do
               "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
 
@@ -269,12 +269,9 @@ jobs:
                 echo '</details>';
               } >>"$GITHUB_STEP_SUMMARY"
 
-              key="${invocation_keys[$bazel_cmd]}"
-              invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).$key }}"
-
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+              bazel "$bazel_cmd" "--invocation_id=${invocation_ids[$bazel_cmd]}" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
             done
 
       - name: Upload to S3
