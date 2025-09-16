@@ -2,7 +2,7 @@ use hex_literal::hex;
 use k256::elliptic_curve::{
     Field, Group,
     group::{GroupEncoding, ff::PrimeField},
-    ops::{LinearCombination, MulByGenerator, Reduce},
+    ops::{Invert, LinearCombination, MulByGenerator, Reduce},
     scalar::IsHigh,
     sec1::FromEncodedPoint,
 };
@@ -244,6 +244,19 @@ impl Scalar {
     /// scalar is zero)
     pub fn invert(&self) -> Option<Self> {
         let inv = self.s.invert();
+        if bool::from(inv.is_some()) {
+            Some(Self::new(inv.unwrap()))
+        } else {
+            None
+        }
+    }
+
+    /// Perform modular inversion
+    ///
+    /// Returns None if no modular inverse exists (ie because the
+    /// scalar is zero)
+    pub fn invert_vartime(&self) -> Option<Self> {
+        let inv = self.s.invert_vartime();
         if bool::from(inv.is_some()) {
             Some(Self::new(inv.unwrap()))
         } else {
