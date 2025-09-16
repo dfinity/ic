@@ -1,21 +1,21 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, SamplingMode, criterion_group, criterion_main};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    ecdsa_sig_share_from_each_receiver, generate_key_transcript, generate_tecdsa_protocol_inputs,
-    random_crypto_component_not_in_receivers, CanisterThresholdSigTestEnvironment,
-    IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, ecdsa_sig_share_from_each_receiver,
+    generate_key_transcript, generate_tecdsa_protocol_inputs,
+    random_crypto_component_not_in_receivers,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+use ic_types::Randomness;
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
-use ic_types::Randomness;
 use rand::{CryptoRng, Rng, RngCore};
 use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
@@ -268,8 +268,8 @@ fn random_sig_inputs<R: Rng>(rng: &mut R) -> (ExtendedDerivationPath, Vec<u8>, R
         caller: PrincipalId::new_user_test_id(1),
         derivation_path: vec![],
     };
-    let hashed_message = rng.gen::<[u8; 32]>();
-    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+    let hashed_message = rng.r#gen::<[u8; 32]>();
+    let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
     (derivation_path, hashed_message.to_vec(), seed)
 }
 
@@ -309,7 +309,7 @@ impl TestCase {
         let curve = match self.alg {
             AlgorithmId::ThresholdEcdsaSecp256k1 => "secp256k1",
             AlgorithmId::ThresholdEcdsaSecp256r1 => "secp256r1",
-            unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
+            unexpected => panic!("Unexpected testcase algorithm {unexpected}"),
         };
         format!("crypto_tecdsa_{}_{}_nodes", curve, self.num_of_nodes)
     }

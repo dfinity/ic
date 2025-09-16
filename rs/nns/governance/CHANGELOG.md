@@ -11,6 +11,24 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-09-05: Proposal 138369
+
+http://dashboard.internetcomputer.org/proposal/138369
+
+## Added
+
+* The neuron `Split` command accepts an optional `memo` field that can be used to derive the neuron
+  subaccount, rather than generating a random one.
+
+## Changed
+
+* The protobuf-encoded `Storable` implementations are changed to `Unbounded`.
+
+## Removed
+
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
+
+
 # 2025-07-25: Proposal 137582
 
 http://dashboard.internetcomputer.org/proposal/137582

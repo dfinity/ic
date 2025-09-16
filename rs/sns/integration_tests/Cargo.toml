@@ -35,6 +35,7 @@ ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-sns-governance-api = { path = "../governance/api" }
+ic-stable-structures = { workspace = true }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }

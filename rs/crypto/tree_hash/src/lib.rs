@@ -2,7 +2,7 @@
 #![deny(clippy::unwrap_used)]
 
 use ic_crypto_sha2::Sha256;
-use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
 use serde_bytes::Bytes;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -189,14 +189,14 @@ impl fmt::Debug for Label {
             )
         } else {
             write!(f, "0x")?;
-            bytes.iter().try_for_each(|b| write!(f, "{:02X}", b))
+            bytes.iter().try_for_each(|b| write!(f, "{b:02X}"))
         }
     }
 }
 
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -250,13 +250,13 @@ impl Digest {
 impl fmt::Debug for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x")?;
-        self.0.iter().try_for_each(|b| write!(f, "{:02X}", b))
+        self.0.iter().try_for_each(|b| write!(f, "{b:02X}"))
     }
 }
 
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -626,7 +626,7 @@ impl MixedHashTree {
             t = match t.search_label(entry.as_ref()) {
                 SearchStatus::Found(t) => t,
                 SearchStatus::Absent | SearchStatus::Lt | SearchStatus::Gt => {
-                    return LookupStatus::Absent
+                    return LookupStatus::Absent;
                 }
                 SearchStatus::Unknown => return LookupStatus::Unknown,
             }
@@ -1053,8 +1053,7 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
                         Ok(MixedHashTree::Pruned(digest))
                     }
                     _ => Err(de::Error::custom(format!(
-                        "unknown tag: {}, expected the tag to be one of {{0, 1, 2, 3, 4}}",
-                        tag
+                        "unknown tag: {tag}, expected the tag to be one of {{0, 1, 2, 3, 4}}"
                     ))),
                 }
             }
@@ -1126,17 +1125,17 @@ fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fm
     let indent = String::from_utf8(vec![b' '; (level.saturating_mul(8)) as usize])
         .expect("String was not valid utf8");
     match witness {
-        Witness::Known() => writeln!(f, "{}** KNOWN **", indent),
-        Witness::Pruned { digest } => writeln!(f, "{}\\__pruned:{:?}", indent, digest),
+        Witness::Known() => writeln!(f, "{indent}** KNOWN **"),
+        Witness::Pruned { digest } => writeln!(f, "{indent}\\__pruned:{digest:?}"),
         Witness::Node { label, sub_witness } => {
-            writeln!(f, "{}+-- node:{:?}", indent, label)?;
+            writeln!(f, "{indent}+-- node:{label:?}")?;
             write_witness(sub_witness, level.saturating_add(1), f)
         }
         Witness::Fork {
             left_tree,
             right_tree,
         } => {
-            writeln!(f, "{}+-- fork:", indent)?;
+            writeln!(f, "{indent}+-- fork:")?;
             write_witness(left_tree, level.saturating_add(1), f)?;
             write_witness(right_tree, level.saturating_add(1), f)
         }

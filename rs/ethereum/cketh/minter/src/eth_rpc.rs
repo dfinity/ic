@@ -19,13 +19,13 @@ pub struct Hash(
 
 impl Debug for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
+        write!(f, "{self:x}")
     }
 }
 
 impl Display for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
+        write!(f, "{self:x}")
     }
 }
 
@@ -50,7 +50,7 @@ impl std::str::FromStr for Hash {
         }
         let mut bytes = [0u8; 32];
         hex::decode_to_slice(&s[2..], &mut bytes)
-            .map_err(|e| format!("failed to decode hash from hex: {}", e))?;
+            .map_err(|e| format!("failed to decode hash from hex: {e}"))?;
         Ok(Self(bytes))
     }
 }

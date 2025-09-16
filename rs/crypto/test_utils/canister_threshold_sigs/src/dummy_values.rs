@@ -38,7 +38,7 @@ pub fn dummy_dealings(
         let signed_dealing = SignedIDkgDealing {
             content: IDkgDealing {
                 transcript_id,
-                internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id)
+                internal_dealing_raw: format!("Dummy raw dealing for dealer {node_id}")
                     .into_bytes(),
             },
             signature: BasicSignature {

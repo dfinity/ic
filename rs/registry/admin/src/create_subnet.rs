@@ -1,8 +1,8 @@
+use crate::ProposalTitle;
 use crate::helpers::{
     get_proposer_and_sender, parse_proposal_url, shortened_pids_string, summary_from_string_or_file,
 };
 use crate::types::{ProposalMetadata, ProposalPayload};
-use crate::ProposalTitle;
 use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
@@ -159,7 +159,7 @@ fn parse_key_config_requests_option(
     };
 
     let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(value)
-        .unwrap_or_else(|err| panic!("Cannot parse `{}` as JSON: {}", value, err));
+        .unwrap_or_else(|err| panic!("Cannot parse `{value}` as JSON: {err}"));
 
     raw.iter()
         .map(|btree| {
@@ -167,7 +167,7 @@ fn parse_key_config_requests_option(
                 .get("subnet_id")
                 .map(|key| {
                     key.parse::<PrincipalId>()
-                        .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{}'", key))
+                        .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{key}'"))
                 })
                 .expect("Each element of the JSON object must specify a 'subnet_id'."));
 
@@ -175,7 +175,7 @@ fn parse_key_config_requests_option(
                 .get("key_id")
                 .map(|key| {
                     key.parse::<MasterPublicKeyId>()
-                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
+                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
                 })
                 .expect("Each element of the JSON object must specify a 'key_id'."));
 

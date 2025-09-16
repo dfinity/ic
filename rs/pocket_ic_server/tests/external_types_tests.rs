@@ -1,6 +1,6 @@
-use candid::types::subtype::equal;
 use candid::CandidType;
-use candid_parser::utils::{instantiate_candid, CandidSource};
+use candid::types::subtype::equal;
+use candid_parser::utils::{CandidSource, instantiate_candid};
 use flate2::read::GzDecoder;
 use pocket_ic_server::external_canister_types::InternetIdentityInit;
 use std::io::Read;

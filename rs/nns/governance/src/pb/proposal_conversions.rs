@@ -162,6 +162,9 @@ fn convert_action(
         pb::proposal::Action::RegisterKnownNeuron(v) => {
             pb_api::proposal::Action::RegisterKnownNeuron(v.clone().into())
         }
+        pb::proposal::Action::DeregisterKnownNeuron(v) => {
+            pb_api::proposal::Action::DeregisterKnownNeuron((*v).into())
+        }
         pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
             pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.clone().into())
         }

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[cfg(test)]
-use proptest::prelude::{any, Strategy};
+use proptest::prelude::{Strategy, any};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 
