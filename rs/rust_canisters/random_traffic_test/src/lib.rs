@@ -74,8 +74,7 @@ impl Config {
         }
         if *reply_bytes.end() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32 {
             return Err(format!(
-                "reply_bytes range max exceeds {}",
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64
+                "reply_bytes range max exceeds {MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64}"
             ));
         }
         if instructions_count.is_empty() {
@@ -139,7 +138,7 @@ impl std::fmt::Debug for Record {
 
         // A timeout indicates a best-effort message.
         if let Some(timeout_secs) = self.timeout_secs {
-            write!(f, "timeout[s]: {} ", timeout_secs)?;
+            write!(f, "timeout[s]: {timeout_secs} ")?;
         }
 
         // A caller indicates a downstream call.

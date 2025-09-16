@@ -10,8 +10,8 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::*;
 fn insufficient_dealings(r: Result<ProtocolRound, CanisterThresholdError>) {
     match r {
         Err(CanisterThresholdError::InsufficientDealings) => {}
-        Err(e) => panic!("Unexpected error {:?}", e),
-        Ok(r) => panic!("Unexpected success {:?}", r),
+        Err(e) => panic!("Unexpected error {e:?}"),
+        Ok(r) => panic!("Unexpected success {r:?}"),
     }
 }
 

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use candid::Deserialize;
 use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
@@ -62,7 +62,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_NETWORK_ID,
             message: "Invalid network identifier".into(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -72,7 +72,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_UNABLE_TO_FIND_BLOCK,
             message: "Unable to find block".into(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -82,7 +82,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_BLOCK_IDENTIFIER,
             message: "Invalid block identifier provided".into(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -92,7 +92,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE,
             message: "Failed to build block response".into(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -122,7 +122,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_PARSING_ERROR,
             message: "Failed trying to parse types.".to_owned(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -131,10 +131,7 @@ impl Error {
     pub fn unsupported_operation(op_type: OperationType) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_UNSUPPORTED_OPERATION,
-            message: format!(
-                "The operation {} is not supported by ICRC Rosetta.",
-                op_type
-            ),
+            message: format!("The operation {op_type} is not supported by ICRC Rosetta."),
             description: None,
             retriable: false,
             details: None,
@@ -145,7 +142,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_LEDGER_COMMUNICATION,
             message: "Failed to communicate with the icrc1 ledger.".to_owned(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -155,7 +152,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_ACCOUNT_BALANCE_NOT_FOUND,
             message: "Unable to find account balance.".to_owned(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -165,7 +162,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_REQUEST_PROCESSING_ERROR,
             message: "Error while processing the request.".to_owned(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -175,7 +172,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED,
             message: "Processing of the construction request failed.".to_owned(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -185,7 +182,7 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_METADATA,
             message: "Invalid metadata provided.".to_owned(),
-            description: Some(format!("{:?}", description)),
+            description: Some(format!("{description:?}")),
             retriable: false,
             details: None,
         })
@@ -221,9 +218,12 @@ impl TryFrom<ApproveMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+                _ => anyhow::bail!(
+                    "Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
             },
-            Err(err) => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap: {:?}",err),
+            Err(err) => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap: {:?}", err),
         }
     }
 }
@@ -232,7 +232,7 @@ impl TryFrom<ObjectMap> for ApproveMetadata {
     type Error = anyhow::Error;
     fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
         serde_json::from_value(serde_json::Value::Object(o.clone()))
-            .with_context(|| format!("Could not parse ApproveMetadata from Object: {:?}", o))
+            .with_context(|| format!("Could not parse ApproveMetadata from Object: {o:?}"))
     }
 }
 
@@ -265,8 +265,15 @@ impl TryFrom<TransactionMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert TransactionMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert TransactionMetadata to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert TransactionMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert TransactionMetadata to ObjectMap: {:?}",
+                err
+            ),
         }
     }
 }
@@ -309,9 +316,12 @@ impl TryFrom<BlockMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert BlockMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            }
-            Err(err) => anyhow::bail!("Could not convert BlockMetadata to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert BlockMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!("Could not convert BlockMetadata to ObjectMap: {:?}", err),
         }
     }
 }
@@ -360,8 +370,12 @@ impl TryFrom<FeeMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert FeeMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert FeeMetadata to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert FeeMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!("Could not convert FeeMetadata to ObjectMap: {:?}", err),
         }
     }
 }

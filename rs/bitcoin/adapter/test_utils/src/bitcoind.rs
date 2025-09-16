@@ -12,19 +12,19 @@ use std::{
 use bitcoin::p2p::{Magic, ServiceFlags};
 
 use bitcoin::{
+    BlockHash,
     consensus::{deserialize_partial, encode, serialize},
     p2p::{
         message::{NetworkMessage, RawNetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
         message_network::VersionMessage,
     },
-    BlockHash,
 };
 use ic_btc_adapter::{BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 
 use bitcoin::io as bitcoin_io;
 
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -235,10 +235,10 @@ where
                                     NetworkMessage::Ping(val) => {
                                         handle_ping::<Network>(&mut socket, *val, *raw.magic()).await
                                     }
-                                    smth => panic!("Unexpected NetworkMessage: {:?}", smth),
+                                    smth => panic!("Unexpected NetworkMessage: {smth:?}"),
                                 };
                                 if let Err(err) = handler_result {
-                                    eprintln!("Mock bitcoind handler error: {}", err);
+                                    eprintln!("Mock bitcoind handler error: {err}");
                                 }
                                 unparsed.drain(..cnt);
                             }
@@ -359,11 +359,11 @@ impl<T: RpcClientType> Daemon<T> {
         fs::write(conf_path.clone(), "")?;
         let rpc_port = get_available_port()?;
         let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
-        let rpc_url = format!("http://{}", rpc_socket);
+        let rpc_url = format!("http://{rpc_socket}");
         let (p2p_args, p2p_socket) = if conf.p2p {
             let p2p_port = get_available_port()?;
             let p2p_socket = net::SocketAddrV4::new(LOCAL_IP, p2p_port);
-            let p2p_arg = format!("-port={}", p2p_port);
+            let p2p_arg = format!("-port={p2p_port}");
             let args = vec![p2p_arg];
             (args, Some(p2p_socket))
         } else {
@@ -380,14 +380,14 @@ impl<T: RpcClientType> Daemon<T> {
             .arg("-printtoconsole")
             .arg(format!("-conf={}", conf_path.display()))
             .arg(format!("-datadir={}", work_dir.path().display()))
-            .arg(format!("-rpcport={}", rpc_port))
+            .arg(format!("-rpcport={rpc_port}"))
             .args(&p2p_args)
             .args(&conf.args)
             .stdout(stdout)
             .spawn()?;
 
         if let Some(status) = process.try_wait()? {
-            panic!("early exit with: {:?}", status);
+            panic!("early exit with: {status:?}");
         }
         assert!(process.stderr.is_none());
 

@@ -1,10 +1,11 @@
 use ic_canonical_state::{
+    Control, LabelLike, MAX_SUPPORTED_CERTIFICATION_VERSION, Visitor,
     size_limit_visitor::{Matcher::*, SizeLimitVisitor},
     subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse, Control, LabelLike, Visitor, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    traverse,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, testing::ReplicatedStateTesting};
 use ic_test_utilities_state::arb_stream;
 use ic_test_utilities_types::ids::subnet_test_id;
 use proptest::prelude::*;
@@ -132,10 +133,7 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
         // Messages should be at least 35 bytes.
         assert!(
             size as u64 > (end - begin) * 35,
-            "size {}, begin {}, end {}",
-            size,
-            begin,
-            end
+            "size {size}, begin {begin}, end {end}"
         );
     } else {
         assert_eq!(begin, end);

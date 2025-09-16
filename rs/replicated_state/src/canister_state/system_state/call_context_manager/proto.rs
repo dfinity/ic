@@ -1,5 +1,5 @@
 use super::*;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 
@@ -177,10 +177,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
             .map(CallbackId::from)
             .map(|callback_id| {
                 let callback = callbacks.get(&callback_id).ok_or_else(|| {
-                    ProxyDecodeError::Other(format!(
-                        "Unexpired callback not found: {}",
-                        callback_id
-                    ))
+                    ProxyDecodeError::Other(format!("Unexpired callback not found: {callback_id}"))
                 })?;
                 Ok(((callback.deadline, callback_id), ()))
             })

@@ -4,9 +4,9 @@ pub use errors::*;
 use ic_base_types::NodeId;
 
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_types::RegistryVersion;
 use ic_types::crypto::{CryptoError, CurrentNodePublicKeys, KeyPurpose};
 use ic_types::registry::RegistryClientError;
-use ic_types::RegistryVersion;
 
 /// Methods for checking and retrieving key material.
 pub trait KeyManager {
@@ -41,7 +41,7 @@ pub trait KeyManager {
     /// # Errors
     /// * [`CurrentNodePublicKeysError::TransientInternalError`] in case of a transient internal error.
     fn current_node_public_keys(&self)
-        -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>;
+    -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>;
 
     /// Rotates the I-DKG dealing encryption keys. This function checks to see if the local node
     /// may rotate its key, and if so, performs the rotation. If a previously rotated key has not
@@ -109,7 +109,7 @@ impl From<CryptoError> for CheckKeysWithRegistryError {
                 registry_version,
             },
             _ => CheckKeysWithRegistryError::InternalError {
-                internal_error: format!("{}", crypto_error),
+                internal_error: format!("{crypto_error}"),
             },
         }
     }

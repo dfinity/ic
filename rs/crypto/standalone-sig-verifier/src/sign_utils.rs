@@ -106,8 +106,7 @@ pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
             algorithm: AlgorithmId::Ed25519,
             key_bytes: Some(raw_key),
             internal_error: format!(
-                "Incorrect length. Expected 32 bytes but found {} bytes",
-                key_length
+                "Incorrect length. Expected 32 bytes but found {key_length} bytes"
             ),
         }
     })?;

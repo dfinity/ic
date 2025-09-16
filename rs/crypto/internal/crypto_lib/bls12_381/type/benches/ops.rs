@@ -353,14 +353,14 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     });
 
     for n in [2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
-        group.bench_function(format!("multiexp_naive_{}", n), |b| {
+        group.bench_function(format!("multiexp_naive_{n}"), |b| {
             b.iter_batched_ref(
                 || g1_muln_instance(n, rng),
                 |(points, scalars)| g1_multiexp_naive(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });
-        group.bench_function(format!("multiexp_muln_{}", n), |b| {
+        group.bench_function(format!("multiexp_muln_{n}"), |b| {
             b.iter_batched_ref(
                 || g1_muln_instance(n, rng),
                 |(points, scalars)| G1Projective::muln_vartime(&points[..], &scalars[..]),
@@ -528,7 +528,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     });
 
     for n in [2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
-        group.bench_function(format!("multiexp_naive_{}", n), |b| {
+        group.bench_function(format!("multiexp_naive_{n}"), |b| {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| g2_multiexp_naive(&points[..], &scalars[..]),
@@ -536,7 +536,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             )
         });
 
-        group.bench_function(format!("multiexp_muln_{}", n), |b| {
+        group.bench_function(format!("multiexp_muln_{n}"), |b| {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
@@ -632,7 +632,7 @@ fn pairing_ops(c: &mut Criterion) {
     });
 
     for n in [2, 3, 10, 20] {
-        group.bench_function(format!("{}-pairing", n), |b| {
+        group.bench_function(format!("{n}-pairing"), |b| {
             b.iter_batched_ref(
                 || n_pairing_instance(n, rng),
                 |terms| {

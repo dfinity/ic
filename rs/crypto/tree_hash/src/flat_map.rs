@@ -3,9 +3,9 @@
 //!
 //! NOTE: `FlatMap` isn't a general-purpose map container.
 
+use serde::Serialize;
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::Serializer;
-use serde::Serialize;
 use std::fmt;
 use std::iter::{DoubleEndedIterator, Iterator};
 

@@ -1,11 +1,11 @@
 use crate::{
+    CanisterState, NumWasmPages, PageMap,
     canister_state::{
+        WASM_PAGE_SIZE_IN_BYTES,
         execution_state::{Memory, WasmExecutionMode},
         system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
-        WASM_PAGE_SIZE_IN_BYTES,
     },
     page_map::{Buffer, PageAllocatorFileDescriptor},
-    CanisterState, NumWasmPages, PageMap,
 };
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
@@ -14,8 +14,8 @@ use ic_management_canister_types_private::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, CanisterTimer, NumBytes, PrincipalId, SnapshotId, Time, MAX_STABLE_MEMORY_IN_BYTES,
-    MAX_WASM64_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, PrincipalId, SnapshotId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -711,8 +711,8 @@ mod tests {
     use super::*;
     use super::{CanisterSnapshot, CanisterSnapshots, PageMap};
     use ic_test_utilities_types::ids::canister_test_id;
-    use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
+    use ic_types::time::UNIX_EPOCH;
     use maplit::{btreemap, btreeset};
 
     fn fake_canister_snapshot(

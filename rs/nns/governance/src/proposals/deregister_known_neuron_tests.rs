@@ -1,7 +1,7 @@
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, DeregisterKnownNeuron, KnownNeuronData},
+    pb::v1::{DeregisterKnownNeuron, KnownNeuronData, governance_error::ErrorType},
     temporarily_disable_deregister_known_neuron, temporarily_enable_deregister_known_neuron,
 };
 use assert_matches::assert_matches;
@@ -23,6 +23,7 @@ fn create_test_neuron_store() -> NeuronStore {
     .with_known_neuron_data(Some(KnownNeuronData {
         name: "Test Known Neuron".to_string(),
         description: Some("A test known neuron for deregistration".to_string()),
+        links: vec!["http://example.com".to_string()],
     }))
     .build();
 
@@ -157,7 +158,7 @@ fn test_execute_success() {
 
     // Execute the deregistration
     let result = request.execute(&mut neuron_store);
-    assert!(result.is_ok(), "Execute should succeed: {:?}", result);
+    assert!(result.is_ok(), "Execute should succeed: {result:?}");
 
     // Verify the known neuron data has been removed
     let has_known_data_after = neuron_store
