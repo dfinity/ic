@@ -21,7 +21,7 @@ pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableR
 /// method to retrieve the "timestamp" that a version was first added to the local
 /// canister.
 #[async_trait]
-pub trait CanisterRegistryClient {
+pub trait CanisterRegistryClient: Send + Sync {
     /// The following holds:
     ///
     /// (1) ∀ k: get_value(k, get_latest_version()).is_ok()
