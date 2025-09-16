@@ -10,8 +10,8 @@ use ic_interfaces::p2p::consensus::{
     MutablePool, PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use ic_types::NodeId;
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

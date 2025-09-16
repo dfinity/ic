@@ -1,5 +1,5 @@
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
 use ic_types::{
@@ -90,10 +90,10 @@ impl From<GetIngressMessageInBlockResponse> for pb::GetIngressMessageInBlockResp
 #[cfg(test)]
 mod tests {
     use ic_types::{
+        Height,
         artifact::IngressMessageId,
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
-        Height,
     };
     use ic_types_test_utils::ids::message_test_id;
 

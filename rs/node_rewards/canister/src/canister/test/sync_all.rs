@@ -1,10 +1,10 @@
-use crate::canister::test::test_utils::{setup_thread_local_canister_for_test, CANISTER_TEST};
 use crate::canister::NodeRewardsCanister;
+use crate::canister::test::test_utils::{CANISTER_TEST, setup_thread_local_canister_for_test};
 use crate::metrics::tests::subnet_id;
 use futures_util::FutureExt;
 use ic_base_types::{RegistryVersion, SubnetId};
-use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_nervous_system_canisters::registry::Registry;
+use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use std::sync::Arc;

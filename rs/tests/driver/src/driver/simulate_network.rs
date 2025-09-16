@@ -42,8 +42,7 @@ impl SimulateNetwork<ProductionSubnetTopology> for SubnetSnapshot {
                 // tc class id start at 1 and we already defined one above so we need to start from 2..
                 let tc_class_id = destination_node + 2;
                 tc_command.push_str(&format!(
-                    "sudo tc class add dev enp1s0 parent 1:1 classid 1:{} htb rate 2000Mbps \n",
-                    tc_class_id,
+                    "sudo tc class add dev enp1s0 parent 1:1 classid 1:{tc_class_id} htb rate 2000Mbps \n",
                 ));
                 tc_command.push_str(&format!(
                         "sudo tc qdisc add dev enp1s0 handle {}: parent 1:{} netem limit 10000000 loss {:.3}% delay {}ms \n",
@@ -52,7 +51,7 @@ impl SimulateNetwork<ProductionSubnetTopology> for SubnetSnapshot {
                         packet_loss[(subnet_size-1) * source_node + destination_node].2 * 100.0,
                         (rtt[(subnet_size-1) * source_node + destination_node].2 * 1000.0 / 2.0) as u64
                     ));
-                tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {} u32 match ip6 dst {destination_ip} flowid 1:{} \n", tc_class_id, tc_class_id ));
+                tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {tc_class_id} u32 match ip6 dst {destination_ip} flowid 1:{tc_class_id} \n" ));
             }
             tc_command.push_str(
                 "sudo tc class add dev enp1s0 parent 1:1 classid 1:999 htb rate 2000Mbps \n",
@@ -94,7 +93,7 @@ impl SimulateNetwork<FixedNetworkSimulation> for SubnetSnapshot {
             "Packet loss must be between 0.0 and 1.0"
         );
 
-        let packet_loss_percentage = format!("{:.3}", packet_loss);
+        let packet_loss_percentage = format!("{packet_loss:.3}");
         let command = format!(
             r#"set -euo pipefail
 sudo tc qdisc del dev {DEVICE_NAME} root 2> /dev/null || true

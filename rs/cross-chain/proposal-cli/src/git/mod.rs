@@ -1,4 +1,4 @@
-use crate::candid::{encode_upgrade_args, UpgradeArgs};
+use crate::candid::{UpgradeArgs, encode_upgrade_args};
 use crate::canister::TargetCanister;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
@@ -24,7 +24,7 @@ impl<const N: usize> FromStr for Hash<N> {
             ));
         }
         let mut bytes = [0u8; N];
-        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {}", e))?;
+        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {e}"))?;
         Ok(Self(bytes))
     }
 }
@@ -123,20 +123,20 @@ impl GitRepository {
         let mut git_log = self.git();
         git_log
             .arg("log")
-            .arg(format!("--format={}", FORMAT_PARAMS))
-            .arg(format!("{}..{}", from, to))
+            .arg(format!("--format={FORMAT_PARAMS}"))
+            .arg(format!("{from}..{to}"))
             .arg("--");
         for repo_dir in canister.git_log_dirs() {
             git_log.arg(repo_dir);
         }
         let log = git_log.output().expect("failed to run git log");
-        assert!(log.status.success(), "failed to run git log: {:?}", log);
+        assert!(log.status.success(), "failed to run git log: {log:?}");
 
         let executed_command = iter::once(git_log.get_program())
             .chain(git_log.get_args())
             .fold(String::new(), |acc, arg| acc + " " + arg.to_str().unwrap())
             .trim()
-            .replace(FORMAT_PARAMS, format!("'{}'", FORMAT_PARAMS).as_str());
+            .replace(FORMAT_PARAMS, format!("'{FORMAT_PARAMS}'").as_str());
 
         let output = String::from_utf8_lossy(&log.stdout)
             .lines()

@@ -134,8 +134,7 @@ fn test_http_headers_max_number() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The number of elements exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -188,8 +187,7 @@ fn test_http_headers_max_total_size() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The total data size exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The total data size exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -236,8 +234,7 @@ fn test_http_headers_max_element_size() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The single element data size exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The single element data size exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()

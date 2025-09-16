@@ -2,7 +2,7 @@ use crate::attestation_package::generate_attestation_package;
 use crate::custom_data::EncodeSevCustomData;
 use crate::verification::verify_attestation_package;
 use crate::{
-    verification, SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail,
+    SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail, verification,
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::MockSevGuestFirmware;

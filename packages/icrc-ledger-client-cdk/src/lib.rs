@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use candid::{
-    utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
+    utils::{ArgumentDecoder, ArgumentEncoder},
 };
 pub use icrc_ledger_client::{ICRC1Client, Runtime};
 

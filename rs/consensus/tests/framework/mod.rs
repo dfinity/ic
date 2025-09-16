@@ -15,7 +15,7 @@ pub use types::{
 };
 
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript};
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
@@ -29,12 +29,13 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
+    NodeId, RegistryVersion, SubnetId,
     consensus::CatchUpPackage,
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId},
         KeyPurpose,
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId},
     },
-    subnet_id_into_protobuf, NodeId, RegistryVersion, SubnetId,
+    subnet_id_into_protobuf,
 };
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;

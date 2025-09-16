@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_crypto_temp_crypto::{CryptoComponentRng, TempCryptoComponentGeneric};
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment, RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::LoadTranscriptResult;
@@ -223,10 +223,7 @@ fn create_and_verify_key_shares_for_each<C: CryptoComponentRng>(
             let key_share = crypto
                 .create_encrypted_key_share(vetkd_args.clone())
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "vetKD encrypted key share creation by node {:?} failed: {}",
-                        creator, e
-                    )
+                    panic!("vetKD encrypted key share creation by node {creator:?} failed: {e}")
                 });
             assert_eq!(
                 crypto.verify_encrypted_key_share(*creator, &key_share, vetkd_args),

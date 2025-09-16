@@ -14,7 +14,7 @@ pub fn num_field_wrapper_into(dst: &mut [u8], src: u64) {
 }
 
 fn octal_into<T: fmt::Octal>(dst: &mut [u8], val: T) {
-    let o = format!("{:o}", val);
+    let o = format!("{val:o}");
     let value = o.bytes().rev().chain(repeat(b'0'));
     for (slot, value) in dst.iter_mut().rev().skip(1).zip(value) {
         *slot = value;

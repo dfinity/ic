@@ -136,7 +136,7 @@ fn eval(ops_bytes: OpsBytes) {
         ops_bytes = rest;
         let op = match Ops::try_from(*op_code) {
             Err(..) => {
-                api::trap_with(&format!("unknown op {}", op_code));
+                api::trap_with(&format!("unknown op {op_code}"));
             }
             Ok(op) => op,
         };
@@ -454,8 +454,7 @@ fn eval(ops_bytes: OpsBytes) {
                 match api::cost_sign_with_ecdsa(&key_name, ecdsa_curve) {
                     Ok(bytes) => stack.push_blob(bytes),
                     Err(err_code) => api::trap_with(&format!(
-                        "ic0.cost_sign_with_ecdsa failed with error code {}",
-                        err_code
+                        "ic0.cost_sign_with_ecdsa failed with error code {err_code}"
                     )),
                 }
             }
@@ -465,8 +464,7 @@ fn eval(ops_bytes: OpsBytes) {
                 match api::cost_sign_with_schnorr(&key_name, algorithm) {
                     Ok(bytes) => stack.push_blob(bytes),
                     Err(err_code) => api::trap_with(&format!(
-                        "ic0.cost_sign_with_schnorr failed with error code {}",
-                        err_code
+                        "ic0.cost_sign_with_schnorr failed with error code {err_code}"
                     )),
                 }
             }
@@ -476,8 +474,7 @@ fn eval(ops_bytes: OpsBytes) {
                 match api::cost_vetkd_derive_key(&key_name, vetkd_curve) {
                     Ok(bytes) => stack.push_blob(bytes),
                     Err(err_code) => api::trap_with(&format!(
-                        "ic0.cost_vetkd_derive_key failed with error code {}",
-                        err_code
+                        "ic0.cost_vetkd_derive_key failed with error code {err_code}"
                     )),
                 }
             }
@@ -680,10 +677,10 @@ fn get_callback(idx: u32) -> Vec<u8> {
         if let Some(code) = entry.take() {
             code
         } else {
-            panic!("get_callback: {} already taken", idx)
+            panic!("get_callback: {idx} already taken")
         }
     } else {
-        panic!("get_callback: {} out of bounds", idx)
+        panic!("get_callback: {idx} out of bounds")
     }
 }
 

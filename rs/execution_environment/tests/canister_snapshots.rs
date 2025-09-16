@@ -12,7 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
-    wasm, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
 use ic_types::CanisterId;
 
@@ -223,9 +223,8 @@ fn take_download_upload_load_snapshot_roundtrip_no_globals() {
     (call $msg_reply)
   )
   (export "canister_update run" (func $run))
-  (memory {} 1)
-)"#,
-            memory
+  (memory {memory} 1)
+)"#
         );
         for download_upload in [false, true] {
             take_download_upload_load_snapshot_roundtrip(&wat, vec![], download_upload);
@@ -258,10 +257,9 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
     (call $msg_reply)
   )
   (export "canister_update run" (func $run))
-  (global {} {} (i32.const 42))
-  (memory {} 1)
-)"#,
-                    exported, mutable, memory
+  (global {exported} {mutable} (i32.const 42))
+  (memory {memory} 1)
+)"#
                 );
                 // The current implementation includes all globals that are exported or mutable.
                 let expected_globals = if is_exported || is_mutable {
@@ -281,8 +279,8 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
     }
 }
 
-fn test_env_for_global_timer_on_low_wasm_memory(
-) -> (StateMachine, CanisterId, SnapshotId, WasmResult) {
+fn test_env_for_global_timer_on_low_wasm_memory()
+-> (StateMachine, CanisterId, SnapshotId, WasmResult) {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)
         .with_snapshot_upload_enabled(true)

@@ -8,7 +8,7 @@
 //! We vary the pool size count between 15,000 and 105,000, with 10,000
 //! increments.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
@@ -41,11 +41,11 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     ingress::IngressStatus,
     malicious_flags::MaliciousFlags,
-    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
 };
 use pprof::criterion::{Output, PProfProfiler};
 use std::{

@@ -15,9 +15,9 @@ use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterSettings;
 use pocket_ic::{
+    PocketIcBuilder,
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
-    PocketIcBuilder,
 };
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Deserialize;

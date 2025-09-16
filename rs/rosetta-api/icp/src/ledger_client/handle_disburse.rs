@@ -1,14 +1,14 @@
 use crate::{errors::ApiError, ledger_client::OperationOutput};
 use ic_nns_governance_api::{
-    manage_neuron_response::{Command, DisburseResponse},
     ManageNeuronResponse,
+    manage_neuron_response::{Command, DisburseResponse},
 };
 
 pub fn handle_disburse(
     bytes: Vec<u8>,
 ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
     let response: ManageNeuronResponse = candid::decode_one(bytes.as_ref())
-        .map_err(|err| format!("Could not decode DISBURSE response : {}", err))?;
+        .map_err(|err| format!("Could not decode DISBURSE response : {err}"))?;
     match &response.command {
         Some(Command::Disburse(DisburseResponse {
             transfer_block_height,
@@ -17,7 +17,7 @@ pub fn handle_disburse(
         )))),
         Some(Command::Error(err)) => Ok(Err(ApiError::TransactionRejected(
             false,
-            format!("Could not disburse: {}", err).into(),
+            format!("Could not disburse: {err}").into(),
         ))),
         _ => panic!("Unexpected disburse result: {:?}", response.command),
     }

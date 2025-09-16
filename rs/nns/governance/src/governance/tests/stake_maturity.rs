@@ -2,8 +2,8 @@ use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
-        tests::{MockEnvironment, StubCMC, StubIcpLedger},
         Governance,
+        tests::{MockEnvironment, StubCMC, StubIcpLedger},
     },
     pb::v1::manage_neuron::StakeMaturity,
 };

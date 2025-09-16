@@ -186,7 +186,7 @@ fn parse_chain_key_configs_option(
     };
 
     let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(value)
-        .unwrap_or_else(|err| panic!("Cannot parse `{}` as JSON: {}", value, err));
+        .unwrap_or_else(|err| panic!("Cannot parse `{value}` as JSON: {err}"));
 
     raw.iter()
         .map(|btree| {
@@ -194,7 +194,7 @@ fn parse_chain_key_configs_option(
                 .get("key_id")
                 .map(|key| {
                     key.parse::<MasterPublicKeyId>()
-                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
+                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
                 })
                 .expect("Each element of the JSON object must specify a 'key_id'."));
 
@@ -218,7 +218,7 @@ fn parse_chain_keys(key_strings: &[String]) -> Vec<MasterPublicKeyId> {
         .iter()
         .map(|key| {
             key.parse::<MasterPublicKeyId>()
-                .unwrap_or_else(|_| panic!("Could not parse as MasterPublicKeyId: '{}'", key))
+                .unwrap_or_else(|_| panic!("Could not parse as MasterPublicKeyId: '{key}'"))
         })
         .collect()
 }
@@ -306,8 +306,7 @@ impl ProposeToUpdateSubnetCmd {
             if !intersection.is_empty() {
                 panic!(
                     "You are attempting to enable and disable signing for the same chain keys: \
-                    {:?}",
-                    intersection
+                    {intersection:?}"
                 )
             }
         }
