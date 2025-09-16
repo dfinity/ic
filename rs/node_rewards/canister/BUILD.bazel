@@ -6,9 +6,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/timer_task",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
     "//rs/node_rewards/rewards_calculation",
