@@ -29,5 +29,6 @@ runs:
   steps:
     - name: Generate Bazel invocation IDs
       id: gen-uuids
+      shell: bash
       run: ./.github/actions/generate-invocation-ids/generate-ids.py '${{ toJSON(fromJSON(inputs.targets)) }}'
 

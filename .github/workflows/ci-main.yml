@@ -210,9 +210,13 @@ jobs:
                 )
             fi
 
-            for bazel_cmd in build test; do
+            for pair in "build "${{ fromJSON(steps.gen-uuids.outputs.output).build_id }} "test ${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"; do
               "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
+
+              set -- $pair
+              bazel_cmd=$1
+              invocation_id=$2
 
               num_targets=$(wc <"$target_pattern_file" -l)
               # if bazel targets is empty we don't need to run any tests
@@ -232,13 +236,6 @@ jobs:
                 echo
                 echo '</details>';
               } >>"$GITHUB_STEP_SUMMARY"
-
-              # pick invocation id from action outputs
-              if [ "$bazel_cmd" = "build" ]; then
-                invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
-              else
-                invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
-              fi
 
               echo "Running bazel command: $bazel_cmd"
 
