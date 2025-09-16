@@ -4,7 +4,7 @@ use crate::common::BlockchainHeaderValidator;
 use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     header_cache::{
-        AddHeaderError, AddHeaderResult, HeaderCache, HeaderNode, InMemoryHeaderCache,
+        AddHeaderCacheError, AddHeaderResult, HeaderCache, HeaderNode, InMemoryHeaderCache,
         LMDBHeaderCache, Tip,
     },
     metrics::BlockchainStateMetrics,
@@ -21,6 +21,22 @@ use thiserror::Error;
 /// not be created.
 const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
 const ONE_MB: usize = 1_024 * 1_024;
+
+#[derive(Debug, Error)]
+pub enum AddHeaderError<V: BlockchainHeaderValidator> {
+    /// When the received header is invalid (e.g., not in the right format).
+    #[error("Received an invalid block header: {0}")]
+    InvalidHeader(BlockHash, V::HeaderValidationError),
+    /// When there is an error writing the header to the cache.
+    #[error("Error writing the header to the cache: {0}")]
+    CacheError(AddHeaderCacheError),
+}
+
+impl<V: BlockchainHeaderValidator> From<AddHeaderCacheError> for AddHeaderError<V> {
+    fn from(err: AddHeaderCacheError) -> Self {
+        AddHeaderError::CacheError(err)
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum AddBlockError<V: BlockchainHeaderValidator> {
@@ -142,7 +158,10 @@ where
     }
 
     /// This method adds the input header to the `header_cache`.
-    fn add_header(&mut self, header: Network::Header) -> Result<AddHeaderResult, AddHeaderError<Network::HeaderValidator>> {
+    fn add_header(
+        &mut self,
+        header: Network::Header,
+    ) -> Result<AddHeaderResult, AddHeaderError<Network::HeaderValidator>> {
         let block_hash = header.block_hash();
 
         // If the header already exists in the cache,
@@ -162,6 +181,7 @@ where
             .inspect(|_| {
                 self.metrics.header_cache_size.inc();
             })
+            .map_err(AddHeaderError::from)
     }
 
     /// This method adds a new block to the `block_cache`
@@ -281,13 +301,14 @@ where
     }
 }
 
-impl<Network: BlockchainNetwork> HeaderStore for BlockchainState<Network>
-where
-    Network::Header: Send + Sync,
-{
-    fn get_header(&self, hash: &BlockHash) -> Option<(Network::Header, BlockHeight)> {
-        self.get_cached_header(hash)
-            .map(|cached| (cached.data.header.clone().into_pure_header(), cached.data.height))
+impl<Network: BlockchainNetwork> HeaderStore for BlockchainState<Network> {
+    fn get_header(&self, hash: &BlockHash) -> Option<(Header, BlockHeight)> {
+        self.get_cached_header(hash).map(|cached| {
+            (
+                cached.data.header.clone().into_pure_header(),
+                cached.data.height,
+            )
+        })
     }
 
     fn get_initial_hash(&self) -> BlockHash {
@@ -302,8 +323,8 @@ where
 #[cfg(test)]
 mod test {
     use bitcoin::{Block, Network, TxMerkleNode, consensus::Decodable};
-    use ic_logger::no_op_logger;
     use ic_btc_validation::ValidateHeaderError;
+    use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use tempfile::tempdir;
 

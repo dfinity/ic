@@ -1,11 +1,12 @@
+use crate::blockchainstate::AddHeaderError;
 use crate::common::BlockchainHeaderValidator;
+use crate::header_cache::AddHeaderCacheError;
 use crate::{
     Channel, Command, ProcessNetworkMessageError,
     blockchainstate::BlockchainState,
     common::{
         BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork, MINIMUM_VERSION_NUMBER,
     },
-    header_cache::AddHeaderError,
     metrics::RouterMetrics,
 };
 use bitcoin::{
@@ -375,13 +376,15 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                         validate_header_error,
                     ));
                 }
-                Some(AddHeaderError::PrevHeaderNotCached(stop_hash)) => {
-                    Some((blockchain_state.locator_hashes(), stop_hash))
-                }
-                Some(AddHeaderError::Internal(_)) => {
-                    // Error writing the header cache, stop getting more headers
-                    None
-                }
+                Some(AddHeaderError::CacheError(cache_err)) => match cache_err {
+                    AddHeaderCacheError::PrevHeaderNotCached(stop_hash) => {
+                        Some((blockchain_state.locator_hashes(), stop_hash))
+                    }
+                    AddHeaderCacheError::Internal(_) => {
+                        // Error writing the header cache, stop getting more headers
+                        None
+                    }
+                },
                 None => {
                     if let Some(last) = maybe_last_header {
                         // If the headers length is less than the max headers size (2000), it is likely that the end
