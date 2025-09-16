@@ -46,7 +46,7 @@ pub fn function_domain_union(
                 sf.keys().chain(ef.keys()).cloned()
             }
             _ => {
-                panic!("Field {} not found in the start or end state, or not a function, when computing the union", field_name)
+                panic!("Field {field_name} not found in the start or end state, or not a function, when computing the union")
             }
         }
     }
@@ -63,7 +63,7 @@ pub fn function_range_union(
                 sf.values().chain(ef.values()).cloned()
             }
             _ => {
-                panic!("Field {} not found in the start or end state, or not a function, when computing the union", field_name)
+                panic!("Field {field_name} not found in the start or end state, or not a function, when computing the union")
             }
         }
     }
@@ -84,21 +84,19 @@ pub fn get_maturity_disbursement_in_progress_account_ids(
                                 .get("account_id")
                                 .expect("account_id not found in the record")
                                 .clone(),
-                            _ => panic!("Field account_id not a record: {}", v),
+                            _ => panic!("Field account_id not a record: {v}"),
                         }),
                         _ => panic!(
-                            "maturity_disbursements_in_progress not found in the neuron record {}",
-                            n
+                            "maturity_disbursements_in_progress not found in the neuron record {n}"
                         ),
                     },
-                    _ => panic!("Field neuron not a record: {}", n),
+                    _ => panic!("Field neuron not a record: {n}"),
                 })
                 .collect()
         }
         _ => {
             panic!(
-                "Error getting maturity_disbursement_in_progress_acount_ids; field neuron not found in the start or end state, or not a function, in pair {:?}",
-                pair
+                "Error getting maturity_disbursement_in_progress_acount_ids; field neuron not found in the start or end state, or not a function, in pair {pair:?}"
             );
         }
     }

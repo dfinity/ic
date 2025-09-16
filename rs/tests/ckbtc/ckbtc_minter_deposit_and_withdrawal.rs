@@ -1,10 +1,10 @@
 use anyhow::Result;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_adapter_test_utils::bitcoin::{hashes::Hash, Txid};
+use ic_btc_adapter_test_utils::bitcoin::{Txid, hashes::Hash};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
-    state::{eventlog::EventType, RetrieveBtcRequest, RetrieveBtcStatus},
+    state::{RetrieveBtcRequest, RetrieveBtcStatus, eventlog::EventType},
     updates::{get_withdrawal_account::compute_subaccount, retrieve_btc::RetrieveBtcArgs},
 };
 use ic_system_test_driver::{
@@ -17,14 +17,14 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys,
     utils::{
-        generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-        wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
-        wait_for_update_balance, BITCOIN_NETWORK_TRANSFER_FEE,
+        BITCOIN_NETWORK_TRANSFER_FEE, generate_blocks, get_btc_address, get_rpc_client,
+        send_to_btc_address, wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
+        wait_for_update_balance,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -36,7 +36,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
     let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
@@ -151,8 +151,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
                     | RetrieveBtcStatus::Sending { .. }
                     | RetrieveBtcStatus::Submitted { .. }
             ),
-            "Expected status Submitted or Pending, got {:?}",
-            retrieve_status,
+            "Expected status Submitted or Pending, got {retrieve_status:?}",
         );
 
         // Wait for tx to be signed
@@ -165,9 +164,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),
-            "The mempool does not contain the expected txid: {}, mempool contents: {:?}",
-            btc_txid,
-            mempool_txids
+            "The mempool does not contain the expected txid: {btc_txid}, mempool contents: {mempool_txids:?}"
         );
 
         // We are expecting only one transaction in mempool.
@@ -239,24 +236,21 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
                     ..
                 }) if *block_index == retrieve_response.block_index
             )),
-            "missing the retrieve request in the event log: {:?}",
-            events
+            "missing the retrieve request in the event log: {events:?}"
         );
 
         assert!(
             events.iter().any(
                 |e| matches!(e, EventType::SentBtcTransaction { txid, .. } if txid == &finalized_txid)
             ),
-            "missing the tx submission in the event log: {:?}",
-            events
+            "missing the tx submission in the event log: {events:?}"
         );
 
         assert!(
             events.iter().any(
                 |e| matches!(e, EventType::ConfirmedBtcTransaction { txid } if txid == &finalized_txid)
             ),
-            "missing the tx confirmation in the event log: {:?}",
-            events
+            "missing the tx confirmation in the event log: {events:?}"
         );
     })
 }

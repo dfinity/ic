@@ -37,7 +37,7 @@ pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey>
     }
 
     let decoded = base64::decode(lines[1..n - 1].join(""))
-        .map_err(|err| invalid_data_err(format!("failed to decode base64: {}", err)))?;
+        .map_err(|err| invalid_data_err(format!("failed to decode base64: {err}")))?;
 
     parse_threshold_sig_key_from_der(&decoded)
 }
@@ -76,7 +76,7 @@ pub fn threshold_sig_public_key_to_der(pk: ThresholdSigPublicKey) -> CryptoResul
     public_key_to_der(&key.0).map_err(|e| CryptoError::MalformedPublicKey {
         algorithm: AlgorithmId::ThresBls12_381,
         key_bytes: Some(key.0.to_vec()),
-        internal_error: format!("Conversion to DER failed with error {}", e),
+        internal_error: format!("Conversion to DER failed with error {e}"),
     })
 }
 

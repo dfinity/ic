@@ -9,6 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-types = { path = "../../types/types" }
 lru = { version = "0.7.8", default-features = false }
 

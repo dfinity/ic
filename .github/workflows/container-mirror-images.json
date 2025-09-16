@@ -52,9 +52,9 @@
       "sha256": "c9ba1ba8a93223305a8bce2ae09024060797698121cd01a48e5cd7462b22faa1"
     },
     {
-      "image": "cmajewski/shkeeper-dogecoind",
+      "image": "fiftysix/dogecoin-core",
       "repo": "docker.io",
-      "sha256": "b2fcdeece97660f9d80871395ef13703e480efa0d387ea4702433045e083d563"
+      "sha256": "13c8b150b759eed9e11ebaf0edfdf998022bfd622164c8768d7057b43e4e156c"
     }
   ]
 }

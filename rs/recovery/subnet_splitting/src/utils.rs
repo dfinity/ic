@@ -7,7 +7,7 @@ use ic_recovery::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
-use ic_types::{consensus::CatchUpPackage, Time};
+use ic_types::{Time, consensus::CatchUpPackage};
 
 use std::{fmt::Display, path::Path};
 

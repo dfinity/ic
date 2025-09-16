@@ -1,41 +1,41 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
+    common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
+    CanisterId, PrincipalId, UserId,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
-        HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
+        Blob, Certificate, EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent, HttpReadStateResponse,
+        HttpRequest, HttpRequestEnvelope, MessageId, ReadState,
     },
-    CanisterId, PrincipalId, UserId,
 };
 use ic_validator::{CanisterIdSet, HttpRequestVerifier};
 use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tower::{util::BoxCloneService, ServiceBuilder};
+use tower::{ServiceBuilder, util::BoxCloneService};
 
 #[derive(Copy, Clone, Debug)]
 pub enum Version {
@@ -173,7 +173,7 @@ pub(crate) async fn canister_read_state(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
@@ -287,7 +287,7 @@ fn verify_paths(
             [b"canister", canister_id, b"metadata", name] => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Could not parse the custom section name: {}.", err),
+                    message: format!("Could not parse the custom section name: {err}."),
                 })?;
 
                 // Get principal id from byte slice.
@@ -303,28 +303,39 @@ fn verify_paths(
             }
             [b"api_boundary_nodes"] => {}
             [b"api_boundary_nodes", _node_id]
-            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
+            | [
+                b"api_boundary_nodes",
+                _node_id,
+                b"domain" | b"ipv4_address" | b"ipv6_address",
+            ] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id]
-            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            | [
+                b"subnet",
+                _subnet_id,
+                b"public_key" | b"canister_ranges" | b"node",
+            ] => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
-            [b"canister_ranges", _subnet_id] => {}
             [b"request_status", request_id]
-            | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
-            {
+            | [
+                b"request_status",
+                request_id,
+                b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code",
+            ] => {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
+                    message: format!("Invalid request id in paths. Maybe the request ID is not of {EXPECTED_MESSAGE_ID_LENGTH} bytes in length?!")
                 })?;
 
                 if let Some(x) = last_request_status_id {
                     if x != message_id {
                         return Err(HttpError {
-                                status: StatusCode::BAD_REQUEST,
-                                message: format!("More than one non-unique request ID exists in request_status paths: {} and {}.",
-                                   x, message_id),
-                            });
+                            status: StatusCode::BAD_REQUEST,
+                            message: format!(
+                                "More than one non-unique request ID exists in request_status paths: {x} and {message_id}."
+                            ),
+                        });
                     }
                 }
                 last_request_status_id = Some(message_id.clone());
@@ -394,8 +405,7 @@ fn can_read_canister_metadata(
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,
                     message: format!(
-                        "Custom section {:.100} can only be requested by the controllers of the canister.",
-                        custom_section_name
+                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister."
                     ),
                 });
             }
@@ -410,14 +420,14 @@ fn can_read_canister_metadata(
 mod test {
     use super::*;
     use crate::{
-        common::test::{array, assert_cbor_ser_equal, bytes, int},
         HttpError,
+        common::test::{array, assert_cbor_ser_equal, bytes, int},
     };
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+        CanisterQueues, ReplicatedState, SystemMetadata, canister_snapshots::CanisterSnapshots,
     };
     use ic_test_utilities_state::insert_dummy_canister;
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
@@ -534,6 +544,31 @@ mod test {
     }
 
     #[test]
+    fn test_canister_ranges_are_not_allowed() {
+        let state = ReplicatedState::new_from_checkpoint(
+            BTreeMap::new(),
+            SystemMetadata::new(subnet_test_id(1), SubnetType::Application),
+            CanisterQueues::default(),
+            RawQueryStats::default(),
+            CanisterSnapshots::default(),
+        );
+
+        let error = verify_paths(
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("canister_ranges"),
+                [0; 32].into(),
+            ])],
+            &CanisterIdSet::all(),
+            canister_test_id(1).get(),
+        )
+        .expect_err("Should fail because canister_ranges are not allowed");
+
+        assert_eq!(error.status, StatusCode::NOT_FOUND)
+    }
+
+    #[test]
     fn test_verify_path() {
         let subnet_id = subnet_test_id(1);
         let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
@@ -570,23 +605,24 @@ mod test {
                         [0; 32].into(),
                         Label::from("reply")
                     ]),
-                    Path::new(vec![Label::from("canister_ranges"), [0; 32].into(),])
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1).get(),
             ),
             Ok(())
         );
-        assert!(verify_paths(
-            &state,
-            &user_test_id(1),
-            &[
-                Path::new(vec![Label::from("request_status"), [0; 32].into()]),
-                Path::new(vec![Label::from("request_status"), [1; 32].into()])
-            ],
-            &CanisterIdSet::all(),
-            canister_test_id(1).get(),
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                &state,
+                &user_test_id(1),
+                &[
+                    Path::new(vec![Label::from("request_status"), [0; 32].into()]),
+                    Path::new(vec![Label::from("request_status"), [1; 32].into()])
+                ],
+                &CanisterIdSet::all(),
+                canister_test_id(1).get(),
+            )
+            .is_err()
+        );
     }
 }

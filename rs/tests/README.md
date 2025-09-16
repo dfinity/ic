@@ -187,12 +187,6 @@ For example, to run all the `pre-master` system tests use:
 
 Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.
 
-
-### My test is failing/flaky, what do I do?
-
-Please, check the [FAQ](doc/FAQ.md) or [TROUBLESHOOTING](doc/TROUBLESHOOTING.md) before submitting
-a bug report.
-
 ### Running the tests
 Go to the end of the page for info on the CLI arguments.
 If you are running the script within nix-shell on Linux and run out of disk space, `export TMPDIR=` might solve this issue for you.

@@ -1,7 +1,7 @@
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    batch::VetKdAgreement, crypto::vetkd::VetKdKeyVerificationError, messages::CallbackId,
-    registry::RegistryClientError, state_manager::StateManagerError, Height,
+    Height, batch::VetKdAgreement, crypto::vetkd::VetKdKeyVerificationError, messages::CallbackId,
+    registry::RegistryClientError, state_manager::StateManagerError,
 };
 
 #[derive(Debug)]

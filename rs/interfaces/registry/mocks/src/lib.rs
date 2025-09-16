@@ -1,6 +1,6 @@
 use ic_base_types::RegistryVersion;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult, RegistryClientVersionedResult};
-use ic_types::{registry::RegistryClientError, Time};
+use ic_types::{Time, registry::RegistryClientError};
 use mockall::*;
 
 mock! {

@@ -12,8 +12,8 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types 
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionSecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_sig_types;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    gen_keypair, CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes,
-    MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
+    CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes,
+    MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes, gen_keypair,
 };
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
