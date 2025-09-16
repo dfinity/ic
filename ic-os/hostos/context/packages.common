@@ -80,6 +80,7 @@ ovmf/plucky # Top level
 # Install >=10.5.0 libvirt
 libvirt-daemon-system/plucky # Top level
 libvirt-dev/plucky # Top level
+libvirt-daemon-log/plucky # Dependency
 libvirt-daemon-system-systemd/plucky # Dependency
 libvirt-daemon-config-nwfilter/plucky # Dependency
 libvirt-daemon-config-network/plucky # Dependency
