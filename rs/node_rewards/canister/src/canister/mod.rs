@@ -3,7 +3,7 @@ use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
-use crate::storage::{REWARDABLE_NODES_CACHE, VM};
+use crate::storage::REWARDABLE_NODES_CACHE;
 use crate::timer_tasks::TaskStatus;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
@@ -56,7 +56,7 @@ pub fn current_time() -> Time {
 /// through arguments and responses with almost no logic.
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
-    metrics_manager: Arc<MetricsManager<VM>>,
+    metrics_manager: Arc<MetricsManager>,
     registry_querier: Arc<RegistryQuerier>,
     last_metrics_update: RegistryVersion,
 }
@@ -65,7 +65,7 @@ pub struct NodeRewardsCanister {
 impl NodeRewardsCanister {
     pub fn new(
         registry_client: Arc<dyn CanisterRegistryClient>,
-        metrics_manager: Arc<MetricsManager<VM>>,
+        metrics_manager: Arc<MetricsManager>,
     ) -> Self {
         Self {
             registry_querier: Arc::new(RegistryQuerier::new(registry_client.clone())),
@@ -81,7 +81,7 @@ impl NodeRewardsCanister {
     }
 
     /// Gets Arc reference to MetricsManager
-    pub fn get_metrics_manager(&self) -> Arc<MetricsManager<VM>> {
+    pub fn get_metrics_manager(&self) -> Arc<MetricsManager> {
         self.metrics_manager.clone()
     }
 

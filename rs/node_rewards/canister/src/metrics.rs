@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use crate::KeyRange;
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
+use crate::storage::VM;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::{NodeId, SubnetId};
@@ -44,21 +45,14 @@ impl ManagementCanisterClient for ICCanisterClient {
     }
 }
 
-pub struct MetricsManager<Memory>
-where
-    Memory: ic_stable_structures::Memory,
-{
+pub struct MetricsManager {
     pub(crate) client: Box<dyn ManagementCanisterClient>,
-    pub(crate) subnets_metrics:
-        RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
-    pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, Memory>>,
-    pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
+    pub(crate) subnets_metrics: RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, VM>>,
+    pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, VM>>,
+    pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, VM>>,
 }
 
-impl<Memory> MetricsManager<Memory>
-where
-    Memory: ic_stable_structures::Memory + 'static,
-{
+impl MetricsManager {
     pub async fn retry_failed_subnets(&self) {
         let subnets_to_retry: Vec<SubnetId> = self
             .subnets_to_retry
