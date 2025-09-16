@@ -3611,6 +3611,7 @@ fn payload_too_large() {
     }
 }
 
+#[cfg(not(windows))]
 fn send_too_large_body(
     client: &reqwest::blocking::Client,
     url: &str,
