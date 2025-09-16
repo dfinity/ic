@@ -1,8 +1,7 @@
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::{
-    driver::{group::SystemTestGroup, ic::InternetComputer, test_env::TestEnv},
-    systest,
+use ic_system_test_driver::driver::{
+    group::SystemTestGroup, ic::InternetComputer, test_env::TestEnv,
 };
 
 fn main() -> Result<()> {

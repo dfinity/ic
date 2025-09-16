@@ -1,7 +1,6 @@
 use anyhow::Result;
-use ic_system_test_driver::{
-    driver::{group::SystemTestGroup, nested::NestedNodes, test_env::TestEnv},
-    systest,
+use ic_system_test_driver::driver::{
+    group::SystemTestGroup, nested::NestedNodes, test_env::TestEnv,
 };
 
 fn main() -> Result<()> {
