@@ -87,7 +87,7 @@ pub fn uvm_serve_recovery_artifacts(
         env,
         artifacts_path,
         Path::new(&format!("recovery/{artifacts_hash}/recovery.tar.zst")),
-    );
+    )?;
 
     let uvm = get_upstreams_uvm(env);
     info!(
