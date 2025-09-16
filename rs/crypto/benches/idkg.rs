@@ -4,10 +4,10 @@ use criterion::{BenchmarkGroup, Criterion, SamplingMode, criterion_group, criter
 use ic_crypto_test_utils_canister_threshold_sigs::node::{Node, Nodes};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgMode, IDkgModeTestContext, IDkgParticipants,
-    IDkgTestContextForComplaint, build_params_from_previous, create_transcript_or_panic,
+    IDkgTestContextForComplaint, create_transcript_or_panic,
     generate_and_verify_openings_for_complaint, generate_ecdsa_presig_quadruple,
     load_previous_transcripts_for_all_dealers, load_transcript_or_panic, random_transcript_id,
-    run_idkg_without_complaint, setup_masked_random_params,
+    run_idkg_without_complaint, setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::IDkgProtocol;
@@ -228,23 +228,15 @@ fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
                         )
                     });
 
-                let initial_params = setup_masked_random_params(
+                let initial_params = setup_unmasked_random_params(
                     dealers_env,
                     test_case.alg(),
                     src_dealers,
                     src_receivers,
                     rng,
                 );
-                let initial_transcript =
-                    run_idkg_without_complaint(&initial_params, &dealers_env.nodes, rng);
-
-                let unmasked_params = build_params_from_previous(
-                    initial_params,
-                    IDkgTranscriptOperation::ReshareOfMasked(initial_transcript),
-                    rng,
-                );
                 let unmasked_transcript =
-                    run_idkg_without_complaint(&unmasked_params, &dealers_env.nodes, rng);
+                    run_idkg_without_complaint(&initial_params, &dealers_env.nodes, rng);
 
                 let reshare_of_unmasked_params = IDkgTranscriptParams::new(
                     random_transcript_id(rng),
@@ -757,15 +749,7 @@ fn generate_key_transcript<R: RngCore + CryptoRng>(
     receivers: &IDkgReceivers,
     rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
-    let masked_key_transcript = run_idkg_without_complaint(&masked_key_params, &env.nodes, rng);
-
-    let unmasked_key_params = build_params_from_previous(
-        masked_key_params,
-        IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
-        rng,
-    );
-
+    let unmasked_key_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
     run_idkg_without_complaint(&unmasked_key_params, &env.nodes, rng)
 }
 
