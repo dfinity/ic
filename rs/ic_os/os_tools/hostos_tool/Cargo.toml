@@ -13,7 +13,9 @@ clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../deterministic_ips" }
+itertools = { workspace = true }
 network = { path = "../../network" }
+regex = { workspace = true }
 utils = { path = "../../utils" }
 
 [features]

@@ -1,7 +1,7 @@
 //! A parser for the command line flags and configuration file.
 use clap::Parser;
 use http::Uri;
-use ic_btc_adapter::{address_limits, AdapterNetwork, Config};
+use ic_btc_adapter::{AdapterNetwork, Config, address_limits};
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -112,7 +112,7 @@ pub mod test {
     #[test]
     fn test_cli_get_config_error_invalid_json() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", EMPTY_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{EMPTY_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };
@@ -131,7 +131,7 @@ pub mod test {
     #[test]
     fn test_cli_bad_socks_url() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", TESTNET_BAD_SOCKS_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{TESTNET_BAD_SOCKS_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };
@@ -148,7 +148,7 @@ pub mod test {
     #[test]
     fn test_cli_get_config_good_mainnet_json() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", MAINNET_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{MAINNET_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };
@@ -164,7 +164,7 @@ pub mod test {
     #[test]
     fn test_cli_get_config_good_testnet_json() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", TESTNET_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{TESTNET_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };

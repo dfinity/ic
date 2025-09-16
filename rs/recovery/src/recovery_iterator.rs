@@ -1,10 +1,10 @@
 use crate::{
-    app_subnet_recovery, app_subnet_recovery::AppSubnetRecovery, error::RecoveryError,
-    nns_recovery_failover_nodes, nns_recovery_failover_nodes::NNSRecoveryFailoverNodes,
-    nns_recovery_same_nodes, nns_recovery_same_nodes::NNSRecoverySameNodes, steps::Step,
-    RecoveryResult,
+    RecoveryResult, app_subnet_recovery, app_subnet_recovery::AppSubnetRecovery,
+    error::RecoveryError, nns_recovery_failover_nodes,
+    nns_recovery_failover_nodes::NNSRecoveryFailoverNodes, nns_recovery_same_nodes,
+    nns_recovery_same_nodes::NNSRecoverySameNodes, steps::Step,
 };
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use strum::EnumMessage;
 
 use std::{fmt::Debug, iter::Peekable};
@@ -48,7 +48,7 @@ pub trait RecoveryIterator<
             if skipped_steps.contains(&current_step) {
                 self.next_step()
             } else {
-                super::cli::print_step(self.get_logger(), &format!("{:?}", current_step));
+                super::cli::print_step(self.get_logger(), &format!("{current_step:?}"));
                 if let Some(explanation) = current_step.get_documentation() {
                     info!(self.get_logger(), "\n\n{}\n", explanation);
                 }

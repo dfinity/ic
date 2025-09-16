@@ -13,6 +13,7 @@ members = [
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
     "packages/ic-metrics-assert",
+    "packages/ic-pub-key",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
@@ -453,6 +454,7 @@ members = [
     "rs/tests/message_routing/xnet",
     "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/nested",
+    "rs/tests/nested/nns_recovery",
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
@@ -530,7 +532,7 @@ version = "0.9.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Autonomous serverless cloud functionality for the public Internet."
 documentation = "https://internetcomputer.org/docs/"
-edition = "2021"
+edition = "2024"
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
@@ -668,12 +670,14 @@ ic-cdk = "0.18.7"
 ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
+ic-ed25519 = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
+ic-secp256k1 = "0.2.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
@@ -689,6 +693,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
+indoc = "1.0.9"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
@@ -711,6 +716,8 @@ libc = "0.2.158"
 libcryptsetup-rs = "0.13"
 libflate = "2.1.0"
 libnss = "0.5.0"
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 macaddr = "1.0"

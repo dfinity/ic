@@ -1,13 +1,13 @@
 use crate::crypt::{
     activate_crypt_device, check_encryption_key, deactivate_crypt_device, format_crypt_device,
 };
-use crate::{crypt_name, run, Args, Partition};
+use crate::{Args, Partition, crypt_name, run};
 use anyhow::Result;
 use config_types::{
     DeploymentEnvironment, GuestOSConfig, ICOSSettings, Ipv6Config, NetworkSettings,
 };
 use ic_device::device_mapping::{Bytes, TempDevice};
-use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
+use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use ic_sev::guest::testing::MockSevGuestFirmwareBuilder;
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use std::fs;
@@ -15,7 +15,7 @@ use std::fs::{File, Permissions};
 use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 // All tests interact with the same device mapper and use shared crypt device names, so we must run
 // the tests sequentially.

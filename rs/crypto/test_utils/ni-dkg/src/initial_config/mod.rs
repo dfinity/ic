@@ -2,9 +2,9 @@
 //! for testing distributed key generation and threshold signing.
 use crate::{dummy_transcript_for_tests, dummy_transcript_for_tests_with_params};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
+use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript::Groth20_Bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_temp_crypto::{CryptoComponentRng, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -13,13 +13,13 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::get_faults_tolerated;
+use ic_types::crypto::KeyPurpose;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgTargetId};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
 };
-use ic_types::crypto::KeyPurpose;
 use ic_types::{Height, NodeId, SubnetId};
 use ic_types::{NumberOfNodes, RegistryVersion};
 use rand::SeedableRng;
@@ -119,7 +119,7 @@ pub fn initial_dkg_transcript<R: rand::Rng + rand::CryptoRng>(
     let dealer_crypto = TempCryptoComponent::builder()
         .with_registry(Arc::new(registry))
         .with_node_id(dealer_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
 
     transcript_with_single_dealing(dkg_config, dealer_crypto, dealer_id)

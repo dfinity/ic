@@ -2,12 +2,12 @@ use assert_matches::assert_matches;
 use ic_crypto_interfaces_sig_verification::CanisterSigVerifier;
 use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
-use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
+use ic_crypto_standalone_sig_verifier::{KeyBytesContentType, user_public_key_from_bytes};
 use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
 use ic_crypto_test_utils_canister_sigs::new_valid_sig_and_crypto_component;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::crypto::SignableMock;
+use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::crypto::{AlgorithmId, CanisterSig, CanisterSigOf, CryptoError};
 
 use ic_crypto_temp_crypto::TempCryptoComponent;

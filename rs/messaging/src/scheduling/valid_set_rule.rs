@@ -11,19 +11,19 @@ use ic_interfaces::{
     },
 };
 use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, trace};
 use ic_management_canister_types_private::CanisterStatusType;
-use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets, buckets::linear_buckets};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Time,
     ingress::{IngressState, IngressStatus},
     messages::{
-        extract_effective_canister_id, HttpRequestContent, Ingress, ParseIngressError,
-        SignedIngressContent,
+        HttpRequestContent, Ingress, ParseIngressError, SignedIngressContent,
+        extract_effective_canister_id,
     },
     time::expiry_time_from_now,
-    Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;
@@ -253,15 +253,15 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
             Err(ParseIngressError::UnknownSubnetMethod) => {
                 return Err(IngressInductionError::CanisterMethodNotFound(
                     msg.method_name().to_string(),
-                ))
+                ));
             }
             Err(ParseIngressError::SubnetMethodNotAllowed) => {
                 return Err(IngressInductionError::SubnetMethodNotAllowed(
                     msg.method_name().to_string(),
-                ))
+                ));
             }
             Err(ParseIngressError::InvalidSubnetPayload(_)) => {
-                return Err(IngressInductionError::InvalidManagementPayload)
+                return Err(IngressInductionError::InvalidManagementPayload);
             }
         };
 
@@ -314,12 +314,12 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                         CanisterStatusType::Stopping => {
                             return Err(IngressInductionError::CanisterStopping(
                                 canister.canister_id(),
-                            ))
+                            ));
                         }
                         CanisterStatusType::Stopped => {
                             return Err(IngressInductionError::CanisterStopped(
                                 canister.canister_id(),
-                            ))
+                            ));
                         }
                     }
                 }

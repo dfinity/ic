@@ -1,4 +1,7 @@
 use crate::{
+    CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
+    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE,
+    OLD_IC_STATE, Recovery,
     admin_helper::IcAdmin,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
@@ -7,10 +10,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{block_on, parse_hex_str, SshUser},
-    DataLocation, Recovery, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE,
-    OLD_IC_STATE,
+    util::{SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -19,8 +19,8 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{consensus::certification::CertificationMessage, Height, SubnetId};
-use slog::{debug, info, warn, Logger};
+use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
+use slog::{Logger, debug, info, warn};
 use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
@@ -324,8 +324,7 @@ impl Step for DownloadIcStateStep {
 
         let res = ssh_helper
             .ssh(format!(
-                r"echo $(ls {}/{} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');",
-                IC_DATA_PATH, IC_CHECKPOINTS_PATH
+                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');"
             ))?
             .unwrap_or_default();
         res.trim().split(' ').for_each(|cp| {
@@ -611,15 +610,13 @@ impl UploadAndRestartStep {
     /// giving read permissions for the target path to group and others.
     fn cmd_set_permissions(src: &str, target: &str) -> String {
         let mut set_permissions = String::new();
-        set_permissions.push_str(&format!("sudo chmod -R --reference={} {};", src, target));
-        set_permissions.push_str(&format!("sudo chown -R --reference={} {};", src, target));
+        set_permissions.push_str(&format!("sudo chmod -R --reference={src} {target};"));
+        set_permissions.push_str(&format!("sudo chown -R --reference={src} {target};"));
         set_permissions.push_str(&format!(
-            r"sudo find {} -type f -exec chmod a-x {{}} \;;",
-            target
+            r"sudo find {target} -type f -exec chmod a-x {{}} \;;"
         ));
         set_permissions.push_str(&format!(
-            r"sudo find {} -type f -exec chmod go+r {{}} \;;",
-            target
+            r"sudo find {target} -type f -exec chmod go+r {{}} \;;"
         ));
         set_permissions
     }
@@ -655,13 +652,12 @@ impl Step for UploadAndRestartStep {
 
             if parse_hex_str(max_checkpoint)? != replay_height.get() {
                 return Err(RecoveryError::invalid_output_error(format!(
-                    "Latest checkpoint height ({}) doesn't match replay output ({})",
-                    max_checkpoint, replay_height
+                    "Latest checkpoint height ({max_checkpoint}) doesn't match replay output ({replay_height})"
                 )));
             }
         }
 
-        let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
+        let ic_state_path = format!("{IC_DATA_PATH}/{IC_STATE}");
         let src = format!("{}/", self.data_src.display());
 
         // Decide: remote or local recovery
@@ -669,19 +665,16 @@ impl Step for UploadAndRestartStep {
             // For remote recoveries, we copy the source directory via rsync.
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.
-            let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
-            let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
+            let upload_dir = format!("{IC_DATA_PATH}/{NEW_IC_STATE}");
+            let ic_checkpoints_path = format!("{IC_DATA_PATH}/{IC_CHECKPOINTS_PATH}");
             // path of highest checkpoint on upload node
-            let copy_from = format!(
-                "{}/$(ls {} | sort | tail -1)",
-                ic_checkpoints_path, ic_checkpoints_path
-            );
+            let copy_from =
+                format!("{ic_checkpoints_path}/$(ls {ic_checkpoints_path} | sort | tail -1)");
             // path and name of checkpoint after replay
-            let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
-            let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
+            let copy_to = format!("{upload_dir}/{CHECKPOINTS}/{max_checkpoint}");
+            let cp = format!("sudo cp -r {copy_from} {copy_to}");
             let cmd_create_and_copy_checkpoint_dir = format!(
-                "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
-                upload_dir, CHECKPOINTS, cp, account, upload_dir
+                "sudo mkdir -p {upload_dir}/{CHECKPOINTS}; {cp}; sudo chown -R {account} {upload_dir};"
             );
 
             let ssh_helper = SshHelper::new(
@@ -698,7 +691,7 @@ impl Step for UploadAndRestartStep {
             if let Some(res) = ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)? {
                 info!(self.logger, "{}", res);
             }
-            let target = format!("{}@[{}]:{}/", account, node_ip, upload_dir);
+            let target = format!("{account}@[{node_ip}]:{upload_dir}/");
             info!(self.logger, "Uploading state...");
             rsync(
                 &self.logger,
@@ -710,10 +703,8 @@ impl Step for UploadAndRestartStep {
             )?;
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
-            let cmd_replace_state = format!(
-                "sudo rm -r {}; sudo mv {} {};",
-                ic_state_path, upload_dir, ic_state_path
-            );
+            let cmd_replace_state =
+                format!("sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};");
 
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
@@ -837,9 +828,11 @@ pub struct UpdateLocalStoreStep {
 
 impl Step for UpdateLocalStoreStep {
     fn descr(&self) -> String {
-        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store",
+        format!(
+            "Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store",
             self.work_dir.join("ic.json5"),
-            self.subnet_id)
+            self.subnet_id
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -1014,10 +1007,7 @@ impl Step for UploadCUPAndTarStep {
 
         info!(self.logger, "Uploading to {}", self.node_ip);
         let upload_dir = UploadCUPAndTarStep::get_upload_dir_name();
-        ssh_helper.ssh(format!(
-            "sudo rm -rf {} && mkdir {}",
-            upload_dir, upload_dir
-        ))?;
+        ssh_helper.ssh(format!("sudo rm -rf {upload_dir} && mkdir {upload_dir}"))?;
 
         let target = format!("{}@[{}]:{}/", SshUser::Admin, self.node_ip, upload_dir);
 
@@ -1118,16 +1108,17 @@ impl Step for CreateNNSRecoveryTarStep {
             info!(self.logger, "{}", res);
         }
 
-        if let Some(sha256) =
-            exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))?
-        {
-            info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
-        } else {
-            return Err(RecoveryError::invalid_output_error(format!(
-                "Could not read {}/{}",
-                self.output_dir.display(),
-                self.get_sha_name()
-            )));
+        match exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))? {
+            Some(sha256) => {
+                info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
+            }
+            _ => {
+                return Err(RecoveryError::invalid_output_error(format!(
+                    "Could not read {}/{}",
+                    self.output_dir.display(),
+                    self.get_sha_name()
+                )));
+            }
         }
 
         Ok(())
@@ -1171,14 +1162,14 @@ impl Step for DownloadRegistryStoreStep {
         let backoff = 10;
         let mut child_subnet_found = false;
         for i in 0..tries {
-            if let Err(e) = ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
-            {
+            match ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
+            { Err(e) => {
                 info!(self.logger, "Try {}: {}", i, e);
-            } else {
+            } _ => {
                 info!(self.logger, "Found subnet with original NNS id!");
                 child_subnet_found = true;
                 break;
-            }
+            }}
             thread::sleep(time::Duration::from_secs(backoff));
         }
 
@@ -1238,7 +1229,7 @@ impl Step for UploadAndHostTarStep {
         let upload_dir = "/tmp/recovery_registry";
 
         ssh_helper.ssh("nix-env -i daemonize python3".to_string())?;
-        ssh_helper.ssh(format!("mkdir -p {}", upload_dir))?;
+        ssh_helper.ssh(format!("mkdir -p {upload_dir}"))?;
 
         let target = format!("{}@[{}]:{}/", self.aux_host, self.aux_ip, upload_dir);
         let src = format!("{}", self.tar.display());

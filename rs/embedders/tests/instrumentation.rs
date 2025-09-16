@@ -2,27 +2,27 @@ use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
-    wasm_utils::{validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, Segments},
     WasmtimeEmbedder,
+    wasm_utils::{Segments, validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS},
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageIndex};
 use ic_wasm_transform::Module;
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
 
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasmtime_embedder::{WasmtimeInstance, system_api_complexity};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
-    methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,
+    methods::{FuncRef, WasmMethod},
 };
 
 const GB: u64 = 1024 * 1024 * 1024;
@@ -743,15 +743,13 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         (module
             (global $g1 (export "g1") (mut i64) (i64.const 0))
             (func $test (export "canister_update test")
-                (i64.store ({ADDRESS} 0) (i64.const 17))
-                (i64.store ({ADDRESS} 4096) (i64.const 117))
-                (i64.load ({ADDRESS} 0))
+                (i64.store ({address} 0) (i64.const 17))
+                (i64.store ({address} 4096) (i64.const 117))
+                (i64.load ({address} 0))
                 global.set $g1
             )
-            {MEMORY}
-        )"#,
-        ADDRESS = address,
-        MEMORY = memory
+            {memory}
+        )"#
     );
     let mut instance = new_instance(&wat, 10000);
     let res = instance.run(func_ref("test")).unwrap();
@@ -1075,8 +1073,8 @@ fn table_modifications_are_unsupported_for_wasm_version(is_wasm64: bool) {
 
     let err = test_table_validation(
         &format!(
-        "(table.copy ({address_type}.const 0) ({address_type}.const 0) ({address_type}.const 0))"
-    ),
+            "(table.copy ({address_type}.const 0) ({address_type}.const 0) ({address_type}.const 0))"
+        ),
         is_wasm64,
     );
     assert!(err.contains("unsupported instruction table.copy"));

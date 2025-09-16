@@ -1,6 +1,6 @@
-use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use crate::MetadataEntry;
-use anyhow::{bail, Context};
+use crate::common::storage::types::{RosettaBlock, RosettaCounter};
+use anyhow::{Context, bail};
 use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
@@ -8,7 +8,7 @@ use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
 use rusqlite::Connection;
-use rusqlite::{named_params, params, CachedStatement, Params};
+use rusqlite::{CachedStatement, Params, named_params, params};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
@@ -131,7 +131,8 @@ pub fn get_fee_collector_from_block(
         } else {
             bail!(
                 "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
-                rosetta_block.index, fee_collector_block_index
+                rosetta_block.index,
+                fee_collector_block_index
             );
         }
     }
@@ -201,12 +202,15 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         {
             Nat(balance.0.checked_sub(&amount.0).with_context(|| {
                 format!(
-                    "Underflow while debiting account {} for amount {} at index {} (balance: {})",
-                    account, amount, index, balance
+                    "Underflow while debiting account {account} for amount {amount} at index {index} (balance: {balance})"
                 )
             })?)
         } else {
-            bail!("Trying to debit an account {} that has not yet been allocated any tokens (index: {})", account, index)
+            bail!(
+                "Trying to debit an account {} that has not yet been allocated any tokens (index: {})",
+                account,
+                index
+            )
         };
         account_balances_cache
             .entry(account)
@@ -227,8 +231,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         {
             Nat(balance.0.checked_add(&amount.0).with_context(|| {
                 format!(
-                    "Overflow while crediting an account {} for amount {} at index {} (balance: {})",
-                    account, amount, index, balance
+                    "Overflow while crediting an account {account} for amount {amount} at index {index} (balance: {balance})"
                 )
             })?)
         } else {
@@ -266,22 +269,58 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         for rosetta_block in rosetta_blocks {
             match rosetta_block.get_transaction().operation {
                 crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => {
+                    let fee = rosetta_block
+                        .get_fee_paid()?
+                        .unwrap_or(Nat(BigUint::zero()));
+                    let burn_amount = Nat(amount.0.checked_add(&fee.0)
+                        .with_context(|| format!("Overflow while adding the fee {} to the amount {} for block at index {}",
+                            fee, amount, rosetta_block.index
+                    ))?);
                     debit(
                         from,
-                        amount,
+                        burn_amount,
                         rosetta_block.index,
                         connection,
                         &mut account_balances_cache,
                     )?;
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
+                    let fee = rosetta_block
+                        .get_fee_paid()?
+                        .unwrap_or(Nat(BigUint::zero()));
+                    let credit_amount = Nat(amount.0.checked_sub(&fee.0)
+                        .with_context(|| format!("Underflow while subtracting the fee {} from the amount {} for block at index {}",
+                            fee, amount, rosetta_block.index
+                    ))?);
                     credit(
                         to,
-                        amount,
+                        credit_amount,
                         rosetta_block.index,
                         connection,
                         &mut account_balances_cache,
                     )?;
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Approve { from, .. } => {
                     let fee = rosetta_block
@@ -508,10 +547,7 @@ pub fn get_block_at_idx(
     connection: &Connection,
     block_idx: u64,
 ) -> anyhow::Result<Option<RosettaBlock>> {
-    let command = format!(
-        "SELECT idx,serialized_block FROM blocks WHERE idx = {}",
-        block_idx
-    );
+    let command = format!("SELECT idx,serialized_block FROM blocks WHERE idx = {block_idx}");
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
 }
@@ -524,8 +560,7 @@ fn get_block_at_next_idx(
     block_idx: u64,
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let command = format!(
-        "SELECT idx,serialized_block FROM blocks WHERE idx > {} ORDER BY idx ASC LIMIT 1",
-        block_idx
+        "SELECT idx,serialized_block FROM blocks WHERE idx > {block_idx} ORDER BY idx ASC LIMIT 1"
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
@@ -662,10 +697,7 @@ pub fn get_account_balance_at_block_idx(
         .next()
         .transpose()
         .with_context(|| {
-            format!(
-                "Unable to fetch balance of account {} at index {}",
-                account, block_idx
-            )
+            format!("Unable to fetch balance of account {account} at index {block_idx}")
         })?
         .map(|x: String| Nat::from_str(&x))
         .transpose()?)

@@ -4,15 +4,15 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::{
-    nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-    proposal::Action,
     ExecuteGenericNervousSystemFunction, NervousSystemFunction, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType, Proposal, ProposalDecisionStatus, ProposalId,
     Topic,
+    nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+    proposal::Action,
 };
 use ic_sns_test_utils::itest_helpers::{
-    install_rust_canister_with_memory_allocation, local_test_on_sns_subnet, SnsCanisters,
-    SnsTestsInitPayloadBuilder,
+    SnsCanisters, SnsTestsInitPayloadBuilder, install_rust_canister_with_memory_allocation,
+    local_test_on_sns_subnet,
 };
 
 /// Assert the proposal is accepted and executed.
@@ -149,11 +149,13 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             .await;
 
         assert!(result.is_err());
-        assert!(result
-            .err()
-            .unwrap()
-            .error_message
-            .contains("Value < 10. Invalid!"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .error_message
+                .contains("Value < 10. Invalid!")
+        );
 
         let valid_value = 11i64;
 
@@ -177,10 +179,12 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         let proposal_data = sns_canisters.get_proposal(proposal_id).await;
         assert!(proposal_data.executed_timestamp_seconds > 0);
         assert!(proposal_data.payload_text_rendering.is_some());
-        assert!(proposal_data
-            .payload_text_rendering
-            .unwrap()
-            .contains("Value is 11. Valid!"));
+        assert!(
+            proposal_data
+                .payload_text_rendering
+                .unwrap()
+                .contains("Value is 11. Valid!")
+        );
 
         // Now remove the NervousSystemFunction
         let proposal_payload = Proposal {
@@ -212,10 +216,12 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             .await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .error_message
-            .contains("There is no NervousSystemFunction with id: 1000"));
+        assert!(
+            result
+                .unwrap_err()
+                .error_message
+                .contains("There is no NervousSystemFunction with id: 1000")
+        );
 
         let list_nervous_system_functions_response =
             sns_canisters.list_nervous_system_functions().await;

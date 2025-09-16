@@ -90,6 +90,20 @@ jobs:
           fi
 
 
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
+              skip_didc_checks="true"
+          else
+              skip_didc_checks="false"
+          fi
+
+
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
+              skip_buf_checks="true"
+          else
+              skip_buf_checks="false"
+          fi
+
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -108,6 +122,14 @@ jobs:
           echo "full_macos_build: $full_macos_build"
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_didc_checks: $skip_didc_checks"
+          echo "skip_didc_checks=$skip_didc_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_didc_checks\` | \`$skip_didc_checks\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_buf_checks: $skip_buf_checks"
+          echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
@@ -117,11 +139,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
       options: >-
         -e NODE_NAME --privileged --cgroupns host
-    timeout-minutes: 120
-    env:
-      # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-      OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-      CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
+    timeout-minutes: 150
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -138,11 +156,8 @@ jobs:
           run: |
             set -euo pipefail
 
-            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
-            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
-            SKIP_LONG_TESTS='${{ needs.config.outputs.skip_long_tests }}'
-            BASE_SHA='${{ github.event.pull_request.base.sha }}'
-            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
 
             # Determine bazel_args based on event type or branch name
             bazel_args=(
@@ -157,7 +172,7 @@ jobs:
                 bazel_args+=( --keep_going )
             fi
 
-            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
@@ -167,36 +182,49 @@ jobs:
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
             targets_args=()
-            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
-            if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_didc_checks")
             fi
-            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
-            num_targets=$(wc <"$target_pattern_file" -l)
-            # if bazel targets is empty we don't need to run any tests
-            if [ "$num_targets" -eq 0 ]; then
-              echo "No bazel targets"
-              exit 0
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_buf_checks")
             fi
-            echo "Testing $num_targets targets ..."
-            # the target list can get quite big, so we wrap it in details/summary
-            {
-              echo '<details><summary>Tested '"$num_targets"' targets</summary>';
-              echo
-              echo '```'
-              cat "$target_pattern_file"
-              echo '```'
-              echo
-              echo '</details>';
-            } >>"$GITHUB_STEP_SUMMARY"
-            bazel_args+=( --target_pattern_file="$target_pattern_file" )
+            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
+            fi
 
-            echo "Building as user: $(whoami)"
-            echo "Bazel version: $(bazel version)"
+            for bazel_cmd in build test; do
+              "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
+                    "${targets_args[@]}" >"$target_pattern_file"
 
-            bazel test "${bazel_args[@]}"
+              num_targets=$(wc <"$target_pattern_file" -l)
+              # if bazel targets is empty we don't need to run any tests
+              if [ "$num_targets" -eq 0 ]; then
+                echo "No bazel targets to $bazel_cmd"
+                continue
+              fi
+
+              echo "${bazel_cmd}ing $num_targets targets ..."
+              # the target list can get quite big, so we wrap it in details/summary
+              {
+                echo '<details><summary>'"$bazel_cmd"' '"$num_targets"' targets</summary>';
+                echo
+                echo '```'
+                cat "$target_pattern_file"
+                echo '```'
+                echo
+                echo '</details>';
+              } >>"$GITHUB_STEP_SUMMARY"
+
+              echo "Running bazel command: $bazel_cmd"
+
+              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+            done
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
@@ -264,6 +292,11 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
+      # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
+      # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
+      - name: Install lld
+        run: |
+          sudo apt install lld
       - name: Build and Test
         run: |
           # run pocket-ic tests

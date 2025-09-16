@@ -4,7 +4,7 @@ use candid::{CandidType, Principal};
 use ic_cdk::{call::Call, println};
 use serde::Deserialize;
 
-use crate::{processing::ProcessingResult, ValidationError};
+use crate::{ValidationError, processing::ProcessingResult};
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 
@@ -49,7 +49,7 @@ pub async fn get_subnet_for_canister(
             Ok(Err(_msg)) => ProcessingResult::NoProgress,
             Err(e) => {
                 println!(
-                    "Decoding `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
+                    "Decoding `get_subnet_for_canister` for {:?} failed: {:?}",
                     canister_id, e
                 );
                 ProcessingResult::NoProgress

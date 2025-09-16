@@ -1,18 +1,17 @@
-use ic_certification::{verify_certified_data, CertificateValidationError};
+use ic_certification::{CertificateValidationError, verify_certified_data};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
-    dechunkify_mutation_value,
+    GetChunk, dechunkify_mutation_value,
     pb::v1::{CertifiedResponse, HighCapacityRegistryAtomicMutateRequest},
-    GetChunk,
 };
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
+    CanisterId, RegistryVersion, SubnetId, Time, crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use prost::Message;
 use serde::Deserialize;
 use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use tree_deserializer::{LabeledTreeDeserializer, types::Leb128EncodedU64};
 
 #[cfg(test)]
 mod tests;
@@ -102,8 +101,7 @@ fn validate_version_range(
         .try_fold(since_version, |prev_version, next_version| {
             if *next_version != prev_version + 1 {
                 Err(CertificationError::InvalidDeltas(format!(
-                    "version range not continuous: {} follows {}",
-                    next_version, prev_version,
+                    "version range not continuous: {next_version} follows {prev_version}",
                 )))
             } else {
                 Ok(*next_version)
@@ -129,8 +127,7 @@ pub async fn decode_hash_tree(
     // Extract structured deltas from their tree representation.
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
         CertificationError::MalformedHashTree(format!(
-            "failed to convert hash tree to labeled tree: {:?}",
-            err
+            "failed to convert hash tree to labeled tree: {err:?}"
         ))
     })?;
 
@@ -139,8 +136,7 @@ pub async fn decode_hash_tree(
     ))
     .map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to unpack certified payload from the labeled tree: {}",
-            err
+            "failed to unpack certified payload from the labeled tree: {err}"
         ))
     })?;
 
@@ -184,8 +180,7 @@ pub(crate) async fn decode_certified_deltas(
 ) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), CertificationError> {
     let certified_response = CertifiedResponse::decode(payload).map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to decode certified response from {}: {:?}",
-            canister_id, err
+            "failed to decode certified response from {canister_id}: {err:?}"
         ))
     })?;
 
@@ -197,8 +192,7 @@ pub(crate) async fn decode_certified_deltas(
     })?;
     let mixed_hash_tree = MixedHashTree::try_from(hash_tree).map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to deserialize MixedHashTree from {}: {:?}",
-            canister_id, err
+            "failed to deserialize MixedHashTree from {canister_id}: {err:?}"
         ))
     })?;
 

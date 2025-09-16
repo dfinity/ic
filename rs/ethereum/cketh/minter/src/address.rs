@@ -31,13 +31,13 @@ impl Display for AddressValidationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             AddressValidationError::Invalid { error } => {
-                write!(f, "Invalid address: {}", error)
+                write!(f, "Invalid address: {error}")
             }
             AddressValidationError::NotSupported(address) => {
-                write!(f, "Address {} is not supported", address)
+                write!(f, "Address {address} is not supported")
             }
             AddressValidationError::Blocked(address) => {
-                write!(f, "address {} is blocked", address)
+                write!(f, "address {address} is blocked")
             }
         }
     }

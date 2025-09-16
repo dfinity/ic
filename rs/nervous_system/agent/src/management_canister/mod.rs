@@ -90,7 +90,7 @@ pub async fn stored_chunks<C: CallCanisters>(
 
 fn format_full_hash(hash: &[u8]) -> String {
     hash.iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("")
 }

@@ -56,7 +56,7 @@ fn secret_key_from_components(
     let sk = ic_secp256r1::PrivateKey::deserialize_sec1(sk_raw_bytes).map_err(|e| {
         CryptoError::MalformedSecretKey {
             algorithm: AlgorithmId::EcdsaP256,
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
 
