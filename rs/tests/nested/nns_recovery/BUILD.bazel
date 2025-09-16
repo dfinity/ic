@@ -62,7 +62,6 @@ system_test_nns(
     name = "nr_remote",
     env = ENV,
     flaky = True,
-    tags = ["long_test"],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
