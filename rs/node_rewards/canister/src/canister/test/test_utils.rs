@@ -13,6 +13,7 @@ use ic_registry_canister_client::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
@@ -33,7 +34,7 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(TestState, STATE_TEST);
 
-pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Arc<MetricsManager>) {
+pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Rc<MetricsManager>) {
     let fake_registry = Arc::new(FakeRegistry::new());
     let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
@@ -41,7 +42,7 @@ pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Arc<
             timestamp_nanos: 0,
             node_metrics: vec![],
         }]));
-    let metrics_manager = Arc::new(MetricsManager::new_test(mock));
+    let metrics_manager = Rc::new(MetricsManager::new_test(mock));
     let canister = NodeRewardsCanister::new(
         Arc::new(StableCanisterRegistryClient::<TestState>::new(
             fake_registry.clone(),
