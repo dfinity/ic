@@ -9771,7 +9771,7 @@ dependencies = [
  "ic-base-types",
  "ic-ed25519 0.3.0",
  "ic-icp-rosetta-runner",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
@@ -9793,7 +9793,7 @@ name = "ic-icp-rosetta-runner"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-rosetta-test-utils",
  "icp-ledger",
  "pocket-ic",
@@ -9824,7 +9824,7 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
- "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-rosetta-api",
@@ -9919,6 +9919,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-nns-test-utils-golden-nns-state",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
@@ -10028,6 +10029,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
@@ -10466,6 +10468,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
  "ic-rosetta-test-utils",
@@ -10482,6 +10485,10 @@ dependencies = [
  "serde",
  "serde_bytes",
 ]
+
+[[package]]
+name = "ic-ledger-suite-state-machine-tests-constants"
+version = "0.9.0"
 
 [[package]]
 name = "ic-ledger-test-utils"
@@ -12988,7 +12995,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-ledger-test-utils",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-nns-common",
@@ -15481,7 +15488,7 @@ dependencies = [
  "ic-agent",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-client",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-rosetta-api",
  "ic-sender-canister",
  "ic-test-utilities-load-wasm",
@@ -16534,6 +16541,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
