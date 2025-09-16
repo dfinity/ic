@@ -149,8 +149,12 @@ impl FulfillSubnetRentalRequest {
                 )
             })?;
 
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code schrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct RentalRequest {
             user: Principal,
@@ -328,8 +332,12 @@ impl FulfillSubnetRentalRequest {
         let proposal_id = proposal_id.id;
 
         // Assemble the request.
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code schrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct CreateRentalAgreementPayload {
             user: Principal,
