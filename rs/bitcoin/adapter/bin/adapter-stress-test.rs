@@ -48,24 +48,14 @@ pub struct Cli {
 async fn main() {
     let cli = Cli::parse();
     match cli.network {
-        AdapterNetwork::Bitcoin(network) => {
-            let timeout = Duration::from_millis(50);
-            run(network, cli.uds_path, timeout).await
-        }
-        AdapterNetwork::Dogecoin(network) => {
-            // Dogecoin `header` messages (containing 2,000 headers) take 20 sec to verify
-            let timeout = Duration::from_millis(21000);
-            run(network, cli.uds_path, timeout).await
-        }
+        AdapterNetwork::Bitcoin(network) => run(network, cli.uds_path).await,
+        AdapterNetwork::Dogecoin(network) => run(network, cli.uds_path).await,
     }
 }
 
-async fn run<Network: BlockchainNetwork>(
-    network: Network,
-    uds_path: PathBuf,
-    request_timeout_ms: Duration,
-) {
+async fn run<Network: BlockchainNetwork>(network: Network, uds_path: PathBuf) {
     let interval_sleep_ms = Duration::from_millis(1000);
+    let request_timeout_ms = Duration::from_millis(50);
 
     let block_0 = network.genesis_block_header();
     let mut total_processed_block_hashes: usize = 0;
