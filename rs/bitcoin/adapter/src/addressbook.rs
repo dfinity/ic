@@ -122,7 +122,8 @@ impl AddressBook {
     }
 
     /// This function takes the DNS seeds and creates a new queue of socket addresses to connect to
-    /// for the address discovery process.
+    /// for the address discovery process. It is made async because `to_socket_addrs` is a blocking
+    /// operation that may involve DNS lookup.
     async fn build_seed_queue(&mut self) -> Result<(), tokio::task::JoinError> {
         let mut rng = StdRng::from_entropy();
         let dns_seeds = self

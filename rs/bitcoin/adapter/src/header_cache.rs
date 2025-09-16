@@ -234,7 +234,7 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
 
 fn create_db_env(path: &Path) -> Environment {
     let mut builder = Environment::new();
-    let builder_flags = EnvironmentFlags::NO_TLS | EnvironmentFlags::NO_META_SYNC;
+    let builder_flags = EnvironmentFlags::NO_TLS;
     let permission = 0o644;
     builder.set_flags(builder_flags);
     // 3 databases: 1 for headers, 1 for tips, 1 for parent-child relation.
