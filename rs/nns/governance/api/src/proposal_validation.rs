@@ -65,7 +65,7 @@ pub fn validate_proposal_url(url: &str) -> Result<(), String> {
     // An empty string will fail validation as it is not a valid url,
     // but it's fine for us.
     if !url.is_empty() {
-        ic_nervous_system_common_validation::validate_proposal_url(
+        ic_nervous_system_common_validation::validate_url(
             url,
             PROPOSAL_URL_CHAR_MIN,
             PROPOSAL_URL_CHAR_MAX,

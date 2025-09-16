@@ -1,6 +1,6 @@
 use std::{
     cell::Ref,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     convert::TryFrom,
     fs::File,
     mem::size_of,
@@ -790,8 +790,12 @@ pub struct PageAccessResults {
     pub wasm_num_accessed_pages: usize,
     /// Non-deterministic number of dirty OS (4 KiB) pages (write).
     pub wasm_dirty_os_pages_count: usize,
+    /// Non-deterministic number of dirty Wasm (64 KiB) pages (write).
+    pub wasm_dirty_wasm_pages_count: usize,
     /// Non-deterministic number of accessed OS (4 KiB) pages (read + write).
     pub wasm_accessed_os_pages_count: usize,
+    /// Non-deterministic number of accessed Wasm (64 KiB) pages (read + write).
+    pub wasm_accessed_wasm_pages_count: usize,
     pub wasm_read_before_write_count: usize,
     pub wasm_direct_write_count: usize,
     pub wasm_sigsegv_count: usize,
@@ -880,36 +884,30 @@ impl WasmtimeInstance {
                 ..PageAccessResults::default()
             })
         } else {
-            let (wasm_dirty_pages, wasm_dirty_os_pages_count) = {
-                let tracker = self
-                    .memory_trackers
-                    .get(&CanisterMemoryType::Heap)
-                    .unwrap()
-                    .lock()
-                    .unwrap();
-                let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
-                let dirty_pages = tracker.take_dirty_pages();
-                let wasm_dirty_os_pages_count = dirty_pages.len() + speculatively_dirty_pages.len();
-
-                match self.modification_tracking {
-                    ModificationTracking::Track => (
-                        dirty_pages
-                            .into_iter()
-                            .chain(speculatively_dirty_pages)
-                            .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
-                            .collect::<Vec<PageIndex>>(),
-                        wasm_dirty_os_pages_count,
-                    ),
-                    ModificationTracking::Ignore => (vec![], wasm_dirty_os_pages_count),
-                }
-            };
-
             let wasm_tracker = self
                 .memory_trackers
                 .get(&CanisterMemoryType::Heap)
                 .unwrap()
                 .lock()
                 .unwrap();
+
+            let speculatively_dirty_pages = wasm_tracker.take_speculatively_dirty_pages();
+            let dirty_pages = wasm_tracker.take_dirty_pages();
+            let (wasm_dirty_os_pages_count, wasm_dirty_wasm_pages_count) =
+                dirty_os_and_wasm_pages(&speculatively_dirty_pages, &dirty_pages);
+
+            let accessed_pages = wasm_tracker.take_accessed_pages();
+            let (wasm_accessed_os_pages_count, wasm_accessed_wasm_pages_count) =
+                accessed_os_and_wasm_pages(&accessed_pages);
+
+            let wasm_dirty_pages = match self.modification_tracking {
+                ModificationTracking::Track => dirty_pages
+                    .into_iter()
+                    .chain(speculatively_dirty_pages)
+                    .filter_map(|p| wasm_tracker.validate_speculatively_dirty_page(p))
+                    .collect::<Vec<PageIndex>>(),
+                ModificationTracking::Ignore => vec![],
+            };
 
             let wasm_sigsegv_handler_duration = wasm_tracker.sigsegv_handler_duration();
 
@@ -922,7 +920,9 @@ impl WasmtimeInstance {
                     wasm_dirty_pages,
                     wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
                     wasm_dirty_os_pages_count,
-                    wasm_accessed_os_pages_count: wasm_tracker.num_accessed_pages(),
+                    wasm_dirty_wasm_pages_count,
+                    wasm_accessed_os_pages_count,
+                    wasm_accessed_wasm_pages_count,
                     wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
                     wasm_direct_write_count: wasm_tracker.direct_write_count(),
                     wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
@@ -949,7 +949,9 @@ impl WasmtimeInstance {
                 wasm_dirty_pages,
                 wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
                 wasm_dirty_os_pages_count,
-                wasm_accessed_os_pages_count: wasm_tracker.num_accessed_pages(),
+                wasm_dirty_wasm_pages_count,
+                wasm_accessed_os_pages_count,
+                wasm_accessed_wasm_pages_count,
                 wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
                 wasm_direct_write_count: wasm_tracker.direct_write_count(),
                 wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
@@ -989,8 +991,10 @@ impl WasmtimeInstance {
         self.instance_stats = InstanceStats {
             wasm_accessed_pages: res.wasm_num_accessed_pages,
             wasm_accessed_os_pages_count: res.wasm_accessed_os_pages_count,
+            wasm_accessed_wasm_pages_count: res.wasm_accessed_wasm_pages_count,
             wasm_dirty_pages: res.wasm_dirty_pages.len(),
             wasm_dirty_os_pages_count: res.wasm_dirty_os_pages_count,
+            wasm_dirty_wasm_pages_count: res.wasm_dirty_wasm_pages_count,
             wasm_read_before_write_count: res.wasm_read_before_write_count,
             wasm_direct_write_count: res.wasm_direct_write_count,
             wasm_sigsegv_count: res.wasm_sigsegv_count,
@@ -1308,4 +1312,28 @@ impl WasmtimeInstance {
     pub fn get_stats(&self) -> InstanceStats {
         self.instance_stats.clone()
     }
+}
+
+const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE;
+fn accessed_os_and_wasm_pages(accessed_pages: &[PageIndex]) -> (usize, usize) {
+    let wasm_pages: HashSet<u64> = accessed_pages
+        .iter()
+        .map(|&os_index| os_index.get() / OS_PAGES_PER_WASM_PAGE as u64)
+        .collect();
+    (accessed_pages.len(), wasm_pages.len())
+}
+
+fn dirty_os_and_wasm_pages(
+    speculatively_dirty_pages: &[PageIndex],
+    dirty_pages: &[PageIndex],
+) -> (usize, usize) {
+    let wasm_pages: HashSet<u64> = speculatively_dirty_pages
+        .iter()
+        .chain(dirty_pages.iter())
+        .map(|&os_index| os_index.get() / OS_PAGES_PER_WASM_PAGE as u64)
+        .collect();
+    (
+        dirty_pages.len() + speculatively_dirty_pages.len(),
+        wasm_pages.len(),
+    )
 }
