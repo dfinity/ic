@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import json
 import logging
 import os
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 BUILD_BUDDY_URL = "https://dash.idx.dfinity.network/invocation/"
 GITHUB_OUTPUT = "GITHUB_OUTPUT"
-GITHUB_SUMMARY_STEP = "GITHUB_STEP_SUMMARY"
+GITHUB_STEP_SUMMARY = "GITHUB_STEP_SUMMARY"
 
 
 @dataclass
@@ -25,10 +26,14 @@ class Target:
     output_id: str
 
 
+def die(*args, **kwargs):
+    logger.error(*args, **kwargs)
+    sys.exit(1)
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        logger.error("Expected to receive one argument, but received: %d", len(sys.argv) - 1)
-        sys.exit(1)
+        die("Expected to receive one argument, but received: %d", len(sys.argv) - 1)
 
     maybe_json = sys.argv[1]
 
@@ -38,11 +43,9 @@ if __name__ == "__main__":
         parsed = json.loads(maybe_json)
         targets: List[Target] = [Target(**item) for item in parsed]
     except json.JSONDecodeError as e:
-        logger.error("Failed to parse JSON: %s", e)
-        sys.exit(1)
+        die("Failed to parse JSON: %s", e)
     except Exception as e:
-        logger.error("Failed to cast object due to: %s", e)
-        sys.exit(1)
+        die("Failed to cast object due to: %s", e)
 
     summary = """
 ### Bazel Invocation IDs
@@ -84,10 +87,10 @@ _These links may not be immediately available; invocation details will eventuall
     else:
         logger.warning("Didn't find %s in environment variables", GITHUB_OUTPUT)
 
-    if GITHUB_SUMMARY_STEP in os.environ:
-        path = os.environ.get(GITHUB_SUMMARY_STEP)
+    if GITHUB_STEP_SUMMARY in os.environ:
+        path = os.environ.get(GITHUB_STEP_SUMMARY)
         logger.info("Will write summary to %s", path)
         with open(path, "w") as f:
             f.write(summary)
     else:
-        logger.warning("Didn't find %s in environment variables", GITHUB_SUMMARY_STEP)
+        logger.warning("Didn't find %s in environment variables", GITHUB_STEP_SUMMARY)
