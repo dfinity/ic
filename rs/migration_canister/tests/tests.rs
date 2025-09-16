@@ -3,10 +3,10 @@
 //! -x target not controlled by user
 //! -x source not controlled by MC
 //! -x target not controlled by MC
-//! - source not stopped
-//! - target not stopped
+//! -x source not stopped
+//! -x target not stopped
 //! - not enough cycles for migration
-//! - rate-limited
+//! -x rate-limited
 //! - disabled
 //!
 
@@ -59,6 +59,7 @@ pub struct Setup {
     pub target_controllers: Vec<Principal>,
     pub source_subnet: Principal,
     pub target_subnet: Principal,
+    pub system_controller: Principal,
 }
 
 pub struct Settings {
@@ -202,6 +203,7 @@ async fn setup(
         target_controllers,
         source_subnet,
         target_subnet,
+        system_controller,
     }
 }
 
@@ -342,6 +344,41 @@ async fn validation_fails_not_stopped() {
     // target
     pic.start_canister(target, Some(sender)).await.unwrap();
     let Err(ValidationError::TargetNotStopped) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+}
+
+#[tokio::test]
+async fn validation_fails_rate_limited() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        system_controller,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    // rate limit canister
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    struct SetRateLimitArgs {
+        pub max_active_requests: u64,
+    }
+    pic.update_call(
+        MIGRATION_CANISTER_ID.into(),
+        system_controller,
+        "set_rate_limit",
+        Encode!(&SetRateLimitArgs {
+            max_active_requests: 0
+        })
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let Err(ValidationError::RateLimited) =
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
     else {
         panic!()
