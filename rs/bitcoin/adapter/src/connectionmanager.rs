@@ -258,13 +258,12 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     fn flag_seed_addr_retrieval_timeouts(&mut self) {
         let now = SystemTime::now();
         for conn in self.connections.values_mut() {
-            if let AddressEntry::Seed(_) = *conn.address_entry() {
-                if let ConnectionState::AwaitingAddresses { timestamp } = *conn.state() {
-                    let expires_at =
-                        timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
-                    if expires_at <= now {
-                        conn.discard();
-                    }
+            if let AddressEntry::Seed(_) = *conn.address_entry()
+                && let ConnectionState::AwaitingAddresses { timestamp } = *conn.state()
+            {
+                let expires_at = timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+                if expires_at <= now {
+                    conn.discard();
                 }
             }
         }
@@ -548,10 +547,10 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
             return Err(ProcessNetworkMessageError::InvalidMessage);
         }
 
-        if let Ok(conn) = self.get_connection(address) {
-            if let AddressEntry::Seed(_) = conn.address_entry() {
-                conn.disconnect();
-            }
+        if let Ok(conn) = self.get_connection(address)
+            && let AddressEntry::Seed(_) = conn.address_entry()
+        {
+            conn.disconnect();
         }
 
         if self.address_book.has_enough_addresses() {

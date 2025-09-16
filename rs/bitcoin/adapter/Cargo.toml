@@ -21,6 +21,7 @@ ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+lmdb-rkv = { workspace = true }
 parking_lot = { workspace = true }
 primitive-types = "0.12"
 prometheus = { workspace = true }
