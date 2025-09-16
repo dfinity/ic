@@ -4930,9 +4930,9 @@ fn uninstall_code_with_wrong_controller_fails() {
  * - heap memory;
  * - stable memory;
  * - certified data;
- * - wasm chunk store (if `including_chunk_store` is `true`).
+ * - wasm chunk store (if `clears_chunk_store` is `true`).
  */
-fn operation_clears_canister_state<F>(op: F, including_chunk_store: bool)
+fn operation_clears_canister_state<F>(op: F, clears_chunk_store: bool)
 where
     F: FnOnce(&mut ExecutionTest, CanisterId),
 {
@@ -5024,7 +5024,7 @@ where
     assert!(certified_data_are_empty(&test));
 
     // Check that wasm chunk store is cleared.
-    if including_chunk_store {
+    if clears_chunk_store {
         assert!(chunk_store_is_empty(&test));
     } else {
         assert!(!chunk_store_is_empty(&test));

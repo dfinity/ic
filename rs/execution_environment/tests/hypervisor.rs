@@ -5855,7 +5855,7 @@ fn deleted_call_contexts() {
 
     test.execute_message(a_id);
 
-    // The refund was processed (because cycles have been refunded).
+    // The response was processed (because cycles have been refunded).
     assert!(cycles_balance(&mut test) > initial_cycles * 3_u128 / 4_u128);
 
     // The canister can now be stopped.
