@@ -522,7 +522,6 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
 
     fn sync_blocks(&mut self, channel: &mut impl Channel<Network::Header, Network::Block>) {
         // Timeout requests so they may be retried again.
-        trace!(self.logger, "in sync_blocks");
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
@@ -545,7 +544,6 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
 
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
-            trace!(self.logger, "sync_blocks returns early 1");
             return;
         }
 
@@ -568,7 +566,6 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
         let mut peers: Vec<_> = self.peer_info.values().collect();
         let len = peers.len();
         if len == 0 {
-            trace!(self.logger, "sync_blocks returns early 2");
             return;
         }
         peers.rotate_left(self.round_robin_offset % len);
@@ -595,10 +592,6 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
             }
 
             if selected_inventory.is_empty() {
-                trace!(
-                    self.logger,
-                    "sync_blocks get_next_block_hash_to_sync returns None"
-                );
                 continue;
             }
 
