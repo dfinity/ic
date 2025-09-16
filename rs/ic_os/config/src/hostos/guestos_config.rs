@@ -291,9 +291,12 @@ mod tests {
         // Test case 1: No recovery file exists initially
         // The function should return the recovery hash and create the recovery file
         let recovery_config = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
-        assert_eq!(recovery_config, Some(RecoveryConfig {
-            recovery_hash: "test123".to_string(),
-        }));
+        assert_eq!(
+            recovery_config,
+            Some(RecoveryConfig {
+                recovery_hash: "test123".to_string(),
+            })
+        );
         assert!(recovery_file_path.exists());
 
         // Test case 2: Recovery file now exists
