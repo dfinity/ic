@@ -13,6 +13,7 @@ pub mod create_service_nervous_system;
 pub mod deregister_known_neuron;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
+pub mod register_known_neuron;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
 

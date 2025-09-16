@@ -39,6 +39,8 @@ pub struct InstanceStats {
     pub wasm_accessed_pages: usize,
     /// Non-deterministic number of accessed OS (4 KiB) pages (read + write).
     pub wasm_accessed_os_pages_count: usize,
+    /// Non-deterministic number of accessed Wasm (64 KiB) pages (read + write).
+    pub wasm_accessed_wasm_pages_count: usize,
 
     /// Total number of (host) OS pages (4KiB) modified by the instance.
     /// By definition a page that has been dirtied has also been accessed,
@@ -46,6 +48,8 @@ pub struct InstanceStats {
     pub wasm_dirty_pages: usize,
     /// Non-deterministic number of dirty OS (4 KiB) pages (write).
     pub wasm_dirty_os_pages_count: usize,
+    /// Non-deterministic number of dirty Wasm (64 KiB) pages (write).
+    pub wasm_dirty_wasm_pages_count: usize,
 
     /// Number of times a write access is handled when the page has already been
     /// read.
