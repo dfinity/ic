@@ -35,7 +35,3 @@ runs:
 
         ./.github/actions/generate-invocation-ids/generate-ids.py '${{ toJSON(fromJSON(inputs.targets)) }}'
 
-        echo "Printing raw content of output:"
-        cat $GITHUB_OUTPUT
-
-
