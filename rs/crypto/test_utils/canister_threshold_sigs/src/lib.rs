@@ -1752,7 +1752,7 @@ pub fn setup_reshare_of_unmasked_params<R: Rng + CryptoRng>(
     receivers: &IDkgReceivers,
     rng: &mut R,
 ) -> IDkgTranscriptParams {
-    let unmasked_params = setup_reshare_of_masked_params(env, alg, dealers, receivers, rng);
+    let unmasked_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
     let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
     let reshare_params = build_params_from_previous(
         unmasked_params,
