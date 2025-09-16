@@ -1,3 +1,4 @@
+use crate::common::BlockchainHeaderValidator;
 use crate::{
     Channel, Command, ProcessNetworkMessageError,
     blockchainstate::{AddHeaderError, BlockchainState},
@@ -16,7 +17,6 @@ use bitcoin::{
     },
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
-use ic_btc_validation::ValidateHeaderError;
 use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use std::{
     collections::{HashMap, HashSet},
@@ -49,7 +49,7 @@ type Locators = (Vec<BlockHash>, BlockHash);
 
 /// The possible errors the `BlockchainManager::received_headers_message(...)` may produce.
 #[derive(Debug, Error)]
-enum ReceivedHeadersMessageError<Network: BlockchainNetwork> {
+enum ReceivedHeadersMessageError<V: BlockchainHeaderValidator> {
     /// This variant represents when a message from a no longer known peer.
     #[error("Unknown peer")]
     UnknownPeer,
@@ -58,7 +58,7 @@ enum ReceivedHeadersMessageError<Network: BlockchainNetwork> {
     #[error("Received too many unsolicited headers")]
     ReceivedTooManyUnsolicitedHeaders,
     #[error("Received an invalid header, with block hash {0} and error {1:?}")]
-    ReceivedInvalidHeader(BlockHash, Network::ValidationHeaderError),
+    ReceivedInvalidHeader(BlockHash, V::HeaderValidationError),
 }
 
 /// The possible errors the `BlockchainManager::received_inv_message(...)` may produce.
@@ -303,7 +303,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
         channel: &mut impl Channel<Network::Header, Network::Block>,
         addr: &SocketAddr,
         headers: &[Network::Header],
-    ) -> Result<(), ReceivedHeadersMessageError<Network>> {
+    ) -> Result<(), ReceivedHeadersMessageError<Network::HeaderValidator>> {
         let peer = self
             .peer_info
             .get_mut(addr)
