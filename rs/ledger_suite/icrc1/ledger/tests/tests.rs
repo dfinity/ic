@@ -16,10 +16,12 @@ use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     AllowancesRecentlyPurged, verify_ledger_state,
 };
 use ic_ledger_suite_state_machine_tests::{
-    ARCHIVE_TRIGGER_THRESHOLD, AllowanceProvider, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES,
-    FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
-    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, get_all_ledger_and_archive_blocks,
-    send_approval, send_transfer_from,
+    AllowanceProvider, MINTER, get_all_ledger_and_archive_blocks, send_approval, send_transfer_from,
+};
+use ic_ledger_suite_state_machine_tests_constants::{
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;

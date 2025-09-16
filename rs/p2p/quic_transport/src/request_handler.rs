@@ -61,7 +61,7 @@ pub async fn start_stream_acceptor(
             bi = conn_handle.conn().accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
-                        let send_stream = ResetStreamOnDrop::new(bi_tx);
+                        let send_stream = ResetStreamOnDrop::new(bi_tx, metrics.connection_handle_incoming_streams_total.clone());
                         inflight_requests.spawn(
                             metrics.request_task_monitor.instrument(
                                 handle_bi_stream(

@@ -1235,25 +1235,6 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.59.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bd2a9a458e8f4304c52c43ebb0cfbd520289f8379a52e329a38afda99bf8eb8"
-dependencies = [
- "bitflags 1.3.2",
- "cexpr",
- "clang-sys",
- "lazy_static",
- "lazycell",
- "peeking_take_while",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash 1.1.0",
- "shlex",
-]
-
-[[package]]
-name = "bindgen"
 version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271383c67ccabffb7381723dea0672a673f292304fcb45c01cc648c7a8d58088"
@@ -6600,7 +6581,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-crypto-utils-tls",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-limits",
@@ -6748,6 +6729,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-test-utilities-logger",
+ "lmdb-rkv",
  "parking_lot",
  "primitive-types",
  "prometheus 0.13.4",
@@ -6935,7 +6917,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-protobuf",
  "ic-read-state-response-parser",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
@@ -6959,8 +6941,8 @@ name = "ic-canister-client-sender"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "ic-ed25519",
- "ic-secp256k1",
+ "ic-ed25519 0.3.0",
+ "ic-secp256k1 0.2.0",
  "ic-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -7348,7 +7330,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics-assert",
  "ic-metrics-encoder",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -7402,7 +7384,7 @@ dependencies = [
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
@@ -7839,7 +7821,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-http-endpoints-async-utils",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -7853,7 +7835,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-secp256r1",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-registry",
@@ -7949,7 +7931,7 @@ dependencies = [
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-types",
  "rand 0.8.5",
  "serde",
@@ -7996,7 +7978,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-protobuf",
  "ic-types",
  "num-bigint 0.4.6",
@@ -8577,7 +8559,7 @@ name = "ic-crypto-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp-test-utils",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-interfaces-registry",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
@@ -8863,7 +8845,7 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-base-types",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-protobuf",
 ]
 
@@ -9037,6 +9019,23 @@ dependencies = [
  "rand_chacha 0.3.1",
  "thiserror 2.0.12",
  "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-ed25519"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba67d72c59e6e7a9794054bf991f6d6f397073f36b02d66ca652aa6f4c2117f3"
+dependencies = [
+ "candid",
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex-literal 0.4.1",
+ "hkdf",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "thiserror 2.0.12",
  "zeroize",
 ]
 
@@ -9770,13 +9769,13 @@ dependencies = [
  "candid",
  "hex",
  "ic-base-types",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-icp-rosetta-runner",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "icp-ledger",
  "icrc-ledger-types",
  "num-bigint 0.4.6",
@@ -9794,7 +9793,7 @@ name = "ic-icp-rosetta-runner"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-rosetta-test-utils",
  "icp-ledger",
  "pocket-ic",
@@ -9825,7 +9824,7 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
- "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-rosetta-api",
@@ -9872,11 +9871,11 @@ dependencies = [
  "clap 4.5.27",
  "hex",
  "ic-agent",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-runner",
  "ic-rosetta-api",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "icrc-ledger-types",
  "num-bigint 0.4.6",
  "pocket-ic",
@@ -9920,6 +9919,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-nns-test-utils-golden-nns-state",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
@@ -10029,6 +10029,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
@@ -10051,11 +10052,11 @@ dependencies = [
  "candid",
  "ic-agent",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-icrc1",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-types",
  "icrc-ledger-types",
  "num-traits",
@@ -10326,7 +10327,7 @@ dependencies = [
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.9.0"
 dependencies = [
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types",
@@ -10467,6 +10468,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
  "ic-rosetta-test-utils",
@@ -10483,6 +10485,10 @@ dependencies = [
  "serde",
  "serde_bytes",
 ]
+
+[[package]]
+name = "ic-ledger-suite-state-machine-tests-constants"
+version = "0.9.0"
 
 [[package]]
 name = "ic-ledger-test-utils"
@@ -10614,7 +10620,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -11432,6 +11438,7 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
+ "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
  "ic-nervous-system-linear-map",
  "ic-nervous-system-long-message",
@@ -11570,7 +11577,7 @@ dependencies = [
  "ic-nns-gtc-protobuf-generator",
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-test-utilities-compare-dirs",
  "icp-ledger",
  "lazy_static",
@@ -12103,6 +12110,18 @@ version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build 0.13.4",
+]
+
+[[package]]
+name = "ic-pub-key"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "hex-literal 0.4.1",
+ "ic-ed25519 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-management-canister-types",
+ "ic-secp256k1 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-vetkeys",
 ]
 
 [[package]]
@@ -12867,7 +12886,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-limits",
@@ -12965,7 +12984,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-icp-rosetta-client",
  "ic-icp-rosetta-runner",
  "ic-icrc1",
@@ -12976,7 +12995,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-ledger-test-utils",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-nns-common",
@@ -13060,6 +13079,26 @@ dependencies = [
  "sha2 0.10.9",
  "simple_asn1",
  "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-secp256k1"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8c0b976993791865897b9edffd153253cef7b9ff2b51b75bb2a1ac82ebfcad7"
+dependencies = [
+ "candid",
+ "hex-literal 0.4.1",
+ "hmac",
+ "k256 0.13.4",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "sha2 0.10.9",
+ "simple_asn1",
  "zeroize",
 ]
 
@@ -13836,7 +13875,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-error-types 0.2.0",
  "ic-execution-environment",
  "ic-http-endpoints-public",
@@ -13861,7 +13900,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
- "ic-secp256k1",
+ "ic-secp256k1 0.2.0",
  "ic-state-layout",
  "ic-state-manager",
  "ic-test-state-machine-client",
@@ -14211,7 +14250,7 @@ name = "ic-test-identity"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-types",
  "lazy_static",
  "rand 0.8.5",
@@ -14487,7 +14526,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-canister-client-sender",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
@@ -15449,7 +15488,7 @@ dependencies = [
  "ic-agent",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-client",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-rosetta-api",
  "ic-sender-canister",
  "ic-test-utilities-load-wasm",
@@ -16502,6 +16541,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
@@ -16845,7 +16885,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 [[package]]
 name = "lmdb-rkv"
 version = "0.14.99"
-source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=f62018b2deb79ea0d53914d5502389433fc3e6da#f62018b2deb79ea0d53914d5502389433fc3e6da"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=4d952c8f1dca79de855af892b444d7112567b58d#4d952c8f1dca79de855af892b444d7112567b58d"
 dependencies = [
  "bitflags 1.3.2",
  "byteorder",
@@ -16856,9 +16896,8 @@ dependencies = [
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.11.99"
-source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=f62018b2deb79ea0d53914d5502389433fc3e6da#f62018b2deb79ea0d53914d5502389433fc3e6da"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=4d952c8f1dca79de855af892b444d7112567b58d#4d952c8f1dca79de855af892b444d7112567b58d"
 dependencies = [
- "bindgen 0.59.2",
  "cc",
  "libc",
  "pkg-config",
@@ -18358,7 +18397,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-dashboard",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
@@ -18656,12 +18695,6 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-
-[[package]]
-name = "peeking_take_while"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 
 [[package]]
 name = "pem"
@@ -19101,7 +19134,7 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
- "ic-ed25519",
+ "ic-ed25519 0.3.0",
  "ic-error-types 0.2.0",
  "ic-gateway",
  "ic-http-endpoints-public",
@@ -20871,8 +20904,8 @@ dependencies = [
  "candid",
  "hex",
  "ic-agent",
- "ic-ed25519",
- "ic-secp256k1",
+ "ic-ed25519 0.3.0",
+ "ic-secp256k1 0.2.0",
  "ic-types",
  "icp-ledger",
  "icrc-ledger-types",
@@ -23233,11 +23266,8 @@ dependencies = [
  "nested",
  "nns_dapp",
  "os_qualification_utils",
- "reqwest 0.12.15",
- "serde",
  "serde_json",
  "slog",
- "url",
  "xrc-mock",
 ]
 
