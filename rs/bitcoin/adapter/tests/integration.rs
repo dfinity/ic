@@ -105,10 +105,6 @@ fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
         ipv6_only: true,
         address_limits: (1, 1),
         idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
-        logger: LoggerConfig {
-            level: LoggerLevel::Trace,
-            ..LoggerConfig::default()
-        },
         ..Config::default_with(network.into())
     };
     let _enter = rt_handle.enter();
