@@ -9,7 +9,7 @@ use std::str::FromStr;
 use tempfile::NamedTempFile;
 use tokio::fs;
 
-use partition_tools::{ext::ExtPartition, Partition};
+use partition_tools::{Partition, ext::ExtPartition};
 
 const CHECK_DISABLER_CMDLINE_ARGS: [&str; 3] = [
     "ic.setupos.check_hardware",

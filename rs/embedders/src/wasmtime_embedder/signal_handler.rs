@@ -2,10 +2,10 @@ use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 
 use ic_types::NumBytes;
 use libc::c_void;
-use memory_tracker::{signal_access_kind_and_address, SigsegvMemoryTracker};
+use memory_tracker::{SigsegvMemoryTracker, signal_access_kind_and_address};
 use std::convert::TryFrom;
 use std::sync::MutexGuard;
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::Ordering};
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 

@@ -1,10 +1,10 @@
 use clap::Parser;
-use ic_sns_testing::nns_dapp::bootstrap_nns;
-use ic_sns_testing::utils::{get_identity_principal, TREASURY_PRINCIPAL_ID};
 use ic_sns_testing::NnsInitArgs;
+use ic_sns_testing::bootstrap::bootstrap_nns;
+use ic_sns_testing::utils::{TREASURY_PRINCIPAL_ID, get_identity_principal};
 use icp_ledger::Tokens;
-use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use pocket_ic::PocketIcBuilder;
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig, InstanceHttpGatewayConfig};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 
@@ -19,18 +19,15 @@ async fn nns_init(args: NnsInitArgs) {
         );
         tempdir.keep()
     };
-    // The `nns_ui` feature requires auto progress to be enabled when the instance is created
-    // which would make `deciding_nns_neuron_id` non-deterministic.
-    // Hence, we deploy the NNS dapp separately for now.
-    let all_icp_features_but_nns_ui = IcpFeatures {
-        registry: Some(EmptyConfig {}),
-        cycles_minting: Some(EmptyConfig {}),
-        icp_token: Some(EmptyConfig {}),
-        cycles_token: Some(EmptyConfig {}),
-        nns_governance: Some(EmptyConfig {}),
-        sns: Some(EmptyConfig {}),
-        ii: Some(EmptyConfig {}),
-        nns_ui: None,
+    let all_icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ii: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
     };
     // We set the time of the PocketIC instance to the current time so that
     // neurons are not too old when we make the instance "live" later.
@@ -40,11 +37,18 @@ async fn nns_init(args: NnsInitArgs) {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64;
-    let mut pocket_ic = PocketIcBuilder::new()
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: Some(args.ic_network_port),
+        domains: None,
+        https_config: None,
+    };
+    let pocket_ic = PocketIcBuilder::new()
         .with_server_url(args.server_url)
-        .with_state_dir(state_dir.clone())
-        .with_icp_features(all_icp_features_but_nns_ui)
+        .with_state_dir(state_dir)
+        .with_icp_features(all_icp_features)
         .with_initial_timestamp(current_time)
+        .with_http_gateway(http_gateway_config)
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
@@ -77,9 +81,12 @@ async fn nns_init(args: NnsInitArgs) {
     )
     .await;
 
-    // Only make the instance "live" after bootstrapping NNS to ensure a deterministic `deciding_nns_neuron_id`.
-    let endpoint = pocket_ic.make_live(Some(args.ic_network_port)).await;
-    println!("PocketIC endpoint: {}", endpoint);
+    // Only start auto progress on the instance after bootstrapping NNS
+    // to keep the execution deterministic (modulo initial time) as long as possible.
+    pocket_ic.auto_progress().await;
+
+    let endpoint = pocket_ic.url().unwrap();
+    println!("PocketIC endpoint: {endpoint}");
 
     println!("NNS initialized");
     println!(

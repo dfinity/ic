@@ -84,11 +84,7 @@ fn test_get_duplicate_followee_groups() {
 #[test]
 fn test_get_inconsistent_aliases() {
     let test_cases = [
-        (
-            "Trivial case.",
-            btreeset! {},
-            btreemap! {},
-        ),
+        ("Trivial case.", btreeset! {}, btreemap! {}),
         (
             "Rudimentary case I: can't have inconsistent aliases in a singleton collection.",
             btreeset! {

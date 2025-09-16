@@ -1,5 +1,5 @@
 use super::*;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
 
@@ -85,8 +85,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                         && !enqueued_pool_messages.insert(SomeReference::Inbound(reference))
                     {
                         metrics.observe_broken_soft_invariant(format!(
-                            "CanisterQueues: {:?} enqueued more than once",
-                            reference
+                            "CanisterQueues: {reference:?} enqueued more than once"
                         ));
                     }
                 });
@@ -95,8 +94,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                         && !enqueued_pool_messages.insert(SomeReference::Outbound(reference))
                     {
                         metrics.observe_broken_soft_invariant(format!(
-                            "CanisterQueues: {:?} enqueued more than once",
-                            reference
+                            "CanisterQueues: {reference:?} enqueued more than once"
                         ));
                     }
                 });

@@ -1,17 +1,17 @@
 use super::{
-    get_certificate_and_create_response, make_service_unavailable_response, parse_principal_id,
-    verify_principal_ids, DeprecatedCanisterRangesFilter,
+    DeprecatedCanisterRangesFilter, get_certificate_and_create_response,
+    make_service_unavailable_response, parse_principal_id, verify_principal_ids,
 };
 use crate::{
-    common::{Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
+    common::{Cbor, WithTimeout},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::State,
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
@@ -22,8 +22,8 @@ use ic_logger::ReplicaLogger;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{HttpReadStateContent, HttpRequest, HttpRequestEnvelope, ReadState},
     CanisterId, PrincipalId, SubnetId,
+    messages::{HttpReadStateContent, HttpRequest, HttpRequestEnvelope, ReadState},
 };
 use std::{
     convert::{Infallible, TryFrom},
@@ -147,7 +147,7 @@ pub(crate) async fn read_state_subnet(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
@@ -211,7 +211,11 @@ fn verify_paths(
             [b"time"] => {}
             [b"api_boundary_nodes"] => {}
             [b"api_boundary_nodes", _node_id]
-            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
+            | [
+                b"api_boundary_nodes",
+                _node_id,
+                b"domain" | b"ipv4_address" | b"ipv6_address",
+            ] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
             // `/subnet/<subnet_id>/canister_ranges` is only allowed
@@ -244,7 +248,7 @@ fn verify_paths(
 mod test {
     use super::*;
     use ic_crypto_tree_hash::{Label, Path};
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, SUBNET_0, SUBNET_1};
+    use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, subnet_test_id};
     use rstest::rstest;
     use serde_bytes::ByteBuf;
 
@@ -297,93 +301,105 @@ mod test {
             Ok(())
         );
 
-        assert!(verify_paths(
-            version,
-            &[
-                Path::new(vec![
-                    Label::from("request_status"),
-                    [0; 32].into(),
-                    Label::from("status")
-                ]),
-                Path::new(vec![
-                    Label::from("request_status"),
-                    [0; 32].into(),
-                    Label::from("reply")
-                ])
-            ],
-            APP_SUBNET_ID.get(),
-            NNS_SUBNET_ID,
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                version,
+                &[
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        [0; 32].into(),
+                        Label::from("status")
+                    ]),
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        [0; 32].into(),
+                        Label::from("reply")
+                    ])
+                ],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_err()
+        );
 
-        assert!(verify_paths(
-            version,
-            &[
-                Path::new(vec![
-                    Label::from("canister"),
-                    ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                    Label::from("controllers")
-                ]),
-                Path::new(vec![
-                    Label::from("request_status"),
-                    ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                    Label::from("module_hash")
-                ])
-            ],
-            APP_SUBNET_ID.get(),
-            NNS_SUBNET_ID,
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                version,
+                &[
+                    Path::new(vec![
+                        Label::from("canister"),
+                        ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
+                        Label::from("controllers")
+                    ]),
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
+                        Label::from("module_hash")
+                    ])
+                ],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_err()
+        );
 
-        assert!(verify_paths(
-            version,
-            &[Path::new(vec![Label::from("canister_ranges"),]),],
-            APP_SUBNET_ID.get(),
-            NNS_SUBNET_ID,
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                version,
+                &[Path::new(vec![Label::from("canister_ranges"),]),],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet()
     {
-        assert!(verify_paths(
-            Version::V3,
-            &[Path::new(vec![
-                Label::from("subnet"),
-                APP_SUBNET_ID.get().to_vec().into(),
-                Label::from("canister_ranges"),
-            ])],
-            APP_SUBNET_ID.get(),
-            NNS_SUBNET_ID,
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                Version::V3,
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_err()
+        );
 
-        assert!(verify_paths(
-            Version::V3,
-            &[Path::new(vec![
-                Label::from("subnet"),
-                NNS_SUBNET_ID.get().to_vec().into(),
-                Label::from("canister_ranges"),
-            ])],
-            APP_SUBNET_ID.get(),
-            NNS_SUBNET_ID,
-        )
-        .is_ok());
+        assert!(
+            verify_paths(
+                Version::V3,
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint() {
-        assert!(verify_paths(
-            Version::V2,
-            &[Path::new(vec![
-                Label::from("subnet"),
-                APP_SUBNET_ID.get().to_vec().into(),
-                Label::from("canister_ranges"),
-            ])],
-            APP_SUBNET_ID.get(),
-            NNS_SUBNET_ID,
-        )
-        .is_ok());
+        assert!(
+            verify_paths(
+                Version::V2,
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
     }
 }

@@ -1,4 +1,4 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use config_types::{GuestOSConfig, Ipv6Config};
 use get_if_addrs::get_if_addrs;
 use serde_json;
@@ -338,10 +338,10 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
 mod tests {
     use super::*;
     use config_types::{
-        FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings, GuestOSUpgradeConfig,
-        GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings, CONFIG_VERSION,
+        CONFIG_VERSION, FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
+        GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings,
     };
-    use ic_config::{config_parser::ConfigSource, ConfigOptional};
+    use ic_config::{ConfigOptional, config_parser::ConfigSource};
 
     const IC_JSON5_TEMPLATE_BYTES: &[u8] = include_bytes!(
         "../../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template"

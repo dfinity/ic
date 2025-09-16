@@ -459,8 +459,12 @@ impl ScopeInnerErr {
     #[track_caller]
     fn panic(&self) -> ! {
         match self {
-            Self::BorrowError => panic!("cannot enter a task-local scope while the task-local storage is borrowed"),
-            Self::AccessError => panic!("cannot enter a task-local scope during or after destruction of the underlying thread-local"),
+            Self::BorrowError => {
+                panic!("cannot enter a task-local scope while the task-local storage is borrowed")
+            }
+            Self::AccessError => panic!(
+                "cannot enter a task-local scope during or after destruction of the underlying thread-local"
+            ),
         }
     }
 }

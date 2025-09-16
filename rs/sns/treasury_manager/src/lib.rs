@@ -165,7 +165,7 @@ fn fmt_principal_as_string(
     principal: &Principal,
     f: &mut std::fmt::Formatter,
 ) -> Result<(), std::fmt::Error> {
-    write!(f, "{}", principal)
+    write!(f, "{principal}")
 }
 
 #[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Serialize)]

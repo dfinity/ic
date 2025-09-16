@@ -4,7 +4,7 @@ use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
-use ic_system_test_driver::util::{runtime_from_url, MetricsFetcher, UniversalCanister};
+use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
 use slog::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -357,7 +357,7 @@ async fn install_statesync_test_canisters(
                 .bytes(Vec::new())
                 .await
                 .unwrap_or_else(|_| {
-                    panic!("Installation of the canister_idx={} failed.", canister_idx)
+                    panic!("Installation of the canister_idx={canister_idx} failed.")
                 });
             info!(
                 new_logger,
@@ -393,10 +393,7 @@ async fn modify_canister_heap(
                         .update_("expand_state", dfn_candid::candid, payload)
                         .await
                         .unwrap_or_else(|err| {
-                            panic!(
-                                "Calling expand_state() on canister {:?} failed: {}",
-                                canister, err
-                            )
+                            panic!("Calling expand_state() on canister {canister:?} failed: {err}")
                         });
                     info!(
                         logger_clone,
@@ -427,7 +424,7 @@ async fn wait_for_manifest(log: &slog::Logger, height: u64, node: IcNodeSnapshot
         }
         tokio::time::sleep(Duration::from_secs(BACKOFF_TIME_SECONDS)).await;
     }
-    panic!("Couldn't get a manifest at height {}.", height);
+    panic!("Couldn't get a manifest at height {height}.");
 }
 
 // The function waits for the CUP reaching or surpassing the given height and returns the CUP height.
@@ -449,5 +446,5 @@ async fn wait_for_cup(log: &slog::Logger, height: u64, node: IcNodeSnapshot) -> 
         }
         tokio::time::sleep(Duration::from_secs(BACKOFF_TIME_SECONDS)).await;
     }
-    panic!("Couldn't get a CUP at height {}.", height);
+    panic!("Couldn't get a CUP at height {height}.");
 }

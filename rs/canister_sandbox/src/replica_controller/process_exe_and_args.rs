@@ -164,7 +164,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     // In CI we expect the sandbox executable to be in our path so this should
     // succeed.
     if let Ok(exec_path) = which::which(executable_name) {
-        println!("Running sandbox with executable {:?}", exec_path);
+        println!("Running sandbox with executable {exec_path:?}");
         return Some(vec![exec_path.to_str().unwrap().to_string()]);
     }
 
@@ -178,8 +178,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     match (which::which("cargo"), cargo_manifest_for_testing(&krate)) {
         (Ok(path), Some(manifest_path)) => {
             println!(
-                "Building {} with cargo {:?} and manifest {:?}",
-                executable_name, path, manifest_path
+                "Building {executable_name} with cargo {path:?} and manifest {manifest_path:?}"
             );
             let path = path.to_str().unwrap().to_string();
             let cell = match krate {

@@ -14,16 +14,14 @@ fn should_have_one_parameter_per_line() {
         if let Some((_start, end)) = line.split_once("\\") {
             assert!(
                 !end.contains("\\"),
-                "line contains more than one parameter: {}",
-                line
+                "line contains more than one parameter: {line}"
             );
         }
     }
 
     assert!(
         !last_line.contains("\\"),
-        "last line should not contain new line: {}",
-        last_line
+        "last line should not contain new line: {last_line}"
     );
 }
 
@@ -78,9 +76,7 @@ fn should_omit_empty_parameters_without_adding_empty_lines() {
         ensure_no_empty_lines(ic_admin);
         assert!(
             !ic_admin.contains(omitted_substring),
-            "{} should not be present in {}",
-            omitted_substring,
-            ic_admin
+            "{omitted_substring} should not be present in {ic_admin}"
         );
     }
 }
@@ -122,8 +118,7 @@ fn ensure_no_empty_lines(cmd: &str) {
     for line in cmd.lines() {
         assert!(
             !line.trim().is_empty(),
-            "empty line found in command: {}",
-            cmd
+            "empty line found in command: {cmd}"
         );
     }
 }

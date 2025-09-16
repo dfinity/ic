@@ -13,9 +13,9 @@ use ic_test_utilities_types::ids::{
     canister_test_id, message_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
+    Height,
     ingress::{IngressState, IngressStatus, WasmResult},
     time::UNIX_EPOCH,
-    Height,
 };
 use std::sync::Arc;
 use tokio::sync::mpsc::{channel, error::TryRecvError};
@@ -247,9 +247,7 @@ fn test_invalid_transitions() {
             });
             assert!(
                 result.is_err(),
-                "transition from {:?} to {:?} worked but should have failed",
-                origin_state,
-                next_state
+                "transition from {origin_state:?} to {next_state:?} worked but should have failed"
             );
         }
     })

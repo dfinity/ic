@@ -333,29 +333,25 @@ impl From<UpdateSettingsError> for UserError {
             UpdateSettingsError::FreezingThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Freezing threshold expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Freezing threshold expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {}",
-                    provided
+                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::WasmMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(

@@ -1,20 +1,20 @@
 //! Module that deals with requests to /api/{v2,v3}/canister/.../read_state and /api/{v2,v3}/subnet/.../read_state
 
 use crate::{
-    common::{into_cbor, Cbor},
     HttpError,
+    common::{Cbor, into_cbor},
 };
 use axum::response::IntoResponse;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{
-    lookup_path, sparse_labeled_tree_from_paths, Label, LabeledTree, Path, TooLongPathError,
+    Label, LabeledTree, Path, TooLongPathError, lookup_path, sparse_labeled_tree_from_paths,
 };
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{Blob, Certificate, CertificateDelegation, HttpReadStateResponse},
     PrincipalId, SubnetId,
+    messages::{Blob, Certificate, CertificateDelegation, HttpReadStateResponse},
 };
 
 pub mod canister;
@@ -25,7 +25,7 @@ fn parse_principal_id(principal_id: &[u8]) -> Result<PrincipalId, HttpError> {
         Ok(principal_id) => Ok(principal_id),
         Err(err) => Err(HttpError {
             status: StatusCode::BAD_REQUEST,
-            message: format!("Could not parse principal ID: {}.", err),
+            message: format!("Could not parse principal ID: {err}."),
         }),
     }
 }
@@ -38,8 +38,7 @@ fn verify_principal_ids(
         return Err(HttpError {
             status: StatusCode::BAD_REQUEST,
             message: format!(
-                "Effective principal id in URL {} does not match requested principal id: {}.",
-                effective_principal_id, principal_id
+                "Effective principal id in URL {effective_principal_id} does not match requested principal id: {principal_id}."
             ),
         });
     }
@@ -162,18 +161,18 @@ fn get_certificate_and_create_response(
 mod test {
     use axum::body::to_bytes;
     use ic_certification_test_utils::{
-        create_certificate_labeled_tree, generate_root_of_trust, CertificateBuilder,
-        CertificateData,
+        CertificateBuilder, CertificateData, create_certificate_labeled_tree,
+        generate_root_of_trust,
     };
     use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
     use ic_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
     use ic_types::{
+        CanisterId, CryptoHashOfPartialState, Height, SubnetId,
         consensus::certification::{Certification, CertificationContent},
         crypto::{CryptoHash, Signed},
         signature::ThresholdSignature,
-        CanisterId, CryptoHashOfPartialState, Height, SubnetId,
     };
     use rand::thread_rng;
 
@@ -264,8 +263,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_purges_when_requested_to_purge_deprecated_canister_ranges_except_for_the_given_subnet_id(
-    ) {
+    async fn test_purges_when_requested_to_purge_deprecated_canister_ranges_except_for_the_given_subnet_id()
+     {
         let reader = set_up_state_reader(APP_SUBNET_ID);
 
         let response = get_certificate_and_create_response(

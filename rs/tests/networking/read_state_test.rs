@@ -51,7 +51,7 @@ use ic_agent::agent::{CallResponse, Envelope, EnvelopeContent};
 use ic_agent::agent_error::HttpErrorPayload;
 use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
-use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
+use ic_agent::{Agent, AgentError, Certificate, Identity, RequestId, lookup_value};
 use ic_certification::{verify_certificate, verify_certificate_for_subnet_read_state};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
@@ -62,7 +62,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env::HasIcPrepDir;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::util::{
-    block_on, get_identity, random_ed25519_identity, runtime_from_url, MessageCanister,
+    MessageCanister, block_on, get_identity, random_ed25519_identity, runtime_from_url,
 };
 use ic_system_test_driver::{
     driver::{

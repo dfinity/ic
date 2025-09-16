@@ -50,7 +50,7 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-client-cdk/               @dfinity/finint
 /packages/icrc-ledger-types/                    @dfinity/finint
 /packages/ic-ledger-hash-of/                    @dfinity/finint
-/packages/pocket-ic/                            @dfinity/pocket-ic
+/packages/pocket-ic/                            @dfinity/execution
 /packages/ic-error-types/                       @dfinity/execution
 /packages/ic-dummy-getrandom-for-wasm/          @dfinity/crypto-team
 /packages/ic-ed25519/                           @dfinity/crypto-team
@@ -60,6 +60,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-hpke/                              @dfinity/crypto-team
 /packages/ic-http-types/                        @dfinity/cross-chain-team
 /packages/ic-metrics-assert/                    @dfinity/cross-chain-team
+/packages/ic-pub-key/                           @dfinity/crypto-team
 /packages/ic-secp256k1/                         @dfinity/crypto-team
 /packages/ic-secp256r1/                         @dfinity/crypto-team
 /packages/ic-sha3/                              @dfinity/crypto-team
@@ -178,7 +179,7 @@ go_deps.bzl               @dfinity/idx
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity/consensus @dfinity/node
 /rs/p2p/                                                @dfinity/consensus
 /rs/phantom_newtype/                                    @dfinity/ic-interface-owners
-/rs/pocket_ic_server/                                   @dfinity/pocket-ic
+/rs/pocket_ic_server/                                   @dfinity/execution
 /rs/prep/                                               @dfinity/utopia
 /rs/protobuf/                                           @dfinity/ic-interface-owners
 /rs/protobuf/def/bitcoin/                               @dfinity/execution
@@ -231,7 +232,7 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
 /rs/sns/                                                @dfinity/governance-team
 /rs/state_layout/                                       @dfinity/ic-message-routing-owners
-/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/pocket-ic
+/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
 /rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/execution
