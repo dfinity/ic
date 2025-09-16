@@ -156,7 +156,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     let main_address = account_to_bitcoin_address(
         &ecdsa_public_key,
         &Account {
-            owner: ic_cdk::id(),
+            owner: ic_cdk::api::canister_self(),
             subaccount: None,
         },
     );
@@ -264,7 +264,7 @@ pub async fn retrieve_btc_with_approval(
     let main_address = account_to_bitcoin_address(
         &ecdsa_public_key,
         &Account {
-            owner: ic_cdk::id(),
+            owner: ic_cdk::api::canister_self(),
             subaccount: None,
         },
     );
@@ -360,7 +360,7 @@ async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
     };
-    let minter = ic_cdk::id();
+    let minter = ic_cdk::api::canister_self();
     let subaccount = compute_subaccount(PrincipalId(user), 0);
     let result = client
         .balance_of(Account {
@@ -383,7 +383,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
     };
-    let minter = ic_cdk::id();
+    let minter = ic_cdk::api::canister_self();
     let from_subaccount = compute_subaccount(PrincipalId(user), 0);
     let result = client
         .transfer(TransferArg {
@@ -456,7 +456,7 @@ async fn burn_ckbtcs_icrc2(
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
     };
-    let minter = ic_cdk::id();
+    let minter = ic_cdk::api::canister_self();
     let result = client
         .transfer_from(TransferFromArgs {
             spender_subaccount: None,

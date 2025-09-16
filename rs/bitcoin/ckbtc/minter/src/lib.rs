@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
@@ -367,7 +366,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     }
 
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
 
@@ -681,7 +680,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     }
 
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
 
@@ -1465,7 +1464,7 @@ impl CanisterRuntime for IcCanisterRuntime {
     }
 
     fn id(&self) -> Principal {
-        ic_cdk::id()
+        ic_cdk::api::canister_self()
     }
 
     fn time(&self) -> u64 {

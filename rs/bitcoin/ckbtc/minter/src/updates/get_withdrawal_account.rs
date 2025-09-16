@@ -8,7 +8,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 pub async fn get_withdrawal_account() -> Account {
     let caller = PrincipalId(ic_cdk::caller());
     init_ecdsa_public_key().await;
-    let ck_btc_principal = ic_cdk::id();
+    let ck_btc_principal = ic_cdk::api::canister_self();
     let caller_subaccount: Subaccount = compute_subaccount(caller, 0);
     // Check that the computed subaccount doesn't collide with minting account.
     if &caller_subaccount == DEFAULT_SUBACCOUNT {

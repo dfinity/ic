@@ -196,7 +196,7 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
 async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
     ic_cdk::api::management_canister::main::canister_status(
         ic_cdk::api::management_canister::main::CanisterIdRecord {
-            canister_id: ic_cdk::id(),
+            canister_id: ic_cdk::api::canister_self(),
         },
     )
     .await
