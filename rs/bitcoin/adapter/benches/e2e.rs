@@ -1,4 +1,4 @@
-use bitcoin::{block::Header as BlockHeader, BlockHash };
+use bitcoin::{BlockHash, block::Header as BlockHeader};
 use criterion::measurement::Measurement;
 use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_btc_adapter::{

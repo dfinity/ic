@@ -87,7 +87,7 @@ pub enum AddHeaderResult {
     HeaderAlreadyExists,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Eq, PartialEq, Error)]
 pub enum AddHeaderError {
     /// When the received header is invalid (eg: not of the right format).
     #[error("Received an invalid block header: {0}")]
