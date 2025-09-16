@@ -1,15 +1,15 @@
 mod doge;
 mod utils;
 
-use crate::header::AuxPowHeaderValidator;
-use crate::header::{is_timestamp_valid, HeaderValidator};
-use crate::tests::utils::{deserialize_auxpow_header, get_auxpow_headers, get_headers};
 use crate::ValidateHeaderError;
+use crate::header::AuxPowHeaderValidator;
+use crate::header::{HeaderValidator, is_timestamp_valid};
+use crate::tests::utils::{deserialize_auxpow_header, get_auxpow_headers, get_headers};
 use crate::{BlockHeight, HeaderStore};
 use bitcoin::block::{Header, Version};
 use bitcoin::{CompactTarget, Target, TxMerkleNode};
 use std::str::FromStr;
-use utils::{deserialize_header, next_block_header, SimpleHeaderStore};
+use utils::{SimpleHeaderStore, deserialize_header, next_block_header};
 
 fn verify_consecutive_headers<T: HeaderValidator>(
     validator: &T,

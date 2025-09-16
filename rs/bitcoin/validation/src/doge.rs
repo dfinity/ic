@@ -1,13 +1,13 @@
+use crate::BlockHeight;
 use crate::constants::SECONDS_IN_ONE_YEAR;
 pub(crate) use crate::header::{
-    is_timestamp_valid, AuxPowHeaderValidator, HeaderStore, HeaderValidator,
-    ValidateAuxPowHeaderError, ValidateHeaderError,
+    AuxPowHeaderValidator, HeaderStore, HeaderValidator, ValidateAuxPowHeaderError,
+    ValidateHeaderError, is_timestamp_valid,
 };
-use crate::BlockHeight;
 use bitcoin::dogecoin::Network as DogecoinNetwork;
 use bitcoin::{
-    block::Header as PureHeader, dogecoin::Header as DogecoinHeader, BlockHash, CompactTarget,
-    Target,
+    BlockHash, CompactTarget, Target, block::Header as PureHeader,
+    dogecoin::Header as DogecoinHeader,
 };
 use std::str::FromStr;
 use std::time::Duration;

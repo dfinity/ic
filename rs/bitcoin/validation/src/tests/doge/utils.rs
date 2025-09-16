@@ -1,12 +1,12 @@
 use bitcoin::dogecoin::auxpow::{AuxPow, MERGED_MINING_HEADER};
 use bitcoin::hashes::Hash;
 use bitcoin::{
-    absolute::LockTime,
-    block::{Header as PureHeader, Version},
-    dogecoin::auxpow::VERSION_AUXPOW,
-    dogecoin::Address,
     Amount, BlockHash, OutPoint, Script, ScriptBuf, Sequence, Target, Transaction, TxIn,
     TxMerkleNode, TxOut, Witness,
+    absolute::LockTime,
+    block::{Header as PureHeader, Version},
+    dogecoin::Address,
+    dogecoin::auxpow::VERSION_AUXPOW,
 };
 use std::str::FromStr;
 

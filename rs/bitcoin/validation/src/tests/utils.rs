@@ -4,8 +4,8 @@ use bitcoin::block::{Header, Version};
 use bitcoin::consensus::deserialize;
 use bitcoin::dogecoin::auxpow::AuxPow;
 use bitcoin::dogecoin::{
-    constants::genesis_block as dogecoin_genesis_block, Header as DogecoinHeader,
-    Network as DogecoinNetwork,
+    Header as DogecoinHeader, Network as DogecoinNetwork,
+    constants::genesis_block as dogecoin_genesis_block,
 };
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::{BlockHash, CompactTarget, TxMerkleNode};

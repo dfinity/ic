@@ -11,8 +11,8 @@ use crate::tests::{
     verify_with_excessive_target, verify_with_invalid_pow,
     verify_with_invalid_pow_with_computed_target, verify_with_missing_parent,
 };
-use bitcoin::dogecoin::constants::genesis_block as dogecoin_genesis_block;
 use bitcoin::dogecoin::Network as DogecoinNetwork;
+use bitcoin::dogecoin::constants::genesis_block as dogecoin_genesis_block;
 use bitcoin::{CompactTarget, Target};
 
 /// Mainnet 0c120ab190655673a709bc92ad86f80dc1cd9f11f9e0f09ebc5e6a3058b73002
@@ -255,8 +255,10 @@ fn test_timestamp_validation_mainnet() {
 fn test_digishield_with_min_difficulty_height() {
     let networks = [DogecoinNetwork::Testnet, DogecoinNetwork::Regtest];
     for network in networks.iter() {
-        assert!(network
-            .params()
-            .is_digishield_activated(ALLOW_DIGISHIELD_MIN_DIFFICULTY_HEIGHT));
+        assert!(
+            network
+                .params()
+                .is_digishield_activated(ALLOW_DIGISHIELD_MIN_DIFFICULTY_HEIGHT)
+        );
     }
 }

@@ -7,11 +7,11 @@
 //! version number and chain ID rules, and child/parent PoW validation.
 use crate::doge::{AuxPowHeaderValidator, ValidateAuxPowHeaderError};
 use crate::doge::{DogecoinHeaderValidator, HeaderValidator, ValidateHeaderError};
-use crate::tests::doge::utils::{AuxPowBuilder, HeaderBuilder, DOGECOIN_CHAIN_ID};
-use crate::tests::utils::{build_header_chain, SimpleHeaderStore};
+use crate::tests::doge::utils::{AuxPowBuilder, DOGECOIN_CHAIN_ID, HeaderBuilder};
+use crate::tests::utils::{SimpleHeaderStore, build_header_chain};
 use bitcoin::block::Header;
-use bitcoin::dogecoin::constants::genesis_block;
 use bitcoin::dogecoin::Header as DogecoinHeader;
+use bitcoin::dogecoin::constants::genesis_block;
 
 const BASE_VERSION: i32 = 5;
 
@@ -48,9 +48,11 @@ fn test_auxpow_version() {
         .with_valid_pow(true)
         .build()
         .into();
-    assert!(validator
-        .validate_auxpow_header(&store_legacy, &dogecoin_header)
-        .is_ok());
+    assert!(
+        validator
+            .validate_auxpow_header(&store_legacy, &dogecoin_header)
+            .is_ok()
+    );
 
     // Version 3 (with no chain ID) - should fail (before AuxPow activation)
     // This should fail because version 3 is not legacy but doesn't have chain ID
@@ -76,9 +78,11 @@ fn test_auxpow_version() {
         .with_valid_pow(true)
         .build()
         .into();
-    assert!(validator
-        .validate_auxpow_header(&store_legacy, &dogecoin_header)
-        .is_ok());
+    assert!(
+        validator
+            .validate_auxpow_header(&store_legacy, &dogecoin_header)
+            .is_ok()
+    );
 
     // Version 2 (with correct chain ID) - should pass (after AuxPow activation)
     let dogecoin_header = HeaderBuilder::default()
@@ -89,9 +93,11 @@ fn test_auxpow_version() {
         .with_valid_pow(true)
         .build()
         .into();
-    assert!(validator
-        .validate_auxpow_header(&store_auxpow, &dogecoin_header)
-        .is_ok());
+    assert!(
+        validator
+            .validate_auxpow_header(&store_auxpow, &dogecoin_header)
+            .is_ok()
+    );
 
     // AuxPow bit set (with correct chain ID) - should fail (before AuxPow activation)
     let pure_header = HeaderBuilder::default()
@@ -128,9 +134,11 @@ fn test_auxpow_version() {
         pure_header,
         aux_pow: Some(aux_pow),
     };
-    assert!(validator
-        .validate_auxpow_header(&store_auxpow, &dogecoin_header)
-        .is_ok());
+    assert!(
+        validator
+            .validate_auxpow_header(&store_auxpow, &dogecoin_header)
+            .is_ok()
+    );
 
     // AuxPow bit set (with wrong chain ID) - should fail (after AuxPow activation)
     let dogecoin_header = HeaderBuilder::default()
@@ -161,9 +169,11 @@ fn test_without_auxpow_data() {
         .with_valid_pow(true)
         .build()
         .into();
-    assert!(validator
-        .validate_auxpow_header(&legacy_store, &dogecoin_header)
-        .is_ok());
+    assert!(
+        validator
+            .validate_auxpow_header(&legacy_store, &dogecoin_header)
+            .is_ok()
+    );
 
     // AuxPow flag unset and no AuxPow data but bad PoW - should fail
     let dogecoin_header = HeaderBuilder::default()
@@ -214,9 +224,11 @@ fn test_with_auxpow_data() {
         pure_header,
         aux_pow: Some(aux_pow),
     };
-    assert!(validator
-        .validate_auxpow_header(&store_auxpow, &dogecoin_header)
-        .is_ok());
+    assert!(
+        validator
+            .validate_auxpow_header(&store_auxpow, &dogecoin_header)
+            .is_ok()
+    );
 
     // Parent block with invalid PoW - should fail
     let pure_header = HeaderBuilder::default()
@@ -300,9 +312,11 @@ fn test_header_modification_invalidates_auxpow_proof() {
     };
 
     // Should pass initially
-    assert!(validator
-        .validate_auxpow_header(&store_auxpow, &dogecoin_header)
-        .is_ok());
+    assert!(
+        validator
+            .validate_auxpow_header(&store_auxpow, &dogecoin_header)
+            .is_ok()
+    );
 
     // Modify the block header
     dogecoin_header.pure_header.time += 1;
