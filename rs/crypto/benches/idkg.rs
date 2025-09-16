@@ -93,23 +93,23 @@ fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
     vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(vault_type, rng);
     let bench_context = OnceCell::new();
 
     group.bench_function(format!("create_dealing_{mode}"), |bench| {
         bench.iter_batched(
             || {
-                let (_, params) = bench_context.get_or_init(|| {
+                let (env, _, params) = bench_context.get_or_init(|| {
+                    let env = test_case.new_test_environment(vault_type, rng);
                     let context = IDkgModeTestContext::new(mode, &env, rng);
                     let params: IDkgTranscriptParams =
                         context.setup_params(&env, test_case.alg(), rng);
-                    (context, params)
+                    (env, context, params)
                 });
 
                 env.nodes.random_dealer(params, rng)
             },
             |dealer| {
-                let (_, params) = bench_context.get().unwrap();
+                let (_, _, params) = bench_context.get().unwrap();
                 create_dealing(dealer, params)
             },
             SmallInput,
@@ -125,15 +125,15 @@ fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let bench_context = OnceCell::new();
-    let env = test_case.new_test_environment(vault_type, rng);
 
     group.bench_function(format!("verify_dealing_public_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
-                let (_, params) = bench_context.get_or_init(|| {
+                let (env, _, params) = bench_context.get_or_init(|| {
+                    let env = test_case.new_test_environment(vault_type, rng);
                     let context = IDkgModeTestContext::new(mode, &env, rng);
                     let params = context.setup_params(&env, test_case.alg(), rng);
-                    (context, params)
+                    (env, context, params)
                 });
                 let receiver = env
                     .nodes
@@ -143,7 +143,7 @@ fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
                 (receiver, dealing)
             },
             |(receiver, dealing)| {
-                let (_, params) = bench_context.get().unwrap();
+                let (_, _, params) = bench_context.get().unwrap();
                 verify_dealing_public(receiver, params, dealing)
             },
             SmallInput,
@@ -159,15 +159,15 @@ fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let bench_context = OnceCell::new();
-    let env = test_case.new_test_environment(vault_type, rng);
 
     group.bench_function(format!("verify_dealing_private_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
-                let (_, params) = bench_context.get_or_init(|| {
+                let (env, _, params) = bench_context.get_or_init(|| {
+                    let env = test_case.new_test_environment(vault_type, rng);
                     let context = IDkgModeTestContext::new(mode, &env, rng);
                     let params = context.setup_params(&env, test_case.alg(), rng);
-                    (context, params)
+                    (env, context, params)
                 });
                 let receiver = env
                     .nodes
@@ -177,7 +177,7 @@ fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
                 (receiver, dealing)
             },
             |(receiver, dealing)| {
-                let (_, params) = bench_context.get().unwrap();
+                let (_, _, params) = bench_context.get().unwrap();
                 verify_dealing_private(receiver, params, dealing)
             },
             SmallInput,
