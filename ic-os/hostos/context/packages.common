@@ -81,6 +81,10 @@ ovmf/plucky # Top level
 libvirt-daemon-system/plucky # Top level
 libvirt-dev/plucky # Top level
 libvirt-daemon-log/plucky # Dependency
+libvirt-daemon-driver-nodedev/plucky # Dependency
+libvirt-daemon-driver-qemu/plucky # Dependency
+libvirt-daemon-driver-secret/plucky # Dependency
+libvirt-daemon-driver-storage/plucky # Dependency
 libvirt-daemon-system-systemd/plucky # Dependency
 libvirt-daemon-config-nwfilter/plucky # Dependency
 libvirt-daemon-config-network/plucky # Dependency
