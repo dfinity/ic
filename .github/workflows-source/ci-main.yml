@@ -243,8 +243,8 @@ jobs:
 
             # Values map to `output_id` in `gen-uuids` step
             declare -A invocation_keys=(
-              [build]="build_id"
-              [test]="test_id"
+              [build]="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
+              [test]="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
             )
             for bazel_cmd in "${!invocation_keys[@]}"; do
               "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
