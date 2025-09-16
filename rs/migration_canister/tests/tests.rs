@@ -10,7 +10,7 @@
 //! -x disabled
 //!
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use candid::{CandidType, Decode, Encode, Principal};
 use canister_test::Project;
@@ -231,6 +231,7 @@ async fn validation_succeeds() {
         source,
         target,
         source_controllers,
+        system_controller,
         ..
     } = setup(Settings::default()).await;
     let sender = source_controllers[0];
@@ -239,10 +240,29 @@ async fn validation_succeeds() {
         .await
         .unwrap();
 
+    let mut logs = HashMap::new();
+
+    pic.fetch_canister_logs(MIGRATION_CANISTER_ID.into(), system_controller)
+        .await
+        .unwrap()
+        .iter()
+        .map(|x| logs.insert(x.idx, String::from_utf8(x.content.clone()).unwrap()));
+
     for _ in 0..100 {
         // println!("=============================================");
         pic.advance_time(Duration::from_millis(100)).await;
         pic.tick().await;
+
+        pic.fetch_canister_logs(MIGRATION_CANISTER_ID.into(), system_controller)
+            .await
+            .unwrap()
+            .iter()
+            .map(|x| logs.insert(x.idx, String::from_utf8(x.content.clone()).unwrap()));
+    }
+
+    for (idx, message) in logs.iter() {
+        println!("----------------------------------------------------");
+        println!("{idx}: {message}");
     }
 }
 
