@@ -144,7 +144,7 @@ if "$BUILD_IMG"; then BAZEL_TARGETS+=(
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
 # Only add invocation if specified by the environment variable
-if [ -z "$BAZEL_BUILD_INVOCATION_ID" ]; then
+if [ -n "${BAZEL_BUILD_INVOCATION_ID:-}" ]; then
     BAZEL_COMMON_ARGS+=(--invocation_id="$BAZEL_BUILD_INVOCATION_ID")
 fi
 
