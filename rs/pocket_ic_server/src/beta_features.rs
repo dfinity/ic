@@ -1,5 +1,4 @@
 use ic_config::embedders::FeatureFlags;
-use ic_config::flag_status::FlagStatus;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
 };
