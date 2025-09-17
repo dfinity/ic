@@ -183,7 +183,7 @@ fn listener_from_first_systemd_socket(
         .expect("Failed to convert UnixListener into Tokio equivalent")
 }
 
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 use thiserror::Error;
