@@ -247,6 +247,8 @@ where
             .consensus_encode(&mut serialized_block)
             .map_err(|e| AddBlockError::CouldNotSerialize(block_hash, e.to_string()))?;
 
+        // The unwrap below would only fail when the RwLock is poisoned, which will
+        // not happen here because the use of the lock is never nested.
         self.block_cache
             .write()
             .unwrap()
