@@ -194,7 +194,8 @@ fn test(env: TestEnv) {
             .fold(f64::MAX, |acc, val| f64::min(acc, *val));
         let max = state_sync_durations
             .iter()
-            .fold(f64::MIN, |acc, val| f64::max(acc, *val));
+            .reduce(f64::max)
+            .unwrap();
         let avr = state_sync_durations.iter().sum::<f64>() / (state_sync_durations.len() as f64);
         info!(
             logger,
