@@ -120,8 +120,12 @@ def get_subnet_replica_version_info(subnet_id: str) -> (str, str, str, str):
         "replica_version_id"
     ]
 
+    return get_replica_version_info(latest_replica_version)
+
+
+def get_replica_version_info(replica_version: str) -> (str, str, str, str):
     req = urllib.request.Request(
-        url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnet-replica-versions/{latest_replica_version}",
+        url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnet-replica-versions/{replica_version}",
         headers={"user-agent": "python"},
     )
     with urllib.request.urlopen(req, timeout=30) as request:
@@ -172,7 +176,7 @@ def get_latest_replica_version_info() -> (str, str, str, str):
     return (version, hash, dev_hash, launch_measurements)
 
 
-def get_latest_hostos_version_info() -> (str, str, str):
+def get_latest_hostos_version_info() -> (str, str, str, str):
     """Use the dashboard to pull the version info for the most recent HostOS version."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedHostosVersions",
@@ -194,7 +198,11 @@ def get_latest_hostos_version_info() -> (str, str, str):
         f"https://download.dfinity.systems/ic/{version}/host-os/update-img-dev/update-img.tar.zst"
     )
 
-    return (version, hash, dev_hash)
+    # NOTE: This may not work if HostOS is ever released without GuestOS
+    # Pull the measurements of the GuestOS version from the proposal
+    (_version, _hash, _dev_hash, launch_measurements) = get_replica_version_info(version)
+
+    return (version, hash, dev_hash, launch_measurements)
 
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
@@ -253,7 +261,7 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
 
 def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     """Fetch and update the saved HostOS version and hash."""
-    (version, hash, dev_hash) = get_latest_hostos_version_info()
+    (version, hash, dev_hash, launch_measurements) = get_latest_hostos_version_info()
     logger.info("Latest HostOS revision: %s hash: %s", version, hash)
 
     full_path = repo_root / file_path
@@ -266,7 +274,14 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
         logger.info("Hostos revision already updated to version %s. Skipping update.", version)
         return
 
-    data["hostos"] = {"latest_release": {"version": version, "update_img_hash": hash, "update_img_hash_dev": dev_hash}}
+    data["hostos"] = {
+        "latest_release": {
+            "version": version,
+            "update_img_hash": hash,
+            "update_img_hash_dev": dev_hash,
+            "launch_measurements": launch_measurements,
+        }
+    }
 
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
