@@ -14,6 +14,7 @@ rust_canister(
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic_stable_structures_next",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",

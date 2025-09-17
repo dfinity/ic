@@ -17,6 +17,7 @@ ic-cdk-timers = { workspace = true }
 ic-stable-structures = "0.7.0"
 serde = { workspace = true }
 serde_cbor = { workspace = true }
+ic-management-canister-types = {workspace = true}
 
 [dev-dependencies]
 pocket-ic = { path = "../../packages/pocket-ic" }

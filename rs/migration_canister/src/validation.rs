@@ -15,7 +15,7 @@ use crate::{
     Request, ValidationError,
     canister_state::requests::list_by,
     external_interfaces::{
-        management::{CanisterStatusType, canister_status},
+        management::{CanisterStatusType, assert_no_snapshots, canister_status},
         registry::get_subnet_for_canister,
     },
 };
@@ -71,7 +71,7 @@ pub async fn validate_request(
         return Err(ValidationError::TargetNotStopped);
     }
     // 10. Does the target have snapshots?
-    // TODO: list snapshots
+    assert_no_snapshots(target).await?;
 
     // n. Does the target have sufficient cycles for the migration?
     // TODO

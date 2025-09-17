@@ -4,9 +4,12 @@ use candid::{CandidType, Principal};
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::Call,
-    management_canister::{CanisterInfoArgs, CanisterInfoResult, canister_info},
+    management_canister::{
+        CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
+    },
     println,
 };
+use ic_management_canister_types::ListCanisterSnapshotsArgs;
 use serde::Deserialize;
 
 use crate::{ValidationError, processing::ProcessingResult};
@@ -239,7 +242,8 @@ pub async fn rename_canister(
         sender_canister_version: canister_version(),
     };
 
-    match Call::bounded_wait(target_subnet, "rename_canister")
+    // We have to await this call no matter what. Bounded wait is not an option.
+    match Call::unbounded_wait(target_subnet, "rename_canister")
         .with_arg(args)
         .await
     {
@@ -249,6 +253,30 @@ pub async fn rename_canister(
             // All fatal error conditions have been checked upfront and should not be possible now.
             // CanisterAlreadyExists, RenameCanisterNotStopped, RenameCanisterHasSnapshot.
             ProcessingResult::NoProgress
+        }
+    }
+}
+
+// ========================================================================= //
+// `list_canister_snapshots`
+
+pub async fn assert_no_snapshots(canister_id: Principal) -> Result<(), ValidationError> {
+    match list_canister_snapshots(&ListCanisterSnapshotsArgs { canister_id }).await {
+        Ok(snapshots) => {
+            if snapshots.len() == 0 {
+                Ok(())
+            } else {
+                Err(ValidationError::TargetHasSnapshots)
+            }
+        }
+        Err(e) => {
+            println!(
+                "Call `list_canister_snapshots` for {:?} failed: {:?}",
+                canister_id, e
+            );
+            Err(ValidationError::CallFailed {
+                reason: format!("{:?}", e),
+            })
         }
     }
 }
