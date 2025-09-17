@@ -65,6 +65,11 @@ fn prepare(
     }
 }
 
+// This simulation constructs a blockchain comprising four forks, each of 2000 blocks.
+// For an extended BFS execution, the initial 1975 blocks of every branch are marked in
+// the request as being processed, with the aim to receive the last 25 blocks of each fork.
+// Performance metrics are captured from the sending of the deserialised request through
+// to receiving the response and its deserialisation.
 fn e2e(criterion: &mut Criterion) {
     let network = bitcoin::Network::Regtest;
     let mut config = Config::default_with(network.into());
@@ -277,11 +282,6 @@ fn decompress<P: AsRef<Path>>(location: P) -> Vec<u8> {
     decompressed
 }
 
-// This simulation constructs a blockchain comprising four forks, each of 2000 blocks.
-// For an extended BFS execution, the initial 1975 blocks of every branch are marked in
-// the request as being processed, with the aim to receive the last 25 blocks of each fork.
-// Performance metrics are captured from the sending of the deserialised request through
-// to receiving the response and its deserialisation.
 criterion_group!(benches, e2e, hash_block_header, add_block_headers);
 
 // The benchmark can be run using:
