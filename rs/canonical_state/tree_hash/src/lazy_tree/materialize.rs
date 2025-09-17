@@ -35,7 +35,7 @@ fn materialize(
 /// represented as a LabeledTree, without data in the leaves).
 ///
 /// Optionally, an exclusion list can be provided for paths that should be excluded
-/// even if included in the inclusive pattern.
+/// even when matching the pattern.
 ///
 /// This is used in the implementation of the `read_state` request, so a
 /// specification can be found in the Interface Spec, section on Lookup in
