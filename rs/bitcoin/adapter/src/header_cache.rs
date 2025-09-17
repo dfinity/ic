@@ -754,8 +754,8 @@ mod test {
             let parent = <BlockHash>::consensus_decode(&mut key).unwrap();
             let child = <BlockHash>::consensus_decode(&mut val).unwrap();
             // Skip this assert because parent may have already been removed due to pruning.
-            // assert!(headers.get(&parent).is_some());
-            assert!(headers.get(&child).is_some());
+            // assert!(headers.contains_key(&parent));
+            assert!(headers.contains_key(&child));
             headers
                 .entry(parent)
                 .and_modify(|node| node.children.push(child));
