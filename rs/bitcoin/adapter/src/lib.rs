@@ -205,16 +205,12 @@ async fn start_server_helper<Network>(
 {
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = if let Some(cache_dir) = &config.cache_dir {
-        BlockchainState::new_with_cache_dir(
-            config.network,
-            cache_dir.clone(),
-            &metrics_registry,
-            log.clone(),
-        )
-    } else {
-        BlockchainState::new(config.network, &metrics_registry)
-    };
+    let blockchain_state = BlockchainState::new(
+        config.network,
+        config.cache_dir.clone(),
+        &metrics_registry,
+        log.clone(),
+    );
     let blockchain_state = Arc::new(blockchain_state);
 
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);

@@ -787,7 +787,8 @@ pub mod test {
     fn create_blockchain_manager<Network: BlockchainNetwork>(
         network: Network,
     ) -> (BlockHeader, BlockchainManager<Network>) {
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state =
+            BlockchainState::new(network, None, &MetricsRegistry::default(), no_op_logger());
         (
             blockchain_state.genesis(),
             BlockchainManager::new(

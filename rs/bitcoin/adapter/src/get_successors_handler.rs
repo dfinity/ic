@@ -92,7 +92,7 @@ pub struct GetSuccessorsHandler<Network: BlockchainNetwork> {
     metrics: GetSuccessorMetrics,
 }
 
-impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
+impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
     /// Creates a GetSuccessorsHandler to be used to access the blockchain state
     /// inside of the adapter when a `GetSuccessorsRequest` is received.
     pub fn new(
@@ -122,6 +122,10 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
         self.metrics
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
+
+        // Spawn persist-to-disk task without waiting for it to finish
+        let cache = self.state.header_cache.clone();
+        tokio::task::spawn_blocking(move || cache.persist_headers_below_anchor(request.anchor));
 
         let (blocks, next, obsolete_blocks) = {
             let anchor_height = self
@@ -312,6 +316,7 @@ mod test {
     use super::*;
 
     use bitcoin::{Block, consensus::Decodable};
+    use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 
@@ -323,12 +328,18 @@ mod test {
         Block::consensus_decode(&mut (*serialized_block).as_slice()).unwrap()
     }
 
+    fn new_blockchain_state<Network: BlockchainNetwork>(
+        network: Network,
+    ) -> BlockchainState<Network> {
+        BlockchainState::new(network, None, &MetricsRegistry::default(), no_op_logger())
+    }
+
     /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks
     /// with the next headers of many forks and enqueue missing block hashes.
     #[tokio::test]
     async fn test_get_successors() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
@@ -440,7 +451,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_wait_header_sync_regtest() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
@@ -490,7 +501,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_multiple_blocks() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
@@ -564,7 +575,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_max_num_blocks() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
@@ -600,7 +611,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_multiple_blocks_out_of_order() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
@@ -694,7 +705,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_large_block() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
@@ -760,7 +771,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_many_blocks_until_size_cap_is_met() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
