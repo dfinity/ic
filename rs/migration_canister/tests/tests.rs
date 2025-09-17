@@ -18,6 +18,9 @@ use std::{
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(99);
 
+// TODO:
+// - test all conditions of validation after the MC is unique controller and fail there.
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct MigrateCanisterArgs {
     pub source: Principal,
@@ -291,7 +294,8 @@ async fn validation_succeeds() {
         logs.add(log);
     }
 
-    // Low prio test that the state machine transitions in expected order
+    // TODO: this should be a separate test disconnected from validation
+    // Test that the state machine transitions in expected order
     assert!(logs.contains_in_order(vec![
         "Entering `accepted` with 1 pending",
         "Exiting `accepted` with 1 successful",
