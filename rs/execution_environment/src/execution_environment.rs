@@ -81,8 +81,7 @@ use ic_types::{
     messages::{
         CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
-        SignedIngressContent, StopCanisterCallId, StopCanisterContext,
-        extract_effective_canister_id,
+        SignedIngress, StopCanisterCallId, StopCanisterContext, extract_effective_canister_id,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
@@ -2883,7 +2882,7 @@ impl ExecutionEnvironment {
         &self,
         state: Arc<ReplicatedState>,
         provisional_whitelist: &ProvisionalWhitelist,
-        ingress: &SignedIngressContent,
+        ingress: &SignedIngress,
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
@@ -2896,8 +2895,8 @@ impl ExecutionEnvironment {
                 )),
             }
         };
-        let effective_canister_id = extract_effective_canister_id(ingress)
-            .map_err(|err| err.into_user_error(ingress.method_name()))?;
+        let effective_canister_id = extract_effective_canister_id(ingress.content())
+            .map_err(|err| err.into_user_error(ingress.content().method_name()))?;
 
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
@@ -2938,11 +2937,11 @@ impl ExecutionEnvironment {
             }
         }
 
-        if ingress.is_addressed_to_subnet() {
+        if ingress.content().is_addressed_to_subnet() {
             return self.canister_manager.should_accept_ingress_message(
                 state,
                 provisional_whitelist,
-                ingress,
+                ingress.content(),
                 effective_canister_id,
             );
         }
@@ -2996,7 +2995,7 @@ impl ExecutionEnvironment {
         inspect_message::execute_inspect_message(
             state.time(),
             canister_state.clone(),
-            ingress,
+            ingress.content(),
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,

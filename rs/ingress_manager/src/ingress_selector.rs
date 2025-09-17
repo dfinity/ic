@@ -505,7 +505,7 @@ impl IngressManager {
             .get_subnet_size(&state.metadata.own_subnet_id)
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         match self.cycles_account_manager.ingress_induction_cost(
-            msg,
+            signed_ingress,
             effective_canister_id,
             subnet_size,
             state.get_own_cost_schedule(),
@@ -1507,7 +1507,7 @@ mod tests {
                             .with_cycles(
                                 cycles_account_manager
                                     .ingress_induction_cost(
-                                        m1.content(),
+                                        &m1,
                                         None,
                                         SMALL_APP_SUBNET_MAX_SIZE,
                                         CanisterCyclesCostSchedule::Normal,
