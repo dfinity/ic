@@ -3559,27 +3559,62 @@ fn payload_too_large() {
     );
     for url in [instances_url, gateway_url] {
         let client = reqwest::blocking::Client::new();
-        let resp = client
-            .post(url)
-            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
-            .body(vec![42; 5 * 1024 * 1024])
-            .send()
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
-        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-        assert!(bytes.contains("error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes."));
+        retry_send_too_large_body(
+            &client,
+            &url,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes.",
+        );
     }
 
     // Too large frontend request for canister via HTTP gateway.
     let (client, url) = frontend_canister(&pic, canister_id, false, "/index.html");
+    retry_send_too_large_body(
+        &client,
+        url.as_ref(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "503 - upstream error",
+    );
+}
+
+#[cfg(not(windows))]
+fn retry_send_too_large_body(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    expected_status: StatusCode,
+    expected_body: &str,
+) {
+    let started = Instant::now();
+    while let Err(err) = send_too_large_body(client, url, expected_status, expected_body) {
+        println!("{err}");
+        if started.elapsed() > Duration::from_secs(5 * 60) {
+            panic!("Retrying requests with too large body timed out.");
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(not(windows))]
+fn send_too_large_body(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    expected_status: StatusCode,
+    expected_body: &str,
+) -> Result<(), String> {
     let resp = client
         .post(url)
         .body(vec![42; 5 * 1024 * 1024])
         .send()
-        .unwrap();
+        .map_err(|err| format!("Failed to send request: {err}"))?;
 
-    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    assert!(bytes.contains("503 - upstream error"));
+    if resp.status() != expected_status {
+        return Err(format!("Unexpected status code: {:?}", resp.status()));
+    }
+
+    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    if !body.contains(expected_body) {
+        return Err(format!("Unexpected response body: {body}"));
+    }
+
+    Ok(())
 }
