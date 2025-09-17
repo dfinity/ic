@@ -1,6 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount, DEFAULT_SUBACCOUNT};
+use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
 
 use super::get_btc_address::init_ecdsa_public_key;
 
@@ -12,10 +12,7 @@ pub async fn get_withdrawal_account() -> Account {
     let caller_subaccount: Subaccount = compute_subaccount(caller, 0);
     // Check that the computed subaccount doesn't collide with minting account.
     if &caller_subaccount == DEFAULT_SUBACCOUNT {
-        panic!(
-            "Subaccount collision with principal {}. Please contact DFINITY support.",
-            caller
-        );
+        panic!("Subaccount collision with principal {caller}. Please contact DFINITY support.");
     }
     Account {
         owner: ck_btc_principal,

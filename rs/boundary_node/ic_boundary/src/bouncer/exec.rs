@@ -3,7 +3,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{bail, Context, Error};
+use anyhow::{Context, Error, bail};
 use nftables::schema::Nftables;
 
 const SUDO: &str = "/usr/bin/sudo";

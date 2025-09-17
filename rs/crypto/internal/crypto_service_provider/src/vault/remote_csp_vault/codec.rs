@@ -5,7 +5,7 @@ use bytes::{Bytes, BytesMut};
 use core::marker::PhantomData;
 use educe::Educe;
 use ic_crypto_internal_logmon::metrics::{CryptoMetrics, MessageType, MetricsDomain, ServiceType};
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use serde::{Deserialize, Serialize};
 use std::io;
 use std::pin::Pin;

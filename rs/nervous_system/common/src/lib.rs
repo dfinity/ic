@@ -6,11 +6,11 @@ use core::{
 };
 use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
-use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
+use ic_canister_log::{GlobalBuffer, LogBuffer, LogEntry, export};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{
-    tokens::{CheckedAdd, CheckedSub},
     Tokens,
+    tokens::{CheckedAdd, CheckedSub},
 };
 use lazy_static::lazy_static;
 use maplit::hashmap;
@@ -91,7 +91,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 
 #[macro_export]
 macro_rules! assert_is_ok {
-    ($result: expr) => {
+    ($result: expr_2021) => {
         let r = $result;
         assert!(
             r.is_ok(),
@@ -104,7 +104,7 @@ macro_rules! assert_is_ok {
 
 #[macro_export]
 macro_rules! assert_is_err {
-    ($result: expr) => {
+    ($result: expr_2021) => {
         let r = $result;
         assert!(
             r.is_err(),
@@ -146,7 +146,7 @@ pub fn i2d(i: u64) -> Decimal {
     // Convert to i64.
     let i = i
         .try_into()
-        .unwrap_or_else(|err| panic!("{} does not fit into i64: {:#?}", i, err));
+        .unwrap_or_else(|err| panic!("{i} does not fit into i64: {err:#?}"));
 
     Decimal::new(i, 0)
 }
@@ -358,7 +358,7 @@ impl FromStr for LogSeverity {
         let severity = match name {
             "Info" => Self::Info,
             "Error" => Self::Error,
-            _ => return Err(format!("Unknown log severity name: {}", name)),
+            _ => return Err(format!("Unknown log severity name: {name}")),
         };
 
         Ok(severity)
@@ -372,7 +372,7 @@ impl Display for LogSeverity {
             Self::Error => "Error",
         };
 
-        write!(formatter, "{}", s)
+        write!(formatter, "{s}")
     }
 }
 
@@ -400,7 +400,7 @@ where
 
     /// Based on the timestamp of the head log entry; earlier entries have
     /// higher priority.
-    fn priority(&self) -> impl Ord + Debug {
+    fn priority(&self) -> impl Ord + Debug + use<I> {
         Reverse(
             self.head
                 .map(|log_entry| log_entry.timestamp)
@@ -571,7 +571,7 @@ impl LogsRequest {
     fn skip_old_log_entries<'a>(
         &self,
         log_buffer: &'a LogBuffer,
-    ) -> impl Iterator<Item = &'a LogEntry> {
+    ) -> impl Iterator<Item = &'a LogEntry> + use<'a> {
         let max_skip_timestamp = self.time;
         log_buffer
             .entries_partition_point(move |log_entry| log_entry.timestamp <= max_skip_timestamp)
@@ -601,8 +601,7 @@ impl TryFrom<HttpRequest> for LogsRequest {
             Ok(severity) => severity,
             Err(err) => {
                 defects.push(format!(
-                    "Invalid value for query parameter `severity` ({}): {}",
-                    severity, err,
+                    "Invalid value for query parameter `severity` ({severity}): {err}",
                 ));
                 // Dummy value; won't actually be used, because defects is now nonempty.
                 LogSeverity::Info
@@ -613,8 +612,7 @@ impl TryFrom<HttpRequest> for LogsRequest {
             Ok(time) => time,
             Err(err) => {
                 defects.push(format!(
-                    "Invalid value for query parameter `time` ({}): {}",
-                    time, err,
+                    "Invalid value for query parameter `time` ({time}): {err}",
                 ));
                 // Dummy value; won't actually be used, because defects is now nonempty.
                 0
@@ -724,7 +722,7 @@ pub fn serve_metrics(
             .with_body_and_content_length(writer.into_inner())
             .build(),
         Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err)).build()
+            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}")).build()
         }
     }
 }
@@ -775,7 +773,7 @@ pub fn hash_to_hex_string(hash: &[u8]) -> String {
     use std::fmt::Write;
     let mut result_hash = String::new();
     for b in hash {
-        let _ = write!(result_hash, "{:02x}", b);
+        let _ = write!(result_hash, "{b:02x}");
     }
     result_hash
 }

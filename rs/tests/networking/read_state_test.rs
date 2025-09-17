@@ -51,7 +51,7 @@ use ic_agent::agent::{CallResponse, Envelope, EnvelopeContent};
 use ic_agent::agent_error::HttpErrorPayload;
 use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
-use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
+use ic_agent::{Agent, AgentError, Certificate, Identity, RequestId, lookup_value};
 use ic_certification::{verify_certificate, verify_certificate_for_subnet_read_state};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
@@ -62,11 +62,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env::HasIcPrepDir;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::util::{
-    block_on, get_identity, random_ed25519_identity, runtime_from_url, MessageCanister,
+    MessageCanister, block_on, get_identity, random_ed25519_identity, runtime_from_url,
 };
 use ic_system_test_driver::{
     driver::{
-        group::SystemTestGroup,
+        group::{SystemTestGroup, SystemTestSubGroup},
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot},
@@ -953,8 +953,7 @@ macro_rules! systest_all_variants {
 }
 
 fn main() -> Result<()> {
-    let mut group = SystemTestGroup::new()
-        .with_setup(setup)
+    let mut parallel_group = SystemTestSubGroup::new()
         .add_test(systest!(test_non_utf8_metadata))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V2))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
@@ -981,12 +980,15 @@ fn main() -> Result<()> {
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
 
-    systest_all_variants!(group, test_empty_paths_return_time);
-    systest_all_variants!(group, test_time_path_returns_time);
-    systest_all_variants!(group, test_subnet_path);
-    systest_all_variants!(group, test_invalid_request_rejected);
-    systest_all_variants!(group, test_invalid_path_rejected);
+    systest_all_variants!(parallel_group, test_empty_paths_return_time);
+    systest_all_variants!(parallel_group, test_time_path_returns_time);
+    systest_all_variants!(parallel_group, test_subnet_path);
+    systest_all_variants!(parallel_group, test_invalid_request_rejected);
+    systest_all_variants!(parallel_group, test_invalid_path_rejected);
 
-    group.execute_from_args()?;
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_parallel(parallel_group)
+        .execute_from_args()?;
     Ok(())
 }

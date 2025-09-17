@@ -31,7 +31,7 @@
 //! neither fun nor profitable.
 
 use anyhow::Result;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -79,7 +79,9 @@ fn run_unit_test(
     // We search the output for an indication that a test was actually executed.
     // Fragile, but better than nothing.
     assert!(
-        std::str::from_utf8(&output.stdout).unwrap().contains("1 passed"),
+        std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .contains("1 passed"),
         "Trying to execute {} from {:?}, but no test with such name was found.\nCheck that you don't have a typo in the name of the target module or test, and that the test is availalable in the provided version?",
         test_name,
         binary.file_name().unwrap(),

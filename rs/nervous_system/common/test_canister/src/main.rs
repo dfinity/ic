@@ -15,7 +15,7 @@ struct State {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Sets an internal integer variable.
-#[export_name = "canister_update set_integer"]
+#[unsafe(export_name = "canister_update set_integer")]
 fn set_integer() {
     over(candid_one, set_integer_);
 }
@@ -30,7 +30,7 @@ fn set_integer_(new_integer: i32) {
 }
 
 /// Retrieves the value of the integer variable set by set_integer.
-#[export_name = "canister_query get_integer"]
+#[unsafe(export_name = "canister_query get_integer")]
 fn get_integer() {
     over(candid_one, get_integer_);
 }
@@ -42,7 +42,7 @@ fn get_integer_(_: ()) -> i32 {
 }
 
 /// Panics with the given message.
-#[export_name = "canister_query explode"]
+#[unsafe(export_name = "canister_query explode")]
 fn explode() {
     over(candid_one, explode_);
 }
@@ -50,7 +50,7 @@ fn explode() {
 /// Implementation of explode.
 #[candid_method(query, rename = "explode")]
 fn explode_(message: String) {
-    panic!("Oh noez! {}", message);
+    panic!("Oh noez! {message}");
 }
 
 // Prints Candid interface definition, which should only contain get_build_metadata method.
@@ -96,9 +96,7 @@ mod test {
         ] {
             assert!(
                 result.contains(required_chunk),
-                "result: {} vs. required_chunk: {}",
-                result,
-                required_chunk
+                "result: {result} vs. required_chunk: {required_chunk}"
             );
         }
     }

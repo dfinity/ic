@@ -3,13 +3,13 @@ use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionCheckData,
 };
-use crate::{providers, state, Config};
+use crate::{Config, providers, state};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_checker::{
-    blocklist::is_blocked, get_tx_cycle_cost, CheckTransactionIrrecoverableError,
-    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES, RETRY_MAX_RESPONSE_BYTES,
+    CheckTransactionIrrecoverableError, CheckTransactionQueryResponse, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,
+    RETRY_MAX_RESPONSE_BYTES, blocklist::is_blocked, get_tx_cycle_cost,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::log;
@@ -249,8 +249,7 @@ pub trait FetchEnv {
                     } else {
                         // This error shouldn't happen unless blockdata is corrupted.
                         let msg = format!(
-                            "Tx {} vout {} has no address, but is vin {} of tx {}",
-                            input_txid, vout, index, txid
+                            "Tx {input_txid} vout {vout} has no address, but is vin {index} of tx {txid}"
                         );
                         log!(WARN, "{msg}");
                         error = Some(

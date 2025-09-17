@@ -22,7 +22,7 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
     empty_subnet_update, execute_recover_subnet_proposal, execute_update_subnet_proposal,
 };
-use ic_cup_explorer::{explore, verify, SubnetStatus};
+use ic_cup_explorer::{SubnetStatus, explore, verify};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
@@ -39,8 +39,8 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_system_test_driver::{retry_with_msg, systest};
-use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::Height;
+use ic_types::consensus::{CatchUpPackage, HasHeight};
 
 use anyhow::Result;
 use prost::Message;

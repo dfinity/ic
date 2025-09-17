@@ -19,8 +19,8 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
     ManageNeuron, ManageNeuronResponse,
+    manage_neuron::{Command, Configure, NeuronIdOrSubaccount, RemoveHotKey, configure},
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{

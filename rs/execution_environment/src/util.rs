@@ -1,6 +1,6 @@
 use crate::types::Response;
 use ic_interfaces::execution_environment::IngressHistoryWriter;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::ReplicatedState;
 use ic_types::CanisterId;
 use prometheus::IntCounter;
@@ -27,7 +27,7 @@ pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 /// ```
 macro_rules! debug_assert_or_critical_error {
     // debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
-    ($cond:expr, $metric:expr, $($arg:tt)*) => {{
+    ($cond:expr_2021, $metric:expr_2021, $($arg:tt)*) => {{
         if !($cond) {
             debug_assert!($cond);
             $metric.inc();

@@ -2,6 +2,13 @@ use crate::driver::port_allocator::AddrType;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
+use crate::driver::{
+    bootstrap::setup_and_start_nested_vms,
+    farm::Farm,
+    resource::{allocate_resources, get_resource_request_for_nested_nodes},
+    test_env::TestEnvAttribute,
+    test_setup::GroupSetup,
+};
 use crate::util::create_agent;
 use ic_agent::{Agent, AgentError};
 
@@ -10,11 +17,11 @@ use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv6Addr};
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -24,6 +31,39 @@ pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
 pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img.zst";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
+
+#[derive(Default)]
+pub struct NestedNodes {
+    nodes: Vec<NestedNode>,
+}
+
+impl NestedNodes {
+    pub fn new<T: AsRef<str>>(names: &[T]) -> Self {
+        NestedNodes {
+            nodes: names
+                .iter()
+                .map(|v| NestedNode::new(v.as_ref().to_string()))
+                .collect(),
+        }
+    }
+
+    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+        let farm = Farm::from_test_env(env, "Internet Computer");
+
+        let group_setup = GroupSetup::read_attribute(env);
+        let group_name: String = group_setup.infra_group_name;
+        let res_request = get_resource_request_for_nested_nodes(&self.nodes, env, &group_name)?;
+        let res_group = allocate_resources(&farm, &res_request, env)?;
+
+        for (name, vm) in res_group.vms.iter() {
+            env.write_nested_vm(name, vm)?;
+        }
+
+        setup_and_start_nested_vms(env, &farm, &group_name)?;
+
+        Ok(())
+    }
+}
 
 pub struct NestedNode {
     pub name: String,
@@ -41,6 +81,7 @@ pub struct NestedNetwork {
     pub host_ip: Ipv6Addr,
 }
 
+#[derive(Clone)]
 pub struct NestedVm {
     env: TestEnv,
     name: String,
@@ -96,7 +137,7 @@ impl HasVmName for NestedVm {
     }
 }
 
-pub trait NestedVms {
+pub trait HasNestedVms {
     fn get_nested_vm(&self, name: &str) -> Result<NestedVm>;
 
     fn get_all_nested_vms(&self) -> Result<Vec<NestedVm>>;
@@ -104,7 +145,7 @@ pub trait NestedVms {
     fn write_nested_vm(&self, name: &str, vm: &AllocatedVm) -> Result<()>;
 }
 
-impl NestedVms for TestEnv {
+impl HasNestedVms for TestEnv {
     fn get_nested_vm(&self, name: &str) -> Result<NestedVm> {
         let rel_dir: PathBuf = [NESTED_VMS_DIR, name].iter().collect();
         let abs_dir = self.get_path(rel_dir);
@@ -123,14 +164,16 @@ impl NestedVms for TestEnv {
         let mut vms = Vec::new();
 
         let abs_dir = self.get_path(NESTED_VMS_DIR);
-        for file in fs::read_dir(abs_dir)? {
-            let file = file?;
+        if abs_dir.exists() {
+            for file in fs::read_dir(abs_dir)? {
+                let file = file?;
 
-            if file.file_type()?.is_dir() {
-                vms.push(NestedVm {
-                    env: self.clone(),
-                    name: file.file_name().to_string_lossy().into_owned(),
-                });
+                if file.file_type()?.is_dir() {
+                    vms.push(NestedVm {
+                        env: self.clone(),
+                        name: file.file_name().to_string_lossy().into_owned(),
+                    });
+                }
             }
         }
 
@@ -224,5 +267,20 @@ impl HasTestEnv for GuestSsh {
 impl SshSession for GuestSsh {
     fn get_host_ip(&self) -> Result<IpAddr> {
         Ok(self.ip.into())
+    }
+}
+
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+pub enum UnassignedRecordConfig {
+    /// Do not create an UnassignedNodesConfigRecord
+    Skip,
+    /// Create an UnassignedNodesConfigRecord, ignore version mismatch
+    /// between initial GuestOS and SetupOS
+    Ignore,
+}
+
+impl TestEnvAttribute for UnassignedRecordConfig {
+    fn attribute_name() -> String {
+        "unassigned_record_config".to_string()
     }
 }

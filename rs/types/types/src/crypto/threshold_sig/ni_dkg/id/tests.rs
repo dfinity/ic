@@ -170,8 +170,8 @@ fn should_return_error_if_ni_dkg_tag_invalid_with_missing_keyid_when_parsing_pro
 }
 
 #[test]
-fn should_return_error_if_ni_dkg_tag_invalid_with_invalid_vetkd_master_public_key_when_parsing_proto(
-) {
+fn should_return_error_if_ni_dkg_tag_invalid_with_invalid_vetkd_master_public_key_when_parsing_proto()
+ {
     let proto = NiDkgIdProto {
         start_block_height: 7,
         dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
@@ -217,8 +217,8 @@ fn should_return_error_if_ni_dkg_tag_invalid_with_non_vetkd_master_public_key_wh
 }
 
 #[test]
-fn should_return_error_if_ni_dkg_tag_invalid_with_nonempty_keyid_for_low_thres_tag_when_parsing_proto(
-) {
+fn should_return_error_if_ni_dkg_tag_invalid_with_nonempty_keyid_for_low_thres_tag_when_parsing_proto()
+ {
     let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: "key".to_string(),
@@ -240,8 +240,8 @@ fn should_return_error_if_ni_dkg_tag_invalid_with_nonempty_keyid_for_low_thres_t
 }
 
 #[test]
-fn should_return_error_if_ni_dkg_tag_invalid_with_nonempty_keyid_for_high_thres_tag_when_parsing_proto(
-) {
+fn should_return_error_if_ni_dkg_tag_invalid_with_nonempty_keyid_for_high_thres_tag_when_parsing_proto()
+ {
     let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: "key".to_string(),

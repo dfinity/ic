@@ -95,6 +95,7 @@ fn test_known_neurons() {
             known_neuron_data: Some(KnownNeuronData {
                 name: "NeuronTwo".to_string(),
                 description: Some("Second test neuron".to_string()),
+                links: Some(vec![]),
             }),
         },
     );
@@ -107,6 +108,7 @@ fn test_known_neurons() {
             known_neuron_data: Some(KnownNeuronData {
                 name: "NeuronThree".to_string(),
                 description: None,
+                links: Some(vec![]),
             }),
         },
     );
@@ -121,6 +123,7 @@ fn test_known_neurons() {
                     known_neuron_data: Some(KnownNeuronData {
                         name: "NeuronThree".to_string(),
                         description: None,
+                        links: Some(vec![]),
                     }),
                 },
                 KnownNeuron {
@@ -128,6 +131,7 @@ fn test_known_neurons() {
                     known_neuron_data: Some(KnownNeuronData {
                         name: "NeuronTwo".to_string(),
                         description: Some("Second test neuron".to_string()),
+                        links: Some(vec![]),
                     }),
                 },
             ],
@@ -141,6 +145,7 @@ fn test_known_neurons() {
         KnownNeuronData {
             name: "NeuronTwo".to_string(),
             description: Some("Second test neuron".to_string()),
+            links: Some(vec![]),
         }
     );
     assert_eq!(
@@ -151,6 +156,7 @@ fn test_known_neurons() {
         KnownNeuronData {
             name: "NeuronThree".to_string(),
             description: None,
+            links: Some(vec![]),
         }
     );
 
@@ -174,6 +180,7 @@ fn test_known_neurons() {
                 known_neuron_data: Some(KnownNeuronData {
                     name: "NeuronThree".to_string(),
                     description: None,
+                    links: Some(vec![]),
                 }),
             }],
         }
@@ -195,6 +202,7 @@ fn test_known_neurons() {
             known_neuron_data: Some(KnownNeuronData {
                 name: "NeuronThree (changed)".to_string(),
                 description: Some("Third test neuron".to_string()),
+                links: Some(vec!["https://example.com".to_string()]),
             }),
         },
     );
@@ -208,6 +216,7 @@ fn test_known_neurons() {
                 known_neuron_data: Some(KnownNeuronData {
                     name: "NeuronThree (changed)".to_string(),
                     description: Some("Third test neuron".to_string()),
+                    links: Some(vec!["https://example.com".to_string()]),
                 }),
             }],
         }
@@ -220,6 +229,7 @@ fn test_known_neurons() {
         KnownNeuronData {
             name: "NeuronThree (changed)".to_string(),
             description: Some("Third test neuron".to_string()),
+            links: Some(vec!["https://example.com".to_string()]),
         }
     );
 }

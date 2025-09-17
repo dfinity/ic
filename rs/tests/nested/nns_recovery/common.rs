@@ -1,71 +1,76 @@
 use std::time::Duration;
 
-use anyhow::{bail, Result};
-use futures::future::join_all;
+use anyhow::{Result, bail};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
+    node::await_subnet_earliest_topology_version,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
     },
     set_sandbox_env_vars,
     ssh_access::{
-        get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::assert_assigned_replica_version,
 };
 use ic_recovery::{
-    get_node_metrics,
+    RecoveryArgs, get_node_metrics,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     util::DataLocation,
-    RecoveryArgs,
 };
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        nested::NestedVms,
+        nested::NestedVm,
+        nested::{HasNestedVms, NestedNodes},
         test_env::TestEnv,
         test_env_api::*,
     },
     nns::change_subnet_membership,
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg_async,
     util::block_on,
 };
-use nested::util::{
-    assert_version_compatibility, get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group,
-    setup_vector_targets_for_vm, start_nested_vm_group, NODE_REGISTRATION_BACKOFF,
-    NODE_REGISTRATION_TIMEOUT,
-};
+use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
-use slog::{info, Logger};
+use slog::{Logger, info};
+use tokio::task::JoinSet;
 
-/// Four nodes is the minimum subnet size that satisfies 3f+1 for f=1
+/// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
 /// DKG interval of 9 is large enough for a subnet of that size and as small as possible to keep the
 /// test runtime low
 pub const DKG_INTERVAL: u64 = 9;
+
+/// 40 nodes and DKG interval of 199 are the production values for the NNS but 49 was chosen for
+/// the DKG interval to make the test faster
+pub const LARGE_SUBNET_SIZE: usize = 40;
+pub const LARGE_DKG_INTERVAL: u64 = 49;
+
 /// RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual version of the recovery
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
 pub struct SetupConfig {
     pub impersonate_upstreams: bool,
+    pub subnet_size: usize,
+    pub dkg_interval: u64,
 }
 
 #[derive(Debug)]
 pub struct TestConfig {}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
-    (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
+    (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
-pub fn assign_unassigned_nodes_to_nns(
-    logger: &Logger,
-    topology: &TopologySnapshot,
-) -> TopologySnapshot {
+pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
+    let logger = env.logger();
+
     info!(logger, "Adding all unassigned nodes to the NNS subnet...");
+    let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
     let original_node = nns_subnet.nodes().next().unwrap();
 
@@ -97,106 +102,49 @@ pub fn assign_unassigned_nodes_to_nns(
         new_node_ids.len(),
         num_nns_nodes
     );
+
+    // Readiness wait: ensure the NNS subnet is healthy and making progress
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
+    await_subnet_earliest_topology_version(
+        &nns_subnet,
+        new_topology.get_registry_version(),
+        &logger,
+    );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
-
-    // Readiness wait: ensure the NNS subnet is healthy and making progress
-    let nns_node = nns_subnet.nodes().next().unwrap();
-    info!(
-        logger,
-        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
-    );
-    cert_state_makes_progress_with_retries(
-        &nns_node.get_public_url(),
-        nns_node.effective_canister_id(),
-        logger,
-        Duration::from_secs(300),
-        Duration::from_secs(10),
-    );
-
-    new_topology
 }
 
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
-    assert_version_compatibility();
-
     if cfg.impersonate_upstreams {
         impersonate_upstreams::setup_upstreams_uvm(&env);
     }
 
-    setup_ic_infrastructure(&env, Some(DKG_INTERVAL));
+    setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
-    let host_vm_names = get_host_vm_names(SUBNET_SIZE);
-    let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
-    setup_nested_vm_group(env.clone(), &host_vm_names_refs);
-
-    for vm_name in &host_vm_names {
-        setup_vector_targets_for_vm(&env, vm_name);
-    }
+    let host_vm_names = get_host_vm_names(cfg.subnet_size);
+    NestedNodes::new(&host_vm_names)
+        .setup_and_start(&env)
+        .unwrap();
 }
 
 pub fn test(env: TestEnv, _cfg: TestConfig) {
     let logger = env.logger();
 
-    let recovery_img = std::fs::read(get_dependency_path(
-        std::env::var("RECOVERY_GUESTOS_IMG_PATH")
-            .expect("RECOVERY_GUESTOS_IMG_PATH environment variable not found"),
-    ))
-    .expect("Failed to read recovery GuestOS image");
+    let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
+    let recovery_img =
+        std::fs::read(&recovery_img_path).expect("Failed to read recovery GuestOS image");
     let recovery_img_hash = Sha256::digest(&recovery_img)
         .iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
-    )
-    .unwrap();
+    nested::registration(env.clone());
+    replace_nns_with_unassigned_nodes(&env);
 
-    // Check that there are initially no unassigned nodes.
-    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
-    assert_eq!(num_unassigned_nodes, 0);
-
-    start_nested_vm_group(env.clone());
-
-    info!(logger, "Waiting for all nodes to join ...");
-
-    // Wait for all nodes to register by repeatedly waiting for registry updates
-    // and checking if we have the expected number of unassigned nodes
-    let new_topology = retry_with_msg!(
-        "Waiting for all nodes to register and appear as unassigned nodes",
-        logger.clone(),
-        NODE_REGISTRATION_TIMEOUT,
-        NODE_REGISTRATION_BACKOFF,
-        || {
-            // Wait for a newer registry version to be available
-            let new_topology = block_on(
-                initial_topology.block_for_newer_registry_version_within_duration(
-                    Duration::from_secs(60), // Shorter timeout for each individual check
-                    Duration::from_secs(2),
-                ),
-            )?;
-
-            let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == SUBNET_SIZE {
-                info!(logger, "Success: All nodes have registered");
-                Ok(new_topology)
-            } else {
-                bail!(
-                    "Expected {} unassigned nodes, but found {}",
-                    SUBNET_SIZE,
-                    num_unassigned_nodes
-                )
-            }
-        }
-    )
-    .unwrap();
-
-    let new_topology = assign_unassigned_nodes_to_nns(&logger, &new_topology);
-    let nns_subnet = new_topology.root_subnet();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let subnet_size = nns_subnet.nodes().count();
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
@@ -255,7 +203,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
 
     // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
-    let f = (SUBNET_SIZE - 1) / 3;
+    let f = (subnet_size - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
     info!(
@@ -366,7 +314,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
     }
     info!(
         logger,
@@ -374,18 +322,18 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     );
 
     info!(logger, "Setup UVM to serve recovery artifacts");
-    let artifacts = std::fs::read(output_dir.join("recovery.tar.zst")).unwrap();
+    let artifacts_path = output_dir.join("recovery.tar.zst");
     let artifacts_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
         .unwrap()
         .trim()
         .to_string();
-    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, artifacts, &artifacts_hash)
+    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
         .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_guestos_image(
         &env,
-        recovery_img,
+        &recovery_img_path,
         RECOVERY_GUESTOS_IMG_VERSION,
     )
     .unwrap();
@@ -393,32 +341,60 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
     // trigger the recovery on 2f other nodes.
     info!(logger, "Simulate node provider action on 2f nodes");
-    block_on(join_all(
-        get_host_vm_names(SUBNET_SIZE)
+    block_on(async {
+        let mut handles = JoinSet::new();
+
+        for vm in env
+            .get_all_nested_vms()
+            .unwrap()
             .iter()
-            .filter(|vm_name| {
-                env.get_nested_vm(vm_name)
-                    .unwrap()
-                    .get_nested_network()
-                    .unwrap()
-                    .guest_ip
-                    != dfinity_owned_node.get_ip_addr()
+            .filter(|&vm| {
+                vm.get_nested_network().unwrap().guest_ip != dfinity_owned_node.get_ip_addr()
             })
+            .cloned()
             .collect::<Vec<_>>()
             .choose_multiple(&mut rand::thread_rng(), 2 * f)
-            .map(|vm_name| {
+        {
+            let logger = logger.clone();
+            let env = env.clone();
+            let vm = vm.clone();
+            let recovery_img_hash = recovery_img_hash.clone();
+            let artifacts_hash = artifacts_hash.clone();
+
+            handles.spawn(async move {
                 simulate_node_provider_action(
                     &logger,
                     &env,
-                    vm_name,
+                    &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash[..6],
                     &artifacts_hash,
                 )
-            }),
-    ));
+                .await
+            });
+        }
 
-    info!(logger, "Wait for state sync to complete");
+        handles.join_all().await;
+    });
+
+    info!(
+        logger,
+        "Ensure every node uses the new replica version, is healthy and the subnet is making progress"
+    );
+    let nns_subnet =
+        block_on(topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)))
+            .expect("Could not obtain updated registry.")
+            .root_subnet();
+    for node in nns_subnet.nodes() {
+        assert_assigned_replica_version(&node, &working_version, env.logger());
+        node.await_status_is_healthy().unwrap_or_else(|_| {
+            panic!(
+                "Node {} ({:?}) did not become healthy after the recovery",
+                node.node_id,
+                node.get_ip_addr()
+            )
+        });
+    }
     cert_state_makes_progress_with_retries(
         &dfinity_owned_node.get_public_url(),
         dfinity_owned_node.effective_canister_id(),
@@ -427,13 +403,6 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         secs(10),
     );
 
-    info!(logger, "Ensure the subnet uses the new replica version");
-    let nns_subnet = block_on(new_topology.block_for_newer_registry_version())
-        .expect("Could not obtain updated registry.")
-        .root_subnet();
-    for node in nns_subnet.nodes() {
-        assert_assigned_replica_version(&node, &working_version, env.logger());
-    }
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure the old message is still readable");
@@ -487,18 +456,18 @@ where
 async fn simulate_node_provider_action(
     logger: &Logger,
     env: &TestEnv,
-    vm_name: &str,
+    host: &NestedVm,
     img_version: &str,
     img_short_hash: &str,
     artifacts_hash: &str,
 ) {
-    let host = env.get_nested_vm(vm_name).unwrap();
-    let host_boot_id_pre_reboot = get_host_boot_id(&host);
+    let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
 
     // Trigger HostOS reboot and run guestos-recovery-upgrader
     info!(
         logger,
-        "Remounting /boot as read-write, updating boot_args file and rebooting host {}", vm_name,
+        "Remounting /boot as read-write, updating boot_args file and rebooting host {}",
+        host.vm_name(),
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
@@ -518,7 +487,7 @@ async fn simulate_node_provider_action(
         Duration::from_secs(5 * 60),
         Duration::from_secs(5),
         || async {
-            let host_boot_id = get_host_boot_id(&host);
+            let host_boot_id = get_host_boot_id_async(host).await;
             if host_boot_id != host_boot_id_pre_reboot {
                 info!(
                     logger,
@@ -537,9 +506,11 @@ async fn simulate_node_provider_action(
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
-        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}", vm_name, server_ipv6
+        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}",
+        host.vm_name(),
+        server_ipv6
     );
-    impersonate_upstreams::spoof_node_dns_async(&host, &server_ipv6)
+    impersonate_upstreams::spoof_node_dns_async(host, &server_ipv6)
         .await
         .expect("Failed to spoof HostOS DNS");
 
@@ -555,7 +526,9 @@ async fn simulate_node_provider_action(
         .expect("Failed to overwrite expected recovery hash");
     info!(
         logger,
-        "Spoofing GuestOS DNS to point the upstreams to the UVM at {}", server_ipv6
+        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}",
+        host.vm_name(),
+        server_ipv6
     );
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await

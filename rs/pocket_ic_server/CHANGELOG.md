@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 10.0.0 - 2025-09-05
+## 10.0.0 - 2025-09-12
 
 ### Added
 - The endpoint `/instances/<instance_id>/update/await_ingress_message` (execute rounds on the PocketIc instance until the message is executed):

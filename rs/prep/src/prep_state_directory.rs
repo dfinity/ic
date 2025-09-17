@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::internet_computer::{IC_REGISTRY_LOCAL_STORE_PATH, IC_ROOT_PUB_KEY_PATH};
 

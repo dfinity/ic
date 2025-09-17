@@ -1,6 +1,6 @@
 use crate::{format_duration, parse_duration};
 use ic_nervous_system_proto::pb::v1::Duration;
-use serde::{ser::Error, Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Deserializer, Serializer, ser::Error};
 
 #[cfg(test)]
 mod duration_tests;

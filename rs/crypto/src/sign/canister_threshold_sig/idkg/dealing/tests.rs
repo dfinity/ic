@@ -1,11 +1,11 @@
 mod verify_dealing_public {
-    use crate::sign::canister_threshold_sig::idkg::dealing::verify_dealing_public;
-    use crate::sign::canister_threshold_sig::idkg::dealing::BasicSignature;
-    use crate::sign::canister_threshold_sig::idkg::dealing::IDkgDealing;
-    use crate::sign::canister_threshold_sig::idkg::SignedIDkgDealing;
-    use crate::sign::canister_threshold_sig::test_utils::valid_internal_dealing_raw;
     use crate::sign::BasicSig;
     use crate::sign::BasicSigOf;
+    use crate::sign::canister_threshold_sig::idkg::SignedIDkgDealing;
+    use crate::sign::canister_threshold_sig::idkg::dealing::BasicSignature;
+    use crate::sign::canister_threshold_sig::idkg::dealing::IDkgDealing;
+    use crate::sign::canister_threshold_sig::idkg::dealing::verify_dealing_public;
+    use crate::sign::canister_threshold_sig::test_utils::valid_internal_dealing_raw;
     use assert_matches::assert_matches;
     use ic_base_types::NodeId;
     use ic_base_types::RegistryVersion;
@@ -15,17 +15,17 @@ mod verify_dealing_public {
     use ic_crypto_test_utils_canister_threshold_sigs::node_id;
     use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::crypto::ErrorReproducibility;
     use ic_interfaces_registry::RegistryValue;
     use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_registry_keys::make_crypto_node_key;
+    use ic_types::crypto::KeyPurpose::NodeSigning;
     use ic_types::crypto::canister_threshold_sig::error::IDkgVerifyDealingPublicError;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
     use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
-    use ic_types::crypto::KeyPurpose::NodeSigning;
     use ic_types::crypto::{AlgorithmId, CryptoError, Signable};
     use ic_types::registry::RegistryClientError;
     use rand::Rng;
@@ -72,7 +72,7 @@ mod verify_dealing_public {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let registry_client_error = RegistryClientError::VersionNotAvailable {
-                version: RegistryVersion::from(rng.gen::<u32>() as u64),
+                version: RegistryVersion::from(rng.r#gen::<u32>() as u64),
             };
 
             let setup = Setup::new_with_registry_client_get_value_error(
