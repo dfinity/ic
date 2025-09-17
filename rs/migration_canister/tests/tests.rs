@@ -50,6 +50,7 @@ pub struct Setup {
     pub target_controllers: Vec<Principal>,
     pub source_subnet: Principal,
     pub target_subnet: Principal,
+    /// Controller of the NNS canisters including MC
     pub system_controller: Principal,
 }
 
@@ -182,7 +183,6 @@ async fn setup(
     if enough_cycles {
         pic.add_cycles(target, u128::MAX / 2).await;
     }
-    // stop source and target
     pic.stop_canister(target, Some(c1)).await.unwrap();
     println!("Source canister id: {}", source.to_text());
     println!("Target canister id: {}", target.to_text());
@@ -248,6 +248,9 @@ impl Logs {
         );
         let mut next = String::from("");
         for exp in expected.iter() {
+            if exp.is_empty() {
+                continue;
+            }
             while !next.contains(exp) {
                 next = match logs.pop_front() {
                     Some(next) => next,
