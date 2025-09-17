@@ -124,10 +124,7 @@ impl KernelCommandLine {
     /// If the argument doesn't exist, returns None.
     pub fn get_argument(&self, argument_name: &str) -> Option<String> {
         static REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(
-                r#"^(?<key>.+)=('(?<value1>[\s\S]*?)'|"(?<value2>[\s\S]*?)"|(?<value3>[\s\S]*?))$"#,
-            )
-            .unwrap()
+            Regex::new(r#"^(?<key>.+)=('(?<value1>.+)'|"(?<value2>.+)"|(?<value3>.+))$"#).unwrap()
         });
 
         self.tokenized_arguments.iter().find_map(|arg| {
@@ -429,18 +426,6 @@ Actual:
                 "rd.debug rd.debuglevel=\"'quoted'\"",
                 "rd.debuglevel",
                 Some("'quoted'".to_string()),
-            ),
-            (
-                "get argument with newline in value",
-                "recovery-hash=TEST123\n",
-                "recovery-hash",
-                Some("TEST123".to_string()),
-            ),
-            (
-                "get argument with newline in quoted value",
-                "recovery-hash=\"TEST123\n\"",
-                "recovery-hash",
-                Some("TEST123".to_string()),
             ),
         ];
 

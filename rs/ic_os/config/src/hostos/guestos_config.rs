@@ -76,7 +76,9 @@ pub fn generate_guestos_config(
         });
 
     let hostos_cmdline_content = std::fs::read_to_string("/proc/cmdline")
-        .context("Failed to read HostOS boot args from /proc/cmdline")?;
+        .context("Failed to read HostOS boot args from /proc/cmdline")?
+        .trim()
+        .to_string();
 
     let recovery_config = guestos_recovery_hash(
         &hostos_cmdline_content,
