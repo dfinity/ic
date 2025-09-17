@@ -418,6 +418,8 @@ impl PocketIcBuilder {
 
     /// Enables selected ICP features supported by PocketIC and implemented by system canisters
     /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
+    /// Subnets to which the system canisters are deployed are automatically declared as empty subnets,
+    /// e.g., `PocketIcBuilder::with_nns_subnet` is implicitly implied by specifying the `icp_token` feature.
     pub fn with_icp_features(mut self, icp_features: IcpFeatures) -> Self {
         self.icp_features = icp_features;
         self
