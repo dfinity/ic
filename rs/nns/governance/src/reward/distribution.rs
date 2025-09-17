@@ -167,7 +167,8 @@ impl RewardsDistribution {
                             .saturating_add(reward_e8s),
                     );
                 } else {
-                    neuron.maturity_e8s_equivalent += reward_e8s;
+                    neuron.maturity_e8s_equivalent =
+                        neuron.maturity_e8s_equivalent.saturating_add(reward_e8s);
                 }
             }) {
                 Ok(_) => {}
