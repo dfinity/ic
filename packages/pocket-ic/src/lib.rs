@@ -426,9 +426,20 @@ impl PocketIcBuilder {
     /// Sets the initial timestamp of the new instance to the provided value which must be at least
     /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
     /// - 06 May 2021 21:17:10 CEST otherwise.
+    #[deprecated(note = "Use `with_initial_time` instead")]
     pub fn with_initial_timestamp(mut self, initial_timestamp_nanos: u64) -> Self {
         self.initial_time = Some(InitialTime::Timestamp(RawTime {
             nanos_since_epoch: initial_timestamp_nanos,
+        }));
+        self
+    }
+
+    /// Sets the initial time of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    pub fn with_initial_time(mut self, initial_time: Time) -> Self {
+        self.initial_time = Some(InitialTime::Timestamp(RawTime {
+            nanos_since_epoch: initial_time.as_nanos_since_unix_epoch(),
         }));
         self
     }
