@@ -1941,7 +1941,6 @@ pub mod test {
             fake_signature_request_context_with_registry_version,
             fake_state_with_signature_requests,
         },
-        matches_pattern,
     };
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_time::FastForwardTimeSource;
