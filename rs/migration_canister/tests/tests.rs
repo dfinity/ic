@@ -303,10 +303,7 @@ async fn validation_succeeds() {
         logs.add(log);
     }
 
-    for (idx, message) in logs.in_order().iter() {
-        println!("{idx}: {message}");
-    }
-
+    // Low prio test that the state machine transitions in expected order
     assert!(logs.contains_in_order(vec![
         "Entering `accepted` with 1 pending",
         "Exiting `accepted` with 1 successful",
