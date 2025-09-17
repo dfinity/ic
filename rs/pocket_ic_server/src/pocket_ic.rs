@@ -61,6 +61,7 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
+use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
@@ -1562,12 +1563,6 @@ impl PocketIcSubnets {
             );
             assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
 
-            // The following fixed principal has a high ICP balance in test environments.
-            let rich_principal = Principal::from_text(
-                "hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe",
-            )
-            .unwrap();
-
             // Install the governance canister with a tiny initial neuron to satisfy the governance canister invariants.
             let mut governance_init_payload_builder = GovernanceCanisterInitPayloadBuilder::new();
             let neuron_id = governance_init_payload_builder.new_neuron_id();
@@ -1577,11 +1572,16 @@ impl PocketIcSubnets {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
+            // We create an initial NNS neuron so that the total voting power is not zero.
+            // The initial NNS neuron has the following properties:
+            // - controlled by the anonymous principal;
+            // - stake of 1 ICP;
+            // - the maximum possible dissolve delay (8 years).
             let initial_neuron = Neuron {
                 id: Some(neuron_id.into()),
-                controller: Some(PrincipalId(rich_principal)),
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(183 * 86400)), // 183 days so that it contributes to the total voting power
-                cached_neuron_stake_e8s: 100_000_000,                                   // 1 ICP
+                controller: Some(PrincipalId(Principal::anonymous())),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(8 * ONE_YEAR_SECONDS)),
+                cached_neuron_stake_e8s: 100_000_000,
                 created_timestamp_seconds: current_timestamp_seconds,
                 aging_since_timestamp_seconds: 0,
                 account: DEFAULT_SUBACCOUNT.into(),
