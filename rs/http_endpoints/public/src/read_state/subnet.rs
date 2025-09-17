@@ -168,7 +168,7 @@ pub(crate) async fn read_state_subnet(
 
         let maybe_nns_subnet_filter = match version {
             Version::V2 => DeprecatedCanisterRangesFilter::KeepAll,
-            Version::V3 => DeprecatedCanisterRangesFilter::KeepOnly(nns_subnet_id),
+            Version::V3 => DeprecatedCanisterRangesFilter::KeepOnlyNNS(nns_subnet_id),
         };
 
         get_certificate_and_create_response(
@@ -294,75 +294,71 @@ mod test {
             Ok(())
         );
 
-        assert!(
-            verify_paths(
-                version,
-                &[
-                    Path::new(vec![
-                        Label::from("request_status"),
-                        [0; 32].into(),
-                        Label::from("status")
-                    ]),
-                    Path::new(vec![
-                        Label::from("request_status"),
-                        [0; 32].into(),
-                        Label::from("reply")
-                    ])
-                ],
-                APP_SUBNET_ID.get(),
-                NNS_SUBNET_ID,
-            )
-            .is_err()
-        );
+        let err = verify_paths(
+            version,
+            &[
+                Path::new(vec![
+                    Label::from("request_status"),
+                    [0; 32].into(),
+                    Label::from("status"),
+                ]),
+                Path::new(vec![
+                    Label::from("request_status"),
+                    [0; 32].into(),
+                    Label::from("reply"),
+                ]),
+            ],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
 
-        assert!(
-            verify_paths(
-                version,
-                &[
-                    Path::new(vec![
-                        Label::from("canister"),
-                        ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                        Label::from("controllers")
-                    ]),
-                    Path::new(vec![
-                        Label::from("request_status"),
-                        ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                        Label::from("module_hash")
-                    ])
-                ],
-                APP_SUBNET_ID.get(),
-                NNS_SUBNET_ID,
-            )
-            .is_err()
-        );
+        let err = verify_paths(
+            version,
+            &[
+                Path::new(vec![
+                    Label::from("canister"),
+                    ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
+                    Label::from("controllers"),
+                ]),
+                Path::new(vec![
+                    Label::from("request_status"),
+                    ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
+                    Label::from("module_hash"),
+                ]),
+            ],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
 
-        assert!(
-            verify_paths(
-                version,
-                &[Path::new(vec![Label::from("canister_ranges"),]),],
-                APP_SUBNET_ID.get(),
-                NNS_SUBNET_ID,
-            )
-            .is_err()
-        );
+        let err = verify_paths(
+            version,
+            &[Path::new(vec![Label::from("canister_ranges")])],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
     }
 
     #[test]
     fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet()
     {
-        assert!(
-            verify_paths(
-                Version::V3,
-                &[Path::new(vec![
-                    Label::from("subnet"),
-                    APP_SUBNET_ID.get().to_vec().into(),
-                    Label::from("canister_ranges"),
-                ])],
-                APP_SUBNET_ID.get(),
-                NNS_SUBNET_ID,
-            )
-            .is_err()
-        );
+        let err = verify_paths(
+            Version::V3,
+            &[Path::new(vec![
+                Label::from("subnet"),
+                APP_SUBNET_ID.get().to_vec().into(),
+                Label::from("canister_ranges"),
+            ])],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
 
         assert!(
             verify_paths(
@@ -387,6 +383,20 @@ mod test {
                 &[Path::new(vec![
                     Label::from("subnet"),
                     APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
+
+        assert!(
+            verify_paths(
+                Version::V2,
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
                     Label::from("canister_ranges"),
                 ])],
                 APP_SUBNET_ID.get(),

@@ -57,8 +57,8 @@ enum DeprecatedCanisterRangesFilter {
     /// Will keep all paths of the form `/subnet/<subnet_id>/canister_ranges` for all subnet ids.
     KeepAll,
     /// Will prune all paths of the form `/subnet/<subnet_id>/canister_ranges` for all subnet ids
-    /// except the provided [`SubnetId`].
-    KeepOnly(SubnetId),
+    /// except for the provided NNS subnet id.
+    KeepOnlyNNS(SubnetId),
 }
 
 fn get_certificate_and_create_response(
@@ -83,7 +83,7 @@ fn get_certificate_and_create_response(
 
     let exclusion_rule = match deprecated_canister_ranges_filter {
         DeprecatedCanisterRangesFilter::KeepAll => None,
-        DeprecatedCanisterRangesFilter::KeepOnly(nns_subnet_id) => {
+        DeprecatedCanisterRangesFilter::KeepOnlyNNS(nns_subnet_id) => {
             let deprecated_canister_ranges_except_the_nns_subnet_id_pattern = vec![
                 MatchPattern::Inclusive(Label::from("subnet")),
                 MatchPattern::Exclusive(Label::from(nns_subnet_id.get_ref())),
@@ -181,7 +181,7 @@ mod test {
             Vec::new(),
             /*delegation_from_nns=*/ None,
             &reader,
-            DeprecatedCanisterRangesFilter::KeepOnly(NNS_SUBNET_ID),
+            DeprecatedCanisterRangesFilter::KeepOnlyNNS(NNS_SUBNET_ID),
         );
 
         assert_eq!(response.status(), StatusCode::OK);
