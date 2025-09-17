@@ -3542,23 +3542,17 @@ mod reshare_key_transcript {
             let (source_dealers, source_receivers) = source_subnet_nodes
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
             let source_key_transcript = {
-                let masked_key_params = IDkgTranscriptParams::new(
+                let unmasked_key_params = IDkgTranscriptParams::new(
                     random_transcript_id(rng),
                     source_dealers.get().clone(),
                     source_receivers.get().clone(),
                     env.newest_registry_version,
                     alg,
-                    IDkgTranscriptOperation::Random,
+                    IDkgTranscriptOperation::RandomUnmasked,
                 )
                 .expect("failed to create random IDkgTranscriptParams");
-                let masked_key_transcript = source_subnet_nodes
-                    .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
-                let unmasked_params = build_params_from_previous(
-                    masked_key_params,
-                    IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
-                    rng,
-                );
-                source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+                source_subnet_nodes
+                    .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
             };
             let source_tecdsa_master_public_key =
                 get_master_public_key_from_transcript(&source_key_transcript)
@@ -3634,23 +3628,17 @@ mod reshare_key_transcript {
             let (source_dealers, source_receivers) = source_subnet_nodes
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
             let source_key_transcript = {
-                let masked_key_params = IDkgTranscriptParams::new(
+                let unmasked_key_params = IDkgTranscriptParams::new(
                     random_transcript_id(rng),
                     source_dealers.get().clone(),
                     source_receivers.get().clone(),
                     env.newest_registry_version,
                     alg,
-                    IDkgTranscriptOperation::Random,
+                    IDkgTranscriptOperation::RandomUnmasked,
                 )
                 .expect("failed to create random IDkgTranscriptParams");
-                let masked_key_transcript = source_subnet_nodes
-                    .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
-                let unmasked_params = build_params_from_previous(
-                    masked_key_params,
-                    IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
-                    rng,
-                );
-                source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+                source_subnet_nodes
+                    .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
             };
             let source_tecdsa_master_public_key =
                 get_master_public_key_from_transcript(&source_key_transcript)
