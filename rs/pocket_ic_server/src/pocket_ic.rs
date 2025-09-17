@@ -1,5 +1,6 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, GoogleOpenIdConfig, InternetIdentityInit, RateLimitConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, GoogleOpenIdConfig,
+    InternetIdentityInit, NnsDappCanisterArguments, RateLimitConfig, SnsAggregatorConfig,
     StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
@@ -11,7 +12,7 @@ use axum::{
     response::{Html, IntoResponse},
 };
 use bitcoin::Network;
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload,
     DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
@@ -1395,17 +1396,6 @@ impl PocketIcSubnets {
             return;
         };
 
-        // Cycles ledger init args.
-        #[derive(CandidType)]
-        struct CyclesLedgerConfig {
-            max_blocks_per_request: u64,
-            index_id: Option<Principal>,
-        }
-        #[derive(CandidType)]
-        enum CyclesLedgerArgs {
-            Init(CyclesLedgerConfig),
-        }
-
         if !ii_subnet
             .state_machine
             .canister_exists(CYCLES_LEDGER_CANISTER_ID)
@@ -1806,12 +1796,7 @@ impl PocketIcSubnets {
             //       update_interval_ms = 120_000 : nat64;
             //       fast_interval_ms = 10_000 : nat64;
             //     },
-            #[derive(CandidType)]
-            struct Config {
-                update_interval_ms: u64,
-                fast_interval_ms: u64,
-            }
-            let sns_aggregator_init_payload = Config {
+            let sns_aggregator_init_payload = SnsAggregatorConfig {
                 update_interval_ms: 120_000,
                 fast_interval_ms: 10_000,
             };
@@ -2024,10 +2009,6 @@ impl PocketIcSubnets {
             // Install the NNS dapp canister.
             // The configuration values have been adapted from
             // `https://github.com/dfinity/nns-dapp/blob/5126b011ac52f9f8544c37d18bc15603756a7e3c/scripts/nns-dapp/test-config-assets/mainnet/arg.did`.
-            #[derive(CandidType)]
-            struct CanisterArguments {
-                args: Vec<(String, String)>,
-            }
             let localhost_url = format!("http://localhost:{gateway_port}");
             let args = vec![
               ("API_HOST".to_string(), localhost_url.clone()),
@@ -2051,7 +2032,7 @@ impl PocketIcSubnets {
               ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
               ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
             ];
-            let nns_dapp_test_init_payload = CanisterArguments { args };
+            let nns_dapp_test_init_payload = NnsDappCanisterArguments { args };
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
