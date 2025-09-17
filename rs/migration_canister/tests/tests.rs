@@ -244,7 +244,7 @@ impl Logs {
             self.in_order()
                 .into_iter()
                 .map(|(_k, v)| v)
-                .retain(|x| !x.is_empty())
+                .filter(|x| !x.is_empty())
                 .collect::<Vec<String>>(),
         );
         if logs.is_empty() {
@@ -252,7 +252,7 @@ impl Logs {
             return false;
         }
         let mut next = String::from("");
-        for exp in expected.iter().retain(|x| !x.is_empty()) {
+        for exp in expected.iter().filter(|x| !x.is_empty()) {
             while !next.contains(exp) {
                 next = match logs.pop_front() {
                     Some(next) => next,
@@ -396,20 +396,19 @@ async fn validation_fails_not_stopped() {
 
     // source
     pic.start_canister(source, Some(sender)).await.unwrap();
-    let Err(ValidationError::SourceNotStopped) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
-    else {
-        panic!()
-    };
+    assert!(matches!(
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        Err(ValidationError::SourceNotStopped)
+    ));
+
     pic.stop_canister(source, Some(sender)).await.unwrap();
 
     // target
     pic.start_canister(target, Some(sender)).await.unwrap();
-    let Err(ValidationError::TargetNotStopped) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
-    else {
-        panic!()
-    };
+    assert!(matches!(
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        Err(ValidationError::TargetNotStopped)
+    ));
 }
 
 #[tokio::test]
@@ -440,11 +439,10 @@ async fn validation_fails_rate_limited() {
     .await
     .unwrap();
 
-    let Err(ValidationError::RateLimited) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
-    else {
-        panic!()
-    };
+    assert!(matches!(
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        Err(ValidationError::RateLimited)
+    ));
 }
 
 #[tokio::test]
@@ -468,9 +466,8 @@ async fn validation_fails_disabled() {
     .await
     .unwrap();
 
-    let Err(ValidationError::MigrationsDisabled) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
-    else {
-        panic!()
-    };
+    assert!(matches!(
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        Err(ValidationError::MigrationsDisabled)
+    ));
 }
