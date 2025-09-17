@@ -54,7 +54,9 @@ mod get_successors_handler;
 
 pub use blockchainmanager::MAX_HEADERS_SIZE;
 pub use blockchainstate::BlockchainState;
-pub use common::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
+pub use common::{
+    AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork, HeaderValidator,
+};
 pub use config::{Config, IncomingSource, address_limits};
 
 use crate::{
@@ -207,6 +209,7 @@ fn start_server_helper<Network>(
     Network: BlockchainNetwork + Sync + Send + 'static,
     Network::Header: Send,
     Network::Block: Send,
+    BlockchainState<Network>: HeaderValidator<Network>,
 {
     let _enter = rt_handle.enter();
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);

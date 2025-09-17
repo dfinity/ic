@@ -1,10 +1,6 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
 use bitcoin::{BlockHash, Work, block::Header as PureHeader};
-use ic_btc_validation::doge::DogecoinHeaderValidator as DogeHeaderValidator;
-use ic_btc_validation::{
-    AuxPowHeaderValidator, HeaderStore, ValidateAuxPowHeaderError, ValidateHeaderError,
-};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::{fmt, str::FromStr};
@@ -134,69 +130,16 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
     }
 }
 
-pub trait BlockchainHeaderValidator: Debug {
-    type Network: BlockchainNetwork;
-    type Header: BlockchainHeader;
-    type HeaderValidationError: Debug;
-    fn validate_header(
-        &self,
-        network: &Self::Network,
-        store: &impl HeaderStore,
-        header: &Self::Header,
-    ) -> Result<(), Self::HeaderValidationError>;
-}
-
-#[derive(Debug)]
-pub struct BitcoinHeaderValidator;
-
-impl BlockchainHeaderValidator for BitcoinHeaderValidator {
-    type Network = bitcoin::Network;
-    type Header = bitcoin::block::Header;
-    type HeaderValidationError = ValidateHeaderError;
-
-    fn validate_header(
-        &self,
-        network: &Self::Network,
-        store: &impl HeaderStore,
-        header: &Self::Header,
-    ) -> Result<(), Self::HeaderValidationError> {
-        ic_btc_validation::validate_header(network, store, header)
-    }
-}
-
-#[derive(Debug)]
-pub struct DogecoinHeaderValidator;
-
-impl BlockchainHeaderValidator for DogecoinHeaderValidator {
-    type Network = bitcoin::dogecoin::Network;
-    type Header = bitcoin::dogecoin::Header;
-    type HeaderValidationError = ValidateAuxPowHeaderError;
-
-    fn validate_header(
-        &self,
-        network: &Self::Network,
-        store: &impl HeaderStore,
-        header: &Self::Header,
-    ) -> Result<(), Self::HeaderValidationError> {
-        let validator = DogeHeaderValidator::new(*network);
-        validator.validate_auxpow_header(store, header)
-    }
-}
-
 /// Trait that implements differences between Bitcoin and Dogecoin networks.
 pub trait BlockchainNetwork: Copy + 'static {
     /// Header type.
     type Header: BlockchainHeader + Send + Sync;
     /// Block type.
     type Block: BlockchainBlock<Header = Self::Header>;
-    /// Validator used to validate blockchain headers
-    type HeaderValidator: BlockchainHeaderValidator<Network = Self, Header = Self::Header>;
     /// P2P protocol version number.
     const P2P_PROTOCOL_VERSION: u32;
     /// Return genesis block header.
     fn genesis_block_header(&self) -> Self::Header;
-    /// Returns the validator to validate block headers.
-    fn get_header_validator(&self) -> Self::HeaderValidator;
     /// Helper used to determine if multiple blocks should be returned
     /// in [GetSuccessorsResponse].
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool;
@@ -217,13 +160,9 @@ pub trait BlockchainNetwork: Copy + 'static {
 impl BlockchainNetwork for bitcoin::Network {
     type Header = bitcoin::block::Header;
     type Block = bitcoin::Block;
-    type HeaderValidator = BitcoinHeaderValidator;
     const P2P_PROTOCOL_VERSION: u32 = bitcoin::p2p::PROTOCOL_VERSION;
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::blockdata::constants::genesis_block(self).header
-    }
-    fn get_header_validator(&self) -> Self::HeaderValidator {
-        BitcoinHeaderValidator
     }
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
         use bitcoin::Network::*;
@@ -267,13 +206,9 @@ impl BlockchainNetwork for bitcoin::Network {
 impl BlockchainNetwork for bitcoin::dogecoin::Network {
     type Header = bitcoin::dogecoin::Header;
     type Block = bitcoin::dogecoin::Block;
-    type HeaderValidator = DogecoinHeaderValidator;
     const P2P_PROTOCOL_VERSION: u32 = 70015;
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::dogecoin::constants::genesis_block(self).header
-    }
-    fn get_header_validator(&self) -> Self::HeaderValidator {
-        DogecoinHeaderValidator
     }
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
         use bitcoin::dogecoin::Network::*;
@@ -387,6 +322,19 @@ impl BlockchainBlock for bitcoin::dogecoin::Block {
     fn header(&self) -> &Self::Header {
         &self.header
     }
+}
+
+/// A trait for validating block headers in a blockchain network.
+pub trait HeaderValidator<Network: BlockchainNetwork> {
+    /// The error type returned when validation fails.
+    type HeaderError: Debug;
+
+    /// Validate a block header against the rules of the given blockchain network.
+    fn validate_header(
+        &self,
+        network: &Network,
+        header: &Network::Header,
+    ) -> Result<(), Self::HeaderError>;
 }
 
 #[cfg(test)]

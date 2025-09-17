@@ -1,5 +1,5 @@
 use crate::blockchainstate::AddHeaderError;
-use crate::common::BlockchainHeaderValidator;
+use crate::common::HeaderValidator;
 use crate::header_cache::AddHeaderCacheError;
 use crate::{
     Channel, Command, ProcessNetworkMessageError,
@@ -51,7 +51,7 @@ type Locators = (Vec<BlockHash>, BlockHash);
 
 /// The possible errors the `BlockchainManager::received_headers_message(...)` may produce.
 #[derive(Debug, Error)]
-enum ReceivedHeadersMessageError<V: BlockchainHeaderValidator> {
+enum ReceivedHeadersMessageError<Error> {
     /// This variant represents when a message from a no longer known peer.
     #[error("Unknown peer")]
     UnknownPeer,
@@ -60,7 +60,7 @@ enum ReceivedHeadersMessageError<V: BlockchainHeaderValidator> {
     #[error("Received too many unsolicited headers")]
     ReceivedTooManyUnsolicitedHeaders,
     #[error("Received an invalid header, with block hash {0} and error {1:?}")]
-    ReceivedInvalidHeader(BlockHash, V::HeaderValidationError),
+    ReceivedInvalidHeader(BlockHash, Error),
 }
 
 /// The possible errors the `BlockchainManager::received_inv_message(...)` may produce.
@@ -176,7 +176,10 @@ pub struct BlockchainManager<Network: BlockchainNetwork> {
     metrics: RouterMetrics,
 }
 
-impl<Network: BlockchainNetwork> BlockchainManager<Network> {
+impl<Network: BlockchainNetwork> BlockchainManager<Network>
+where
+    BlockchainState<Network>: HeaderValidator<Network>,
+{
     /// This function instantiates a BlockChainManager struct. A node is provided
     /// in order to get its client so the manager can send messages to the
     /// BTC network.
@@ -305,7 +308,15 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
         channel: &mut impl Channel<Network::Header, Network::Block>,
         addr: &SocketAddr,
         headers: &[Network::Header],
-    ) -> Result<(), ReceivedHeadersMessageError<Network::HeaderValidator>> {
+    ) -> Result<
+        (),
+        ReceivedHeadersMessageError<
+            <BlockchainState<Network> as HeaderValidator<Network>>::HeaderError,
+        >,
+    >
+    where
+        BlockchainState<Network>: HeaderValidator<Network>,
+    {
         let peer = self
             .peer_info
             .get_mut(addr)
@@ -789,7 +800,10 @@ pub mod test {
 
     fn create_blockchain_manager<Network: BlockchainNetwork>(
         network: Network,
-    ) -> (BlockHeader, BlockchainManager<Network>) {
+    ) -> (BlockHeader, BlockchainManager<Network>)
+    where
+        BlockchainState<Network>: HeaderValidator<Network>,
+    {
         let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
         (
             blockchain_state.genesis(),
