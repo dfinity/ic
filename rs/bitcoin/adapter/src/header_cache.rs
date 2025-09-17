@@ -8,7 +8,7 @@ use bitcoin::{
     io,
 };
 use ic_btc_validation::ValidateHeaderError;
-use ic_logger::{ReplicaLogger, error, info};
+use ic_logger::{ReplicaLogger, debug, error};
 use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
     Transaction, WriteFlags,
@@ -137,9 +137,9 @@ pub trait HeaderCache: Send + Sync {
     fn get_tips(&self) -> Vec<Tip<Self::Header>>;
 
     /// Return the anchor height and headers to prune given the anchor's block hash.
-    fn get_headers_to_prune(&self, anchor: BlockHash) -> (BlockHeight, Vec<BlockHash>);
+    fn get_headers_to_prune(&self, anchor: BlockHash) -> (Option<BlockHeight>, Vec<BlockHash>);
 
-    /// Prune headers from the cache
+    /// Prune headers from the cache.
     fn prune_headers(&self, anchor_height: BlockHeight, to_prune: Vec<BlockHash>);
 }
 
@@ -237,13 +237,16 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         self.read().unwrap().tips.clone()
     }
 
-    fn get_headers_to_prune(&self, anchor: BlockHash) -> (BlockHeight, Vec<BlockHash>) {
-        // Not implemented
-        (self.get_header(anchor).unwrap().data.height, Vec::new())
+    fn get_headers_to_prune(&self, anchor: BlockHash) -> (Option<BlockHeight>, Vec<BlockHash>) {
+        // Not implemented for in-memory cache.
+        (
+            self.get_header(anchor).map(|node| node.data.height),
+            Vec::new(),
+        )
     }
 
     fn prune_headers(&self, _anchor_height: BlockHeight, _to_prune: Vec<BlockHash>) {
-        // Not implemented
+        // Not implemented for in-memory cache.
     }
 }
 
@@ -350,7 +353,7 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
             .create_db(Some("HEIGHTS"), DatabaseFlags::DUP_SORT)
             .unwrap_or_else(|err| panic!("Error creating db for heights: {:?}", err));
         let last_pruned_height = db_env
-            .create_db(Some("LAST_PRUNED_HEIGHT"), DatabaseFlags::DUP_SORT)
+            .create_db(Some("LAST_PRUNED_HEIGHT"), DatabaseFlags::empty())
             .unwrap_or_else(|err| panic!("Error creating db for last_pruned_height: {:?}", err));
 
         let cache = LMDBHeaderCache {
@@ -444,7 +447,7 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         &self,
         tx: &Tx,
         mut hash: BlockHash,
-    ) -> Result<(BlockHeight, Vec<BlockHash>), LMDBCacheError> {
+    ) -> Result<(Option<BlockHeight>, Vec<BlockHash>), LMDBCacheError> {
         let last_pruned_height = log_err_except!(
             self.tx_get_last_pruned_height(tx),
             self.log,
@@ -455,11 +458,13 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         let mut to_prune = Vec::new();
         let mut starting_height = None;
         loop {
-            let node = log_err!(
-                self.tx_get_header(tx, hash),
-                self.log,
-                format!("tx_get_header({hash})")
-            )?;
+            let node = match self.tx_get_header(tx, hash) {
+                Ok(node) => node,
+                Err(err) => {
+                    error!(self.log, "tx_get_header({hash}) failed: {:?}", err);
+                    break;
+                }
+            };
             let height = node.data.height;
             if starting_height.is_none() {
                 starting_height = Some(height);
@@ -479,7 +484,7 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
             }
             hash = node.data.header.prev_block_hash();
         }
-        Ok((starting_height.unwrap(), to_prune))
+        Ok((starting_height, to_prune))
     }
 
     fn tx_prune_headers(
@@ -633,7 +638,7 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
         .unwrap_or_else(|err| panic!("Failed to get tips {:?}", err))
     }
 
-    fn get_headers_to_prune(&self, anchor: BlockHash) -> (BlockHeight, Vec<BlockHash>) {
+    fn get_headers_to_prune(&self, anchor: BlockHash) -> (Option<BlockHeight>, Vec<BlockHash>) {
         log_err!(
             self.run_ro_txn(|tx| self.tx_get_headers_to_prune(tx, anchor)),
             self.log,
@@ -650,7 +655,7 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
             "tx_prune_headers()"
         )
         .unwrap_or_else(|err| panic!("Failed to prune headers {:?}", err));
-        info!(self.log, "Pruned {num} headers from LMDBHeaderCache");
+        debug!(self.log, "Pruned {num} headers from LMDBHeaderCache");
     }
 }
 
@@ -866,7 +871,10 @@ mod test {
                 dir.path().to_path_buf(),
                 logger,
             );
-            assert_eq!(cache.get_headers_to_prune(genesis_block_hash), (0, vec![]));
+            assert_eq!(
+                cache.get_headers_to_prune(genesis_block_hash),
+                (Some(0), vec![])
+            );
 
             // Make a few new header
             let mut next_headers = Vec::new();
@@ -902,26 +910,26 @@ mod test {
             // Prune from intermediate
             let (anchor_height, to_prune) =
                 cache.get_headers_to_prune(intermediate.header.block_hash());
-            assert_eq!(anchor_height, 3);
+            assert_eq!(anchor_height, Some(3));
             // for <= height 3, there are 1 + 2 + 3 - 3 = 3 nodes to be pruned
             assert_eq!(to_prune.len(), 3);
-            cache.prune_headers(anchor_height, to_prune);
+            cache.prune_headers(anchor_height.unwrap(), to_prune);
             check_lmdb_cache_consistency(&cache);
             assert_eq!(
                 cache.get_headers_to_prune(intermediate.header.block_hash()),
-                (3, vec![])
+                (Some(3), vec![])
             );
 
             // Prune from tip
             let (anchor_height, to_prune) = cache.get_headers_to_prune(tip.header.block_hash());
-            assert_eq!(anchor_height, 6);
+            assert_eq!(anchor_height, Some(6));
             // for <= height 6, there are 1 + 2 + 3 - 3 = 3 nodes to be pruned
             assert_eq!(to_prune.len(), 3);
-            cache.prune_headers(anchor_height, to_prune);
+            cache.prune_headers(anchor_height.unwrap(), to_prune);
             check_lmdb_cache_consistency(&cache);
             assert_eq!(
                 cache.get_headers_to_prune(tip.header.block_hash()),
-                (6, vec![])
+                (Some(6), vec![])
             )
         });
     }

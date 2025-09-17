@@ -212,9 +212,11 @@ where
         let (anchor_height, to_prune) =
             tokio::task::spawn_blocking(move || header_cache.get_headers_to_prune(anchor)).await?;
         let num_headers_to_prune = to_prune.len();
-        let header_cache = self.header_cache.clone();
-        tokio::task::spawn_blocking(move || header_cache.prune_headers(anchor_height, to_prune))
-            .await?;
+        if let Some(height) = anchor_height {
+            let header_cache = self.header_cache.clone();
+            tokio::task::spawn_blocking(move || header_cache.prune_headers(height, to_prune))
+                .await?
+        }
         self.metrics
             .header_cache_size
             .sub(num_headers_to_prune as i64);
