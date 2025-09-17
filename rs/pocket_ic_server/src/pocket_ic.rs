@@ -309,7 +309,6 @@ impl BitcoinAdapterParts {
         log_level: Option<Level>,
         replica_logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-        runtime: Arc<Runtime>,
     ) -> Self {
         let bitcoin_adapter_config = BitcoinAdapterConfig {
             nodes: bitcoind_addr,
@@ -321,12 +320,7 @@ impl BitcoinAdapterParts {
             ..BitcoinAdapterConfig::default_with(Network::Regtest.into())
         };
         let adapter = tokio::spawn(async move {
-            start_btc_server(
-                &replica_logger,
-                &metrics_registry,
-                runtime.handle(),
-                bitcoin_adapter_config,
-            )
+            start_btc_server(replica_logger, metrics_registry, bitcoin_adapter_config).await
         });
         let start = std::time::Instant::now();
         loop {
@@ -862,7 +856,6 @@ impl PocketIcSubnets {
                 self.log_level,
                 sm.replica_logger.clone(),
                 sm.metrics_registry.clone(),
-                self.runtime.clone(),
             ));
         }
 
