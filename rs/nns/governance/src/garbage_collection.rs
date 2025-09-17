@@ -3,6 +3,7 @@ use crate::{
     pb::v1::{ProposalData, Topic},
 };
 use ic_cdk::println;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};
