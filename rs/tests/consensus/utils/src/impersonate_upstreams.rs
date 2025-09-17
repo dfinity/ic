@@ -75,7 +75,19 @@ pub fn uvm_serve_guestos_image(
         Path::new(&format!(
             "ic/{image_version}/guest-os/update-img/update-img.tar.zst"
         )),
-    )
+    )?;
+
+    let uvm = get_upstreams_uvm(env);
+    info!(
+        env.logger(),
+        "Remote image checksum: {}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            sha256sum {WEB_ROOT}/ic/{image_version}/guest-os/update-img/update-img.tar.zst
+        "#
+        ))?
+    );
+    Ok(())
 }
 
 pub fn uvm_serve_recovery_artifacts(
@@ -92,7 +104,7 @@ pub fn uvm_serve_recovery_artifacts(
     let uvm = get_upstreams_uvm(env);
     info!(
         env.logger(),
-        "Remote checksum: {}",
+        "Remote artifacts checksum: {}",
         uvm.block_on_bash_script(&format!(
             r#"
             sha256sum {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst
