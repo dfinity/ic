@@ -664,7 +664,7 @@ impl AsErrorHelp for CanisterManagerError {
             }
             CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
                 ErrorHelp::UserError {
-                    suggestion: "Snapshot is not currently loadable on the specified canister. Try again later."
+                    suggestion: "Snapshot is not currently loadable on the specified canister. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes)."
                         .to_string(),
                     doc_link: "".to_string(),
                 }
@@ -1047,7 +1047,7 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "Snapshot {} is not currently loadable on the specified canister {}. Try again later.",
+                    "Snapshot {} is not currently loadable on the specified canister {}. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes).",
                     snapshot_id, canister_id,
                 ),
             ),

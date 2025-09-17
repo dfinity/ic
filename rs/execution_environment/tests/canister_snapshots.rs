@@ -943,7 +943,7 @@ fn load_canister_snapshot_works_on_another_canister() {
     assert_eq!(
         err.description(),
         format!(
-            "Snapshot {} is not currently loadable on the specified canister {}. Try again later.",
+            "Snapshot {} is not currently loadable on the specified canister {}. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes).",
             snapshot_id_1, canister_id_2
         ),
     );
