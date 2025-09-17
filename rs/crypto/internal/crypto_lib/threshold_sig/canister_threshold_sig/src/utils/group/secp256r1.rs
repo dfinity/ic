@@ -64,14 +64,9 @@ impl Scalar {
             return None;
         }
 
-        let fb = p256::FieldBytes::from_slice(bytes);
-        let s = p256::Scalar::from_repr(*fb);
-
-        if bool::from(s.is_some()) {
-            Some(Self::new(s.unwrap()))
-        } else {
-            None
-        }
+        p256::Scalar::from_repr(*p256::FieldBytes::from_slice(bytes))
+            .into_option()
+            .map(Self::new)
     }
 
     /// Compute the scalar from a larger value
@@ -145,12 +140,7 @@ impl Scalar {
     /// Returns None if no modular inverse exists (ie because the
     /// scalar is zero)
     pub fn invert(&self) -> Option<Self> {
-        let inv = self.s.invert();
-        if bool::from(inv.is_some()) {
-            Some(Self::new(inv.unwrap()))
-        } else {
-            None
-        }
+        self.s.invert().into_option().map(Self::new)
     }
 
     /// Perform modular inversion
@@ -158,12 +148,7 @@ impl Scalar {
     /// Returns None if no modular inverse exists (ie because the
     /// scalar is zero)
     pub fn invert_vartime(&self) -> Option<Self> {
-        let inv = self.s.invert_vartime();
-        if bool::from(inv.is_some()) {
-            Some(Self::new(inv.unwrap()))
-        } else {
-            None
-        }
+        self.s.invert_vartime().into_option().map(Self::new)
     }
 
     /// Check if the scalar is zero
@@ -231,15 +216,9 @@ impl Point {
     /// None is returned
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
         match p256::EncodedPoint::from_bytes(bytes) {
-            Ok(ept) => {
-                let apt = p256::AffinePoint::from_encoded_point(&ept);
-
-                if bool::from(apt.is_some()) {
-                    Some(Self::new(p256::ProjectivePoint::from(apt.unwrap())))
-                } else {
-                    None
-                }
-            }
+            Ok(ept) => p256::AffinePoint::from_encoded_point(&ept)
+                .into_option()
+                .map(|p| Self::new(p256::ProjectivePoint::from(p))),
             Err(_) => None,
         }
     }
