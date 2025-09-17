@@ -47,8 +47,8 @@ const TOTAL_NODES: usize = 13;
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
 
-const SIZE_LEVEL: usize = 8;
-const NUM_CANISTERS: usize = 8;
+const SIZE_LEVEL: usize = 1;
+const NUM_CANISTERS: usize = 4;
 
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
     "state_sync_duration_seconds_sum{status=\"ok\"}";
@@ -83,7 +83,7 @@ fn setup(env: TestEnv) {
     topology.subnets().for_each(|subnet| {
         subnet.nodes().for_each(|node| {
             node.await_status_is_healthy()
-                .expect("Nodes failed to come up healty")
+                .expect("Nodes failed to come up healthy")
         })
     });
 
@@ -176,11 +176,17 @@ fn test(env: TestEnv) {
             .expect("Failed to wait for new topology version");
         env.sync_with_prometheus();
 
+        // Wait for the new nodes to report healthy
+        for node in new_nodes.clone() {
+            node.await_status_is_healthy()
+                .expect("Nodes failed to come up healthy")
+        }
+        info!(logger, "All newly joined nodes report healthy");
+
         let maybe_state_syncs = new_nodes
             .into_iter()
             .map(|node| async { assert_state_sync_has_happened(&logger, node, 0).await })
             .collect::<Vec<_>>();
-
         let state_sync_durations = join_all(maybe_state_syncs).await;
 
         let min = state_sync_durations

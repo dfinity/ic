@@ -403,10 +403,7 @@ pub async fn modify_canister_heap(
                     )
                     .await
                     .unwrap_or_else(|err| {
-                        panic!(
-                            "Calling expand_state() on canister {canister:?} failed: {err}",
-                            canister, err
-                        )
+                        panic!("Calling expand_state() on canister {canister:?} failed: {err}",)
                     });
 
                     info!(
