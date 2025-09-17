@@ -28,7 +28,7 @@ use ic_canonical_state_tree_hash::{
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{
-    Digest, LabeledTree, MatchPatternTree, MixedHashTree, Witness, recompute_digest,
+    Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::{
@@ -3240,13 +3240,13 @@ impl CertifiedStateSnapshot for CertifiedStateSnapshotImpl {
     fn read_certified_state_with_exclusion(
         &self,
         paths: &LabeledTree<()>,
-        exclusion: Option<&MatchPatternTree>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(MixedHashTree, Certification)> {
         let _timer = self.read_certified_state_duration_histogram.start_timer();
 
         let mixed_hash_tree = {
             let lazy_tree = replicated_state_as_lazy_tree(self.get_state());
-            let partial_tree = materialize_partial(&lazy_tree, paths, exclusion);
+            let partial_tree = materialize_partial(&lazy_tree, paths, exclusion.map(|v| &v[..]));
             self.hash_tree.witness::<MixedHashTree>(&partial_tree)
         }
         .ok()?;
@@ -3356,7 +3356,7 @@ impl StateReader for StateManagerImpl {
     fn read_certified_state_with_exclusion(
         &self,
         paths: &LabeledTree<()>,
-        exclusion: Option<&MatchPatternTree>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
         let reader = self.certified_state_reader()?;
         let (mixed_hash_tree, certification) =

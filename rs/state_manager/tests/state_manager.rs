@@ -3,8 +3,8 @@ use ic_base_types::SnapshotId;
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, LookupStatus, MatchPattern, MatchPatternTree, MixedHashTree,
-    Path as LabelPath, flatmap, sparse_labeled_tree_from_paths,
+    Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, flatmap,
+    sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
@@ -5175,17 +5175,11 @@ fn certified_read_can_exclude_canister_ranges() {
 
         // Drop all `canister_ranges` leafs except for `some_subnet_id`
         let some_subnet_id = subnet_test_id(1);
-        let exclusion = MatchPatternTree::Leaf;
-        let exclusion = MatchPatternTree::SubTree(vec![(
-            MatchPattern::Label("canister_ranges".into()),
-            exclusion,
-        )]);
-        let exclusion = MatchPatternTree::SubTree(vec![(
-            MatchPattern::AllLabelsExcept(vec![label(some_subnet_id.get_ref())]),
-            exclusion,
-        )]);
-        let exclusion =
-            MatchPatternTree::SubTree(vec![(MatchPattern::Label("subnet".into()), exclusion)]);
+        let exclusion = vec![
+            MatchPattern::Inclusive("subnet".into()),
+            MatchPattern::Exclusive(label(some_subnet_id.get_ref())),
+            MatchPattern::Inclusive("canister_ranges".into()),
+        ];
 
         let (_state, mixed_tree, cert) = state_manager
             .read_certified_state_with_exclusion(&path, Some(&exclusion))

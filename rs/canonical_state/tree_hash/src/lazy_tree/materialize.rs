@@ -2,7 +2,7 @@
 
 use super::LazyTree;
 use LazyTree::*;
-use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MatchPatternTree};
+use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MatchPattern};
 
 /// A pattern to be used for filtering the parts of a [`LazyTree`] to be
 /// materialized. A [`LabeledTree`] with no values.
@@ -10,7 +10,7 @@ pub type TreePattern = LabeledTree<()>;
 
 fn materialize(
     lazy_tree: &LazyTree<'_>,
-    exclusion: Option<&MatchPatternTree>,
+    exclusion: Option<&[MatchPattern]>,
 ) -> LabeledTree<Vec<u8>> {
     match lazy_tree {
         Blob(blob, _) => LabeledTree::Leaf(blob.to_vec()),
@@ -19,7 +19,7 @@ fn materialize(
             let mut children = FlatMap::new();
             for (l, t) in f.children() {
                 let exclusion = exclusion_for_label(&l, exclusion);
-                if !matches!(exclusion, Some(MatchPatternTree::Leaf)) {
+                if !matches!(exclusion, Some(&[])) {
                     children
                         .try_append(l, materialize(&t, exclusion))
                         .expect("bug: lazy tree labels aren't sorted");
@@ -44,7 +44,7 @@ fn materialize(
 pub fn materialize_partial(
     lazy_tree: &LazyTree<'_>,
     pattern: &TreePattern,
-    exclusion: Option<&MatchPatternTree>,
+    exclusion: Option<&[MatchPattern]>,
 ) -> LabeledTree<Vec<u8>> {
     match (pattern, lazy_tree) {
         (LabeledTree::Leaf(()), lazy_tree) => materialize(lazy_tree, exclusion),
@@ -53,7 +53,7 @@ pub fn materialize_partial(
                 match f.edge(label) {
                     Some(lazy_tree) => {
                         let exclusion = exclusion_for_label(label, exclusion);
-                        if !matches!(exclusion, Some(MatchPatternTree::Leaf)) {
+                        if !matches!(exclusion, Some(&[])) {
                             Some((
                                 label.clone(),
                                 materialize_partial(&lazy_tree, pattern, exclusion),
@@ -86,15 +86,19 @@ pub fn materialize_partial(
     }
 }
 
-/// Helper function to get the exclusion that applies to the subtree under `label`.
+/// Helper function that returns Some(tail) if the head matches the label, and `None` otherwise.
 fn exclusion_for_label<'a>(
     label: &'_ Label,
-    exclusion: Option<&'a MatchPatternTree>,
-) -> Option<&'a MatchPatternTree> {
-    match exclusion {
-        None | Some(MatchPatternTree::Leaf) => None,
-        Some(MatchPatternTree::SubTree(patterns)) => patterns
-            .iter()
-            .find_map(|(pattern, subtree)| pattern.is_match(label).then_some(subtree)),
-    }
+    exclusion: Option<&'a [MatchPattern]>,
+) -> Option<&'a [MatchPattern]> {
+    exclusion.and_then(|exclusion| match exclusion {
+        [] => None,
+        [head, tail @ ..] => {
+            if head.matches(label) {
+                Some(tail)
+            } else {
+                None
+            }
+        }
+    })
 }

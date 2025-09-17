@@ -7,7 +7,7 @@ use hyper_util::rt::TokioIo;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
@@ -173,7 +173,7 @@ pub fn default_certified_state_reader()
         fn read_certified_state_with_exclusion(
             &self,
             _paths: &LabeledTree<()>,
-            _exclusion: Option<&MatchPatternTree>,
+            _exclusion: Option<&MatchPatternPath>,
         ) -> Option<(MixedHashTree, Certification)> {
             Some((self.1.clone(), self.2.clone()))
         }

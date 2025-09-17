@@ -1,6 +1,6 @@
 //! The state manager public interface.
 
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
     consensus::certification::Certification, state_manager::StateManagerResult,
@@ -335,7 +335,7 @@ pub trait CertifiedStateSnapshot: Send + Sync {
     fn read_certified_state_with_exclusion(
         &self,
         paths: &LabeledTree<()>,
-        exclusion: Option<&MatchPatternTree>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(MixedHashTree, Certification)>;
 }
 
@@ -411,7 +411,7 @@ pub trait StateReader: Send + Sync {
     fn read_certified_state_with_exclusion(
         &self,
         paths: &LabeledTree<()>,
-        exclusion: Option<&MatchPatternTree>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)>;
 
     /// Returns a CertifiedStateSnapshot corresponding to the latest certified state.
