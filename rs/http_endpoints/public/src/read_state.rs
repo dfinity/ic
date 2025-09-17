@@ -7,7 +7,7 @@ use crate::{
 use axum::response::IntoResponse;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{
-    Label, MatchPattern, MatchPatternTree, Path, TooLongPathError, sparse_labeled_tree_from_paths,
+    Label, MatchPattern, Path, TooLongPathError, sparse_labeled_tree_from_paths,
 };
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_replicated_state::ReplicatedState;
@@ -83,17 +83,11 @@ fn get_certificate_and_create_response(
     let exception_rule = match deprecated_canister_ranges_filter {
         DeprecatedCanisterRangesFilter::KeepAll => None,
         DeprecatedCanisterRangesFilter::KeepOnly(root_subnet_id) => {
-            let deprecated_canister_ranges_except_the_root_subnet_id_pattern =
-                MatchPatternTree::SubTree(vec![(
-                    MatchPattern::Label(Label::from("subnet")),
-                    MatchPatternTree::SubTree(vec![(
-                        MatchPattern::AllLabelsExcept(vec![Label::from(root_subnet_id.get_ref())]),
-                        MatchPatternTree::SubTree(vec![(
-                            MatchPattern::Label(Label::from("canister_ranges")),
-                            MatchPatternTree::Leaf,
-                        )]),
-                    )]),
-                )]);
+            let deprecated_canister_ranges_except_the_root_subnet_id_pattern = vec![
+                MatchPattern::Inclusive(Label::from("subnet")),
+                MatchPattern::Exclusive(Label::from(root_subnet_id.get_ref())),
+                MatchPattern::Inclusive(Label::from("canister_ranges")),
+            ];
 
             Some(deprecated_canister_ranges_except_the_root_subnet_id_pattern)
         }
@@ -123,7 +117,7 @@ mod test {
         CertificateBuilder, CertificateData, create_certificate_labeled_tree,
         generate_root_of_trust,
     };
-    use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+    use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
     use ic_types::{
@@ -166,7 +160,7 @@ mod test {
         fn read_certified_state_with_exclusion(
             &self,
             _paths: &LabeledTree<()>,
-            exclusion: Option<&MatchPatternTree>,
+            exclusion: Option<&MatchPatternPath>,
         ) -> Option<(MixedHashTree, Certification)> {
             assert!(exclusion.is_some() == self.expects_exclusion);
             Some((self.tree.clone(), self.certification.clone()))
