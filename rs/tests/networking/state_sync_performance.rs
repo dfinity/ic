@@ -80,17 +80,18 @@ fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     let topology = env.topology_snapshot();
-    topology.subnets().for_each(|subnet| {
-        subnet.nodes().for_each(|node| {
+
+    for subnet in topology.subnets() {
+        for node in subnet.nodes() {
             node.await_status_is_healthy()
                 .expect("Nodes failed to come up healthy")
-        })
-    });
+        }
+    }
 
-    topology.unassigned_nodes().for_each(|node| {
+    for node in topology.unassigned_nodes() {
         node.await_can_login_as_admin_via_ssh()
             .expect("Timeout while waiting for all unassigned nodes to be healthy");
-    });
+    }
 
     topology.root_subnet().apply_network_settings(
         FixedNetworkSimulation::new()
@@ -183,24 +184,22 @@ fn test(env: TestEnv) {
         }
         info!(logger, "All newly joined nodes report healthy");
 
-        let maybe_state_syncs = new_nodes
+        let state_syncs = new_nodes
             .into_iter()
             .map(|node| async { assert_state_sync_has_happened(&logger, node, 0).await })
             .collect::<Vec<_>>();
-        let state_sync_durations = join_all(maybe_state_syncs).await;
+        let state_sync_durations = join_all(state_syncs).await;
 
         let min = state_sync_durations
             .iter()
-            .reduce(f64::min)
-            .unwrap()
+            .fold(f64::MAX, |acc, val| f64::min(acc, *val));
         let max = state_sync_durations
             .iter()
-            .reduce(f64::max)
-            .unwrap();
+            .fold(f64::MIN, |acc, val| f64::max(acc, *val));
         let avg = state_sync_durations.iter().sum::<f64>() / (state_sync_durations.len() as f64);
         info!(
             logger,
-            "State sync durations: min: {}, avr: {}, max: {}", min, avr, max
+            "State sync durations: min: {}, avg: {}, max: {}", min, avg, max
         );
     });
 }
