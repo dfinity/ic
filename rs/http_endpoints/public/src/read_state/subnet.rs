@@ -35,7 +35,7 @@ pub enum Version {
     /// Endpoint with the NNS delegation using the flat format of the canister ranges.
     /// `/subnet/<subnet_id>/canister_ranges` path is allowed
     V2,
-    /// Endpoint with the NNS delegation using the tree format of the canister ranges.
+    /// Endpoint with the NNS delegation will all canister ranges pruned out.
     /// Explicitly requesting `/subnet/<subnet_id>/canister_ranges` path is NOT allowed
     /// except when `subnet_id == nns_subnet_id`. Moreover, all paths of the form
     /// `/subnet/<subnet_id>/canister_ranges`, where `subnet_id != nns_subnet_id`, are

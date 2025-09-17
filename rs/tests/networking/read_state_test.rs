@@ -850,12 +850,20 @@ fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint
         Endpoint::CanisterReadState(read_state::canister::Version::V3)
         | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => false,
     };
-    let app_subnet = get_first_app_subnet(&env);
-    let nns_subnet = env.topology_snapshot().root_subnet();
 
+    let app_subnet = get_first_app_subnet(&env);
+    let app_subnet_id_label = Label::<Vec<u8>>::from(app_subnet.subnet_id.get_ref().as_slice());
     let deprecated_canister_ranges_for_app_subnet_path: Vec<Label<Vec<u8>>> = vec![
         "subnet".into(),
-        app_subnet.subnet_id.get_ref().as_slice().into(),
+        app_subnet_id_label.clone(),
+        "canister_ranges".into(),
+    ];
+
+    let nns_subnet = env.topology_snapshot().root_subnet();
+    let nns_subnet_id_label = Label::<Vec<u8>>::from(nns_subnet.subnet_id.get_ref().as_slice());
+    let deprecated_canister_ranges_for_nns_path: Vec<Label<Vec<u8>>> = vec![
+        "subnet".into(),
+        nns_subnet_id_label.clone(),
         "canister_ranges".into(),
     ];
 
@@ -882,12 +890,6 @@ fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint
         assert_matches!(err, AgentError::HttpError(payload) if payload.status == StatusCode::NOT_FOUND.as_u16());
     }
 
-    let deprecated_canister_ranges_for_nns_path: Vec<Label<Vec<u8>>> = vec![
-        "subnet".into(),
-        nns_subnet.subnet_id.as_ref().as_slice().into(),
-        "canister_ranges".into(),
-    ];
-
     let certificate = read_state(
         &env,
         vec![deprecated_canister_ranges_for_nns_path.clone()],
@@ -904,35 +906,48 @@ fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint
         ranges because we are requesting the nns subnet"
     );
 
-    for path in [
-        vec!["subnet".into()],
-        vec![
-            "subnet".into(),
-            app_subnet.subnet_id.get_ref().as_slice().into(),
-        ],
+    for (path, check_app, check_nns) in [
+        (vec!["subnet".into()], true, true),
+        (vec!["subnet".into(), app_subnet_id_label], true, false),
+        (vec!["subnet".into(), nns_subnet_id_label], false, true),
     ] {
         let certificate = read_state(&env, vec![path.clone()], endpoint)
             .expect("Requesting the {path:?} subtree is valid");
-        let deprecated_ranges = lookup_value(
-            &certificate,
-            deprecated_canister_ranges_for_app_subnet_path.clone(),
-        );
 
-        if should_accept_deprecated_canister_ranges_path {
+        if check_app {
+            let deprecated_app_subnet_ranges = lookup_value(
+                &certificate,
+                deprecated_canister_ranges_for_app_subnet_path.clone(),
+            );
+            if should_accept_deprecated_canister_ranges_path {
+                assert!(
+                    deprecated_app_subnet_ranges.is_ok(),
+                    "The certificate should contain the deprecated canister ranges \
+                    for the app subnet"
+                );
+            } else {
+                let err = deprecated_app_subnet_ranges.expect_err(
+                    "The new endpoints should purge the deprecated paths \
+                    for the app subnet",
+                );
+                assert_matches!(
+                    err,
+                    AgentError::LookupPathUnknown(_),
+                    "The path {deprecated_canister_ranges_for_app_subnet_path:?} should have \
+                    been purged from the certificate"
+                );
+            }
+        }
+
+        if check_nns {
             assert!(
-                deprecated_ranges.is_ok(),
-                "The certificate should contain the deprecated canister ranges"
-            );
-        } else {
-            let err = deprecated_ranges.expect_err(
-                "The new endpoints should purge \
-                 the deprecated paths",
-            );
-            assert_matches!(
-                err,
-                AgentError::LookupPathUnknown(_),
-                "The path {deprecated_canister_ranges_for_app_subnet_path:?} should have \
-                been purged from the certificate"
+                lookup_value(
+                    &certificate,
+                    deprecated_canister_ranges_for_nns_path.clone()
+                )
+                .is_ok(),
+                "The certificate should contain the deprecated canister \
+                ranges because we are requesting the nns subnet"
             );
         }
     }

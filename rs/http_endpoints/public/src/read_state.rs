@@ -83,14 +83,14 @@ fn get_certificate_and_create_response(
 
     let exclusion_rule = match deprecated_canister_ranges_filter {
         DeprecatedCanisterRangesFilter::KeepAll => None,
-        DeprecatedCanisterRangesFilter::KeepOnly(root_subnet_id) => {
-            let deprecated_canister_ranges_except_the_root_subnet_id_pattern = vec![
+        DeprecatedCanisterRangesFilter::KeepOnly(nns_subnet_id) => {
+            let deprecated_canister_ranges_except_the_nns_subnet_id_pattern = vec![
                 MatchPattern::Inclusive(Label::from("subnet")),
-                MatchPattern::Exclusive(Label::from(root_subnet_id.get_ref())),
+                MatchPattern::Exclusive(Label::from(nns_subnet_id.get_ref())),
                 MatchPattern::Inclusive(Label::from("canister_ranges")),
             ];
 
-            Some(deprecated_canister_ranges_except_the_root_subnet_id_pattern)
+            Some(deprecated_canister_ranges_except_the_nns_subnet_id_pattern)
         }
     };
 
