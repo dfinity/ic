@@ -97,8 +97,6 @@ def commit_and_create_pr(
                     description,
                     "--title",
                     commit_message,
-                    "--label",
-                    "CI_ALL_BAZEL_TARGETS",
                 ],
                 cwd=repo_root,
             )
