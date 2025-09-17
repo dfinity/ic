@@ -251,7 +251,7 @@ impl AddressBook {
 
     /// This function retrieves the next seed address from the seed queue.
     /// If no seeds are found, the seed queue is rebuilt from the DNS seeds.
-    pub async fn pop_seed(&mut self) -> AddressBookResult<AddressEntry> {
+    pub async fn resolve_next_seed(&mut self) -> AddressBookResult<AddressEntry> {
         if self.seed_queue.is_empty() {
             self.build_seed_queue().await?;
         }
@@ -381,7 +381,10 @@ mod test {
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
 
-        let seed = book.pop_seed().await.expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address_1 = Address::new(&socket_1, ServiceFlags::NETWORK);
 
@@ -406,7 +409,10 @@ mod test {
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
 
-        let seed = book.pop_seed().await.expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address_1 = Address::new(&socket_1, ServiceFlags::NETWORK);
 
@@ -430,7 +436,10 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
-        let seed = book.pop_seed().await.expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(&socket, ServiceFlags::NETWORK);
 
@@ -473,31 +482,37 @@ mod test {
         assert_eq!(book.active_addresses.len(), 0);
     }
 
-    /// This function ensures that the [AddressBook::pop_seed](AddressBook::pop_seed) method
+    /// This function ensures that the [AddressBook::resolve_next_seed](AddressBook::resolve_next_seed) method
     /// gives the next address in queue but also pushes it to the back of the queue.
     #[tokio::test]
-    async fn test_pop_seed() {
+    async fn test_resolve_next_seed() {
         let config = ConfigBuilder::default_with(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
-        book.pop_seed().await.expect("there should be 1 seed");
+        book.resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         assert_eq!(book.seed_queue.len(), 1);
 
-        book.pop_seed().await.expect("there should be 1 seed");
+        book.resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         assert_eq!(book.seed_queue.len(), 0);
 
-        book.pop_seed()
+        book.resolve_next_seed()
             .await
-            .expect("pop_seed should rebuild seed queue");
+            .expect("resolve_next_seed should rebuild seed queue");
         assert_eq!(book.seed_queue.len(), 1);
 
         // Remove the remaining seed address and then empty the dns_seeds.
-        book.pop_seed().await.expect("there should be 1 seed");
+        book.resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         book.dns_seeds.clear();
-        // `pop_seed` should now cause the AddressBookError::NoSeedAddressesFound error.
+        // `resolve_next_seed` should now cause the AddressBookError::NoSeedAddressesFound error.
         assert!(matches!(
-            book.pop_seed().await,
+            book.resolve_next_seed().await,
             Err(AddressBookError::NoSeedAddressesFound)
         ));
     }
@@ -517,7 +532,10 @@ mod test {
         assert_eq!(book.seed_queue.len(), 0);
         book.build_seed_queue().await.unwrap();
         assert_eq!(book.seed_queue.len(), 1);
-        let addr_entry = book.pop_seed().await.expect("there should be 1 seed");
+        let addr_entry = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         assert!(addr_entry.addr().is_ipv6());
     }
 
@@ -530,7 +548,10 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
-        let seed = book.pop_seed().await.expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(
             &socket,

@@ -304,7 +304,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     ) -> ConnectionManagerResult<()> {
         self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
-            self.address_book.pop_seed().await
+            self.address_book.resolve_next_seed().await
         } else {
             self.address_book.pop()
         };
