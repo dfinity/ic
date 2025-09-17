@@ -70,7 +70,7 @@ jobs:
           launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).benchmark_id }}" --benchmark
 
           # Run bare metal node hostOS metrics check
-          launch_bare_metal "${{ fromJSON(steps.gen-uuids.output.output).hostos_metrics_id }}" --check_hostos_metrics
+          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hostos_metrics_id }}" --check_hostos_metrics
 
           bazel clean
         env:
