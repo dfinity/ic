@@ -22,7 +22,7 @@ use ic_certification_test_utils::{
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{Label, LabeledTree, MatchPatternTree, MixedHashTree, Path, flatmap};
+use ic_crypto_tree_hash::{Label, LabeledTree, MatchPatternPath, MixedHashTree, Path, flatmap};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
@@ -721,7 +721,7 @@ fn can_retrieve_subnet_metrics(
     #[values(read_state::subnet::Version::V2, read_state::subnet::Version::V3)]
     version: read_state::subnet::Version,
 ) {
-    use ic_crypto_tree_hash::MatchPatternTree;
+    use ic_crypto_tree_hash::MatchPatternPath;
 
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -819,7 +819,7 @@ fn can_retrieve_subnet_metrics(
                 fn read_certified_state_with_exclusion(
                     &self,
                     _paths: &LabeledTree<()>,
-                    _exclusion: Option<&MatchPatternTree>,
+                    _exclusion: Option<&MatchPatternPath>,
                 ) -> Option<(MixedHashTree, Certification)> {
                     Some((self.1.clone(), self.2.clone()))
                 }
@@ -1114,7 +1114,7 @@ fn test_http_1_requests_are_accepted() {
 fn test_call_handler_returns_early_for_ingress_message_already_in_certified_state(
     #[values(Call::V3, Call::V4)] endpoint: Call,
 ) {
-    use ic_crypto_tree_hash::MatchPatternTree;
+    use ic_crypto_tree_hash::MatchPatternPath;
 
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -1156,7 +1156,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
                 fn read_certified_state_with_exclusion(
                     &self,
                     paths: &LabeledTree<()>,
-                    _exclusion: Option<&MatchPatternTree>,
+                    _exclusion: Option<&MatchPatternPath>,
                 ) -> Option<(MixedHashTree, Certification)> {
                     let message_id = match paths {
                         LabeledTree::SubTree(flat_map) => {
@@ -1522,7 +1522,7 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
     fn read_certified_state_with_exclusion(
         &self,
         _paths: &LabeledTree<()>,
-        _exclusion: Option<&MatchPatternTree>,
+        _exclusion: Option<&MatchPatternPath>,
     ) -> Option<(MixedHashTree, Certification)> {
         None
     }

@@ -3,7 +3,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     generate_key_transcript, setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
@@ -390,7 +390,7 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
     fn read_certified_state_with_exclusion(
         &self,
         _paths: &LabeledTree<()>,
-        _exclusion: Option<&MatchPatternTree>,
+        _exclusion: Option<&MatchPatternPath>,
     ) -> Option<(MixedHashTree, Certification)> {
         None
     }

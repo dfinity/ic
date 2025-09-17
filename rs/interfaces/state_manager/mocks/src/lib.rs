@@ -1,4 +1,4 @@
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
 };
@@ -32,7 +32,7 @@ mock! {
         fn read_certified_state_with_exclusion<'a>(
             &self,
             _paths: &'a LabeledTree<()>,
-            _exclusion: Option<&'a MatchPatternTree>,
+            _exclusion: Option<&'a MatchPatternPath>,
         ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
 
         fn get_certified_state_snapshot(&self) -> Option<Box<dyn CertifiedStateSnapshot<State = <MockStateManager as StateReader>::State> + 'static>>;
