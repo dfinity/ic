@@ -23,7 +23,8 @@ use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        nested::{NestedVm, NestedVms},
+        nested::NestedVm,
+        nested::{HasNestedVms, NestedNodes},
         test_env::TestEnv,
         test_env_api::*,
     },
@@ -31,10 +32,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
     util::block_on,
 };
-use nested::util::{
-    assert_version_compatibility, get_host_boot_id_async, setup_ic_infrastructure,
-    setup_nested_vm_group, setup_vector_targets_for_vm,
-};
+use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{Logger, info};
@@ -118,8 +116,6 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
 }
 
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
-    assert_version_compatibility();
-
     if cfg.impersonate_upstreams {
         impersonate_upstreams::setup_upstreams_uvm(&env);
     }
@@ -127,12 +123,9 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
-    setup_nested_vm_group(env.clone(), &host_vm_names_refs);
-
-    for vm_name in &host_vm_names {
-        setup_vector_targets_for_vm(&env, vm_name);
-    }
+    NestedNodes::new(&host_vm_names)
+        .setup_and_start(&env)
+        .unwrap();
 }
 
 pub fn test(env: TestEnv, _cfg: TestConfig) {

@@ -61,6 +61,10 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
+  generate-bazel-invocation-ids: &generate-bazel-invocation-ids
+    name: Generate Bazel invocation IDs
+    id: gen-uuids
+    uses: ./.github/actions/generate-invocation-ids
 
 jobs:
   config:
@@ -176,6 +180,16 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }, {
+              "name": "Build",
+              "output_id": "build_id",
+            }]
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
@@ -227,7 +241,12 @@ jobs:
                 )
             fi
 
-            for bazel_cmd in build test; do
+            # Values map to `output_id` in `gen-uuids` step
+            declare -A invocation_ids=(
+              [build]="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
+              [test]="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
+            )
+            for bazel_cmd in "${!invocation_ids[@]}"; do
               "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
 
@@ -252,7 +271,7 @@ jobs:
 
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+              bazel "$bazel_cmd" "--invocation_id=${invocation_ids[$bazel_cmd]}" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
             done
 
       - name: Upload to S3
@@ -276,6 +295,16 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }
+            ${{ needs.config.outputs.full_macos_build == 'true' && ', { "name": "Test", "output_id": "test_id" }' || '' }}
+            ]
+
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
@@ -284,6 +313,7 @@ jobs:
           run: |
             bazel build \
               --config=stamped \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" \
               --build_tag_filters=test_macos \
               //... --nobuild
 
@@ -294,6 +324,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=test_macos \
               //...
 
@@ -326,7 +357,6 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
-
       # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
       # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
       - name: Install lld
@@ -498,6 +528,15 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }]
+
+
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -509,6 +548,8 @@ jobs:
             DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
             BASE_SHA='${{ github.event.pull_request.base.sha }}'
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+            export BAZEL_BUILD_INVOCATION_ID="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
 
             cd "$CI_PROJECT_DIR"
 
@@ -626,10 +667,18 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }]
+
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
-          run: bazel build --config=stamped --config=local //...
+          run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   cargo-clippy-linux:

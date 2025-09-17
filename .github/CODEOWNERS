@@ -168,7 +168,7 @@ go_deps.bzl               @dfinity/idx
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
-/rs/migration_canister/                                 @dfinity/execution 
+/rs/migration_canister/                                 @dfinity/execution
 /rs/monitoring/                                         @dfinity/consensus
 /rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
@@ -264,6 +264,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners
 /rs/tests/nested/                                       @dfinity/node
+/rs/tests/nested/nns_recovery/                          @dfinity/consensus @dfinity/node
 /rs/tests/networking/                                   @dfinity/consensus
 /rs/tests/nns/                                          @dfinity/governance-team
 /rs/tests/node/                                         @dfinity/node
