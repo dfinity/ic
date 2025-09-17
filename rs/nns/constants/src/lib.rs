@@ -32,6 +32,7 @@ pub const SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 13;
 pub const ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 14;
 pub const ICP_LEDGER_ARCHIVE_3_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 15;
 pub const NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 16;
+pub const MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 17;
 // Exchange Rate, Cycles Ledger (Index) Canisters are deployed to the II subnet.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x2100001;
 pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x2100002;
@@ -51,7 +52,7 @@ pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 /// run when creating a new net (e.g. mainnet, or testnet). For whatever reason,
 /// that doesn't need ledger archive, nor ledger index. (I guess because those
 /// are spawned by ledger.) Thus, they are not included.
-pub const NNS_CANISTER_WASMS: [&str; 13] = [
+pub const NNS_CANISTER_WASMS: [&str; 14] = [
     "registry-canister",
     "governance-canister",
     "governance-canister_test",
@@ -66,6 +67,7 @@ pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "sns-wasm-canister",
     "ic-icrc1-ledger",
     "ic-ckbtc-minter",
+    "migration-canister",
 ];
 
 /// WARNING: This count is incomplete. See comments on NNS_CANISTER_WASMS.
@@ -123,6 +125,9 @@ pub const ICP_LEDGER_ARCHIVE_3_CANISTER_ID: CanisterId =
 // 16: sgymv-uiaaa-aaaaa-aaaia-cai
 pub const NODE_REWARDS_CANISTER_ID: CanisterId =
     CanisterId::from_u64(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET);
+// 17: sbzkb-zqaaa-aaaaa-aaaiq-cai
+pub const MIGRATION_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET);
 /// 0x2_100_001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
@@ -147,7 +152,7 @@ pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
 ///
 /// As of May 2024, it looks like this is only used by (a whole bunch of) tests, mostly as the
 /// argument to send_whitelist.
-pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
+pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -165,9 +170,10 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
     &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
+    &MIGRATION_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 20] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -182,6 +188,7 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
     &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
+    &MIGRATION_CANISTER_ID,
     &EXCHANGE_RATE_CANISTER_ID,
     &BITCOIN_MAINNET_CANISTER_ID,
     &BITCOIN_TESTNET_CANISTER_ID,
@@ -239,12 +246,13 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         ROOT_CANISTER_ID                 => "root",
         SNS_WASM_CANISTER_ID             => "sns-wasm",
         SUBNET_RENTAL_CANISTER_ID        => "subnet-rental",
+        MIGRATION_CANISTER_ID            => "migration"
     };
     debug_assert_eq!(
         id_to_name.len(),
         // Because 0 through 14 accounts for the first 15 canister +
         // 1 for exchange rate canister.
-        18,
+        19,
         "{id_to_name:#?}"
     );
 
