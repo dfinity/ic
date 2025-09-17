@@ -191,7 +191,8 @@ fn test(env: TestEnv) {
 
         let min = state_sync_durations
             .iter()
-            .fold(f64::MAX, |acc, val| f64::min(acc, *val));
+            .reduce(f64::min)
+            .unwrap()
         let max = state_sync_durations
             .iter()
             .reduce(f64::max)
