@@ -4,7 +4,7 @@ use crate::{
     AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
     ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
     blockchainmanager::BlockchainManager,
-    common::{BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE},
+    common::{BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, HeaderValidator},
     config::Config,
     connectionmanager::ConnectionManager,
     metrics::RouterMetrics,
@@ -40,6 +40,8 @@ where
     Network: BlockchainNetwork + Send + Sync + 'static,
     Network::Header: Send,
     Network::Block: Send + Sync,
+    BlockchainState<Network>: HeaderValidator<Network>,
+    <BlockchainState<Network> as HeaderValidator<Network>>::HeaderError: Send + Sync,
 {
     let (network_message_sender, mut network_message_receiver) = channel::<(
         SocketAddr,
