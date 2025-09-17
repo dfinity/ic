@@ -182,7 +182,6 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
             height: prev_node.data.height + 1,
             work: prev_node.data.work + header.work(),
         };
-        println!("add header {block_hash} height {}", tip.height);
         prev_node.children.push(block_hash);
 
         // Update the tip headers.
@@ -237,7 +236,6 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
     }
 
     fn prune_headers_below_height(&self, anchor_height: BlockHeight) {
-        println!("prune below height {anchor_height}");
         let mut this = self.write().unwrap();
         this.cache
             .retain(|_, node| node.data.height >= anchor_height);
