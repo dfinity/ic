@@ -3787,7 +3787,9 @@ impl Operation for CanisterReadStateRequest {
                 let nns_subnet_id = pic
                     .nns_subnet()
                     .map(|subnet| subnet.get_subnet_id())
-                    .expect("FIXME");
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let builder = delegation.map(|delegation| {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
@@ -3874,13 +3876,14 @@ impl Operation for SubnetReadStateRequest {
                 let nns_subnet_id = pic
                     .nns_subnet()
                     .map(|subnet| subnet.get_subnet_id())
-                    .expect("FIXME");
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let svc = SubnetReadStateServiceBuilder::builder(
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
                     nns_subnet_id,
                     self.version,
-                    subnet.replica_logger.clone(),
                 )
                 .build_service();
 
