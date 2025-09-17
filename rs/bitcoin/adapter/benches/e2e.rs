@@ -1,6 +1,6 @@
 use bitcoin::{BlockHash, block::Header as BlockHeader};
 use criterion::measurement::Measurement;
-use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkGroup, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ic_btc_adapter::{
     BlockchainNetwork, BlockchainState, Config, IncomingSource, MAX_HEADERS_SIZE, start_server,
 };
@@ -19,7 +19,7 @@ use rand::{CryptoRng, Rng};
 use sha2::Digest;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use tempfile::Builder;
+use tempfile::{Builder, tempdir};
 
 type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
@@ -218,15 +218,36 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
     network: Network,
     headers: &[Network::Header],
 ) {
-    group.bench_function("add_headers", |bench| {
+    fn add_headers<Network: BlockchainNetwork>(
+        blockchain_state: &mut BlockchainState<Network>,
+        network: Network,
+        headers: &[Network::Header],
+    ) {
+        // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
+        for chunk in headers.chunks(MAX_HEADERS_SIZE) {
+            let (added_headers, error) = blockchain_state.add_headers(chunk);
+            assert_eq!(error, None);
+            assert_eq!(added_headers.len(), chunk.len())
+        }
+    }
+
+    group.bench_function(BenchmarkId::new("add_headers", "in_memory"), |bench| {
         bench.iter(|| {
             let mut blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
-            // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
-            for chunk in headers.chunks(MAX_HEADERS_SIZE) {
-                let (added_headers, error) = blockchain_state.add_headers(chunk);
-                assert_eq!(error, None);
-                assert_eq!(added_headers.len(), chunk.len())
-            }
+            add_headers(&mut blockchain_state, network, headers);
+        })
+    });
+
+    group.bench_function(BenchmarkId::new("add_headers", "lmdb"), |bench| {
+        bench.iter(|| {
+            let dir = tempdir().unwrap();
+            let mut blockchain_state = BlockchainState::new_with_cache_dir(
+                network,
+                dir.path().to_path_buf(),
+                &MetricsRegistry::default(),
+                no_op_logger(),
+            );
+            add_headers(&mut blockchain_state, network, headers);
         })
     });
 }
