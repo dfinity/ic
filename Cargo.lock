@@ -10730,6 +10730,7 @@ dependencies = [
  "ic-management-canister-types",
  "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
+ "itertools 0.12.1",
  "pocket-ic",
  "registry-canister",
  "serde",
