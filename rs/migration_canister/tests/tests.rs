@@ -14,7 +14,6 @@ use std::{
     collections::{HashMap, VecDeque},
     time::Duration,
 };
-use tempfile::TempDir;
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(99);

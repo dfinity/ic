@@ -260,13 +260,13 @@ pub async fn rename_canister(
 // ========================================================================= //
 // `list_canister_snapshots`
 
-pub async fn assert_no_snapshots(canister_id: Principal) -> Result<(), ValidationError> {
+pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(), ValidationError> {
     match list_canister_snapshots(&ListCanisterSnapshotsArgs { canister_id }).await {
         Ok(snapshots) => {
             if snapshots.len() == 0 {
-                Ok(())
+                ProcessingResult::Success(())
             } else {
-                Err(ValidationError::TargetHasSnapshots)
+                ProcessingResult::FatalFailure(ValidationError::TargetHasSnapshots)
             }
         }
         Err(e) => {
@@ -274,9 +274,7 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> Result<(), Validatio
                 "Call `list_canister_snapshots` for {:?} failed: {:?}",
                 canister_id, e
             );
-            Err(ValidationError::CallFailed {
-                reason: format!("{:?}", e),
-            })
+            ProcessingResult::NoProgress
         }
     }
 }

@@ -11,8 +11,8 @@ use crate::{
     },
     external_interfaces::{
         management::{
-            CanisterStatusType, canister_status, get_canister_info, rename_canister,
-            set_exclusive_controller, set_original_controllers,
+            CanisterStatusType, assert_no_snapshots, canister_status, get_canister_info,
+            rename_canister, set_exclusive_controller, set_original_controllers,
         },
         registry::migrate_canister,
     },
@@ -145,7 +145,17 @@ pub async fn process_controllers_changed(
             reason: "Target is not stopped.".to_string(),
         });
     }
-    // TODO: target has no snapshots
+    match assert_no_snapshots(request.target).await {
+        ProcessingResult::Success(_) => {}
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
+        ProcessingResult::FatalFailure(_) => {
+            return ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                reason: "Target has snapshots.".to_string(),
+            });
+        }
+    }
+
     // TODO: target has enough cycles
 
     // Determine history length of source
