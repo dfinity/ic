@@ -1307,3 +1307,23 @@ pub trait HashTreeBuilder {
     /// Does not `panic!`.
     fn witness_generator(&self) -> Option<Self::WitnessGenerator>;
 }
+
+/// A restricted match pattern that either allows a specific label or everything except a specific label.
+#[derive(Clone, Debug)]
+pub enum MatchPattern {
+    Inclusive(Label),
+    Exclusive(Label),
+}
+
+impl MatchPattern {
+    /// It either matches only the exact label, or everything except the label.
+    pub fn matches(&self, label: &Label) -> bool {
+        match self {
+            MatchPattern::Inclusive(l) => l == label,
+            MatchPattern::Exclusive(l) => l != label,
+        }
+    }
+}
+
+/// A path of `MatchPattern`.
+pub type MatchPatternPath = Vec<MatchPattern>;
