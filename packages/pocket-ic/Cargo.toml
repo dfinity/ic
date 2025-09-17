@@ -62,7 +62,11 @@ k256 = { workspace = true }
 wat = { workspace = true }
 
 [target.'cfg(not(windows))'.dev-dependencies]
+cycles-minting-canister = { path = "../../rs/nns/cmc" }
 ic-base-types = { path = "../../rs/types/base_types" }
+ic-nns-governance-api = { path = "../../rs/nns/governance/api" }
 ic-registry-client = { path = "../../rs/registry/client" }
 ic-registry-client-helpers = { path = "../../rs/registry/helpers" }
 ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provider" }
+ic-sns-wasm = { path = "../../rs/nns/sns-wasm" }
+registry-canister = { path = "../../rs/registry/canister" }

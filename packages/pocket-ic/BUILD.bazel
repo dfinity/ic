@@ -137,6 +137,11 @@ rust_test(
             # Keep sorted.
             ":pocket-ic",
             "//packages/icrc-ledger-types",
+            "//rs/nns/cmc",
+            "//rs/nns/governance/api",
+            "//rs/nns/sns-wasm",
+            "//rs/registry/canister",
+            "//rs/types/base_types",
             "@crate_index//:candid",
             "@crate_index//:flate2",
             "@crate_index//:reqwest",
