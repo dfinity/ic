@@ -313,10 +313,7 @@ where
         ReceivedHeadersMessageError<
             <BlockchainState<Network> as HeaderValidator<Network>>::HeaderError,
         >,
-    >
-    where
-        BlockchainState<Network>: HeaderValidator<Network>,
-    {
+    > {
         let peer = self
             .peer_info
             .get_mut(addr)
