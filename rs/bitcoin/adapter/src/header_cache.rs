@@ -139,9 +139,10 @@ pub trait HeaderCache: Send + Sync {
     /// Return the number of tips.
     fn get_num_tips(&self) -> usize;
 
-    /// Return all ancestor headers of the given anchor from the cache, including the anchor itself.
-    /// The return result is ordered by child first.
-    fn get_ancestors(&self, anchor: BlockHash) -> Vec<(BlockHash, HeaderNode<Self::Header>)>;
+    /// Return the ancestor from the given block hash to the current anchor in the
+    /// in-memory cache as a chain of headers, where each element is the only child
+    /// of the next, and the first element (tip) has no child.
+    fn get_ancestor_chain(&self, from: BlockHash) -> Vec<(BlockHash, HeaderNode<Self::Header>)>;
 
     /// Prune headers below the anchor_height.
     fn prune_headers_below_height(&self, anchor_height: BlockHeight);
@@ -220,13 +221,13 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         self.read().unwrap().tips.len()
     }
 
-    fn get_ancestors(&self, anchor: BlockHash) -> Vec<(BlockHash, HeaderNode<Header>)> {
-        let mut hash = anchor;
+    fn get_ancestor_chain(&self, from: BlockHash) -> Vec<(BlockHash, HeaderNode<Header>)> {
+        let mut hash = from;
         let mut to_persist = Vec::new();
         let mut next_hash = None;
         while let Some(mut node) = self.get_header(hash) {
-            // Make sure the returned anchor node has no child, and others have a single child
-            node.children = next_hash.iter().copied().collect::<Vec<_>>();
+            // The tip in the returned chain will have no child, and the rest have a single child.
+            node.children = next_hash.into_iter().collect::<Vec<_>>();
             let prev_hash = node.data.header.prev_block_hash();
             to_persist.push((hash, node));
             next_hash = Some(hash);
@@ -382,6 +383,20 @@ impl LMDBHeaderCache {
     }
 }
 
+/// A 2-tier header cache consisting of an in-memory cache, and optionally
+/// an on-disk cache. It maintains the following invariants:
+///
+/// 1. The on-disk cache contains headers from genesis to the header at an anchor point.
+///
+/// 2. The in-memory cache contains headers from the anchor to latest.
+///
+/// 3. The on-disk headers form a single list, where the anchor is the tip and has no child.
+///
+/// 4. The two caches would overlap only at the anchor header, in which case
+///    [get_header] would always return the header stored at in-memory cache.
+///
+/// It would behave as only an in-memory cache when on-disk cache is not enabled,
+/// and pruning operation would be a no-op.
 pub struct HybridHeaderCache<Header> {
     in_memory: RwLock<InMemoryHeaderCache<Header>>,
     on_disk: Option<LMDBHeaderCache>,
@@ -425,7 +440,7 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
         // - if the on-disk cache is configured and has persisted data, it should
         //   contain the genesis header;
         // - otherwise the in-memory cache hasn't been pruned, and should contain
-        //    the genesis header.
+        //   the genesis header.
         self.get_header(self.genesis_hash)
             .unwrap()
             .data
@@ -478,7 +493,7 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
         anchor: BlockHash,
     ) -> Result<(), LMDBCacheError> {
         if let Some(on_disk) = &self.on_disk {
-            let to_persist = self.in_memory.get_ancestors(anchor);
+            let to_persist = self.in_memory.get_ancestor_chain(anchor);
             if let Some((hash, first)) = to_persist.first() {
                 let anchor_hash = *hash;
                 let anchor_height = first.data.height;
