@@ -1,7 +1,7 @@
 [package]
 name = "pocket-ic-server"
 version = "10.0.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 aide = { workspace = true }
