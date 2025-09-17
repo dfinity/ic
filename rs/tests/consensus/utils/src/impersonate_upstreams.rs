@@ -71,9 +71,8 @@ pub fn uvm_serve_guestos_image(
 ) -> Result<()> {
     info!(
         env.logger(),
-        "Content of recovery-GuestOS image (length {}): {:?}",
+        "Length of recovery-GuestOS image: {}",
         image_path.metadata()?.len(),
-        std::fs::read(image_path)?
     );
 
     uvm_serve_file(
@@ -97,17 +96,12 @@ pub fn uvm_serve_guestos_image(
 
     info!(
         env.logger(),
-        "Content of remote recovery-GuestOS image (length {}): {:?}",
+        "Length of remote recovery-GuestOS image: {}",
         uvm.block_on_bash_script(&format!(
             r#"
             wc -c {WEB_ROOT}/ic/{image_version}/guest-os/update-img/update-img.tar.zst | awk '{{print $1}}'
         "#
         ))?,
-        uvm.block_on_bash_script(&format!(
-            r#"
-            od -An -t u1 {WEB_ROOT}/ic/{image_version}/guest-os/update-img/update-img.tar.zst | awk '{{for(i=1;i<=NF;i++) printf "%s%s", sep, $i; sep=","}} END{{print ""}}' | sed 's/^/[/' | sed 's/$/]/'
-        "#
-        ))?
     );
 
     Ok(())
@@ -152,7 +146,7 @@ pub fn uvm_serve_recovery_artifacts(
         ))?,
         uvm.block_on_bash_script(&format!(
             r#"
-            od -An -t u1 {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst | awk '{{for(i=1;i<=NF;i++) printf "%s%s", sep, $i; sep=","}} END{{print ""}}' | sed 's/^/[/' | sed 's/$/]/'
+            od -An -t u1 {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst | awk '{{for(i=1;i<=NF;i++) {{if(NR==1 && i==1){{printf "["}} else {{printf ","}}; printf "%s",$i}}}} END{{print "]"}}'
         "#
         ))?
     );
