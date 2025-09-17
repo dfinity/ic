@@ -14,7 +14,7 @@ use lmdb::{
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use thiserror::Error;
 
 /// The max size (in bytes) of a LMDB cache, also know as the LMDB map
@@ -384,14 +384,14 @@ impl LMDBHeaderCache {
 
 pub struct HybridHeaderCache<Header> {
     in_memory: RwLock<InMemoryHeaderCache<Header>>,
-    on_disk: Option<Arc<LMDBHeaderCache>>,
+    on_disk: Option<LMDBHeaderCache>,
     genesis_hash: BlockHash,
 }
 
 impl<Header: BlockchainHeader> HybridHeaderCache<Header> {
     pub fn new(genesis: Header, cache_dir: Option<PathBuf>, log: ReplicaLogger) -> Self {
         let genesis_hash = genesis.block_hash();
-        let on_disk = cache_dir.map(|dir| Arc::new(LMDBHeaderCache::new(dir, log)));
+        let on_disk = cache_dir.map(|dir| LMDBHeaderCache::new(dir, log));
         // Try reading the anchor (tip of the chain) from disk.
         // If it doesn't exist, use genesis header.
         let anchor = on_disk
@@ -473,7 +473,10 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
     /// Persist headers below the anchor (as headers) and the anchor (as tip) on to disk, and
     /// Prune headers below the anchor from the in-memory cache.
     /// It is a no-op if the on-disk cache is not configured.
-    pub fn persist_headers_below_anchor(&self, anchor: BlockHash) -> Result<(), LMDBCacheError> {
+    pub fn persist_and_prune_headers_below_anchor(
+        &self,
+        anchor: BlockHash,
+    ) -> Result<(), LMDBCacheError> {
         if let Some(on_disk) = &self.on_disk {
             let to_persist = self.in_memory.get_ancestors(anchor);
             if let Some((hash, first)) = to_persist.first() {
@@ -636,7 +639,7 @@ pub(crate) mod test {
             let tips = get_tips(&cache);
             assert_eq!(tips.len(), 5);
             cache
-                .persist_headers_below_anchor(intermediate_hash)
+                .persist_and_prune_headers_below_anchor(intermediate_hash)
                 .unwrap();
             // Check if the chain from genesis to tip can still be found
             assert!(cache.get_header(genesis_block_hash).is_some());

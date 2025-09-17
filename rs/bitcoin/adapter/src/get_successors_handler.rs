@@ -125,7 +125,9 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
 
         // Spawn persist-to-disk task without waiting for it to finish
         let cache = self.state.header_cache.clone();
-        tokio::task::spawn_blocking(move || cache.persist_headers_below_anchor(request.anchor));
+        tokio::task::spawn_blocking(move || {
+            cache.persist_and_prune_headers_below_anchor(request.anchor)
+        });
 
         let (blocks, next, obsolete_blocks) = {
             let anchor_height = self
