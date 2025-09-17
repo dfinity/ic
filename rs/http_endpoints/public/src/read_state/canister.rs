@@ -43,13 +43,13 @@ use tower::{ServiceBuilder, util::BoxCloneService};
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Version {
     /// Endpoint with the NNS delegation using the flat format of the canister ranges.
-    /// /subnet/<subnet_id>/canister_ranges path is allowed
+    /// `/subnet/<subnet_id>/canister_ranges` path is allowed
     V2,
     /// Endpoint with the NNS delegation using the tree format of the canister ranges.
-    /// Explicitly requesting /subnet/<subnet_id>/canister_ranges path is NOT allowed
-    /// except when subnet_id == nns_subnet_id. Moreover, all paths of the form
-    /// /subnet/<subnet_id>/canister_ranges, where subnet_id != nns_subnet_id, are
-    /// pruned from the returned certifcate.
+    /// Explicitly requesting `/subnet/<subnet_id>/canister_ranges` path is NOT allowed
+    /// except when `subnet_id == nns_subnet_id`. Moreover, all paths of the form
+    /// `/subnet/<subnet_id>/canister_ranges`, where `subnet_id != nns_subnet_id`, are
+    /// pruned from the returned certificate.
     V3,
 }
 
@@ -306,9 +306,10 @@ fn verify_paths(
             ] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
-            // `/subnet/<subnet_id>/canister_ranges` is only allowed
-            // on the /api/v2 endpoint except when subnet_id == nns_subnet_id
+            // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
             [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
+            // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
+            // only when `subnet_id == nns_subnet_id`.
             [b"subnet", subnet_id, b"canister_ranges"]
                 if version == Version::V3
                     && parse_principal_id(subnet_id)? == nns_subnet_id.get() => {}
@@ -322,7 +323,11 @@ fn verify_paths(
             ] => {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Invalid request id in paths. Maybe the request ID is not of {EXPECTED_MESSAGE_ID_LENGTH} bytes in length?!")
+                    message: format!(
+                        "Invalid request id in paths. \
+                        Maybe the request ID is not \
+                        of {EXPECTED_MESSAGE_ID_LENGTH} bytes in length?!"
+                    ),
                 })?;
 
                 if let Some(x) = last_request_status_id {
@@ -330,7 +335,8 @@ fn verify_paths(
                         return Err(HttpError {
                             status: StatusCode::BAD_REQUEST,
                             message: format!(
-                                "More than one non-unique request ID exists in request_status paths: {x} and {message_id}."
+                                "More than one non-unique request ID exists in \
+                                request_status paths: {x} and {message_id}."
                             ),
                         });
                     }
@@ -353,11 +359,11 @@ fn verify_paths(
                 if let Some(receiver) = ingress_status.receiver() {
                     if !targets.contains(&receiver) {
                         return Err(HttpError {
-                                    status: StatusCode::FORBIDDEN,
-                                    message:
-                                        "The user tries to access request IDs for canisters not belonging to sender delegation targets."
-                                            .to_string(),
-                                });
+                            status: StatusCode::FORBIDDEN,
+                            message: "The user tries to access request IDs for canisters \
+                                      not belonging to sender delegation targets."
+                                .to_string(),
+                        });
                     }
                 }
             }

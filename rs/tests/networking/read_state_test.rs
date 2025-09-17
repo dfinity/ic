@@ -66,7 +66,7 @@ use ic_system_test_driver::util::{
 };
 use ic_system_test_driver::{
     driver::{
-        group::SystemTestGroup,
+        group::{SystemTestGroup, SystemTestSubGroup},
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot},
@@ -893,7 +893,7 @@ fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint
         vec![deprecated_canister_ranges_for_nns_path.clone()],
         endpoint,
     )
-    .expect("Requesting the deprecated canister ranges for the nns subnet is allowed");
+    .expect("Requesting the deprecated canister ranges for the nns subnet is always allowed");
     assert!(
         lookup_value(
             &certificate,
@@ -1082,8 +1082,7 @@ macro_rules! systest_all_variants {
 }
 
 fn main() -> Result<()> {
-    let mut group = SystemTestGroup::new()
-        .with_setup(setup)
+    let mut parallel_group = SystemTestSubGroup::new()
         .add_test(systest!(test_non_utf8_metadata))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V2))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
@@ -1110,13 +1109,16 @@ fn main() -> Result<()> {
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
 
-    systest_all_variants!(group, test_empty_paths_return_time);
-    systest_all_variants!(group, test_time_path_returns_time);
-    systest_all_variants!(group, test_subnet_path);
-    systest_all_variants!(group, test_invalid_request_rejected);
-    systest_all_variants!(group, test_invalid_path_rejected);
-    systest_all_variants!(group, test_deprecated_subnet_canister_ranges_paths);
+    systest_all_variants!(parallel_group, test_empty_paths_return_time);
+    systest_all_variants!(parallel_group, test_time_path_returns_time);
+    systest_all_variants!(parallel_group, test_subnet_path);
+    systest_all_variants!(parallel_group, test_invalid_request_rejected);
+    systest_all_variants!(parallel_group, test_invalid_path_rejected);
+    systest_all_variants!(parallel_group, test_deprecated_subnet_canister_ranges_paths);
 
-    group.execute_from_args()?;
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_parallel(parallel_group)
+        .execute_from_args()?;
     Ok(())
 }

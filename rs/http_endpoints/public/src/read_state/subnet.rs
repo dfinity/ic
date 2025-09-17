@@ -33,13 +33,13 @@ use tower::util::BoxCloneService;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Version {
     /// Endpoint with the NNS delegation using the flat format of the canister ranges.
-    /// /subnet/<subnet_id>/canister_ranges path is allowed
+    /// `/subnet/<subnet_id>/canister_ranges` path is allowed
     V2,
     /// Endpoint with the NNS delegation using the tree format of the canister ranges.
-    /// Explicitly requesting /subnet/<subnet_id>/canister_ranges path is NOT allowed
-    /// except when subnet_id == nns_subnet_id. Moreover, all paths of the form
-    /// /subnet/<subnet_id>/canister_ranges, where subnet_id != nns_subnet_id, are
-    /// pruned from the returned certifcate.
+    /// Explicitly requesting `/subnet/<subnet_id>/canister_ranges` path is NOT allowed
+    /// except when `subnet_id == nns_subnet_id`. Moreover, all paths of the form
+    /// `/subnet/<subnet_id>/canister_ranges`, where `subnet_id != nns_subnet_id`, are
+    /// pruned from the returned certificate.
     V3,
 }
 
@@ -210,9 +210,10 @@ fn verify_paths(
             ] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
-            // `/subnet/<subnet_id>/canister_ranges` is only allowed
-            // on the /api/v2 endpoint except when subnet_id == nns_subnet_id
+            // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
             [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
+            // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
+            // only when `subnet_id == nns_subnet_id`.
             [b"subnet", subnet_id, b"canister_ranges"]
                 if version == Version::V3
                     && parse_principal_id(subnet_id)? == nns_subnet_id.get() => {}

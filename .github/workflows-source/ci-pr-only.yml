@@ -38,6 +38,10 @@ anchors:
     uses: actions/checkout@v4
   skip-merge-group: &skip-merge-group
     if: ${{ github.event_name != 'merge_group' }}
+  generate-bazel-invocation-ids: &generate-bazel-invocation-ids
+    name: Generate Bazel invocation IDs
+    id: gen-uuids
+    uses: ./.github/actions/generate-invocation-ids
 
 jobs:
   insta-tests:
@@ -46,10 +50,18 @@ jobs:
     <<: *skip-merge-group
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id"
+            }]
+
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
-          run: bazel test //:insta_tests
+          run: bazel test --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-build-fuzzers-archives:

@@ -16,7 +16,7 @@ use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, 
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngressContent};
+use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngress};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
 };
@@ -918,14 +918,14 @@ fn ingress_induction_cost_from_bytes(
 
 fn calculate_induction_cost(
     config: &CyclesAccountManagerConfig,
-    ingress: &SignedIngressContent,
+    ingress: &SignedIngress,
     subnet_size: usize,
 ) -> Cycles {
-    let bytes_to_charge = ingress.arg().len()
-        + ingress.method_name().len()
-        + ingress.nonce().map(|n| n.len()).unwrap_or(0);
-
-    ingress_induction_cost_from_bytes(config, NumBytes::from(bytes_to_charge as u64), subnet_size)
+    ingress_induction_cost_from_bytes(
+        config,
+        NumBytes::from(ingress.binary().len() as u64),
+        subnet_size,
+    )
 }
 
 #[test]
@@ -1115,8 +1115,7 @@ fn test_subnet_size_ingress_induction_cost() {
         .method_name("inc")
         .nonce(3)
         .build();
-    let reference_cost =
-        calculate_induction_cost(&config, signed_ingress.content(), reference_subnet_size);
+    let reference_cost = calculate_induction_cost(&config, &signed_ingress, reference_subnet_size);
 
     // Check default cost.
     assert_eq!(
