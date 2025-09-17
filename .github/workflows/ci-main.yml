@@ -154,11 +154,11 @@ jobs:
         with:
           targets: |
             [{
-              "name": "Test",
-              "output_id": "test_id",
-            }, {
               "name": "Build",
               "output_id": "build_id",
+            }, {
+              "name": "Test",
+              "output_id": "test_id",
             }]
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
