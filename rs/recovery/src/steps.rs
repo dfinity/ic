@@ -410,16 +410,16 @@ impl Step for CopyLocalIcStateStep {
             .join("data/ic_consensus_pool/certification")
             .exists()
         {
-            info!(self.logger, "Excluding certifications from download");
+            info!(self.logger, "Excluding certifications from copy");
             excludes.push("certification");
             excludes.push("certifications");
         }
-        // If we already have the consensus pool, we do not download it again.
+        // If we already have the consensus pool, we do not copy it again.
         if PathBuf::from(self.working_dir.clone())
             .join("data/ic_consensus_pool/consensus")
             .exists()
         {
-            info!(self.logger, "Excluding consensus pool from download");
+            info!(self.logger, "Excluding consensus pool from copy");
             excludes.push("ic_consensus_pool/consensus");
         }
 
