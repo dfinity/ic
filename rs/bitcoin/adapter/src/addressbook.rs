@@ -126,15 +126,11 @@ impl AddressBook {
     /// operation that may involve DNS lookup.
     async fn build_seed_queue(&mut self) -> Result<(), tokio::task::JoinError> {
         let mut rng = StdRng::from_entropy();
-        let dns_seeds = self
-            .dns_seeds
-            .iter()
-            .map(|seed| format_addr(seed, self.port))
-            .collect::<Vec<_>>();
         let ipv6_only = self.ipv6_only;
-        let tasks = dns_seeds
-            .into_iter()
-            .map(|seed| tokio::task::spawn_blocking(move || seed.to_socket_addrs()));
+        let tasks = self.dns_seeds.iter().map(|seed| {
+            let addr = format_addr(seed, self.port);
+            tokio::task::spawn_blocking(move || addr.to_socket_addrs())
+        });
         let mut addresses = futures::future::try_join_all(tasks)
             .await?
             .into_iter()
