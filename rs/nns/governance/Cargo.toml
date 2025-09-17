@@ -93,6 +93,7 @@ rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
+subnet_rental_canister = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 canbench-rs = { workspace = true, optional = true }
 

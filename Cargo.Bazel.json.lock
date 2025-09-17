@@ -1,5 +1,5 @@
 {
-  "checksum": "4205d77f306af6cdd08fc713c9bf5f9418d2cd94957dba1378151826506709d5",
+  "checksum": "7369d3a17a3c748c861ec3504b3c16eb05cb917279ed2b32d559c915257b09e5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11735,7 +11735,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -21041,7 +21041,7 @@
               "target": "ic_sha3"
             },
             {
-              "id": "ic-stable-structures 0.6.8",
+              "id": "ic-stable-structures 0.6.9",
               "target": "ic_stable_structures"
             },
             {
@@ -21571,7 +21571,7 @@
               "target": "serde_bytes_repr"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -21673,6 +21673,10 @@
             {
               "id": "stubborn-io 0.3.2",
               "target": "stubborn_io"
+            },
+            {
+              "id": "subnet_rental_canister 0.1.0",
+              "target": "subnet_rental_canister"
             },
             {
               "id": "subtle 2.6.1",
@@ -33467,7 +33471,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -33849,7 +33853,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             }
           ],
@@ -33971,7 +33975,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -34117,7 +34121,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -34343,7 +34347,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -34496,7 +34500,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -34551,7 +34555,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -35135,6 +35139,77 @@
       ],
       "license_file": null
     },
+    "ic-ledger-types 0.15.0": {
+      "name": "ic-ledger-types",
+      "version": "0.15.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-ledger-types/0.15.0/download",
+          "sha256": "feb52826a353b583012628af6da762b52672350686c3275234febfadeca965ea"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_ledger_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_ledger_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "crc32fast 1.3.2",
+              "target": "crc32fast"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-cdk 0.18.7",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.17",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.15.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-management-canister-types 0.3.3": {
       "name": "ic-management-canister-types",
       "version": "0.3.3",
@@ -35175,7 +35250,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             }
           ],
@@ -35433,14 +35508,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-stable-structures 0.6.8": {
+    "ic-stable-structures 0.6.9": {
       "name": "ic-stable-structures",
-      "version": "0.6.8",
+      "version": "0.6.9",
       "package_url": "https://github.com/dfinity/stable-structures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.8/download",
-          "sha256": "f0f5684f577e0146738cd11afed789109c4f51ba963c75823c48c1501dc53278"
+          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.9/download",
+          "sha256": "4d30d4cf17aff1024e13133897048bcba580e063c9000571ab766ca37e2996f4"
         }
       },
       "targets": [
@@ -35497,7 +35572,7 @@
             ]
           }
         },
-        "version": "0.6.8"
+        "version": "0.6.9"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35621,7 +35696,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             }
           ],
@@ -35688,7 +35763,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -35776,7 +35851,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -35874,7 +35949,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -36155,7 +36230,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -36558,6 +36633,183 @@
         },
         "edition": "2021",
         "version": "0.1.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "icrc-cbor 0.1.0": {
+      "name": "icrc-cbor",
+      "version": "0.1.0",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/icrc-cbor/0.1.0/download",
+          "sha256": "90569d2894d9536c5416943556ac6339df249f06611b3c41029196b39e0dd119"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "icrc_cbor",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "icrc_cbor",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "minicbor 0.19.1",
+              "target": "minicbor"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "icrc-ledger-types 0.1.10": {
+      "name": "icrc-ledger-types",
+      "version": "0.1.10",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/icrc-ledger-types/0.1.10/download",
+          "sha256": "87c31beeee0e5ab964861a3d5ea2b5ed7b688b2b22400367a832b1fcf0db1fa4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "icrc_ledger_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "icrc_ledger_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "base32 0.4.0",
+              "target": "base32"
+            },
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "crc32fast 1.3.2",
+              "target": "crc32fast"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-stable-structures 0.6.9",
+              "target": "ic_stable_structures"
+            },
+            {
+              "id": "icrc-cbor 0.1.0",
+              "target": "icrc_cbor"
+            },
+            {
+              "id": "itertools 0.12.0",
+              "target": "itertools"
+            },
+            {
+              "id": "minicbor 0.19.1",
+              "target": "minicbor"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.17",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "strum 0.26.3",
+              "target": "strum"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "strum_macros 0.26.4",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.10"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -56027,7 +56279,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -69991,14 +70243,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "serde_bytes 0.11.15": {
+    "serde_bytes 0.11.17": {
       "name": "serde_bytes",
-      "version": "0.11.15",
+      "version": "0.11.17",
       "package_url": "https://github.com/serde-rs/bytes",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_bytes/0.11.15/download",
-          "sha256": "387cc504cb06bb40a96c8e04e951fe01854cf6bc921053c954e4a606d9675c6a"
+          "url": "https://static.crates.io/crates/serde_bytes/0.11.17/download",
+          "sha256": "8437fd221bde2d4ca316d61b90e337e9e702b3820b87d63caa9ba6c02bd06d96"
         }
       },
       "targets": [
@@ -70037,7 +70289,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.15"
+        "version": "0.11.17"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -71132,7 +71384,7 @@
               "target": "serde_big_array"
             },
             {
-              "id": "serde_bytes 0.11.15",
+              "id": "serde_bytes 0.11.17",
               "target": "serde_bytes"
             },
             {
@@ -75148,6 +75400,100 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "subnet_rental_canister 0.1.0": {
+      "name": "subnet_rental_canister",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/subnet-rental-canister",
+          "commitish": {
+            "Rev": "9e370001a5d51271f797b6b85295780701989cc6"
+          },
+          "strip_prefix": "src/subnet_rental_canister"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "subnet_rental_canister",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "subnet_rental_canister",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-cdk 0.18.7",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk-timers 0.12.2",
+              "target": "ic_cdk_timers"
+            },
+            {
+              "id": "ic-ledger-types 0.15.0",
+              "target": "ic_ledger_types"
+            },
+            {
+              "id": "ic-stable-structures 0.6.9",
+              "target": "ic_stable_structures"
+            },
+            {
+              "id": "ic-xrc-types 1.2.0",
+              "target": "ic_xrc_types"
+            },
+            {
+              "id": "icrc-ledger-types 0.1.10",
+              "target": "icrc_ledger_types"
+            },
+            {
+              "id": "itertools 0.14.0",
+              "target": "itertools"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.17",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "subtle 2.6.1": {
       "name": "subtle",
@@ -94972,7 +95318,7 @@
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
-    "ic-stable-structures 0.6.8",
+    "ic-stable-structures 0.6.9",
     "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.40.1",
@@ -95110,7 +95456,7 @@
     "semver 1.0.26",
     "serde 1.0.219",
     "serde-bytes-repr 0.1.5",
-    "serde_bytes 0.11.15",
+    "serde_bytes 0.11.17",
     "serde_cbor 0.11.2",
     "serde_json 1.0.132",
     "serde_regex 1.1.0",
@@ -95137,6 +95483,7 @@
     "strum 0.26.3",
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
+    "subnet_rental_canister 0.1.0",
     "subtle 2.6.1",
     "syn 1.0.109",
     "syn 2.0.101",

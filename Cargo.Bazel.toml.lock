@@ -3608,7 +3608,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-sha3",
- "ic-stable-structures 0.6.8",
+ "ic-stable-structures 0.6.9",
  "ic-stable-structures 0.7.0",
  "ic-test-state-machine-client",
  "ic-transport-types 0.40.1",
@@ -3773,6 +3773,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "stubborn-io",
+ "subnet_rental_canister",
  "subtle",
  "syn 1.0.109",
  "syn 2.0.101",
@@ -6113,6 +6114,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-types"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "feb52826a353b583012628af6da762b52672350686c3275234febfadeca965ea"
+dependencies = [
+ "candid",
+ "crc32fast",
+ "hex",
+ "ic-cdk",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "ic-management-canister-types"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6174,9 +6190,9 @@ dependencies = [
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.6.8"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0f5684f577e0146738cd11afed789109c4f51ba963c75823c48c1501dc53278"
+checksum = "4d30d4cf17aff1024e13133897048bcba580e063c9000571ab766ca37e2996f4"
 dependencies = [
  "ic_principal",
 ]
@@ -6377,6 +6393,42 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "thiserror 1.0.68",
+]
+
+[[package]]
+name = "icrc-cbor"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90569d2894d9536c5416943556ac6339df249f06611b3c41029196b39e0dd119"
+dependencies = [
+ "candid",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+]
+
+[[package]]
+name = "icrc-ledger-types"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87c31beeee0e5ab964861a3d5ea2b5ed7b688b2b22400367a832b1fcf0db1fa4"
+dependencies = [
+ "base32",
+ "candid",
+ "crc32fast",
+ "hex",
+ "ic-stable-structures 0.6.9",
+ "icrc-cbor",
+ "itertools 0.12.0",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "time",
 ]
 
 [[package]]
@@ -11721,9 +11773,9 @@ dependencies = [
 
 [[package]]
 name = "serde_bytes"
-version = "0.11.15"
+version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "387cc504cb06bb40a96c8e04e951fe01854cf6bc921053c954e4a606d9675c6a"
+checksum = "8437fd221bde2d4ca316d61b90e337e9e702b3820b87d63caa9ba6c02bd06d96"
 dependencies = [
  "serde",
 ]
@@ -12590,6 +12642,25 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "tokio",
+]
+
+[[package]]
+name = "subnet_rental_canister"
+version = "0.1.0"
+source = "git+https://github.com/dfinity/subnet-rental-canister?rev=9e370001a5d51271f797b6b85295780701989cc6#9e370001a5d51271f797b6b85295780701989cc6"
+dependencies = [
+ "candid",
+ "hex",
+ "ic-cdk",
+ "ic-cdk-timers",
+ "ic-ledger-types",
+ "ic-stable-structures 0.6.9",
+ "ic-xrc-types",
+ "icrc-ledger-types",
+ "itertools 0.14.0",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
 ]
 
 [[package]]
