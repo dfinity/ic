@@ -342,7 +342,7 @@ impl Step for DownloadIcStateStep {
             .exists()
         {
             info!(self.logger, "Excluding consensus pool from download");
-            excludes.push("ic_consensus_pool");
+            excludes.push("ic_consensus_pool/consensus");
         }
 
         let target = if self.keep_downloaded_state {
@@ -420,7 +420,7 @@ impl Step for CopyLocalIcStateStep {
             .exists()
         {
             info!(self.logger, "Excluding consensus pool from download");
-            excludes.push("ic_consensus_pool");
+            excludes.push("ic_consensus_pool/consensus");
         }
 
         rsync(
