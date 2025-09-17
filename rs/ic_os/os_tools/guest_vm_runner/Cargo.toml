@@ -1,6 +1,6 @@
 [package]
 name = "guest_vm_runner"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "guest_vm_runner"

@@ -59,7 +59,7 @@ use ic_types::{
         },
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, MessageId, SignedIngress, SignedIngressContent},
+    messages::{CertificateDelegation, MessageId, SignedIngress},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
 };
@@ -77,8 +77,7 @@ use tokio_util::sync::CancellationToken;
 use tower::{Service, ServiceExt, util::BoxCloneService};
 use tower_test::mock::Handle;
 
-pub type IngressFilterHandle =
-    Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
+pub type IngressFilterHandle = Handle<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>>;
 pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
@@ -103,13 +102,11 @@ fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle)
 
 #[allow(clippy::type_complexity)]
 pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
-    let (service, handle) = tower_test::mock::pair::<
-        (ProvisionalWhitelist, SignedIngressContent),
-        Result<(), UserError>,
-    >();
+    let (service, handle) =
+        tower_test::mock::pair::<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>>();
 
-    let infallible_service = tower::service_fn(
-        move |request: (ProvisionalWhitelist, SignedIngressContent)| {
+    let infallible_service =
+        tower::service_fn(move |request: (ProvisionalWhitelist, SignedIngress)| {
             let mut service_clone = service.clone();
             async move {
                 Ok::<Result<(), UserError>, Infallible>({
@@ -122,8 +119,7 @@ pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle
                         .expect("Mocking Infallible service and can therefore not return an error.")
                 })
             }
-        },
-    );
+        });
     (BoxCloneService::new(infallible_service), handle)
 }
 

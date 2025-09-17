@@ -43,6 +43,7 @@ fn add_remove_neuron() {
     neuron.set_known_neuron_data(KnownNeuronData {
         name: "known neuron data".to_string(),
         description: None,
+        links: vec![],
     });
     let account_id =
         AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(neuron.subaccount()));
@@ -173,6 +174,7 @@ fn create_model_neuron_builder(id: u64) -> NeuronBuilder {
     .with_known_neuron_data(Some(KnownNeuronData {
         name: format!("known neuron data {id}"),
         description: None,
+        links: vec![],
     }))
 }
 
@@ -469,6 +471,7 @@ fn update_neuron_add_known_neuron() {
     new_neuron.set_known_neuron_data(KnownNeuronData {
         name: "known neuron data".to_string(),
         description: None,
+        links: vec![],
     });
     assert_eq!(indexes.update_neuron(&old_neuron, &new_neuron), Ok(()));
 
@@ -487,6 +490,7 @@ fn update_neuron_remove_known_neuron() {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: "known neuron data".to_string(),
             description: None,
+            links: vec![],
         }))
         .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
@@ -514,6 +518,7 @@ fn update_neuron_update_known_neuron_name() {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: "known neuron data".to_string(),
             description: None,
+            links: vec![],
         }))
         .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
@@ -535,6 +540,7 @@ fn update_neuron_update_known_neuron_name() {
     new_neuron.set_known_neuron_data(KnownNeuronData {
         name: "different known neuron data".to_string(),
         description: None,
+        links: vec![],
     });
     assert_eq!(indexes.update_neuron(&old_neuron, &new_neuron), Ok(()));
 

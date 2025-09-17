@@ -15,7 +15,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::{PrincipalId, messages::SignedIngressContent};
+use ic_types::{PrincipalId, messages::SignedIngress};
 use ic_validator_http_request_arbitrary::AnonymousContent;
 use libfuzzer_sys::fuzz_target;
 use std::{
@@ -36,8 +36,7 @@ use tower_test::mock::Handle;
 pub mod common;
 use common::{basic_registry_client, get_free_localhost_socket_addr, setup_ingress_filter_mock};
 
-type IngressFilterHandle =
-    Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
+type IngressFilterHandle = Handle<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>>;
 type CallServiceEndpoint = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
 
 #[derive(Clone, Debug, Arbitrary)]
