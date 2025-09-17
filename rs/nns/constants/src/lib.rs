@@ -52,7 +52,7 @@ pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 /// run when creating a new net (e.g. mainnet, or testnet). For whatever reason,
 /// that doesn't need ledger archive, nor ledger index. (I guess because those
 /// are spawned by ledger.) Thus, they are not included.
-pub const NNS_CANISTER_WASMS: [&str; 14] = [
+pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "registry-canister",
     "governance-canister",
     "governance-canister_test",
@@ -67,7 +67,6 @@ pub const NNS_CANISTER_WASMS: [&str; 14] = [
     "sns-wasm-canister",
     "ic-icrc1-ledger",
     "ic-ckbtc-minter",
-    "migration-canister",
 ];
 
 /// WARNING: This count is incomplete. See comments on NNS_CANISTER_WASMS.
@@ -152,7 +151,7 @@ pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
 ///
 /// As of May 2024, it looks like this is only used by (a whole bunch of) tests, mostly as the
 /// argument to send_whitelist.
-pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
+pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -170,10 +169,9 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
     &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
-    &MIGRATION_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 20] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -188,7 +186,6 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 20] = [
     &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
-    &MIGRATION_CANISTER_ID,
     &EXCHANGE_RATE_CANISTER_ID,
     &BITCOIN_MAINNET_CANISTER_ID,
     &BITCOIN_TESTNET_CANISTER_ID,
@@ -246,13 +243,12 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         ROOT_CANISTER_ID                 => "root",
         SNS_WASM_CANISTER_ID             => "sns-wasm",
         SUBNET_RENTAL_CANISTER_ID        => "subnet-rental",
-        MIGRATION_CANISTER_ID            => "migration"
     };
     debug_assert_eq!(
         id_to_name.len(),
         // Because 0 through 14 accounts for the first 15 canister +
         // 1 for exchange rate canister.
-        19,
+        18,
         "{id_to_name:#?}"
     );
 

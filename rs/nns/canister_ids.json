@@ -58,9 +58,5 @@
   "node-rewards": {
     "local": "sgymv-uiaaa-aaaaa-aaaia-cai",
     "mainnet": "sgymv-uiaaa-aaaaa-aaaia-cai"
-  },
-  "migration": {
-    "local": "sbzkb-zqaaa-aaaaa-aaaiq-cai",
-    "mainnet": "sbzkb-zqaaa-aaaaa-aaaiq-cai"
   }
 }
