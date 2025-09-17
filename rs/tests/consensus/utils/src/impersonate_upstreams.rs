@@ -69,6 +69,13 @@ pub fn uvm_serve_guestos_image(
     image_path: &Path,
     image_version: &str,
 ) -> Result<()> {
+    info!(
+        env.logger(),
+        "Content of recovery-GuestOS image (length {}): {:?}",
+        image_path.metadata()?.len(),
+        std::fs::read(image_path)?
+    );
+
     uvm_serve_file(
         env,
         image_path,
@@ -87,6 +94,22 @@ pub fn uvm_serve_guestos_image(
         "#
         ))?
     );
+
+    info!(
+        env.logger(),
+        "Content of remote recovery-GuestOS image (length {}): {:?}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            wc -c {WEB_ROOT}/ic/{image_version}/guest-os/update-img/update-img.tar.zst | awk '{{print $1}}'
+        "#
+        ))?,
+        uvm.block_on_bash_script(&format!(
+            r#"
+            od -An -t u1 {WEB_ROOT}/ic/{image_version}/guest-os/update-img/update-img.tar.zst | awk '{{for(i=1;i<=NF;i++) printf "%s%s", sep, $i; sep=","}} END{{print ""}}' | sed 's/^/[/' | sed 's/$/]/'
+        "#
+        ))?
+    );
+
     Ok(())
 }
 
@@ -95,6 +118,13 @@ pub fn uvm_serve_recovery_artifacts(
     artifacts_path: &Path,
     artifacts_hash: &str,
 ) -> Result<()> {
+    info!(
+        env.logger(),
+        "Content of recovery artifacts (length {}): {:?}",
+        artifacts_path.metadata()?.len(),
+        std::fs::read(artifacts_path)?
+    );
+
     uvm_serve_file(
         env,
         artifacts_path,
@@ -111,6 +141,22 @@ pub fn uvm_serve_recovery_artifacts(
         "#
         ))?
     );
+
+    info!(
+        env.logger(),
+        "Content of remote recovery artifacts (length {}): {:?}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            wc -c {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst | awk '{{print $1}}'
+        "#
+        ))?,
+        uvm.block_on_bash_script(&format!(
+            r#"
+            od -An -t u1 {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst | awk '{{for(i=1;i<=NF;i++) printf "%s%s", sep, $i; sep=","}} END{{print ""}}' | sed 's/^/[/' | sed 's/$/]/'
+        "#
+        ))?
+    );
+
     Ok(())
 }
 
