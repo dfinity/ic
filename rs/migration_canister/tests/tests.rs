@@ -10,12 +10,11 @@
 //! -x disabled
 //!
 
-use std::{collections::HashMap, time::Duration};
-
 use candid::{CandidType, Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::CanisterId;
-use ic_management_canister_types::CanisterSettings;
+use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
+use itertools::Itertools;
 use pocket_ic::{
     PocketIcBuilder,
     common::rest::{IcpFeatures, IcpFeaturesConfig},
@@ -23,6 +22,10 @@ use pocket_ic::{
 };
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Deserialize;
+use std::{
+    collections::{HashMap, VecDeque},
+    time::Duration,
+};
 use tempfile::TempDir;
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
@@ -224,6 +227,53 @@ async fn migrate_canister(
     Decode!(&res, Result<(), ValidationError>).unwrap()
 }
 
+#[derive(Default, Debug)]
+struct Logs {
+    map: HashMap<u64, String>,
+}
+
+impl Logs {
+    pub fn add(&mut self, logs: Vec<CanisterLogRecord>) {
+        for x in logs.into_iter() {
+            self.map
+                .insert(x.idx, String::from_utf8(x.content).unwrap());
+        }
+    }
+
+    pub fn in_order(&self) -> Vec<(u64, String)> {
+        self.map
+            .iter()
+            .sorted()
+            .map(|(k, v)| (*k, v.clone()))
+            .collect()
+    }
+
+    /// Takes a Vec of expected log fragments and checks that they occur
+    /// in the given order. Other, unrelated logs may be interspersed and
+    /// this will still return true.
+    pub fn contains_in_order(&self, expected: Vec<&str>) -> bool {
+        let mut logs = VecDeque::from(
+            self.in_order()
+                .into_iter()
+                .map(|(_k, v)| v)
+                .collect::<Vec<String>>(),
+        );
+        let mut next = String::from("");
+        for exp in expected.iter() {
+            while !next.contains(exp) {
+                next = match logs.pop_front() {
+                    Some(next) => next,
+                    None => {
+                        println!("Logs do not contain (in order): '{exp}'");
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+}
+
 #[tokio::test]
 async fn validation_succeeds() {
     let Setup {
@@ -240,30 +290,32 @@ async fn validation_succeeds() {
         .await
         .unwrap();
 
-    let mut logs = HashMap::new();
-
-    pic.fetch_canister_logs(MIGRATION_CANISTER_ID.into(), system_controller)
-        .await
-        .unwrap()
-        .iter()
-        .map(|x| logs.insert(x.idx, String::from_utf8(x.content.clone()).unwrap()));
+    let mut logs = Logs::default();
 
     for _ in 0..100 {
-        // println!("=============================================");
         pic.advance_time(Duration::from_millis(100)).await;
         pic.tick().await;
 
-        pic.fetch_canister_logs(MIGRATION_CANISTER_ID.into(), system_controller)
+        let log = pic
+            .fetch_canister_logs(MIGRATION_CANISTER_ID.into(), system_controller)
             .await
-            .unwrap()
-            .iter()
-            .map(|x| logs.insert(x.idx, String::from_utf8(x.content.clone()).unwrap()));
+            .unwrap();
+        logs.add(log);
     }
 
-    for (idx, message) in logs.iter() {
-        println!("----------------------------------------------------");
+    for (idx, message) in logs.in_order().iter() {
         println!("{idx}: {message}");
     }
+
+    assert!(logs.contains_in_order(vec![
+        "Entering `accepted` with 1 pending",
+        "Exiting `accepted` with 1 successful",
+        "Entering `controllers_changed` with 1 pending",
+        "Exiting `controllers_changed` with 1 successful",
+        "Entering `stopped` with 1 pending",
+        "Exiting `stopped` with 1 successful",
+        "Entering `renamed_target` with 1 pending",
+    ]));
 }
 
 #[tokio::test]
