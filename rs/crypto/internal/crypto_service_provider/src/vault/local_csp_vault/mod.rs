@@ -15,11 +15,11 @@ mod tls;
 mod tschnorr;
 mod vetkd;
 
-use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
+use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use crate::secret_key_store::SecretKeyStore;
 use crate::secret_key_store::memory_secret_key_store::InMemorySecretKeyStore;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
-use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdSchnorrCreateSigShareVaultError;
 use crate::{CspRwLock, KeyId};
@@ -29,7 +29,7 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CombinedCommitment, CommitmentOpening,
 };
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
-use ic_logger::{new_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, new_logger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -192,7 +192,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     }
 
     fn generate_seed(&self) -> Seed {
-        let intermediate_seed: [u8; 32] = self.csprng.write().gen(); // lock is released after this line
+        let intermediate_seed: [u8; 32] = self.csprng.write().r#gen(); // lock is released after this line
         Seed::from_bytes(&intermediate_seed) // use of intermediate seed minimizes locking time
     }
 
@@ -206,7 +206,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         match &opening {
             Some(CspSecretKey::IDkgCommitmentOpening(bytes)) => CommitmentOpening::try_from(bytes)
                 .map_err(|e| {
-                    CombinedCommitmentOpeningFromSksError::SerializationError(format!("{:?}", e))
+                    CombinedCommitmentOpeningFromSksError::SerializationError(format!("{e:?}"))
                 }),
             Some(key_with_wrong_type) => {
                 Err(CombinedCommitmentOpeningFromSksError::WrongSecretKeyType(
@@ -268,10 +268,7 @@ fn ensure_unique_paths(paths: &[&Path]) {
     let mut distinct_paths: HashSet<&Path> = HashSet::new();
     for path in paths {
         if !distinct_paths.insert(*path) {
-            panic!(
-                "Expected key stores to use distinct files but {:?} is used more than once",
-                path
-            )
+            panic!("Expected key stores to use distinct files but {path:?} is used more than once")
         }
     }
     assert_eq!(

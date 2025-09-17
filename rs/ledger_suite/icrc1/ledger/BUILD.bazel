@@ -320,6 +320,7 @@ package(default_visibility = ["//visibility:public"])
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1/test_utils",
+            "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
@@ -370,6 +371,7 @@ package(default_visibility = ["//visibility:public"])
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+            "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
             "//rs/types/base_types",
             "@crate_index//:proptest",
         ] + extra_deps,
@@ -453,3 +455,32 @@ package(default_visibility = ["//visibility:public"])
         ),
     ]
 ]
+
+rust_ic_test(
+    name = "ledger_upgrade_token_type_tests",
+    srcs = ["tests/upgrade_token_type_tests.rs"],
+    crate_features = [],
+    data = [
+        ":ledger_canister.wasm.gz",
+        ":ledger_canister_u256.wasm.gz",
+        "@mainnet_ckbtc_ic-icrc1-ledger//file",
+        "@mainnet_cketh_ic-icrc1-ledger-u256//file",
+    ],
+    env = {
+        "IC_ICRC1_LEDGER_WASM_U64_PATH": "$(rootpath :ledger_canister.wasm.gz)",
+        "IC_ICRC1_LEDGER_WASM_U256_PATH": "$(rootpath :ledger_canister_u256.wasm.gz)",
+        "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+        "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
+    },
+    deps = [
+        # Keep sorted.
+        ":ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+    ],
+)

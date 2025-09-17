@@ -3,16 +3,17 @@
 members = [
     "packages/canlog",
     "packages/canlog_derive",
-    "packages/ic-deterministic-heap-bytes",
-    "packages/ic-deterministic-heap-bytes-derive",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-error-types",
     "packages/ic-ethereum-types",
+    "packages/ic-heap-bytes",
+    "packages/ic-heap-bytes-derive",
     "packages/ic-hpke",
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
     "packages/ic-metrics-assert",
+    "packages/ic-pub-key",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
@@ -138,7 +139,6 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
-    "rs/drun",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
@@ -161,6 +161,8 @@ members = [
     "rs/https_outcalls/consensus",
     "rs/https_outcalls/service",
     "rs/http_utils",
+    "rs/ic_os/attestation",
+    "rs/ic_os/attestation/testing",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/inject_files",
@@ -217,6 +219,7 @@ members = [
     "rs/ledger_suite/icrc1/tokens_u256",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",
+    "rs/ledger_suite/tests/sm-tests/constants",
     "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
@@ -363,7 +366,6 @@ members = [
     "rs/rosetta-api/icrc1",
     "rs/rosetta-api/icrc1/client",
     "rs/rosetta-api/icrc1/runner",
-    "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/backtrace_canister",
     "rs/rust_canisters/call_loop_canister",
     "rs/rust_canisters/call_tree_test",
@@ -393,6 +395,7 @@ members = [
     "rs/rust_canisters/statesync_test",
     "rs/rust_canisters/tests",
     "rs/rust_canisters/xnet_test",
+    "rs/rust_canisters/xrc_mock",
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
@@ -452,6 +455,7 @@ members = [
     "rs/tests/message_routing/xnet",
     "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/nested",
+    "rs/tests/nested/nns_recovery",
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
@@ -529,7 +533,7 @@ version = "0.9.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Autonomous serverless cloud functionality for the public Internet."
 documentation = "https://internetcomputer.org/docs/"
-edition = "2021"
+edition = "2024"
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
@@ -589,8 +593,7 @@ axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
-bitcoin = { version = "0.32.99", features = ["default", "rand", "serde"] }
-bitcoincore-rpc = "0.19.0"
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "cda2b5ec270017c82abd6ef2e71b7fe583a133fd", features = ["default", "rand", "serde"] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
@@ -616,7 +619,7 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
-der = { version = "0.7", default-features = false }
+der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
 dfx-core = { version = "0.1.4" }
@@ -635,6 +638,7 @@ flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
+get_if_addrs = "0.5.3"
 getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
@@ -667,12 +671,14 @@ ic-cdk = "0.18.7"
 ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
+ic-ed25519 = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
+ic-secp256k1 = "0.2.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
@@ -688,9 +694,11 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
+indoc = "1.0.9"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
+jsonrpc = { version = "0.18.0", features = ["minreq_http"] }
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -709,6 +717,8 @@ libc = "0.2.158"
 libcryptsetup-rs = "0.13"
 libflate = "2.1.0"
 libnss = "0.5.0"
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 macaddr = "1.0"
@@ -722,6 +732,7 @@ nix = { version = "0.24.3", features = ["ptrace", "user"] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
+object = "0.37.3"
 opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
@@ -885,5 +896,3 @@ default-features = false
 features = ["exe"]
 version = "^0.8.1"
 
-[patch.crates-io]
-bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db" }

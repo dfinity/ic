@@ -1,15 +1,15 @@
 //! The module is responsible for awaiting messages from bitcoin peers and dispaching them
 //! to the correct component.
 use crate::{
+    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
+    ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
     blockchainmanager::BlockchainManager,
-    common::{BlockLike, DEFAULT_CHANNEL_BUFFER_SIZE},
+    common::{BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, HeaderValidator},
     config::Config,
     connectionmanager::ConnectionManager,
     metrics::RouterMetrics,
     stream::handle_stream,
     transaction_store::TransactionStore,
-    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
-    ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
 };
 use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::{
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{Receiver, channel},
     time::interval,
 };
 
@@ -27,17 +27,24 @@ use tokio::{
 /// Having a design where we have a separate task that awaits on messages from the
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
 /// TransactionStore or the BlockchainManager.
-pub fn start_main_event_loop<Block: BlockLike + Send + Clone + 'static>(
-    config: &Config,
+pub fn start_main_event_loop<Network>(
+    config: &Config<Network>,
     logger: ReplicaLogger,
-    blockchain_state: Arc<Mutex<BlockchainState>>,
+    blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
     mut adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
     metrics_registry: &MetricsRegistry,
-) {
-    let (network_message_sender, mut network_message_receiver) =
-        channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+) where
+    Network: BlockchainNetwork + Send + 'static,
+    Network::Header: Send,
+    Network::Block: Send,
+    BlockchainState<Network>: HeaderValidator<Network>,
+{
+    let (network_message_sender, mut network_message_receiver) = channel::<(
+        SocketAddr,
+        NetworkMessage<Network::Header, Network::Block>,
+    )>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
     let router_metrics = RouterMetrics::new(metrics_registry);
 

@@ -1,18 +1,17 @@
 [package]
-name = "ic-btc-validation"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-btc-validation"
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bitcoin = { workspace = true }
-hex = { workspace = true }
 
 [dev-dependencies]
 csv = "1.1"
-proptest = "0.9.4"
 rstest = { workspace = true }
+hex = { workspace = true }

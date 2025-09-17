@@ -1,26 +1,26 @@
 use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
-use crate::driver::farm::id_of_file;
 use crate::driver::farm::AttachImageSpec;
 use crate::driver::farm::ClaimResult;
 use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
+use crate::driver::farm::id_of_file;
 use crate::driver::ic::VmAllocationStrategy;
 use crate::driver::ic::VmResources;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
-    allocate_resources, get_resource_request_for_universal_vm, DiskImage,
+    DiskImage, allocate_resources, get_resource_request_for_universal_vm,
 };
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_dependency_path, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
+    HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, get_dependency_path,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::k8s::datavolume::DataVolumeContentType;
 use crate::k8s::images::upload_image;
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;

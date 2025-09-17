@@ -1,6 +1,6 @@
 use clap::Parser;
 use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
 };
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
@@ -20,7 +20,7 @@ use ic_system_test_driver::driver::{
 use ic_types::ReplicaVersion;
 use reqwest::blocking::Client;
 use serde::Serialize;
-use slog::{o, Drain};
+use slog::{Drain, o};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -79,7 +79,7 @@ fn main() {
         .expect("Falied to retrieve unix epoch")
         .as_millis();
     // Group name is now unique, so not deleting old ones
-    let group_name = format!("{}--{:?}", test_name, timestamp);
+    let group_name = format!("{test_name}--{timestamp:?}");
 
     // Create a new group
     create_group(
@@ -220,6 +220,7 @@ fn main() {
             malicious_behavior: None,
             query_stats_epoch_length: None,
             bitcoind_addr: None,
+            dogecoind_addr: None,
             jaeger_addr: None,
             socks_proxy: None,
             hostname: None,

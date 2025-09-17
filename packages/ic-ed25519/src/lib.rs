@@ -5,7 +5,7 @@
 
 //! A crate for creating and verifying Ed25519 signatures
 
-use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint, Scalar};
+use curve25519_dalek::{EdwardsPoint, Scalar, edwards::CompressedEdwardsY};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
@@ -13,7 +13,7 @@ use hex_literal::hex;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
-pub use candid::Principal as CanisterId;
+pub use ic_principal::Principal as CanisterId;
 
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
@@ -246,7 +246,7 @@ impl PrivateKey {
             Self::deserialize_raw(&bytes[sk_offset..sk_offset + Self::BYTES])
         } else {
             let sk = SigningKey::from_pkcs8_der(bytes)
-                .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+                .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
             Ok(Self { sk })
         }
     }
@@ -270,7 +270,7 @@ impl PrivateKey {
     /// This corresponds with the format used by PrivateKey::serialize_pkcs8_pem
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, PrivateKeyDecodingError> {
         let der = pem::parse(pem)
-            .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != "PRIVATE KEY" {
             return Err(PrivateKeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -611,7 +611,7 @@ impl PublicKey {
             ))
         })?;
         let pk = VerifyingKey::from_bytes(&bytes)
-            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
 
         Ok(Self::new(pk))
     }
@@ -651,7 +651,7 @@ impl PublicKey {
     /// properties, use is_torsion_free and is_canonical
     pub fn deserialize_rfc8410_der(bytes: &[u8]) -> Result<Self, PublicKeyDecodingError> {
         let pk = VerifyingKey::from_public_key_der(bytes)
-            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self::new(pk))
     }
 
@@ -667,7 +667,7 @@ impl PublicKey {
     /// properties, use is_torsion_free and is_canonical
     pub fn deserialize_rfc8410_pem(pem: &str) -> Result<Self, PublicKeyDecodingError> {
         let der = pem::parse(pem)
-            .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != "PUBLIC KEY" {
             return Err(PublicKeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -748,7 +748,7 @@ impl PublicKey {
             .collect::<Vec<_>>();
 
         // Select a random Scalar for each signature.
-        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.gen::<u128>())).collect();
+        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.r#gen::<u128>())).collect();
 
         let b_coefficient: Scalar = signatures
             .iter()

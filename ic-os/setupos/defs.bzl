@@ -174,3 +174,18 @@ def _custom_partitions(mode):
         ":partition-config.tzst",
         ":partition-data.tzst",
     ]
+
+def create_test_img(name, source, **kwargs):
+    native.genrule(
+        name = name,
+        srcs = [source],
+        outs = [name + ".tar.zst"],
+        cmd = """
+            tar -xf $<
+            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
+            tar --zstd -Scf $@ disk.img
+        """,
+        target_compatible_with = ["@platforms//os:linux"],
+        tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
+        **kwargs
+    )

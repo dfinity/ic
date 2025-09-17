@@ -28,7 +28,7 @@ this container provides all the necessary environment setup for building and run
 ### Via native Bazel commands
 Within the docker execute:
 ```
-devenv-container$ bazel test --config=systest //rs/tests/idx:basic_health_test
+devenv-container$ bazel test --test_output=streamed //rs/tests/idx:basic_health_test
 ```
 You can provide additional [flags](https://bazel.build/reference/command-line-reference#test) to the Bazel [test](https://bazel.build/reference/command-line-reference#test) command. For example, *--test_tmpdir* would be useful, if you want to keep test artifacts (logs, ssh keys, etc.) after the test execution has finished.
 ### Via `ict` command line tool
@@ -39,7 +39,7 @@ devenv-container$ ict test //rs/tests/idx:basic_health_test
 Upon this invocation `ict` launches the test and also displays the raw Bazel command, which is called under the hood:
 ```
 Raw Bazel command to be invoked:
-$ bazel test //rs/tests/idx:basic_health_test --config=systest --cache_test_results=no
+$ bazel test //rs/tests/idx:basic_health_test --test_output=streamed --cache_test_results=no
 ```
 You can explore the functionality of the continuously developed `ict` tool by:
 ```

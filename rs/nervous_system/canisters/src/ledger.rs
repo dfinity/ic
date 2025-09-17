@@ -72,6 +72,7 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError> {
         <IcpLedgerCanister<Rt> as IcpLedger>::icrc2_approve(
             self,
@@ -80,6 +81,7 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
             expires_at,
             fee,
             from_subaccount,
+            expected_allowance,
         )
         .await
     }
@@ -128,13 +130,12 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(format!(
-                    "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'transfer' of the ledger canister. Code: {code:?}. Message: {msg}"
                 ))
             })
             .and_then(|inner_result: (Result<u64, TransferError>,)| {
                 inner_result.0.map_err(|e: TransferError| {
-                    NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
+                    NervousSystemError::new_with_message(format!("Error transferring funds: {e}"))
                 })
             })
     }
@@ -151,8 +152,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {code:?}. Message: {msg}"
                 )
             )
         })
@@ -175,8 +175,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'account_balance' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'account_balance' of the ledger canister. Code: {code:?}. Message: {msg}"
                 )
             )
         })
@@ -193,6 +192,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError> {
         let result: Result<(Result<Nat, ApproveError>,), (i32, String)> = Rt::call_with_cleanup(
             self.canister_id,
@@ -204,10 +204,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
                 fee: Some(Nat::from(fee)),
                 from_subaccount,
                 created_at_time: None,
-                // If the expected_allowance field is set, the ledger
-                // MUST ensure that the current allowance for the spender
-                // from the caller's account is equal to the given value.
-                expected_allowance: Some(Nat::from(0_u64)),
+                expected_allowance: expected_allowance.map(Nat::from),
                 memo: None,
             },),
         )
@@ -215,13 +212,12 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(format!(
-                "Error calling method 'icrc2_approve' of the ledger canister. Code: {:?}. Message: {}",
-                code, msg
+                "Error calling method 'icrc2_approve' of the ledger canister. Code: {code:?}. Message: {msg}"
             ))
         })
         .and_then(|inner_result: (Result<Nat, ApproveError>,)| {
             inner_result.0.map_err(|e: ApproveError| {
-                NervousSystemError::new_with_message(format!("Error approving funds: {}", e))
+                NervousSystemError::new_with_message(format!("Error approving funds: {e}"))
             })
         })
     }
@@ -275,6 +271,7 @@ pub trait ICRC1Ledger: Send + Sync {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError>;
 
     /// Returns an array of blocks for the ranges specified in args.
@@ -322,6 +319,7 @@ pub trait IcpLedger: Send + Sync {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError>;
 
     /// Returns an array of blocks for the ranges specified in args.

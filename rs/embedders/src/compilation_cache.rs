@@ -1,16 +1,17 @@
 use std::{
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
 use tempfile::TempDir;
 
 use crate::{OnDiskSerializedModule, SerializedModule};
+use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_types::{MemoryDiskBytes, NumBytes};
+use ic_types::{DiskBytes, NumBytes};
 use ic_utils_lru_cache::LruCache;
 use ic_wasm_types::{CanisterModule, WasmHash};
 
@@ -29,6 +30,7 @@ const DEFAULT_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
 
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.
+#[derive(HeapBytes)]
 pub struct CompilationCache {
     /// Directory holding all the temporary files. It will be deleted on
     /// drop.
@@ -41,11 +43,7 @@ pub struct CompilationCache {
     max_entries: usize,
 }
 
-impl MemoryDiskBytes for CompilationCache {
-    fn memory_bytes(&self) -> usize {
-        self.cache.lock().unwrap().memory_bytes()
-    }
-
+impl DiskBytes for CompilationCache {
     fn disk_bytes(&self) -> usize {
         self.cache.lock().unwrap().disk_bytes()
     }
@@ -124,9 +122,9 @@ impl CompilationCache {
         let hash = WasmHash::from(canister_module);
         let id = self.counter.fetch_add(1, Ordering::SeqCst);
         let mut bytes_path: PathBuf = self.dir.path().into();
-        bytes_path.push(format!("{}-{}.module_bytes", hash, id));
+        bytes_path.push(format!("{hash}-{id}.module_bytes"));
         let mut initial_state_path: PathBuf = self.dir.path().into();
-        initial_state_path.push(format!("{}-{}.initial_data", hash, id));
+        initial_state_path.push(format!("{hash}-{id}.initial_data"));
 
         let on_disk = Arc::new(OnDiskSerializedModule::from_serialized_module(
             serialized_module,

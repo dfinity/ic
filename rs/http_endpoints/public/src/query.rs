@@ -1,15 +1,15 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
     ReplicaHealthStatus,
+    common::{Cbor, WithTimeout, build_validator, validation_error_to_http_error},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
@@ -22,10 +22,11 @@ use ic_interfaces::{
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
+    CanisterId, NodeId,
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
@@ -33,7 +34,6 @@ use ic_types::{
         HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, Query,
         QueryResponseHash,
     },
-    CanisterId, NodeId,
 };
 use ic_validator::HttpRequestVerifier;
 use std::sync::Arc;
@@ -41,7 +41,15 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
-use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
+use tower::{ServiceBuilder, ServiceExt, util::BoxCloneService};
+
+#[derive(Copy, Clone, Debug)]
+pub enum Version {
+    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    V2,
+    // Endpoint with the NNS delegation using the tree format of the canister ranges.
+    V3,
+}
 
 #[derive(Clone)]
 pub struct QueryService {
@@ -54,6 +62,7 @@ pub struct QueryService {
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
+    version: Version,
 }
 
 pub struct QueryServiceBuilder {
@@ -67,11 +76,15 @@ pub struct QueryServiceBuilder {
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
+    version: Version,
 }
 
 impl QueryService {
-    pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/{effective_canister_id}/query"
+    pub(crate) fn route(version: Version) -> &'static str {
+        match version {
+            Version::V2 => "/api/v2/canister/{effective_canister_id}/query",
+            Version::V3 => "/api/v3/canister/{effective_canister_id}/query",
+        }
     }
 }
 
@@ -84,6 +97,7 @@ impl QueryServiceBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         nns_delegation_reader: NNSDelegationReader,
         query_execution_service: QueryExecutionService,
+        version: Version,
     ) -> Self {
         Self {
             log,
@@ -96,6 +110,7 @@ impl QueryServiceBuilder {
             ingress_verifier,
             registry_client,
             query_execution_service,
+            version,
         }
     }
 
@@ -131,9 +146,10 @@ impl QueryServiceBuilder {
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
+            version: self.version,
         };
         Router::new().route_service(
-            QueryService::route(),
+            QueryService::route(self.version),
             axum::routing::post(query)
                 .with_state(state)
                 .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
@@ -158,6 +174,7 @@ pub(crate) async fn query(
         signer,
         nns_delegation_reader,
         query_execution_service,
+        version,
     }): State<QueryService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
 ) -> impl IntoResponse {
@@ -178,7 +195,7 @@ pub(crate) async fn query(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
@@ -186,8 +203,7 @@ pub(crate) async fn query(
     if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
         let status = StatusCode::BAD_REQUEST;
         let text = format!(
-            "Specified CanisterId {} does not match effective canister id in URL {}",
-            canister_id, effective_canister_id
+            "Specified CanisterId {canister_id} does not match effective canister id in URL {effective_canister_id}"
         );
         return (status, text).into_response();
     }
@@ -218,8 +234,14 @@ pub(crate) async fn query(
     let user_query = request.take_content();
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
-    let delegation_from_nns =
-        nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat);
+
+    let delegation_from_nns = match version {
+        Version::V2 => {
+            nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat)
+        }
+        Version::V3 => nns_delegation_reader
+            .get_delegation_with_metadata(CanisterRangesFilter::Tree(effective_canister_id)),
+    };
     let query_execution_input = QueryExecutionInput {
         query: user_query.clone(),
         certificate_delegation_with_metadata: delegation_from_nns,

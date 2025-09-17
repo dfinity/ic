@@ -1,4 +1,4 @@
-use crate::registry::Registry;
+use crate::registry::{Registry, Version};
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use serde::Serialize;
@@ -17,7 +17,9 @@ impl Registry {
             target_subnet_id,
         ));
 
-        MigrateCanistersResponse {}
+        MigrateCanistersResponse {
+            registry_version: self.latest_version(),
+        }
     }
 
     fn validate_payload(
@@ -33,7 +35,7 @@ impl Registry {
             .into_iter()
             .map(|canister_id| {
                 CanisterId::try_from_principal_id(canister_id)
-                    .map_err(|e| format!("Invalid canister id: {}", e))
+                    .map_err(|e| format!("Invalid canister id: {e}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -51,7 +53,9 @@ pub struct MigrateCanistersPayload {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize, Serialize)]
-pub struct MigrateCanistersResponse {}
+pub struct MigrateCanistersResponse {
+    registry_version: Version,
+}
 
 #[cfg(test)]
 mod test {
@@ -111,7 +115,12 @@ mod test {
         let response = registry.do_migrate_canisters(request);
 
         // currently just empty response.
-        assert_eq!(MigrateCanistersResponse {}, response);
+        assert_eq!(
+            MigrateCanistersResponse {
+                registry_version: registry.latest_version()
+            },
+            response
+        );
 
         let updated_routing_table = registry.get_routing_table_or_panic(registry.latest_version());
 

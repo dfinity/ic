@@ -24,8 +24,7 @@ impl Registry {
     ) {
         let caller_id = dfn_core::api::caller();
         println!(
-            "{}do_update_ipv4_config_directly started: {:?} caller: {:?}",
-            LOG_PREFIX, payload, caller_id
+            "{LOG_PREFIX}do_update_ipv4_config_directly started: {payload:?} caller: {caller_id:?}"
         );
 
         self.do_update_node_ipv4_config(payload, caller_id)
@@ -85,7 +84,7 @@ impl Registry {
     fn check_caller_is_node_operator(&self, caller_id: PrincipalId, node_id: NodeId) {
         // Find the node operator id for this node
         let node_operator_id = get_node_operator_id_for_node(self, node_id)
-            .map_err(|e| format!("Failed to obtain the node operator ID: {}", e))
+            .map_err(|e| format!("Failed to obtain the node operator ID: {e}"))
             .unwrap();
 
         assert_eq!(

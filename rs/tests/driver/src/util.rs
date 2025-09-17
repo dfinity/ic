@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
@@ -13,37 +12,36 @@ use crate::{
 use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
-use dfn_protobuf::{protobuf, ProtoBuf};
+use dfn_protobuf::{ProtoBuf, protobuf};
 use futures::{
-    future::{join_all, select_all, try_join_all},
     FutureExt,
+    future::{join_all, select_all, try_join_all},
 };
 use ic_agent::{
+    Agent, AgentError, Identity, Signature,
     agent::{
-        http_transport::reqwest_transport::reqwest, CallResponse, EnvelopeContent, RejectCode,
-        RejectResponse,
+        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
+        http_transport::reqwest_transport::reqwest,
     },
     export::Principal,
     identity::BasicIdentity,
-    Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::api::management_canister::{
-    ecdsa::SignWithEcdsaResponse, schnorr::SignWithSchnorrResponse,
+use ic_cdk::management_canister::{
+    SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::VetKDDeriveKeyResult;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    create_service_nervous_system::{
-        swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
-        SwapParameters,
-    },
     CreateServiceNervousSystem,
+    create_service_nervous_system::{
+        SwapParameters,
+        swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
+    },
 };
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
@@ -52,19 +50,19 @@ use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
-    messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
+    messages::{HttpCallContent, HttpQueryContent},
 };
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
-    DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
+    Tokens, tokens_from_proto,
 };
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use on_wire::FromWire;
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -146,10 +144,10 @@ lazy_static! {
 
 fn get_canister_wasm(env_var: &str) -> Vec<u8> {
     let uc_wasm_path = get_dependency_path(
-        std::env::var(env_var).unwrap_or_else(|e| panic!("{:?} not set: {e:?}", env_var)),
+        std::env::var(env_var).unwrap_or_else(|e| panic!("{env_var:?} not set: {e:?}")),
     );
     std::fs::read(&uc_wasm_path)
-        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
 
 /// Provides an abstraction to the universal canister.
@@ -278,7 +276,7 @@ impl<'a> UniversalCanister<'a> {
         .await
         {
             Ok(Ok(canister)) => Ok(canister),
-            Ok(Err(err)) => Err(format!("Could not create universal canister: {:?}", err)),
+            Ok(Err(err)) => Err(format!("Could not create universal canister: {err:?}")),
             Err(_elasped) => Err("Timeout while creating universal canister".to_string()),
         }
     }
@@ -304,7 +302,7 @@ impl<'a> UniversalCanister<'a> {
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
             .await
-            .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+            .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
             .0;
 
         // Install the universal canister.
@@ -312,7 +310,7 @@ impl<'a> UniversalCanister<'a> {
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
-            .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
+            .map_err(|err| format!("Couldn't install universal canister: {err}"))?;
         Ok(Self { agent, canister_id })
     }
 
@@ -331,7 +329,7 @@ impl<'a> UniversalCanister<'a> {
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
             .await
-            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {err}"))
             .0;
 
         // Install the universal canister.
@@ -339,7 +337,7 @@ impl<'a> UniversalCanister<'a> {
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
-            .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
+            .map_err(|err| format!("Couldn't install universal canister: {err}"))?;
         Ok(Self { agent, canister_id })
     }
 
@@ -359,7 +357,7 @@ impl<'a> UniversalCanister<'a> {
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
             .await
-            .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+            .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
             .0;
 
         // Install the universal canister.
@@ -367,7 +365,7 @@ impl<'a> UniversalCanister<'a> {
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
-            .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
+            .map_err(|err| format!("Couldn't install universal canister: {err}"))?;
 
         Ok(Self { agent, canister_id })
     }
@@ -452,7 +450,7 @@ impl<'a> UniversalCanister<'a> {
             .with_arg(Self::stable_writer(offset, msg))
             .call_and_wait()
             .await
-            .unwrap_or_else(|err| panic!("Could not push message to stable: {}", err));
+            .unwrap_or_else(|err| panic!("Could not push message to stable: {err}"));
     }
 
     /// Tries to read `len` bytes of the stable memory, starting from `offset`.
@@ -473,9 +471,9 @@ impl<'a> UniversalCanister<'a> {
     /// Tries to read `len` bytes of the stable memory, starting from `offset`.
     /// Panics if the read could not be performed.
     pub async fn try_read_stable(&self, offset: u32, len: u32) -> Vec<u8> {
-        self.read_stable(offset, len).await.unwrap_or_else(|err| {
-            panic!("could not read message of len {} from stable: {}", len, err)
-        })
+        self.read_stable(offset, len)
+            .await
+            .unwrap_or_else(|err| panic!("could not read message of len {len} from stable: {err}"))
     }
 
     /// Tries to read `len` bytes of the stable memory, starting from `offset`.
@@ -500,10 +498,7 @@ impl<'a> UniversalCanister<'a> {
                 }
             }
         }
-        panic!(
-            "Could not read message from stable memory after {} retries.",
-            max_retries
-        );
+        panic!("Could not read message from stable memory after {max_retries} retries.");
     }
 
     /// Forwards a message to the `receiver` that calls
@@ -657,7 +652,7 @@ impl<'a> MessageCanister<'a> {
         .await
         {
             Ok(Ok(canister)) => Ok(canister),
-            Ok(Err(err)) => Err(format!("Could not create message canister: {:?}", err)),
+            Ok(Err(err)) => Err(format!("Could not create message canister: {err:?}")),
             Err(_elasped) => Err("Timeout while creating message canister".to_string()),
         }
     }
@@ -677,14 +672,14 @@ impl<'a> MessageCanister<'a> {
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
             .await
-            .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+            .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
             .0;
 
         // Install the universal canister.
         mgr.install_code(&canister_id, &MESSAGE_CANISTER_WASM)
             .call_and_wait()
             .await
-            .map_err(|err| format!("Couldn't install message canister: {}", err))?;
+            .map_err(|err| format!("Couldn't install message canister: {err}"))?;
         Ok(Self { agent, canister_id })
     }
 
@@ -762,7 +757,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn store_msg<P: Into<String>>(&self, msg: P) {
         self.try_store_msg(msg)
             .await
-            .unwrap_or_else(|err| panic!("Could not store message: {}", err))
+            .unwrap_or_else(|err| panic!("Could not store message: {err}"))
     }
 
     pub async fn try_read_msg(&self) -> Result<Option<String>, String> {
@@ -778,7 +773,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn read_msg(&self) -> Option<String> {
         self.try_read_msg()
             .await
-            .unwrap_or_else(|err| panic!("Could not read message: {}", err))
+            .unwrap_or_else(|err| panic!("Could not read message: {err}"))
     }
 }
 
@@ -823,14 +818,14 @@ impl<'a> SignerCanister<'a> {
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
             .await
-            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {err}"))
             .0;
 
         // Install the signer canister.
         mgr.install_code(&canister_id, &SIGNER_CANISTER_WASM)
             .call_and_wait()
             .await
-            .unwrap_or_else(|err| panic!("Couldn't install signer canister: {}", err));
+            .unwrap_or_else(|err| panic!("Couldn't install signer canister: {err}"));
 
         Self { agent, canister_id }
     }
@@ -842,25 +837,25 @@ impl<'a> SignerCanister<'a> {
     pub async fn gen_ecdsa_sig(
         &self,
         params: GenEcdsaParams,
-    ) -> Result<SignWithEcdsaResponse, AgentError> {
+    ) -> Result<SignWithEcdsaResult, AgentError> {
         self.agent
             .update(&self.canister_id, "gen_ecdsa_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map(|bytes| Decode!(&bytes, SignWithEcdsaResponse).unwrap())
+            .map(|bytes| Decode!(&bytes, SignWithEcdsaResult).unwrap())
     }
 
     pub async fn gen_schnorr_sig(
         &self,
         params: GenSchnorrParams,
-    ) -> Result<SignWithSchnorrResponse, AgentError> {
+    ) -> Result<SignWithSchnorrResult, AgentError> {
         self.agent
             .update(&self.canister_id, "gen_schnorr_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map(|bytes| Decode!(&bytes, SignWithSchnorrResponse).unwrap())
+            .map(|bytes| Decode!(&bytes, SignWithSchnorrResult).unwrap())
     }
 
     pub async fn gen_vetkd_key(
@@ -890,7 +885,7 @@ pub async fn assert_create_agent(url: &str) -> Agent {
 
     create_agent(url)
         .await
-        .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
+        .unwrap_or_else(|err| panic!("Failed to create agent for {url}: {err:?}"))
 }
 
 /// Initializes an `Agent` using the provided URL and identity.
@@ -908,7 +903,7 @@ pub async fn assert_create_agent_with_identity(
 
     agent_with_identity(url, identity)
         .await
-        .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
+        .unwrap_or_else(|err| panic!("Failed to create agent for {url}: {err:?}"))
 }
 
 pub async fn create_agent(url: &str) -> Result<Agent, AgentError> {
@@ -1025,7 +1020,7 @@ pub async fn assert_subnet_can_make_progress(message: &[u8], node: &IcNodeSnapsh
 
 pub fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: RejectCode) {
     match res {
-        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
+        Ok(val) => panic!("Expected call to fail but it succeeded with {val:?}"),
         Err(agent_error) => match agent_error {
             AgentError::UncertifiedReject {
                 reject:
@@ -1037,8 +1032,7 @@ pub fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: Rejec
                 ..
             } => assert_eq!(
                 code, reject_code,
-                "Expect code {:?} did not match {:?}. Reject message: {}",
-                code, reject_code, reject_message
+                "Expect code {code:?} did not match {reject_code:?}. Reject message: {reject_message}"
             ),
             AgentError::CertifiedReject {
                 reject:
@@ -1050,13 +1044,11 @@ pub fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: Rejec
                 ..
             } => assert_eq!(
                 code, reject_code,
-                "Expect code {:?} did not match {:?}. Reject message: {}",
-                code, reject_code, reject_message
+                "Expect code {code:?} did not match {reject_code:?}. Reject message: {reject_message}"
             ),
-            others => panic!(
-                "Expected call to fail with a replica error but got {:?} instead",
-                others
-            ),
+            others => {
+                panic!("Expected call to fail with a replica error but got {others:?} instead")
+            }
         },
     }
 }
@@ -1067,7 +1059,7 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
     partial_message: &str,
 ) {
     match res {
-        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
+        Ok(val) => panic!("Expected call to fail but it succeeded with {val:?}"),
         Err(agent_error) => match agent_error {
             AgentError::CertifiedReject {
                 reject:
@@ -1080,13 +1072,11 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
             } => {
                 assert_eq!(
                     code, reject_code,
-                    "Expect code {:?} did not match {:?}. Reject message: {}",
-                    code, reject_code, reject_message
+                    "Expect code {code:?} did not match {reject_code:?}. Reject message: {reject_message}"
                 );
                 assert!(
                     reject_message.contains(partial_message),
-                    "Actual reject message: {}",
-                    reject_message
+                    "Actual reject message: {reject_message}"
                 );
             }
             AgentError::UncertifiedReject {
@@ -1100,19 +1090,16 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
             } => {
                 assert_eq!(
                     code, reject_code,
-                    "Expect code {:?} did not match {:?}. Reject message: {}",
-                    code, reject_code, reject_message
+                    "Expect code {code:?} did not match {reject_code:?}. Reject message: {reject_message}"
                 );
                 assert!(
                     reject_message.contains(partial_message),
-                    "Actual reject message: {}",
-                    reject_message
+                    "Actual reject message: {reject_message}"
                 );
             }
-            others => panic!(
-                "Expected call to fail with a replica error but got {:?} instead",
-                others
-            ),
+            others => {
+                panic!("Expected call to fail with a replica error but got {others:?} instead")
+            }
         },
     }
 }
@@ -1169,16 +1156,17 @@ pub fn assert_http_submit_fails<Output>(
     Output: std::fmt::Debug,
 {
     match result {
-        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
+        Ok(val) => panic!("Expected call to fail but it succeeded with {val:?}."),
         Err(agent_error) => match agent_error {
-            AgentError::UncertifiedReject { reject: RejectResponse{reject_code, ..}, .. } => assert_eq!(
+            AgentError::UncertifiedReject {
+                reject: RejectResponse { reject_code, .. },
+                ..
+            } => assert_eq!(
                 expected_reject_code, reject_code,
-                "Unexpected reject_code: `{:?}`.",
-                reject_code
+                "Unexpected reject_code: `{reject_code:?}`."
             ),
             others => panic!(
-                "Expected agent call to replica to fail with AgentError::UncertifiedReject, but got {:?} instead.",
-                others
+                "Expected agent call to replica to fail with AgentError::UncertifiedReject, but got {others:?} instead."
             ),
         },
     }
@@ -1214,7 +1202,7 @@ pub async fn create_canister_with_cycles(
         .with_effective_canister_id(effective_canister_id)
         .call_and_wait()
         .await
-        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {err}"))
         .0
 }
 
@@ -1229,7 +1217,7 @@ pub async fn create_canister_with_cycles_and_specified_id(
         .as_provisional_create_with_specified_id(specified_id.into())
         .call_and_wait()
         .await
-        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {err}"))
         .0
 }
 
@@ -1244,7 +1232,7 @@ pub async fn install_canister(
         .with_raw_arg(arg)
         .call_and_wait()
         .await
-        .unwrap_or_else(|err| panic!("Couldn't install canister: {}", err));
+        .unwrap_or_else(|err| panic!("Couldn't install canister: {err}"));
 }
 
 pub async fn create_and_install_with_cycles(
@@ -1274,10 +1262,7 @@ pub fn assert_balance_equals(expected: Cycles, actual: Cycles, epsilon: Cycles) 
     // Tolerate both positive and negative difference. Assumes no u64 overflows.
     assert!(
         expected < actual + epsilon && actual < expected + epsilon,
-        "assert_balance_equals: expected {} actual {} epsilon {}",
-        expected,
-        actual,
-        epsilon
+        "assert_balance_equals: expected {expected} actual {actual} epsilon {epsilon}"
     );
 }
 
@@ -1287,7 +1272,7 @@ pub async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
         .canister_status(canister_id)
         .call_and_wait()
         .await
-        .unwrap_or_else(|err| panic!("Could not get canister status: {}", err))
+        .unwrap_or_else(|err| panic!("Could not get canister status: {err}"))
         .0;
     u128::try_from(canister_status.cycles.0).unwrap()
 }
@@ -1302,7 +1287,7 @@ pub async fn set_controller(
         .with_controller(*controller)
         .call_and_wait()
         .await
-        .unwrap_or_else(|err| panic!("Could not set controller: {}", err))
+        .unwrap_or_else(|err| panic!("Could not set controller: {err}"))
 }
 
 pub async fn deposit_cycles(
@@ -1318,7 +1303,7 @@ pub async fn deposit_cycles(
             cycles_to_deposit,
         )
         .await
-        .unwrap_or_else(|err| panic!("Failed to deposit to canister: {}", err));
+        .unwrap_or_else(|err| panic!("Failed to deposit to canister: {err}"));
 }
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
@@ -1339,7 +1324,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
                     .enable_all()
                     .build()
             }
-            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
+            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
             rt.block_on(f)
         }
     }
@@ -1431,7 +1416,7 @@ pub async fn transact_icp_subaccount(
             to_arg(args),
         )
         .await
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| format!("{e:?}"))?;
 
     let decoded: u64 = ProtoBuf::from_bytes(reply).map(|ProtoBuf(c)| c)?;
     info!(log, "decoded result is {:?}", decoded);
@@ -1512,8 +1497,7 @@ pub async fn assert_canister_counter_with_retries(
         }
     }
     panic!(
-        "Minimum expected counter value {} on counter canister was not observed after {} retries.",
-        min_expected_count, max_retries
+        "Minimum expected counter value {min_expected_count} on counter canister was not observed after {max_retries} retries."
     );
 }
 
@@ -1527,7 +1511,7 @@ pub fn escape_for_wat(id: &Principal) -> String {
     // "hexadecimal escape sequences ‘∖ℎℎ’, [...] represent raw bytes of the
     // respective value".
     id.as_slice().iter().fold(String::new(), |mut res, b| {
-        res.push_str(&format!("\\{:02x}", b));
+        res.push_str(&format!("\\{b:02x}"));
         res
     })
 }
@@ -1683,7 +1667,7 @@ impl MetricsFetcher {
         };
 
         let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
-        let url = format!("http://{}", socket_addr);
+        let url = format!("http://{socket_addr}");
         let response = reqwest::get(url).await?.text().await?;
 
         // Filter out only lines that contain metrics we are interested in

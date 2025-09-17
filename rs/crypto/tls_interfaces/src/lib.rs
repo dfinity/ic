@@ -28,7 +28,7 @@ impl TlsPublicKeyCert {
     pub fn new_from_der(cert_der: Vec<u8>) -> Result<Self, TlsPublicKeyCertCreationError> {
         use x509_parser::prelude::FromDer;
         let (remainder, _cert) = X509Certificate::from_der(&cert_der)
-            .map_err(|e| TlsPublicKeyCertCreationError(format!("Error parsing DER: {}", e)))?;
+            .map_err(|e| TlsPublicKeyCertCreationError(format!("Error parsing DER: {e}")))?;
         if !remainder.is_empty() {
             return Err(TlsPublicKeyCertCreationError(format!(
                 "DER not fully consumed when parsing. Remainder: {remainder:?}"
@@ -213,7 +213,7 @@ pub enum TlsConfigError {
 
 impl Display for TlsConfigError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

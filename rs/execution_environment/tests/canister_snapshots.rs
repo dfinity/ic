@@ -12,7 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
-    wasm, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
 use ic_types::CanisterId;
 
@@ -223,9 +223,8 @@ fn take_download_upload_load_snapshot_roundtrip_no_globals() {
     (call $msg_reply)
   )
   (export "canister_update run" (func $run))
-  (memory {} 1)
-)"#,
-            memory
+  (memory {memory} 1)
+)"#
         );
         for download_upload in [false, true] {
             take_download_upload_load_snapshot_roundtrip(&wat, vec![], download_upload);
@@ -258,10 +257,9 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
     (call $msg_reply)
   )
   (export "canister_update run" (func $run))
-  (global {} {} (i32.const 42))
-  (memory {} 1)
-)"#,
-                    exported, mutable, memory
+  (global {exported} {mutable} (i32.const 42))
+  (memory {memory} 1)
+)"#
                 );
                 // The current implementation includes all globals that are exported or mutable.
                 let expected_globals = if is_exported || is_mutable {
@@ -281,8 +279,8 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
     }
 }
 
-fn test_env_for_global_timer_on_low_wasm_memory(
-) -> (StateMachine, CanisterId, SnapshotId, WasmResult) {
+fn test_env_for_global_timer_on_low_wasm_memory()
+-> (StateMachine, CanisterId, SnapshotId, WasmResult) {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)
         .with_snapshot_upload_enabled(true)
@@ -454,6 +452,39 @@ fn take_load_snapshot_global_timer_on_low_wasm_memory() {
         )
         .unwrap();
     assert_ne!(current_on_low_wasm_memory_hook, on_low_wasm_memory_hook);
+}
+
+#[test]
+fn upload_and_load_snapshot_with_invalid_wasm() {
+    let env = StateMachineBuilder::new()
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
+        .build();
+
+    let canister_id = env.create_canister(None);
+
+    // Upload snapshot metadata.
+    // A wasm module consisting of 42 zeros is invalid.
+    let upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,   /* replace_snapshot */
+        42,     /* wasm_module_size */
+        vec![], /* globals */
+        0,      /* wasm_memory_size */
+        0,      /* stable_memory_size */
+        vec![], /* certified_data */
+        None,   /* global_timer */
+        None,   /* on_low_wasm_memory_hook_status */
+    );
+    let uploaded_snapshot_id = env
+        .upload_canister_snapshot_metadata(&upload_args)
+        .unwrap()
+        .snapshot_id;
+
+    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, uploaded_snapshot_id, None);
+    let err = env.load_canister_snapshot(load_snapshot_args).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidWasm);
+    assert!(err.description().contains("Canister's Wasm module is not valid: Failed to decode wasm module: unsupported canister module format."));
 }
 
 #[test]

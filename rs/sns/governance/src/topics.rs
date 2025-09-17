@@ -1,9 +1,9 @@
 use crate::{
     extensions,
-    extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec},
+    extensions::{ExtensionOperationSpec, get_extension_operation_spec_from_cache},
     governance::Governance,
     logs::ERROR,
-    pb::v1::{self as pb, nervous_system_function::FunctionType, NervousSystemFunction},
+    pb::v1::{self as pb, NervousSystemFunction, nervous_system_function::FunctionType},
     storage::list_registered_extensions_from_cache,
     types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION},
 };
@@ -64,7 +64,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
         MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS, MANAGE_NERVOUS_SYSTEM_PARAMETERS,
         MANAGE_SNS_METADATA, MINT_SNS_TOKENS, MOTION, REGISTER_DAPP_CANISTERS, REGISTER_EXTENSION,
-        REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION, TRANSFER_SNS_TREASURY_FUNDS,
+        REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION, TRANSFER_SNS_TREASURY_FUNDS, UPGRADE_EXTENSION,
         UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
     };
 
@@ -154,6 +154,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                     REGISTER_EXTENSION,
+                    UPGRADE_EXTENSION,
                 ],
             },
             extension_operations: vec![],
@@ -474,7 +475,7 @@ impl fmt::Display for pb::Topic {
             Self::TreasuryAssetManagement => "TreasuryAssetManagement",
             Self::CriticalDappOperations => "CriticalDappOperations",
         };
-        write!(f, "{}", topic_str)
+        write!(f, "{topic_str}")
     }
 }
 
@@ -508,16 +509,14 @@ mod test {
             let function_id_found = native_functions_with_topic.remove(&native_function_id);
             assert!(
                 function_id_found,
-                "Topic not defined for native proposal '{}' with ID {}.",
-                native_function_name, native_function_id,
+                "Topic not defined for native proposal '{native_function_name}' with ID {native_function_id}.",
             )
         }
 
         assert_eq!(
             native_functions_with_topic,
             BTreeSet::new(),
-            "Some native proposal topics were defined for non-native proposals: {:?}",
-            native_functions_with_topic,
+            "Some native proposal topics were defined for non-native proposals: {native_functions_with_topic:?}",
         )
     }
 }

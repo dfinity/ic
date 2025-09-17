@@ -24,10 +24,13 @@ end::catalog[] */
 use anyhow::Result;
 
 use canister_test::Canister;
-use ic_consensus_system_test_utils::rw_message::cert_state_makes_progress_with_retries;
+use ic_consensus_system_test_utils::{
+    node::await_subnet_earliest_topology_version,
+    rw_message::cert_state_makes_progress_with_retries,
+};
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
-    make_key_ids_for_all_schemes, DKG_INTERVAL,
+    DKG_INTERVAL, enable_chain_key_signing, get_public_key_and_test_signature,
+    get_public_key_with_logger, make_key_ids_for_all_schemes,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -39,8 +42,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            secs, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            SubnetSnapshot,
+            HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
+            NnsInstallationBuilder, SubnetSnapshot, secs,
         },
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
@@ -49,7 +52,7 @@ use ic_system_test_driver::{
 };
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 
 const NODES_COUNT: usize = 4;
@@ -147,48 +150,52 @@ fn test(env: TestEnv) {
         &governance,
         proposal_id,
     ));
+
     info!(log, "Waiting for registry update.");
-    block_on(async {
-        topology_snapshot
-            .block_for_newer_registry_version()
-            .await
-            .expect("Could not block for newer registry version");
-        info!(log, "Asserting nodes membership has changed.");
-        // Get a new snapshot.
-        let topology_snapshot = env.topology_snapshot();
-        assert!(topology_snapshot.unassigned_nodes().next().is_none());
-        let nns = topology_snapshot.root_subnet();
-        assert_eq!(nns.nodes().count(), UNASSIGNED_NODES_COUNT + NODES_COUNT);
+    let topology_snapshot = block_on(topology_snapshot.block_for_newer_registry_version())
+        .expect("Should get newer registry version");
+    info!(log, "Asserting nodes membership has changed.");
+    assert!(topology_snapshot.unassigned_nodes().next().is_none());
+    let nns = topology_snapshot.root_subnet();
+    assert_eq!(nns.nodes().count(), UNASSIGNED_NODES_COUNT + NODES_COUNT);
 
-        for key_id in &key_ids {
-            if !key_id.is_idkg_key() {
-                continue;
-            }
-            info!(log, "Make sure key {} was rotated.", key_id);
-            // All nodes (old and new) should have increased their metric by one.
-            assert_metric_sum(&nns, key_id, 2 * NODES_COUNT + UNASSIGNED_NODES_COUNT, &log).await;
-        }
+    info!(log, "Ensure active subnet membership has progressed.");
+    await_subnet_earliest_topology_version(&nns, topology_snapshot.get_registry_version(), &log);
 
-        info!(log, "Assert all nodes are making progress.");
-        for node in nns.nodes() {
-            cert_state_makes_progress_with_retries(
-                &node.get_public_url(),
-                node.effective_canister_id(),
-                &log,
-                /*timeout=*/ secs(100),
-                /*backoff=*/ secs(3),
-            );
+    for key_id in &key_ids {
+        if !key_id.is_idkg_key() {
+            continue;
         }
+        info!(log, "Make sure key {} was rotated.", key_id);
+        // All nodes (old and new) should have increased their key rotation metric by one.
+        block_on(assert_metric_sum(
+            &nns,
+            key_id,
+            2 * NODES_COUNT + UNASSIGNED_NODES_COUNT,
+            &log,
+        ));
+    }
 
-        info!(log, "Run through signature test.");
-        let msg_can = MessageCanister::from_canister_id(&agent, msg_can.canister_id());
-        for (key_id, public_key) in public_keys {
-            let public_key_ = get_public_key_and_test_signature(&key_id, &msg_can, true, &log)
-                .await
-                .unwrap();
-            assert_eq!(public_key, public_key_);
-        }
-    });
+    info!(log, "Assert all nodes are making progress.");
+    for node in nns.nodes() {
+        cert_state_makes_progress_with_retries(
+            &node.get_public_url(),
+            node.effective_canister_id(),
+            &log,
+            /*timeout=*/ secs(100),
+            /*backoff=*/ secs(3),
+        );
+    }
+
+    info!(log, "Run through signature test.");
+    let msg_can = MessageCanister::from_canister_id(&agent, msg_can.canister_id());
+    for (key_id, public_key) in public_keys {
+        let public_key_ = block_on(get_public_key_and_test_signature(
+            &key_id, &msg_can, true, &log,
+        ))
+        .unwrap();
+        assert_eq!(public_key, public_key_);
+    }
 }
 
 async fn assert_metric_sum(
@@ -198,10 +205,7 @@ async fn assert_metric_sum(
     log: &Logger,
 ) {
     let mut count = 0;
-    let metric_with_label = format!(
-        "{}{{key_id=\"{}\"}}",
-        MASTER_KEY_TRANSCRIPTS_CREATED, key_id
-    );
+    let metric_with_label = format!("{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}");
     let metrics = MetricsFetcher::new(subnet.nodes(), vec![metric_with_label.clone()]);
     loop {
         match metrics.fetch::<u64>().await {
@@ -228,7 +232,7 @@ async fn assert_metric_sum(
         count += 1;
         // Abort after 30 tries
         if count > 30 {
-            panic!("Failed to find key rotation of {}", key_id);
+            panic!("Failed to find key rotation of {key_id}");
         }
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     }

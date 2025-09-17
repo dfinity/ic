@@ -1,6 +1,6 @@
 use super::*;
 use crate::secret_key_store::test_utils::{make_key_id, make_secret_key};
-use crate::secret_key_store::{scope::ConstScope, Scope, SecretKeyStore};
+use crate::secret_key_store::{Scope, SecretKeyStore, scope::ConstScope};
 use crate::types::CspSecretKey;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_secrets_containers::SecretArray;
@@ -96,8 +96,8 @@ mod retain {
     use super::*;
 
     #[test]
-    fn should_retain_expected_keys_with_specified_scope_and_not_remove_keys_with_non_matching_scope(
-    ) {
+    fn should_retain_expected_keys_with_specified_scope_and_not_remove_keys_with_non_matching_scope()
+     {
         let mut key_store = inmem_sks();
         let rng = &mut reproducible_rng();
         let mut next_key = || (make_key_id(rng), make_secret_key(rng));
@@ -123,12 +123,14 @@ mod retain {
 
         let id_to_retain = key_with_id_to_retain.0;
         let value_to_retain = key_with_value_to_retain.1;
-        assert!(key_store
-            .retain(
-                move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
-                selected_scope,
-            )
-            .is_ok());
+        assert!(
+            key_store
+                .retain(
+                    move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
+                    selected_scope,
+                )
+                .is_ok()
+        );
 
         assert!(
             key_store.contains(&key_with_id_to_retain.0),
@@ -303,8 +305,10 @@ mod retain_would_modify_keystore {
 
         assert!(!key_store.retain_would_modify_keystore(|_, _| true, selected_scope));
         assert!(!key_store.retain_would_modify_keystore(|_, _| false, selected_scope));
-        assert!(!key_store
-            .retain_would_modify_keystore(move |id, _| (id == &id_to_retain), selected_scope));
+        assert!(
+            !key_store
+                .retain_would_modify_keystore(move |id, _| (id == &id_to_retain), selected_scope)
+        );
         assert!(!key_store.retain_would_modify_keystore(
             move |_, value| (value == &value_to_retain),
             selected_scope
@@ -324,8 +328,12 @@ mod retain_would_modify_keystore {
             .insert(key_id, key_value, Some(selected_scope))
             .expect("insert should succeed");
 
-        assert!(key_store
-            .retain_would_modify_keystore(move |id, _| (id == &key_id_to_retain), selected_scope));
+        assert!(
+            key_store.retain_would_modify_keystore(
+                move |id, _| (id == &key_id_to_retain),
+                selected_scope
+            )
+        );
     }
 
     #[test]
@@ -392,7 +400,7 @@ mod insert_or_replace {
         fn should_insert_secret_key(seed: [u8; 32], scope in option::of(arb_scope())) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = inmem_sks();
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let secret_key = secret_key(rng);
 
             assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope).is_ok());
@@ -409,7 +417,7 @@ mod insert_or_replace {
         ) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = inmem_sks();
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let first_secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, first_secret_key.clone(), scope_first_key).is_ok());
 
@@ -429,7 +437,7 @@ mod insert_or_replace {
         ) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = inmem_sks();
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, secret_key.clone(), scope1).is_ok());
 
@@ -442,7 +450,7 @@ mod insert_or_replace {
 
     fn secret_key<R: Rng>(rng: &mut R) -> CspSecretKey {
         CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&rng.gen()),
+            SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
         ))
     }
 

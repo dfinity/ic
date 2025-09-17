@@ -1,4 +1,4 @@
-use ic_crypto_tree_hash::{flatmap, Digest, FlatMap, Label, LabeledTree, Witness};
+use ic_crypto_tree_hash::{Digest, FlatMap, Label, LabeledTree, Witness, flatmap};
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 
@@ -50,10 +50,9 @@ fn error_invalid_digest() {
 
     match <v1::Witness as ProtoProxy<Witness>>::proxy_decode(&witness_vec) {
         Err(ProxyDecodeError::InvalidDigestLength { actual: 4, .. }) => (),
-        other => panic!(
-            "Expected ProxyDecodeError::InvalidDigestLength {{ actual: 4 }}, got {:?}",
-            other
-        ),
+        other => {
+            panic!("Expected ProxyDecodeError::InvalidDigestLength {{ actual: 4 }}, got {other:?}")
+        }
     }
 }
 

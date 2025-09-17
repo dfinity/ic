@@ -1,11 +1,11 @@
 use crate::{errors::ApiError, ledger_client::OperationOutput};
-use ic_nns_governance_api::{manage_neuron_response::Command, ManageNeuronResponse};
+use ic_nns_governance_api::{ManageNeuronResponse, manage_neuron_response::Command};
 
 pub fn handle_set_dissolve_timestamp(
     bytes: Vec<u8>,
 ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
     let response: ManageNeuronResponse = candid::decode_one(bytes.as_ref())
-        .map_err(|err| format!("Could not decode dissolve timestamp response: {}", err))?;
+        .map_err(|err| format!("Could not decode dissolve timestamp response: {err}"))?;
     match &response.command {
         Some(Command::Configure(_)) => Ok(Ok(None)),
         Some(Command::Error(err)) => {
@@ -16,7 +16,7 @@ pub fn handle_set_dissolve_timestamp(
             } else {
                 Ok(Err(ApiError::TransactionRejected(
                     false,
-                    format!("Could not set dissolve delay timestamp: {}", err).into(),
+                    format!("Could not set dissolve delay timestamp: {err}").into(),
                 )))
             }
         }

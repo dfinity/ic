@@ -1,8 +1,8 @@
 use crate::io::retry_if_busy;
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use devicemapper::{
-    devnode_to_devno, DevId, Device, DmName, DmOptions, LinearDevTargetParams,
-    LinearDevTargetTable, LinearTargetParams, TargetLine, TargetTable, DM,
+    DM, DevId, Device, DmName, DmOptions, LinearDevTargetParams, LinearDevTargetTable,
+    LinearTargetParams, TargetLine, TargetTable, devnode_to_devno,
 };
 use loopdev::LoopDevice;
 use nix::ioctl_read;

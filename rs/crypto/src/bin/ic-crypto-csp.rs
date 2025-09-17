@@ -148,16 +148,14 @@ fn ensure_n_named_systemd_sockets(num_expected_sockets: usize) {
         .map(|socket_name| {
             if IC_CRYPTO_CSP_SOCKET_FILENAME != socket_name {
                 panic!(
-                    "Expected to receive {} systemd socket(s) named '{}' but instead got '{}'",
-                    num_expected_sockets, IC_CRYPTO_CSP_SOCKET_FILENAME, systemd_socket_names
+                    "Expected to receive {num_expected_sockets} systemd socket(s) named '{IC_CRYPTO_CSP_SOCKET_FILENAME}' but instead got '{systemd_socket_names}'"
                 );
             }
         })
         .count();
     if num_sockets != num_expected_sockets {
         panic!(
-            "Expected to receive {} systemd socket named '{}' but instead got {} ('{}')",
-            num_expected_sockets, IC_CRYPTO_CSP_SOCKET_FILENAME, num_sockets, systemd_socket_names
+            "Expected to receive {num_expected_sockets} systemd socket named '{IC_CRYPTO_CSP_SOCKET_FILENAME}' but instead got {num_sockets} ('{systemd_socket_names}')"
         );
     }
 }

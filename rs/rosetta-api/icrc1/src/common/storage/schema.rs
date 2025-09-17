@@ -73,7 +73,7 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
     initialize_counter_if_missing(connection, &RosettaCounter::SyncedBlocks).map_err(|e| {
         rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ABORT),
-            Some(format!("Failed to initialize SyncedBlocks counter: {}", e)),
+            Some(format!("Failed to initialize SyncedBlocks counter: {e}")),
         )
     })?;
 

@@ -1,7 +1,7 @@
 use crate::ic_wasm::{generate_exports, ic_wasm_config};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_embedders::{WasmtimeEmbedder, wasm_utils::compile};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::time::Duration;
@@ -18,7 +18,8 @@ const MAX_PARALLEL_EXECUTIONS: usize = 4;
 impl<'a> Arbitrary<'a> for MaybeInvalidModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         let mut config = if u.ratio(1, 2)? {
-            let mut config = ic_wasm_config(EmbeddersConfig::default());
+            let is_wasm64 = u.ratio(2, 3)?;
+            let mut config = ic_wasm_config(EmbeddersConfig::default(), is_wasm64);
             config.exports = generate_exports(EmbeddersConfig::default(), u)?;
             config.min_data_segments = 2;
             config.max_data_segments = 10;

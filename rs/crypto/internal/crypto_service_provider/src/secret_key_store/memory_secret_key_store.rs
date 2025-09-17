@@ -4,7 +4,7 @@ use crate::secret_key_store::{
 };
 use crate::types::CspSecretKey;
 use ic_crypto_internal_types::scope::Scope;
-use ic_logger::{debug, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, replica_logger::no_op_logger};
 use std::collections::HashMap;
 
 #[cfg(test)]
