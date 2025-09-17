@@ -112,7 +112,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
 wat = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }
 
 [dev-dependencies]
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }

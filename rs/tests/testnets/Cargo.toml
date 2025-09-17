@@ -21,7 +21,7 @@ nns_dapp = { path = "../nns/nns_dapp" }
 os_qualification_utils = { path = "../dre/utils" }
 serde_json = { workspace = true }
 slog = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }
 
 [[bin]]
 name = "large"
