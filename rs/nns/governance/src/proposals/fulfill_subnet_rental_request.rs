@@ -336,7 +336,7 @@ impl FulfillSubnetRentalRequest {
         // Trying to depend on that creates a bunch of headaches, and maybe
         // requires a different set of hack(s). In particular, it slightly grows
         // the sizes of a couple of wasms. Therefore, leaving this piece of
-        // "code schrapnel in the body" seems like the least harmful thing, but
+        // "code shrapnel in the body" seems like the least harmful thing, but
         // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct CreateRentalAgreementPayload {
