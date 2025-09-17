@@ -197,7 +197,7 @@ fn test(env: TestEnv) {
             .iter()
             .reduce(f64::max)
             .unwrap();
-        let avr = state_sync_durations.iter().sum::<f64>() / (state_sync_durations.len() as f64);
+        let avg = state_sync_durations.iter().sum::<f64>() / (state_sync_durations.len() as f64);
         info!(
             logger,
             "State sync durations: min: {}, avr: {}, max: {}", min, avr, max
