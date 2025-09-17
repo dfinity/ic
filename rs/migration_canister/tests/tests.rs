@@ -236,7 +236,7 @@ impl Logs {
             .collect()
     }
 
-    /// Takes a Vec of expected log fragments and checks that they occur
+    /// Takes a Vec of expected log substrings and checks that they occur
     /// in the given order. Other, unrelated logs may be interspersed and
     /// this will still return true.
     pub fn contains_in_order(&self, expected: Vec<&str>) -> bool {
@@ -244,18 +244,20 @@ impl Logs {
             self.in_order()
                 .into_iter()
                 .map(|(_k, v)| v)
+                .retain(|x| !x.is_empty())
                 .collect::<Vec<String>>(),
         );
+        if logs.is_empty() {
+            println!("Empty Logs do not contain any expected substring.");
+            return false;
+        }
         let mut next = String::from("");
-        for exp in expected.iter() {
-            if exp.is_empty() {
-                continue;
-            }
+        for exp in expected.iter().retain(|x| !x.is_empty()) {
             while !next.contains(exp) {
                 next = match logs.pop_front() {
                     Some(next) => next,
                     None => {
-                        println!("Logs do not contain (in order): '{exp}'");
+                        println!("Logs do not contain (in order): '{exp}'.");
                         return false;
                     }
                 }
