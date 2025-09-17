@@ -2,6 +2,7 @@ pub mod batch;
 pub mod fake;
 pub mod idkg;
 
+use assert_matches::assert_matches;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
     validation::*,
@@ -26,28 +27,18 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
-use std::{sync::RwLock, time::Duration};
+use std::{fmt::Debug, sync::RwLock, time::Duration};
 
 #[macro_export]
 macro_rules! assert_changeset_matches_pattern {
     ($v:expr, $p:pat) => {
         assert_eq!($v.len(), 1);
-        assert!(matches_pattern!($v[0], $p));
+        assert_matches!($v[0], $p);
     };
 }
 
-#[macro_export]
-macro_rules! matches_pattern {
-    ($v:expr, $p:pat) => {
-        if let $p = $v { true } else { false }
-    };
-}
-
-pub fn assert_result_invalid<P, T>(result: ValidationResult<ValidationError<P, T>>) {
-    assert!(matches_pattern!(
-        result,
-        Err(ValidationError::InvalidArtifact(_))
-    ));
+pub fn assert_result_invalid<P: Debug, T: Debug>(result: ValidationResult<ValidationError<P, T>>) {
+    assert_matches!(result, Err(ValidationError::InvalidArtifact(_)));
 }
 
 pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, msg: &T) {
