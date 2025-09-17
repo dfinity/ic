@@ -14328,6 +14328,7 @@ version = "0.9.0"
 name = "ic-test-utilities-consensus"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "bincode",
  "ic-base-types",
  "ic-crypto-test-utils-canister-threshold-sigs",
