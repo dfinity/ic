@@ -1,15 +1,3 @@
-//! TODO:
-//! -x source not controlled by user
-//! -x target not controlled by user
-//! -x source not controlled by MC
-//! -x target not controlled by MC
-//! -x source not stopped
-//! -x target not stopped
-//! - not enough cycles for migration
-//! -x rate-limited
-//! -x disabled
-//!
-
 use candid::{CandidType, Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::CanisterId;
