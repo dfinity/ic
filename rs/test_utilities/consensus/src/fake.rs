@@ -7,18 +7,24 @@ use ic_interfaces::{
 };
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    batch::*,
+    CryptoHashOfPartialState, Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    batch::{BatchPayload, ValidationContext},
     consensus::{
-        certification::*,
+        Block, BlockPayload, DataPayload, FinalizationContent, FinalizationShare,
+        NotarizationContent, NotarizationShare, Payload, RandomBeacon, RandomBeaconContent,
+        RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank, SummaryPayload,
+        certification::{Certification, CertificationContent},
         dkg::{DkgDataPayload, DkgSummary},
-        *,
+        hashed,
     },
     crypto::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript},
         *,
     },
-    signature::*,
-    *,
+    signature::{
+        BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
+        ThresholdSignatureShare,
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -61,6 +67,20 @@ impl Fake for DkgSummary {
             /*height=*/ Height::new(0),
             /*initial_dkg_attempts=*/ BTreeMap::default(),
         )
+    }
+}
+
+impl Fake for Certification {
+    fn fake() -> Self {
+        Certification {
+            height: Height::new(0),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+                signature: ThresholdSignature::fake(),
+            },
+        }
     }
 }
 

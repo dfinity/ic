@@ -37,7 +37,8 @@ fn verify_principal_ids(
         return Err(HttpError {
             status: StatusCode::BAD_REQUEST,
             message: format!(
-                "Effective principal id in URL {effective_principal_id} does not match requested principal id: {principal_id}."
+                "Effective principal id in URL {effective_principal_id} does \
+                not match requested principal id: {principal_id}."
             ),
         });
     }
@@ -80,7 +81,7 @@ fn get_certificate_and_create_response(
         }
     };
 
-    let exception_rule = match deprecated_canister_ranges_filter {
+    let exclusion_rule = match deprecated_canister_ranges_filter {
         DeprecatedCanisterRangesFilter::KeepAll => None,
         DeprecatedCanisterRangesFilter::KeepOnly(root_subnet_id) => {
             let deprecated_canister_ranges_except_the_root_subnet_id_pattern = vec![
@@ -94,7 +95,7 @@ fn get_certificate_and_create_response(
     };
 
     let Some((tree, certification)) = certified_state_reader
-        .read_certified_state_with_exclusion(&labeled_tree, exception_rule.as_ref())
+        .read_certified_state_with_exclusion(&labeled_tree, exclusion_rule.as_ref())
     else {
         return make_service_unavailable_response();
     };
@@ -113,29 +114,15 @@ fn get_certificate_and_create_response(
 
 #[cfg(test)]
 mod test {
-    use ic_certification_test_utils::{
-        CertificateBuilder, CertificateData, create_certificate_labeled_tree,
-        generate_root_of_trust,
-    };
     use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
     use ic_test_utilities_consensus::fake::Fake;
-    use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
-    use ic_types::{
-        CanisterId, CryptoHashOfPartialState, Height, SubnetId,
-        consensus::certification::{Certification, CertificationContent},
-        crypto::{CryptoHash, Signed},
-        signature::ThresholdSignature,
-    };
-    use rand::thread_rng;
+    use ic_types::{SubnetId, consensus::certification::Certification};
 
     use super::*;
 
-    const NNS_SUBNET_ID: SubnetId = SUBNET_0;
-    const APP_SUBNET_ID: SubnetId = SUBNET_1;
+    const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_0;
 
     struct FakeCertifiedStateReader {
-        tree: MixedHashTree,
-        certification: Certification,
         expects_exclusion: bool,
     }
 
@@ -163,39 +150,16 @@ mod test {
             exclusion: Option<&MatchPatternPath>,
         ) -> Option<(MixedHashTree, Certification)> {
             assert!(exclusion.is_some() == self.expects_exclusion);
-            Some((self.tree.clone(), self.certification.clone()))
-        }
-    }
 
-    fn set_up_state_reader(
-        subnet_id: SubnetId,
-        expects_exclusion: bool,
-    ) -> FakeCertifiedStateReader {
-        let certification = Certification {
-            height: Height::new(0),
-            signed: Signed {
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
-                signature: ThresholdSignature::fake(),
-            },
-        };
-
-        FakeCertifiedStateReader {
-            tree: fake_certificate(
-                subnet_id,
-                &vec![(CanisterId::from(0), CanisterId::from(10))],
-                /*with_flat_canister_ranges=*/ true,
-            )
-            .tree(),
-            certification,
-            expects_exclusion,
+            Some((MixedHashTree::Empty, Certification::fake()))
         }
     }
 
     #[test]
     fn test_does_not_request_to_exclude_paths_from_the_state_tree() {
-        let reader = set_up_state_reader(APP_SUBNET_ID, /*expects_exclusion=*/ false);
+        let reader = FakeCertifiedStateReader {
+            expects_exclusion: false,
+        };
 
         let response = get_certificate_and_create_response(
             Vec::new(),
@@ -209,7 +173,9 @@ mod test {
 
     #[test]
     fn test_requests_to_exclude_paths_from_the_state_tree() {
-        let reader = set_up_state_reader(APP_SUBNET_ID, /*expects_exclusion=*/ true);
+        let reader = FakeCertifiedStateReader {
+            expects_exclusion: true,
+        };
 
         let response = get_certificate_and_create_response(
             Vec::new(),
@@ -219,32 +185,5 @@ mod test {
         );
 
         assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    fn fake_certificate(
-        subnet_id: SubnetId,
-        canister_id_ranges: &Vec<(CanisterId, CanisterId)>,
-        with_flat_canister_ranges: bool,
-    ) -> ic_certification_test_utils::Certificate {
-        const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
-
-        let (non_nns_public_key, _non_nns_secret_key) = generate_root_of_trust(&mut thread_rng());
-        let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut thread_rng());
-        let certificate_tree = create_certificate_labeled_tree(
-            canister_id_ranges,
-            subnet_id,
-            non_nns_public_key,
-            MAX_RANGES_PER_ROUTING_TABLE_LEAF,
-            /*time=*/ 42,
-            /*with_tree_canister_ranges=*/ true,
-            with_flat_canister_ranges,
-        );
-
-        let (certificate, _root_pk, _cbor) =
-            CertificateBuilder::new(CertificateData::CustomTree(certificate_tree))
-                .with_root_of_trust(nns_public_key, nns_secret_key)
-                .build();
-
-        certificate
     }
 }
