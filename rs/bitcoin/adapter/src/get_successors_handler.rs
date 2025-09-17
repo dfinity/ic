@@ -92,7 +92,7 @@ pub struct GetSuccessorsHandler<Network: BlockchainNetwork> {
     metrics: GetSuccessorMetrics,
 }
 
-impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
+impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
     /// Creates a GetSuccessorsHandler to be used to access the blockchain state
     /// inside of the adapter when a `GetSuccessorsRequest` is received.
     pub fn new(
@@ -122,6 +122,10 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
         self.metrics
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
+
+        // Spawn pruning without waiting for it to finish
+        let state = self.state.clone();
+        tokio::spawn(async move { state.prune_headers(request.anchor).await });
 
         let (blocks, next, obsolete_blocks) = {
             let anchor_height = self

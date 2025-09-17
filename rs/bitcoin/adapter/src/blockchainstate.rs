@@ -206,6 +206,21 @@ where
         self.header_cache.get_active_chain_tip()
     }
 
+    /// Prune all headers that are below the anchor's height and not one of the anchor's ancestors.
+    pub async fn prune_headers(&self, anchor: BlockHash) -> Result<(), tokio::task::JoinError> {
+        let header_cache = self.header_cache.clone();
+        let (anchor_height, to_prune) =
+            tokio::task::spawn_blocking(move || header_cache.get_headers_to_prune(anchor)).await?;
+        let num_headers_to_prune = to_prune.len();
+        let header_cache = self.header_cache.clone();
+        tokio::task::spawn_blocking(move || header_cache.prune_headers(anchor_height, to_prune))
+            .await?;
+        self.metrics
+            .header_cache_size
+            .sub(num_headers_to_prune as i64);
+        Ok(())
+    }
+
     /// This method is used to remove blocks in the `header_cache` that are found in the given
     /// block hashes.
     pub fn prune_blocks(&self, block_hashes: &[BlockHash]) {

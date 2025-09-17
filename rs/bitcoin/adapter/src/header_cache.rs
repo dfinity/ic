@@ -8,7 +8,7 @@ use bitcoin::{
     io,
 };
 use ic_btc_validation::ValidateHeaderError;
-use ic_logger::{ReplicaLogger, error};
+use ic_logger::{ReplicaLogger, error, info};
 use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
     Transaction, WriteFlags,
@@ -135,6 +135,12 @@ pub trait HeaderCache: Send + Sync {
 
     /// Return all tips.
     fn get_tips(&self) -> Vec<Tip<Self::Header>>;
+
+    /// Return the anchor height and headers to prune given the anchor's block hash.
+    fn get_headers_to_prune(&self, anchor: BlockHash) -> (BlockHeight, Vec<BlockHash>);
+
+    /// Prune headers from the cache
+    fn prune_headers(&self, anchor_height: BlockHeight, to_prune: Vec<BlockHash>);
 }
 
 impl<Header: BlockchainHeader> InMemoryHeaderCache<Header> {
@@ -230,6 +236,15 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
     fn get_tips(&self) -> Vec<Tip<Header>> {
         self.read().unwrap().tips.clone()
     }
+
+    fn get_headers_to_prune(&self, anchor: BlockHash) -> (BlockHeight, Vec<BlockHash>) {
+        // Not implemented
+        (self.get_header(anchor).unwrap().data.height, Vec::new())
+    }
+
+    fn prune_headers(&self, _anchor_height: BlockHeight, _to_prune: Vec<BlockHash>) {
+        // Not implemented
+    }
 }
 
 fn create_db_env(path: &Path) -> Environment {
@@ -237,8 +252,8 @@ fn create_db_env(path: &Path) -> Environment {
     let builder_flags = EnvironmentFlags::NO_TLS;
     let permission = 0o644;
     builder.set_flags(builder_flags);
-    // 3 databases: 1 for headers, 1 for tips, 1 for parent-child relation.
-    builder.set_max_dbs(3);
+    // 5 databases
+    builder.set_max_dbs(5);
     builder.set_map_size(MAX_LMDB_CACHE_SIZE);
     builder
         .open_with_permissions(path, permission)
@@ -287,16 +302,30 @@ macro_rules! log_err_except {
     };
 }
 
+/// Ignore an error if it matches the given pattern.
+macro_rules! ignore_err {
+    ($r:expr, $code:pat) => {
+        match $r {
+            Ok(_) | Err($code) => Ok(()),
+            Err(err) => Err(err),
+        }
+    };
+}
+
 pub struct LMDBHeaderCache<Header> {
     genesis: Header,
     db_env: Environment,
+    log: ReplicaLogger,
     // Map BlockHash to HeaderData.
     headers: Database,
     // Map BlockHash to Tip.
     tips: Database,
     // Map parent's BlockHash to child's BlockHash, duplicated key (parent's hash) allowed.
     children: Database,
-    log: ReplicaLogger,
+    // Map height to header hashes, used for pruning
+    heights: Database,
+    // Last pruned height
+    last_pruned_height: Database,
 }
 
 impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
@@ -310,21 +339,29 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         let db_env = create_db_env(path);
         let headers = db_env
             .create_db(Some("HEADERS"), DatabaseFlags::empty())
-            .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            .unwrap_or_else(|err| panic!("Error creating db for headers: {:?}", err));
         let tips = db_env
             .create_db(Some("TIPS"), DatabaseFlags::empty())
-            .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            .unwrap_or_else(|err| panic!("Error creating db for tips: {:?}", err));
         let children = db_env
             .create_db(Some("CHILDREN"), DatabaseFlags::DUP_SORT)
-            .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            .unwrap_or_else(|err| panic!("Error creating db for children: {:?}", err));
+        let heights = db_env
+            .create_db(Some("HEIGHTS"), DatabaseFlags::DUP_SORT)
+            .unwrap_or_else(|err| panic!("Error creating db for heights: {:?}", err));
+        let last_pruned_height = db_env
+            .create_db(Some("LAST_PRUNED_HEIGHT"), DatabaseFlags::DUP_SORT)
+            .unwrap_or_else(|err| panic!("Error creating db for last_pruned_height: {:?}", err));
 
         let cache = LMDBHeaderCache {
             genesis: genesis.clone(),
             db_env,
+            log,
             headers,
             tips,
             children,
-            log,
+            heights,
+            last_pruned_height,
         };
 
         cache
@@ -336,7 +373,7 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
 
     fn tx_is_tip<Tx: Transaction>(
         &self,
-        tx: &mut Tx,
+        tx: &Tx,
         block_hash: BlockHash,
     ) -> Result<bool, LMDBCacheError> {
         match tx.get(self.tips, &block_hash) {
@@ -346,29 +383,28 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         }
     }
 
-    fn tx_get_tips<Tx: Transaction>(
-        &self,
-        tx: &mut Tx,
-    ) -> Result<Vec<Tip<Header>>, LMDBCacheError> {
+    fn tx_get_tips<Tx: Transaction>(&self, tx: &Tx) -> Result<Vec<Tip<Header>>, LMDBCacheError> {
         let mut cursor = tx.open_ro_cursor(self.tips)?;
         cursor
             .iter_start()
             .map(|row| {
-                let (_, mut value) = row?;
-                let tip = <Tip<Header>>::consensus_decode(&mut value)?;
+                let (mut key, _) = row?;
+                let hash = <BlockHash>::consensus_decode(&mut key)?;
+                let mut bytes = tx.get(self.headers, &hash)?;
+                let tip = <Tip<Header>>::consensus_decode(&mut bytes)?;
                 Ok(tip)
             })
             .collect::<Result<_, _>>()
     }
 
-    fn tx_get_num_tips<Tx: Transaction>(&self, tx: &mut Tx) -> Result<usize, LMDBCacheError> {
+    fn tx_get_num_tips<Tx: Transaction>(&self, tx: &Tx) -> Result<usize, LMDBCacheError> {
         let mut cursor = tx.open_ro_cursor(self.tips)?;
         Ok(cursor.iter_start().count())
     }
 
     fn tx_get_children<Tx: Transaction>(
         &self,
-        tx: &mut Tx,
+        tx: &Tx,
         hash: BlockHash,
     ) -> Result<Vec<BlockHash>, LMDBCacheError> {
         let mut cursor = tx.open_ro_cursor(self.children)?;
@@ -385,7 +421,7 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
 
     fn tx_get_header<Tx: Transaction>(
         &self,
-        tx: &mut Tx,
+        tx: &Tx,
         hash: BlockHash,
     ) -> Result<HeaderNode<Header>, LMDBCacheError> {
         let mut bytes = tx.get(self.headers, &hash)?;
@@ -394,13 +430,87 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         Ok(HeaderNode { data, children })
     }
 
-    fn tx_add_child(
+    fn tx_get_last_pruned_height<Tx: Transaction>(
+        &self,
+        tx: &Tx,
+    ) -> Result<BlockHeight, LMDBCacheError> {
+        let mut bytes = tx.get(self.last_pruned_height, b"height")?;
+        Ok(<BlockHeight>::consensus_decode(&mut bytes)?)
+    }
+
+    // Return (hashes of) nodes that have a height less than or equal to the given node
+    // (of the given hash), and not one of its ancestors.
+    fn tx_get_headers_to_prune<Tx: Transaction>(
+        &self,
+        tx: &Tx,
+        mut hash: BlockHash,
+    ) -> Result<(BlockHeight, Vec<BlockHash>), LMDBCacheError> {
+        let last_pruned_height = log_err_except!(
+            self.tx_get_last_pruned_height(tx),
+            self.log,
+            LMDBCacheError::Lmdb(lmdb::Error::NotFound),
+            "tx_get_last_pruned_height".to_string()
+        )
+        .unwrap_or(0);
+        let mut to_prune = Vec::new();
+        let mut starting_height = None;
+        loop {
+            let node = log_err!(
+                self.tx_get_header(tx, hash),
+                self.log,
+                format!("tx_get_header({hash})")
+            )?;
+            let height = node.data.height;
+            if starting_height.is_none() {
+                starting_height = Some(height);
+            }
+            if height <= last_pruned_height {
+                break;
+            }
+            let mut cursor = tx.open_ro_cursor(self.heights)?;
+            let mut height_bytes = Vec::new();
+            height.consensus_encode(&mut height_bytes)?;
+            for row in cursor.iter_dup_of(&height_bytes) {
+                let (_, mut value) = row?;
+                let block_hash = <BlockHash>::consensus_decode(&mut value)?;
+                if block_hash != hash {
+                    to_prune.push(block_hash);
+                }
+            }
+            hash = node.data.header.prev_block_hash();
+        }
+        Ok((starting_height.unwrap(), to_prune))
+    }
+
+    fn tx_prune_headers(
         &self,
         tx: &mut RwTransaction,
-        prev_hash: BlockHash,
-        block_hash: BlockHash,
+        height: BlockHeight,
+        to_prune: Vec<BlockHash>,
     ) -> Result<(), LMDBCacheError> {
-        Ok(tx.put(self.children, &prev_hash, &block_hash, WriteFlags::empty())?)
+        for hash in to_prune {
+            let mut bytes = tx.get(self.headers, &hash)?;
+            let data = <HeaderData<Header>>::consensus_decode(&mut bytes)?;
+            let prev_hash = data.header.prev_block_hash();
+            let mut height_bytes = Vec::new();
+            data.height.consensus_encode(&mut height_bytes)?;
+            tx.del(self.headers, &hash, None)?;
+            tx.del(self.heights, &height_bytes, Some(hash.as_ref()))?;
+            // Note that we only remove (prev_hash, hash) from the children table,
+            // while keeping (hash, *) entries, which will be removed eventually
+            // when its children are pruned.
+            tx.del(self.children, &prev_hash, Some(hash.as_ref()))?;
+            ignore_err!(tx.del(self.tips, &hash, None), lmdb::Error::NotFound)?;
+        }
+        let mut bytes = Vec::new();
+        height.consensus_encode(&mut bytes)?;
+        tx.put(
+            self.last_pruned_height,
+            b"height",
+            &bytes,
+            WriteFlags::empty(),
+        )?;
+        Ok(())
     }
 
     fn tx_add_header(
@@ -410,21 +520,30 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         block_hash: BlockHash,
         header: Header,
     ) -> Result<AddHeaderResult, LMDBCacheError> {
+        let height = prev_node.map(|p| p.data.height + 1).unwrap_or_default();
+        let work = prev_node
+            .map(|p| p.data.work + header.work())
+            .unwrap_or(header.work());
         let tip = Tip {
             header: header.clone(),
-            height: prev_node.map(|p| p.data.height + 1).unwrap_or_default(),
-            work: prev_node
-                .map(|p| p.data.work + header.work())
-                .unwrap_or(header.work()),
+            height,
+            work,
         };
-        let mut bytes = Vec::new();
-        tip.consensus_encode(&mut bytes)?;
-        tx.put(self.headers, &block_hash, &bytes, WriteFlags::empty())?;
-        tx.put(self.tips, &block_hash, &bytes, WriteFlags::empty())?;
-
+        let mut height_bytes = Vec::new();
+        let mut tip_bytes = Vec::new();
+        height.consensus_encode(&mut height_bytes)?;
+        tip.consensus_encode(&mut tip_bytes)?;
+        tx.put(self.headers, &block_hash, &tip_bytes, WriteFlags::empty())?;
+        tx.put(self.tips, &block_hash, &[], WriteFlags::empty())?;
+        tx.put(
+            self.heights,
+            &height_bytes,
+            &block_hash,
+            WriteFlags::empty(),
+        )?;
         if let Some(prev_node) = prev_node {
             let prev_hash = prev_node.data.header.block_hash();
-            self.tx_add_child(tx, prev_hash, block_hash)?;
+            tx.put(self.children, &prev_hash, &block_hash, WriteFlags::empty())?;
             // If the previous header already exists in `tips`, then remove it
             if self.tx_is_tip(tx, prev_hash)? {
                 tx.del(self.tips, &prev_hash, None)?;
@@ -513,6 +632,26 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
         )
         .unwrap_or_else(|err| panic!("Failed to get tips {:?}", err))
     }
+
+    fn get_headers_to_prune(&self, anchor: BlockHash) -> (BlockHeight, Vec<BlockHash>) {
+        log_err!(
+            self.run_ro_txn(|tx| self.tx_get_headers_to_prune(tx, anchor)),
+            self.log,
+            "tx_get_headers_to_prune({anchor})"
+        )
+        .unwrap_or_else(|err| panic!("Failed to get headers to prune {:?}", err))
+    }
+
+    fn prune_headers(&self, anchor_height: BlockHeight, to_prune: Vec<BlockHash>) {
+        let num = to_prune.len();
+        log_err!(
+            self.run_rw_txn(|tx| self.tx_prune_headers(tx, anchor_height, to_prune)),
+            self.log,
+            "tx_prune_headers()"
+        )
+        .unwrap_or_else(|err| panic!("Failed to prune headers {:?}", err));
+        info!(self.log, "Pruned {num} headers from LMDBHeaderCache");
+    }
 }
 
 #[cfg(test)]
@@ -521,7 +660,7 @@ mod test {
     use crate::BlockchainNetwork;
     use ic_btc_adapter_test_utils::generate_headers;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use tempfile::tempdir;
 
     #[test]
@@ -575,6 +714,79 @@ mod test {
             }
         }
         set
+    }
+
+    fn check_lmdb_cache_consistency<Header: BlockchainHeader>(cache: &LMDBHeaderCache<Header>) {
+        let tx = cache.db_env.begin_ro_txn().unwrap();
+
+        // Num of entries in headers and heights tables are equal
+        assert_eq!(
+            tx.open_ro_cursor(cache.headers)
+                .unwrap()
+                .iter_start()
+                .count(),
+            tx.open_ro_cursor(cache.heights)
+                .unwrap()
+                .iter_start()
+                .count()
+        );
+
+        // Check headers table
+        let mut headers = BTreeMap::new();
+        for row in tx.open_ro_cursor(cache.headers).unwrap().iter_start() {
+            let (mut key, mut val) = row.unwrap();
+            let hash = <BlockHash>::consensus_decode(&mut key).unwrap();
+            let data = <HeaderData<Header>>::consensus_decode(&mut val).unwrap();
+            assert_eq!(hash, data.header.block_hash());
+            headers.insert(
+                hash,
+                HeaderNode {
+                    data,
+                    children: vec![],
+                },
+            );
+        }
+
+        // Check children table
+        let mut tips = headers.keys().cloned().collect::<BTreeSet<_>>();
+        for row in tx.open_ro_cursor(cache.children).unwrap().iter_start() {
+            let (mut key, mut val) = row.unwrap();
+            let parent = <BlockHash>::consensus_decode(&mut key).unwrap();
+            let child = <BlockHash>::consensus_decode(&mut val).unwrap();
+            // Skip this assert because parent may have already been removed due to pruning.
+            // assert!(headers.get(&parent).is_some());
+            assert!(headers.get(&child).is_some());
+            headers
+                .entry(parent)
+                .and_modify(|node| node.children.push(child));
+            tips.remove(&parent);
+        }
+
+        // Check tips table
+        for row in tx.open_ro_cursor(cache.tips).unwrap().iter_start() {
+            let (mut key, _) = row.unwrap();
+            let hash = <BlockHash>::consensus_decode(&mut key).unwrap();
+            assert!(tips.contains(&hash));
+            tips.remove(&hash);
+        }
+        assert!(tips.is_empty());
+
+        // Check heights table
+        let last_pruned = cache.tx_get_last_pruned_height(&tx).unwrap_or_default();
+        let mut heights = BTreeSet::new();
+        for row in tx.open_ro_cursor(cache.heights).unwrap().iter_start() {
+            let (mut key, mut val) = row.unwrap();
+            let height = <BlockHeight>::consensus_decode(&mut key).unwrap();
+            let hash = <BlockHash>::consensus_decode(&mut val).unwrap();
+            let node = headers.get(&hash).unwrap();
+            assert_eq!(node.data.height, height);
+            if height < last_pruned {
+                assert_eq!(node.children.len(), 1);
+            }
+            heights.insert(height);
+        }
+        let max_height = heights.iter().max().cloned().unwrap_or_default();
+        assert_eq!(heights, (0u32..=max_height).collect::<BTreeSet<_>>());
     }
 
     #[test]
@@ -639,6 +851,78 @@ mod test {
             for hash in tips.iter() {
                 assert!(cache.get_header(*hash).is_some());
             }
+        });
+    }
+
+    #[test]
+    fn test_lmdb_header_cache_pruning() {
+        let dir = tempdir().unwrap();
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block_header = network.genesis_block_header();
+        let genesis_block_hash = genesis_block_header.block_hash();
+        with_test_replica_logger(|logger| {
+            let cache = <LMDBHeaderCache<bitcoin::block::Header>>::new(
+                genesis_block_header,
+                dir.path().to_path_buf(),
+                logger,
+            );
+            assert_eq!(cache.get_headers_to_prune(genesis_block_hash), (0, vec![]));
+
+            // Make a few new header
+            let mut next_headers = Vec::new();
+            for i in 1..4 {
+                for header in
+                    generate_headers(genesis_block_hash, genesis_block_header.time, i, &[])
+                {
+                    cache.add_header(header.block_hash(), header).unwrap();
+                    check_lmdb_cache_consistency(&cache);
+                    let next_node = cache.get_header(header.block_hash()).unwrap();
+                    assert_eq!(next_node.data.header, header);
+                    next_headers.push(header);
+                }
+            }
+            let intermediate = cache.get_active_chain_tip();
+            // Extend one of the intermediate node again
+            for i in 1..4 {
+                for header in generate_headers(
+                    intermediate.header.block_hash(),
+                    genesis_block_header.time,
+                    i,
+                    &[],
+                ) {
+                    cache.add_header(header.block_hash(), header).unwrap();
+                    check_lmdb_cache_consistency(&cache);
+                    let next_node = cache.get_header(header.block_hash()).unwrap();
+                    assert_eq!(next_node.data.header, header);
+                    next_headers.push(header);
+                }
+            }
+            let tip = cache.get_active_chain_tip();
+
+            // Prune from intermediate
+            let (anchor_height, to_prune) =
+                cache.get_headers_to_prune(intermediate.header.block_hash());
+            assert_eq!(anchor_height, 3);
+            // for <= height 3, there are 1 + 2 + 3 - 3 = 3 nodes to be pruned
+            assert_eq!(to_prune.len(), 3);
+            cache.prune_headers(anchor_height, to_prune);
+            check_lmdb_cache_consistency(&cache);
+            assert_eq!(
+                cache.get_headers_to_prune(intermediate.header.block_hash()),
+                (3, vec![])
+            );
+
+            // Prune from tip
+            let (anchor_height, to_prune) = cache.get_headers_to_prune(tip.header.block_hash());
+            assert_eq!(anchor_height, 6);
+            // for <= height 6, there are 1 + 2 + 3 - 3 = 3 nodes to be pruned
+            assert_eq!(to_prune.len(), 3);
+            cache.prune_headers(anchor_height, to_prune);
+            check_lmdb_cache_consistency(&cache);
+            assert_eq!(
+                cache.get_headers_to_prune(tip.header.block_hash()),
+                (6, vec![])
+            )
         });
     }
 }
