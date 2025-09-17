@@ -110,6 +110,20 @@ rust_bench(
     ],
 )
 
+
+rust_bench(
+    name = "scalar_bench",
+    testonly = True,
+    srcs = ["benches/scalar.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)
+
 rust_bench(
     name = "hash2curve_bench",
     testonly = True,

@@ -82,6 +82,23 @@ fn random_lagrange_coeffs<R: Rng + CryptoRng>(
     .unwrap()
 }
 
+fn poly_compute_lagrange(c: &mut Criterion) {
+    for curve in EccCurveType::all() {
+        let mut group = c.benchmark_group(format!("crypto_lagrange_coefficients_{curve}"));
+        group.warm_up_time(std::time::Duration::from_millis(100));
+
+        for n in [13, 34, 40] {
+            let node_indicies = (0..n).collect::<Vec<NodeIndex>>();
+
+            group.bench_function(&format!("setup/{n}"), |b| {
+                b.iter(|| {
+                    let _ = LagrangeCoefficients::at_zero(curve, &node_indicies);
+                })
+            });
+        }
+    }
+}
+
 fn poly_interpolate_point(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
@@ -149,6 +166,7 @@ fn poly_interpolate_scalar(c: &mut Criterion) {
 criterion_group!(
     benches,
     poly_bench,
+    poly_compute_lagrange,
     poly_interpolate_point,
     poly_interpolate_scalar
 );
