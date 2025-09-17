@@ -275,8 +275,6 @@ jobs:
             bazel_do build "${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
             bazel_do test "${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
 
-            done
-
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
