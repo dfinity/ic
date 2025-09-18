@@ -39,13 +39,11 @@ impl Registry {
 
         let mut mutations = vec![subnet_record_mutation];
 
-        if let Some(chain_key_signing_enable) = payload.chain_key_signing_enable {
-            mutations.append(
-                &mut self.mutations_to_enable_chain_key(subnet_id, &chain_key_signing_enable),
-            );
+        if let Some(chain_key_enable) = payload.chain_key_enable {
+            mutations.append(&mut self.mutations_to_enable_chain_key(subnet_id, &chain_key_enable));
         }
 
-        let chain_key_signing_disable = payload.chain_key_signing_disable;
+        let chain_key_signing_disable = payload.chain_key_disable;
 
         if let Some(chain_key_signing_disable) = chain_key_signing_disable {
             mutations.append(
@@ -111,9 +109,9 @@ impl Registry {
         }
 
         // Signing cannot be enabled unless the key was previously held by the subnet.
-        if let Some(ref chain_key_signing_enable) = payload.chain_key_signing_enable {
+        if let Some(ref chain_key_enable) = payload.chain_key_enable {
             let current_keys = self.get_master_public_keys_held_by_subnet(subnet_id);
-            for key_id in chain_key_signing_enable {
+            for key_id in chain_key_enable {
                 if !current_keys.contains(key_id) {
                     panic!(
                         "{LOG_PREFIX}Proposal attempts to enable signing for chain key '{key_id}' on Subnet '{subnet_id}', \
@@ -126,12 +124,11 @@ impl Registry {
 
         // Validate that proposal is not attempting to disable and enable signing for the same key
         // in the same proposal
-        if let (Some(chain_key_signing_enable), Some(chain_key_signing_disable)) = (
-            &payload.chain_key_signing_enable,
-            &payload.chain_key_signing_disable,
-        ) {
-            let enable_set = chain_key_signing_enable.iter().collect::<HashSet<_>>();
-            let disable_set = chain_key_signing_disable.iter().collect::<HashSet<_>>();
+        if let (Some(chain_key_enable), Some(chain_key_disable)) =
+            (&payload.chain_key_enable, &payload.chain_key_disable)
+        {
+            let enable_set = chain_key_enable.iter().collect::<HashSet<_>>();
+            let disable_set = chain_key_disable.iter().collect::<HashSet<_>>();
             let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
             if !intersection.is_empty() {
                 panic!(
@@ -232,8 +229,8 @@ pub struct UpdateSubnetPayload {
     pub features: Option<SubnetFeaturesPb>,
 
     pub chain_key_config: Option<ChainKeyConfig>,
-    pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
-    pub chain_key_signing_disable: Option<Vec<MasterPublicKeyId>>,
+    pub chain_key_enable: Option<Vec<MasterPublicKeyId>>,
+    pub chain_key_disable: Option<Vec<MasterPublicKeyId>>,
 
     pub max_number_of_canisters: Option<u64>,
 
@@ -430,8 +427,8 @@ fn merge_subnet_record(
         halt_at_cup_height,
         features,
         chain_key_config,
-        chain_key_signing_enable: _,
-        chain_key_signing_disable: _,
+        chain_key_enable: _,
+        chain_key_disable: _,
         max_number_of_canisters,
         ssh_readonly_access,
         ssh_backup_access,
@@ -525,8 +522,8 @@ mod tests {
             ssh_readonly_access: None,
             ssh_backup_access: None,
             chain_key_config: None,
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
             // Deprecated/unused values follow
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
@@ -609,8 +606,8 @@ mod tests {
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
             chain_key_config: Some(chain_key_config.clone()),
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
             // Deprecated/unused values follow
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
@@ -705,8 +702,8 @@ mod tests {
             ssh_readonly_access: None,
             ssh_backup_access: None,
             chain_key_config: None,
-            chain_key_signing_enable: None,
-            chain_key_signing_disable: None,
+            chain_key_enable: None,
+            chain_key_disable: None,
             // Deprecated/unused values follow
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
@@ -792,7 +789,7 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
-        payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
+        payload.chain_key_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
 
         // Should panic because we are trying to enable a key that hasn't previously held it
         registry.do_update_subnet(payload);
@@ -848,7 +845,7 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
-        payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
+        payload.chain_key_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
 
         registry.do_update_subnet(payload);
     }
@@ -1106,7 +1103,7 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
-        payload.chain_key_signing_enable = Some(vec![master_public_key_held_by_subnet.clone()]);
+        payload.chain_key_enable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
         registry.do_update_subnet(payload);
 
@@ -1135,7 +1132,7 @@ mod tests {
         // The next payload to disable the chain key.
         let mut payload = make_empty_update_payload(subnet_id);
 
-        payload.chain_key_signing_disable = Some(vec![master_public_key_held_by_subnet.clone()]);
+        payload.chain_key_disable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
         registry.do_update_subnet(payload);
 
@@ -1220,8 +1217,8 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
-        payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
-        payload.chain_key_signing_disable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
+        payload.chain_key_enable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
+        payload.chain_key_disable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
 
         // Should panic because we are trying to enable/disable same key
         registry.do_update_subnet(payload);
