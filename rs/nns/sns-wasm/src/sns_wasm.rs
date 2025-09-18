@@ -691,9 +691,7 @@ where
         for sns in self.deployed_sns_list.iter() {
             add_canister_id_to_map("root", sns.root_canister_id);
             add_canister_id_to_map("governance", sns.governance_canister_id);
-            add_canister_id_to_map("ledger", sns.ledger_canister_id);
             add_canister_id_to_map("swap", sns.swap_canister_id);
-            add_canister_id_to_map("index", sns.index_canister_id);
             // We can't add the archive canisters as the SNS-WASM canister is not aware of them.
         }
 
@@ -5136,14 +5134,6 @@ mod test {
             {
                 "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "governance"},
                 "targets": ["ryjl3-tyaaa-aaaaa-aaaba-cai.raw.icp0.io", "rdmx6-jaaaa-aaaaa-aaadq-cai.raw.icp0.io"]
-            },
-            {
-                "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "index"},
-                "targets": ["rno2w-sqaaa-aaaaa-aaacq-cai.raw.icp0.io"]
-            },
-            {
-                "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "ledger"},
-                "targets": ["r7inp-6aaaa-aaaaa-aaabq-cai.raw.icp0.io", "qoctq-giaaa-aaaaa-aaaea-cai.raw.icp0.io"]
             },
             {
                 "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "root"},
