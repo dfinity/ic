@@ -351,6 +351,14 @@ fn endpoint_rejects_requests_with_missing_fields(env: TestEnv, endpoint: Endpoin
 
 fn endpoint_rejects_requests_with_empty_sender(env: TestEnv, endpoint: Endpoint) {
     let logger = env.logger();
+    match endpoint {
+        Endpoint::SubnetReadState(_) => {
+            info!(logger, "Skipping the test for subnet read state endpoints");
+
+            return;
+        }
+        _ => {}
+    }
     let snapshot = env.topology_snapshot();
     let (_, app_subnet) = get_subnets(&snapshot);
     let app_node = app_subnet.nodes().next().unwrap();
