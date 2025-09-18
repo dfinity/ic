@@ -15,15 +15,14 @@
 //! (publicly) re-exported by the root module.
 
 use crate::{
-    pb::v1::{
-        high_capacity_registry_get_value_response, high_capacity_registry_mutation,
-        high_capacity_registry_value, registry_mutation, HighCapacityRegistryAtomicMutateRequest,
-        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
-        HighCapacityRegistryMutation, HighCapacityRegistryValue, LargeValueChunkKeys,
-        RegistryAtomicMutateRequest, RegistryDelta, RegistryGetChangesSinceResponse,
-        RegistryMutation, RegistryValue,
-    },
     Error,
+    pb::v1::{
+        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryDelta,
+        HighCapacityRegistryMutation, HighCapacityRegistryValue, LargeValueChunkKeys,
+        RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation, RegistryValue,
+        high_capacity_registry_get_value_response, high_capacity_registry_mutation,
+        high_capacity_registry_value, registry_mutation,
+    },
 };
 use async_trait::async_trait;
 use ic_crypto_sha2::Sha256;
@@ -31,31 +30,6 @@ use mockall::automock;
 
 mod downgrade_get_changes_since_response {
     use super::*;
-
-    impl TryFrom<HighCapacityRegistryGetChangesSinceResponse> for RegistryGetChangesSinceResponse {
-        type Error = String;
-
-        fn try_from(
-            original: HighCapacityRegistryGetChangesSinceResponse,
-        ) -> Result<RegistryGetChangesSinceResponse, String> {
-            let HighCapacityRegistryGetChangesSinceResponse {
-                error,
-                version,
-                deltas,
-            } = original;
-
-            let deltas = deltas
-                .into_iter()
-                .map(RegistryDelta::try_from)
-                .collect::<Result<Vec<RegistryDelta>, String>>()?;
-
-            Ok(RegistryGetChangesSinceResponse {
-                error,
-                version,
-                deltas,
-            })
-        }
-    }
 
     impl TryFrom<HighCapacityRegistryDelta> for RegistryDelta {
         type Error = String;
@@ -234,8 +208,7 @@ pub async fn dechunkify_mutation_value(
     let mutation_type =
         registry_mutation::Type::try_from(mutation.mutation_type).map_err(|err| {
             Error::MalformedMessage(format!(
-                "Unable to determine mutation's type. Cause: {}. mutation: {:#?}",
-                err, mutation,
+                "Unable to determine mutation's type. Cause: {err}. mutation: {mutation:#?}",
             ))
         })?;
 
@@ -302,7 +275,7 @@ pub async fn dechunkify_get_value_response_content(
         ) => dechunkify(get_chunk, &large_value_chunk_keys)
             .await
             .map_err(|err| {
-                Error::UnknownError(format!("Unable to dechunkify get_value response: {}", err,))
+                Error::UnknownError(format!("Unable to dechunkify get_value response: {err}",))
             }),
     }
 }
@@ -351,10 +324,7 @@ async fn dechunkify_value_content(
 
         high_capacity_registry_value::Content::LargeValueChunkKeys(keys) => {
             let monolithic_blob = dechunkify(get_chunk, &keys).await.map_err(|err| {
-                Error::UnknownError(format!(
-                    "Unable to reconstitute chunked/large value: {}",
-                    err,
-                ))
+                Error::UnknownError(format!("Unable to reconstitute chunked/large value: {err}",))
             })?;
 
             Ok(Some(monolithic_blob))

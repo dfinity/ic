@@ -2,23 +2,25 @@ use super::*;
 use crate::{
     benches_util::check_projected_instructions,
     governance::{
-        KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN, MAX_FOLLOWEES_PER_TOPIC,
-        MAX_NEURONS_FUND_PARTICIPANTS, MAX_NEURON_RECENT_BALLOTS, MAX_NUMBER_OF_NEURONS,
-        MAX_NUM_HOT_KEYS_PER_NEURON,
+        MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NEURONS_FUND_PARTICIPANTS,
+        MAX_NUM_HOT_KEYS_PER_NEURON, MAX_NUMBER_OF_NEURONS,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_data_validation::NeuronDataValidator,
     neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
     pb::v1::{BallotInfo, Followees, KnownNeuronData, Vote},
+    proposals::register_known_neuron::{
+        KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN,
+    },
     temporarily_disable_known_neuron_voting_history,
     temporarily_enable_known_neuron_voting_history,
 };
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::ProposalId;
 use maplit::hashmap;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 use std::collections::BTreeSet;
 
 /// Whether the neuron should be stored in heap or stable storage.
@@ -157,7 +159,7 @@ fn set_up_neuron_store(
 }
 
 #[bench(raw)]
-fn add_neuron_active_typical_stable() -> BenchResult {
+fn add_neuron_active_typical() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
     let neuron =
@@ -169,7 +171,7 @@ fn add_neuron_active_typical_stable() -> BenchResult {
 }
 
 #[bench(raw)]
-fn add_neuron_active_maximum_stable() -> BenchResult {
+fn add_neuron_active_maximum() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
     let neuron =
@@ -228,6 +230,7 @@ fn modify_neuron_all_sections(neuron: &mut Neuron) {
     neuron.set_known_neuron_data(KnownNeuronData {
         name: "name".to_string(),
         description: Some("description".to_string()),
+        links: vec!["http://example.com".to_string()],
     });
 }
 
@@ -236,22 +239,22 @@ fn modify_neuron_main_section(neuron: &mut Neuron) {
 }
 
 #[bench(raw)]
-fn with_neuron_mut_all_sections_typical_stable() -> BenchResult {
+fn with_neuron_mut_all_sections_typical() -> BenchResult {
     with_neuron_mut_benchmark(NeuronSize::Typical, modify_neuron_all_sections)
 }
 
 #[bench(raw)]
-fn with_neuron_mut_all_sections_maximum_stable() -> BenchResult {
+fn with_neuron_mut_all_sections_maximum() -> BenchResult {
     with_neuron_mut_benchmark(NeuronSize::Maximum, modify_neuron_all_sections)
 }
 
 #[bench(raw)]
-fn with_neuron_mut_main_section_typical_stable() -> BenchResult {
+fn with_neuron_mut_main_section_typical() -> BenchResult {
     with_neuron_mut_benchmark(NeuronSize::Typical, modify_neuron_main_section)
 }
 
 #[bench(raw)]
-fn with_neuron_mut_main_section_maximum_stable() -> BenchResult {
+fn with_neuron_mut_main_section_maximum() -> BenchResult {
     with_neuron_mut_benchmark(NeuronSize::Maximum, modify_neuron_main_section)
 }
 
@@ -300,6 +303,7 @@ fn record_known_neuron_vote() -> BenchResult {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: "a".repeat(KNOWN_NEURON_NAME_MAX_LEN),
             description: Some("b".repeat(KNOWN_NEURON_DESCRIPTION_MAX_LEN)),
+            links: vec!["http://example.com".to_string()],
         }))
         .build();
 
@@ -352,7 +356,7 @@ fn neuron_metrics_benchmark() -> BenchResult {
 }
 
 #[bench(raw)]
-fn neuron_metrics_calculation_stable() -> BenchResult {
+fn neuron_metrics_calculation() -> BenchResult {
     neuron_metrics_benchmark()
 }
 
@@ -397,7 +401,7 @@ fn list_ready_to_spawn_neuron_ids_benchmark() -> BenchResult {
 }
 
 #[bench(raw)]
-fn list_ready_to_spawn_neuron_ids_stable() -> BenchResult {
+fn list_ready_to_spawn_neuron_ids() -> BenchResult {
     list_ready_to_spawn_neuron_ids_benchmark()
 }
 
@@ -423,7 +427,7 @@ fn add_neuron_ready_to_unstake_maturity(
 }
 
 #[bench(raw)]
-fn unstake_maturity_of_dissolved_neurons_stable() -> BenchResult {
+fn unstake_maturity_of_dissolved_neurons() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 1_000, 2_000);
     for _ in 0..100 {
@@ -482,7 +486,7 @@ fn draw_maturity_from_neurons_fund_benchmark() -> BenchResult {
 }
 
 #[bench(raw)]
-fn draw_maturity_from_neurons_fund_stable() -> BenchResult {
+fn draw_maturity_from_neurons_fund() -> BenchResult {
     draw_maturity_from_neurons_fund_benchmark()
 }
 
@@ -508,7 +512,7 @@ fn list_active_neurons_fund_neurons_benchmark() -> BenchResult {
 }
 
 #[bench(raw)]
-fn list_active_neurons_fund_neurons_stable() -> BenchResult {
+fn list_active_neurons_fund_neurons() -> BenchResult {
     list_active_neurons_fund_neurons_benchmark()
 }
 
@@ -529,7 +533,7 @@ fn validate_all_neurons(neuron_store: &NeuronStore, validator: &mut NeuronDataVa
 }
 
 #[bench(raw)]
-fn neuron_data_validation_stable() -> BenchResult {
+fn neuron_data_validation() -> BenchResult {
     let mut rng = new_rng();
     let neuron_store = set_up_neuron_store(&mut rng, 100, 200);
     let mut validator = NeuronDataValidator::new();

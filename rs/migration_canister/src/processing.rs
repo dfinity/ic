@@ -4,23 +4,23 @@
 //! process several requests concurrently.
 
 use crate::{
+    Event, RequestState, ValidationError,
     canister_state::{
-        requests::{insert_request, list_by, remove_request},
         MethodGuard,
+        requests::{insert_request, list_by, remove_request},
     },
     external_interfaces::{
         management::{
-            canister_status, get_canister_info, rename_canister, set_exclusive_controller,
-            set_original_controllers, CanisterStatusType,
+            CanisterStatusType, canister_status, get_canister_info, rename_canister,
+            set_exclusive_controller, set_original_controllers,
         },
         registry::migrate_canister,
     },
-    Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
 use ic_cdk::{
     api::time,
-    management_canister::{subnet_info, SubnetInfoArgs},
+    management_canister::{SubnetInfoArgs, subnet_info},
     println,
 };
 use std::{convert::Infallible, future::Future, iter::zip};
@@ -41,13 +41,29 @@ pub async fn process_all_by_predicate<F>(
     };
     let mut tasks = vec![];
     let requests = list_by(predicate);
+    if requests.is_empty() {
+        return;
+    }
+    println!(
+        "Entering `{}` with {} pending requests",
+        tag,
+        requests.len()
+    );
     for request in requests.iter() {
         tasks.push(processor(request.clone()));
     }
     let results = join_all(tasks).await;
+    let mut success_counter = 0;
     for (req, res) in zip(requests, results) {
+        if res.is_success() {
+            success_counter += 1;
+        }
         res.transition(req);
     }
+    println!(
+        "Exiting `{}` with {} successful transitions.",
+        tag, success_counter
+    );
 }
 
 /// Accepts an `Accepted` request, returns `ControllersChanged` on success.
@@ -164,6 +180,7 @@ pub async fn process_stopped(
         request.source,
         canister_version,
         request.target,
+        request.target_subnet,
         canister_history_total_num,
     )
     .await

@@ -1,5 +1,5 @@
 use axum::{extract::Request, middleware::Next, response::Response};
-use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 
 // Add various headers
 pub async fn middleware(request: Request, next: Next) -> Response {

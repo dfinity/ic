@@ -45,6 +45,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
@@ -54,7 +55,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::mock;

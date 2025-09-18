@@ -138,7 +138,7 @@ fn as_byte_array_len(value: &Value, range: Range<usize>) -> Option<Vec<u8>> {
 fn bytes_to_hex(data: &[u8]) -> String {
     let mut res = String::new();
     for b in data {
-        res.push_str(&format!("{:02X}", b))
+        res.push_str(&format!("{b:02X}"))
     }
     res
 }
@@ -169,7 +169,7 @@ fn hexdigit_to_u8(c: u8) -> u8 {
         b'0'..=b'9' => c - b'0',
         b'A'..=b'F' => c - b'A' + 0xA,
         b'a'..=b'f' => c - b'a' + 0xA,
-        _ => panic!("Not a hex digit: {}", c),
+        _ => panic!("Not a hex digit: {c}"),
     }
 }
 

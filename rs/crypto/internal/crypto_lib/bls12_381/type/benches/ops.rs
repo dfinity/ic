@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
-    G1Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
+    G1Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
@@ -18,7 +18,7 @@ fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
 }
 
 fn random_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Projective {
-    G2Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
+    G2Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
@@ -276,7 +276,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.gen::<[u8; 32]>(),
+            || rng.r#gen::<[u8; 32]>(),
             |bytes| G1Projective::hash(b"dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
@@ -383,14 +383,14 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     });
 
     for n in [2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
-        group.bench_function(format!("multiexp_naive_{}", n), |b| {
+        group.bench_function(format!("multiexp_naive_{n}"), |b| {
             b.iter_batched_ref(
                 || g1_muln_instance(n, rng),
                 |(points, scalars)| g1_multiexp_naive(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });
-        group.bench_function(format!("multiexp_muln_{}", n), |b| {
+        group.bench_function(format!("multiexp_muln_{n}"), |b| {
             b.iter_batched_ref(
                 || g1_muln_instance(n, rng),
                 |(points, scalars)| G1Projective::muln_vartime(&points[..], &scalars[..]),
@@ -443,7 +443,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.gen::<[u8; 32]>(),
+            || rng.r#gen::<[u8; 32]>(),
             |bytes| G2Projective::hash(b"dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
@@ -558,7 +558,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     });
 
     for n in [2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
-        group.bench_function(format!("multiexp_naive_{}", n), |b| {
+        group.bench_function(format!("multiexp_naive_{n}"), |b| {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| g2_multiexp_naive(&points[..], &scalars[..]),
@@ -566,7 +566,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             )
         });
 
-        group.bench_function(format!("multiexp_muln_{}", n), |b| {
+        group.bench_function(format!("multiexp_muln_{n}"), |b| {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
@@ -615,7 +615,7 @@ fn pairing_ops(c: &mut Criterion) {
 
     group.bench_function("multiply_u16", |b| {
         b.iter_batched_ref(
-            || rng.gen::<u16>(),
+            || rng.r#gen::<u16>(),
             |s| Gt::g_mul_u16(*s),
             BatchSize::SmallInput,
         )
@@ -662,7 +662,7 @@ fn pairing_ops(c: &mut Criterion) {
     });
 
     for n in [2, 3, 10, 20] {
-        group.bench_function(format!("{}-pairing", n), |b| {
+        group.bench_function(format!("{n}-pairing"), |b| {
             b.iter_batched_ref(
                 || n_pairing_instance(n, rng),
                 |terms| {

@@ -83,7 +83,7 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister_state::{set_governance_for_tests, CanisterRandomnessGenerator};
+    use crate::canister_state::{CanisterRandomnessGenerator, set_governance_for_tests};
     use crate::governance::Governance;
     use crate::test_utils::{MockEnvironment, StubCMC, StubIcpLedger};
     use ic_nns_governance_api as api;

@@ -56,16 +56,15 @@
 use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
-        HttpsConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, NonmainnetFeatures, RawEffectivePrincipal, RawMessageId, RawTime,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use flate2::read::GzDecoder;
 use ic_management_canister_types::{
@@ -84,7 +83,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::{Child, Command},
-    sync::{mpsc::channel, Arc},
+    sync::{Arc, mpsc::channel},
     thread,
     thread::JoinHandle,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -160,7 +159,7 @@ pub struct PocketIcBuilder {
     max_request_time_ms: Option<u64>,
     read_only_state_dir: Option<PathBuf>,
     state_dir: Option<PocketIcState>,
-    nonmainnet_features: NonmainnetFeatures,
+    icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
@@ -178,7 +177,7 @@ impl PocketIcBuilder {
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             read_only_state_dir: None,
             state_dir: None,
-            nonmainnet_features: NonmainnetFeatures::default(),
+            icp_config: IcpConfig::default(),
             log_level: None,
             bitcoind_addr: None,
             icp_features: IcpFeatures::default(),
@@ -200,7 +199,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
@@ -217,7 +216,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
@@ -259,8 +258,8 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_nonmainnet_features(mut self, nonmainnet_features: NonmainnetFeatures) -> Self {
-        self.nonmainnet_features = nonmainnet_features;
+    pub fn with_icp_config(mut self, icp_config: IcpConfig) -> Self {
+        self.icp_config = icp_config;
         self
     }
 
@@ -419,6 +418,8 @@ impl PocketIcBuilder {
 
     /// Enables selected ICP features supported by PocketIC and implemented by system canisters
     /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
+    /// Subnets to which the system canisters are deployed are automatically declared as empty subnets,
+    /// e.g., `PocketIcBuilder::with_nns_subnet` is implicitly implied by specifying the `icp_token` feature.
     pub fn with_icp_features(mut self, icp_features: IcpFeatures) -> Self {
         self.icp_features = icp_features;
         self
@@ -427,6 +428,7 @@ impl PocketIcBuilder {
     /// Sets the initial timestamp of the new instance to the provided value which must be at least
     /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
     /// - 06 May 2021 21:17:10 CEST otherwise.
+    #[deprecated(note = "Use `with_initial_time` instead")]
     pub fn with_initial_timestamp(mut self, initial_timestamp_nanos: u64) -> Self {
         self.initial_time = Some(InitialTime::Timestamp(RawTime {
             nanos_since_epoch: initial_timestamp_nanos,
@@ -434,12 +436,22 @@ impl PocketIcBuilder {
         self
     }
 
+    /// Sets the initial time of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    pub fn with_initial_time(mut self, initial_time: Time) -> Self {
+        self.initial_time = Some(InitialTime::Timestamp(RawTime {
+            nanos_since_epoch: initial_time.as_nanos_since_unix_epoch(),
+        }));
+        self
+    }
+
     /// Configures the new instance to make progress automatically,
     /// i.e., periodically update the time of the IC instance
     /// to the real time and execute rounds on the subnets.
-    pub fn with_auto_progress(mut self, artificial_delay_ms: Option<u64>) -> Self {
+    pub fn with_auto_progress(mut self) -> Self {
         let config = AutoProgressConfig {
-            artificial_delay_ms,
+            artificial_delay_ms: None,
         };
         self.initial_time = Some(InitialTime::AutoProgress(config));
         self
@@ -470,7 +482,7 @@ impl Time {
 impl std::fmt::Debug for Time {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let nanos_since_unix_epoch = self.as_nanos_since_unix_epoch();
-        write!(f, "{}", nanos_since_unix_epoch)
+        write!(f, "{nanos_since_unix_epoch}")
     }
 }
 
@@ -503,7 +515,9 @@ impl TryFrom<Time> for SystemTime {
         if roundtrip.as_nanos_since_unix_epoch() == nanos {
             Ok(system_time)
         } else {
-            Err(format!("Converting UNIX timestamp {} in nanoseconds to SystemTime failed due to losing precision", nanos))
+            Err(format!(
+                "Converting UNIX timestamp {nanos} in nanoseconds to SystemTime failed due to losing precision"
+            ))
         }
     }
 }
@@ -558,7 +572,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         state_dir: Option<PocketIcState>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
@@ -583,7 +597,7 @@ impl PocketIc {
                 max_request_time_ms,
                 read_only_state_dir,
                 state_dir,
-                nonmainnet_features,
+                icp_config,
                 log_level,
                 bitcoind_addr,
                 icp_features,
@@ -785,13 +799,6 @@ impl PocketIc {
     /// and the HTTP gateway for this IC instance.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn stop_live(&mut self) {
-        let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.stop_live().await })
-    }
-
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub fn make_deterministic(&mut self) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stop_live().await })
     }
@@ -1805,7 +1812,11 @@ pub struct RejectResponse {
 impl std::fmt::Display for RejectResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Follows [agent-rs](https://github.com/dfinity/agent-rs/blob/a651dbbe69e61d4e8508c144cd60cfa3118eeb3a/ic-agent/src/agent/agent_error.rs#L54)
-        write!(f, "PocketIC returned a rejection error: reject code {:?}, reject message {}, error code {:?}", self.reject_code, self.reject_message, self.error_code)
+        write!(
+            f,
+            "PocketIC returned a rejection error: reject code {:?}, reject message {}, error code {:?}",
+            self.reject_code, self.reject_message, self.error_code
+        )
     }
 }
 
@@ -1853,13 +1864,12 @@ fn check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> 
     cmd.arg("--version");
     let version = cmd.output().map_err(|e| e.to_string())?.stdout;
     let version_str = String::from_utf8(version)
-        .map_err(|e| format!("Failed to parse PocketIC server version: {}.", e))?;
+        .map_err(|e| format!("Failed to parse PocketIC server version: {e}."))?;
     let version_line = version_str.trim_end_matches('\n');
-    let expected_version_line = format!("pocket-ic-server {}", EXPECTED_SERVER_VERSION);
+    let expected_version_line = format!("pocket-ic-server {EXPECTED_SERVER_VERSION}");
     if version_line != expected_version_line {
         return Err(format!(
-            "Incompatible PocketIC server version: got {}; expected {}.",
-            version_line, expected_version_line
+            "Incompatible PocketIC server version: got {version_line}; expected {expected_version_line}."
         ));
     }
     Ok(())
@@ -1871,14 +1881,14 @@ async fn download_pocketic_server(
 ) -> Result<(), String> {
     let binary = reqwest::get(server_url)
         .await
-        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .map_err(|e| format!("Failed to download PocketIC server: {e}"))?
         .bytes()
         .await
-        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .map_err(|e| format!("Failed to download PocketIC server: {e}"))?
         .to_vec();
     let mut gz = GzDecoder::new(&binary[..]);
     let _ = std::io::copy(&mut gz, &mut out)
-        .map_err(|e| format!("Failed to write PocketIC server binary: {}", e));
+        .map_err(|e| format!("Failed to write PocketIC server binary: {e}"));
     Ok(())
 }
 
@@ -1892,7 +1902,7 @@ pub struct StartServerParams {
 /// Attempt to start a new PocketIC server.
 pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     let default_bin_dir =
-        std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
+        std::env::temp_dir().join(format!("pocket-ic-server-{EXPECTED_SERVER_VERSION}"));
     let default_bin_path = default_bin_dir.join("pocket-ic");
     let mut bin_path: PathBuf = params.server_binary.unwrap_or_else(|| {
         std::env::var_os("POCKET_IC_BIN")
@@ -1908,36 +1918,48 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         options.write(true).create_new(true);
         #[cfg(unix)]
         options.mode(0o777);
-        if let Ok(out) = options.open(&default_bin_path) {
-            #[cfg(target_os = "macos")]
-            let os = "darwin";
-            #[cfg(not(target_os = "macos"))]
-            let os = "linux";
-            #[cfg(target_arch = "aarch64")]
-            let arch = "arm64";
-            #[cfg(not(target_arch = "aarch64"))]
-            let arch = "x86_64";
-            let server_url = format!(
-                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
-                EXPECTED_SERVER_VERSION, arch, os
-            );
-            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
-            if let Err(e) = download_pocketic_server(server_url, out).await {
-                let _ = std::fs::remove_file(default_bin_path);
-                panic!("{}", e);
+        match options.open(&default_bin_path) {
+            Ok(out) => {
+                #[cfg(target_os = "macos")]
+                let os = "darwin";
+                #[cfg(not(target_os = "macos"))]
+                let os = "linux";
+                #[cfg(target_arch = "aarch64")]
+                let arch = "arm64";
+                #[cfg(not(target_arch = "aarch64"))]
+                let arch = "x86_64";
+                let server_url = format!(
+                    "https://github.com/dfinity/pocketic/releases/download/{EXPECTED_SERVER_VERSION}/pocket-ic-{arch}-{os}.gz"
+                );
+                println!(
+                    "Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.",
+                    e,
+                    EXPECTED_SERVER_VERSION,
+                    server_url,
+                    default_bin_path.display(),
+                    EXPECTED_SERVER_VERSION
+                );
+                if let Err(e) = download_pocketic_server(server_url, out).await {
+                    let _ = std::fs::remove_file(default_bin_path);
+                    panic!("{}", e);
+                }
             }
-        } else {
-            // PocketIC server has already been created: wait until it's fully downloaded.
-            let start = std::time::Instant::now();
-            loop {
-                if check_pocketic_server_version(&default_bin_path).is_ok() {
-                    break;
+            _ => {
+                // PocketIC server has already been created: wait until it's fully downloaded.
+                let start = std::time::Instant::now();
+                loop {
+                    if check_pocketic_server_version(&default_bin_path).is_ok() {
+                        break;
+                    }
+                    if start.elapsed() > std::time::Duration::from_secs(60) {
+                        let _ = std::fs::remove_file(&default_bin_path);
+                        panic!(
+                            "Timed out waiting for PocketIC server being available at the local path {}.",
+                            default_bin_path.display()
+                        );
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                if start.elapsed() > std::time::Duration::from_secs(60) {
-                    let _ = std::fs::remove_file(&default_bin_path);
-                    panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }
     }
@@ -1946,7 +1968,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         // We use the test driver's process ID to share the PocketIC server between multiple tests
         // launched by the same test driver.
         let test_driver_pid = std::process::id();
-        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid))
+        std::env::temp_dir().join(format!("pocket_ic_{test_driver_pid}.port"))
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
@@ -1986,7 +2008,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                     .expect("Failed to parse port to number");
                 break (
                     child,
-                    Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap(),
+                    Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap(),
                 );
             }
         }
@@ -2005,10 +2027,10 @@ impl std::fmt::Display for DefaultEffectiveCanisterIdError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             DefaultEffectiveCanisterIdError::ReqwestError(err) => {
-                write!(f, "ReqwestError({})", err)
+                write!(f, "ReqwestError({err})")
             }
-            DefaultEffectiveCanisterIdError::JsonError(err) => write!(f, "JsonError({})", err),
-            DefaultEffectiveCanisterIdError::Utf8Error(err) => write!(f, "Utf8Error({})", err),
+            DefaultEffectiveCanisterIdError::JsonError(err) => write!(f, "JsonError({err})"),
+            DefaultEffectiveCanisterIdError::Utf8Error(err) => write!(f, "Utf8Error({err})"),
         }
     }
 }
@@ -2077,10 +2099,7 @@ mod test {
         );
         for ic_reject_code in ic_error_types::RejectCode::iter() {
             let reject_code: RejectCode = (ic_reject_code as u64).try_into().unwrap();
-            assert_eq!(
-                format!("{:?}", reject_code),
-                format!("{:?}", ic_reject_code)
-            );
+            assert_eq!(format!("{reject_code:?}"), format!("{:?}", ic_reject_code));
         }
     }
 
@@ -2092,7 +2111,7 @@ mod test {
         );
         for ic_error_code in ic_error_types::ErrorCode::iter() {
             let error_code: ErrorCode = (ic_error_code as u64).try_into().unwrap();
-            assert_eq!(format!("{:?}", error_code), format!("{:?}", ic_error_code));
+            assert_eq!(format!("{error_code:?}"), format!("{:?}", ic_error_code));
         }
     }
 }

@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
@@ -27,9 +26,9 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION,
-    MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
-    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS, UTXOS_COUNT_THRESHOLD,
+    CKBTC_LEDGER_MEMO_SIZE, Log, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RELAY_FEE_PER_VBYTE,
+    MIN_RESUBMISSION_DELAY, MinterInfo, Network, REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
+    UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -141,7 +140,7 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
+            panic!("Expected a successful reply, got a reject: {reject}")
         }
     }
 }
@@ -267,8 +266,7 @@ fn test_upgrade_read_only() {
     let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 
     // 2. retrieve_btc
@@ -287,8 +285,7 @@ fn test_upgrade_read_only() {
     let res = Decode!(&res.bytes(), Result<RetrieveBtcOk, RetrieveBtcError>).unwrap();
     assert!(
         matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 }
 
@@ -333,8 +330,7 @@ fn test_upgrade_restricted() {
     let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 
     // 2. retrieve_btc
@@ -353,8 +349,7 @@ fn test_upgrade_restricted() {
     let res = Decode!(&res.bytes(), Result<RetrieveBtcOk, RetrieveBtcError>).unwrap();
     assert!(
         matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 
     // Test restricted BTC deposits.
@@ -378,8 +373,7 @@ fn test_upgrade_restricted() {
     let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 }
 
@@ -664,13 +658,12 @@ fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
 }
 
 fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
-    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
     let cid = bitcoin_canister_id(btc_network);
     env.create_canister_with_cycles(Some(cid.into()), Cycles::new(0), None);
     env.install_existing_canister(
         cid,
         bitcoin_mock_wasm(),
-        Encode!(&BitcoinNetwork::from(btc_network)).unwrap(),
+        Encode!(&ic_cdk::bitcoin_canister::Network::from(btc_network)).unwrap(),
     )
     .unwrap();
 }
@@ -1245,10 +1238,7 @@ impl CkBtcSetup {
         }
         self.print_minter_logs();
         self.print_minter_events();
-        panic!(
-            "did not reach condition '{}' in {} ticks",
-            description, max_ticks
-        )
+        panic!("did not reach condition '{description}' in {max_ticks} ticks")
     }
 
     /// Check that the given condition holds for the specified number of state machine ticks.
@@ -1261,10 +1251,7 @@ impl CkBtcSetup {
         for n in 0..num_ticks {
             self.env.tick();
             if !condition(self) {
-                panic!(
-                    "Condition '{}' does not hold after {} ticks",
-                    description, n
-                );
+                panic!("Condition '{description}' does not hold after {n} ticks");
             }
         }
     }
@@ -1287,8 +1274,7 @@ impl CkBtcSetup {
         }
         dbg!(self.get_logs());
         panic!(
-            "the minter did not submit a transaction in {} ticks; last status {:?}",
-            max_ticks, last_status
+            "the minter did not submit a transaction in {max_ticks} ticks; last status {last_status:?}"
         )
     }
 
@@ -1323,8 +1309,7 @@ impl CkBtcSetup {
             }
         }
         panic!(
-            "the minter did not finalize the transaction in {} ticks; last status: {:?}",
-            max_ticks, last_status
+            "the minter did not finalize the transaction in {max_ticks} ticks; last status: {last_status:?}"
         )
     }
 
@@ -1413,7 +1398,9 @@ impl CkBtcSetup {
         if res.transactions.len() != 1 {
             self.print_minter_logs();
             self.print_minter_events();
-            panic!("Reimbursement transaction {reimbursement_block_index} for withdrawal {burn_index} not found!");
+            panic!(
+                "Reimbursement transaction {reimbursement_block_index} for withdrawal {burn_index} not found!"
+            );
         }
         let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
         use ic_ckbtc_minter::memo::MintMemo;
@@ -1622,7 +1609,7 @@ fn test_transaction_resubmission_finalize_new() {
     let tx = mempool
         .get(&txid)
         .expect("the mempool does not contain the original transaction");
-    assert_eq!(tx.input.len(), 2, "expect 2 input utxos: {:?}", tx);
+    assert_eq!(tx.input.len(), 2, "expect 2 input utxos: {tx:?}");
 
     // Step 4: wait for the transaction resubmission
 
@@ -1979,7 +1966,7 @@ fn test_filter_logs() {
 
     let request = HttpRequest {
         method: "".to_string(),
-        url: format!("/logs?time={}", nanos),
+        url: format!("/logs?time={nanos}"),
         headers: vec![],
         body: serde_bytes::ByteBuf::new(),
     };

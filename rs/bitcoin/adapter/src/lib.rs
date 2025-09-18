@@ -5,14 +5,10 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::p2p::message::NetworkMessage;
-use bitcoin::{block::Header as PureHeader, BlockHash};
+use bitcoin::{BlockHash, block::Header as PureHeader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use std::{
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 use tokio::sync::{mpsc::channel, watch};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
@@ -36,6 +32,7 @@ mod connection;
 /// This module contains code that is used to manage multiple connections to
 /// BTC nodes.
 mod connectionmanager;
+mod header_cache;
 mod metrics;
 /// The module is responsible for awaiting messages from bitcoin peers and dispaching them
 /// to the correct component.
@@ -51,12 +48,16 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use common::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
-pub use config::{address_limits, Config, IncomingSource};
+pub use blockchainmanager::MAX_HEADERS_SIZE;
+pub use blockchainstate::BlockchainState;
+pub use common::{
+    AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork, HeaderValidator,
+};
+pub use config::{Config, IncomingSource, address_limits};
 
 use crate::{
-    blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
-    router::start_main_event_loop, rpc_server::start_grpc_server, stream::StreamEvent,
+    get_successors_handler::GetSuccessorsHandler, router::start_main_event_loop,
+    rpc_server::start_grpc_server, stream::StreamEvent,
 };
 
 /// This struct is used to represent commands given to the adapter in order to interact
@@ -79,7 +80,7 @@ enum ProcessNetworkMessageError {
     InvalidMessage,
 }
 
-/// This enum is used to represent errors that  
+/// This enum is used to represent errors that
 #[derive(Debug)]
 enum ChannelError {}
 
@@ -195,60 +196,73 @@ impl AdapterState {
     }
 }
 
-fn start_server_helper<Network>(
-    log: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
-    rt_handle: &tokio::runtime::Handle,
+async fn start_server_helper<Network>(
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
     config: config::Config<Network>,
 ) where
     Network: BlockchainNetwork + Sync + Send + 'static,
     Network::Header: Send,
-    Network::Block: Send,
+    Network::Block: Send + Sync,
+    BlockchainState<Network>: HeaderValidator<Network>,
+    <BlockchainState<Network> as HeaderValidator<Network>>::HeaderError: Send + Sync,
 {
-    let _enter = rt_handle.enter();
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(
-        config.network,
-        metrics_registry,
-    )));
+    let blockchain_state = if let Some(cache_dir) = &config.cache_dir {
+        BlockchainState::new_with_cache_dir(
+            config.network,
+            cache_dir.clone(),
+            &metrics_registry,
+            log.clone(),
+        )
+    } else {
+        BlockchainState::new(config.network, &metrics_registry)
+    };
+    let blockchain_state = Arc::new(blockchain_state);
+
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
-    start_grpc_server(
-        config.network,
-        config.incoming_source.clone(),
-        log.clone(),
-        tx,
-        blockchain_state.clone(),
-        blockchain_manager_tx,
-        transaction_manager_tx,
-        metrics_registry,
-    );
-    start_main_event_loop(
-        &config,
-        log.clone(),
-        blockchain_state,
-        transaction_manager_rx,
-        adapter_state,
-        blockchain_manager_rx,
-        metrics_registry,
-    )
+    let handles = [
+        start_grpc_server(
+            config.network,
+            config.incoming_source.clone(),
+            log.clone(),
+            tx,
+            blockchain_state.clone(),
+            blockchain_manager_tx,
+            transaction_manager_tx,
+            &metrics_registry,
+        ),
+        start_main_event_loop(
+            &config,
+            log.clone(),
+            blockchain_state,
+            transaction_manager_rx,
+            adapter_state,
+            blockchain_manager_rx,
+            &metrics_registry,
+        ),
+    ];
+
+    for handle in handles {
+        let _ = handle.await; // Waits for each task to complete
+    }
 }
 
 /// Starts the gRPC server and the router for handling incoming requests.
-pub fn start_server(
-    log: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
-    rt_handle: &tokio::runtime::Handle,
+pub async fn start_server(
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
     config: config::Config<AdapterNetwork>,
 ) {
     match config.network {
         AdapterNetwork::Bitcoin(network) => {
             let btc_config = config.with_network(network);
-            start_server_helper(log, metrics_registry, rt_handle, btc_config)
+            start_server_helper(log, metrics_registry, btc_config).await
         }
         AdapterNetwork::Dogecoin(network) => {
             let doge_config = config.with_network(network);
-            start_server_helper(log, metrics_registry, rt_handle, doge_config)
+            start_server_helper(log, metrics_registry, doge_config).await
         }
     }
 }

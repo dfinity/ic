@@ -5,29 +5,29 @@ use ic_ledger_canister_blocks_synchronizer::blocks::{
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
-use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo};
+use ic_nns_governance_api::{KnownNeuron, ProposalInfo, manage_neuron::NeuronIdOrSubaccount};
 use ic_rosetta_api::{
+    DEFAULT_TOKEN_SYMBOL,
     convert::{from_arg, to_model_account_identifier},
     errors::ApiError,
     ledger_client::LedgerAccess,
     models::{AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction},
-    request::{request_result::RequestResult, transaction_results::TransactionResults, Request},
+    request::{Request, request_result::RequestResult, transaction_results::TransactionResults},
     request_handler::RosettaRequestHandler,
     request_types::{RequestType, Status},
-    DEFAULT_TOKEN_SYMBOL,
 };
 use ic_types::{
-    messages::{HttpCallContent, HttpCanisterUpdate},
     CanisterId, PrincipalId,
+    messages::{HttpCallContent, HttpCanisterUpdate},
 };
 use icp_ledger::{
-    self, AccountIdentifier, Block, Operation, SendArgs, Tokens, TransferFee, DEFAULT_TRANSFER_FEE,
+    self, AccountIdentifier, Block, DEFAULT_TRANSFER_FEE, Operation, SendArgs, Tokens, TransferFee,
 };
 use std::{
     convert::TryFrom,
     ops::Deref,
     str::FromStr,
-    sync::{atomic::AtomicBool, Arc, Mutex},
+    sync::{Arc, Mutex, atomic::AtomicBool},
 };
 use tokio::sync::RwLock;
 
@@ -175,7 +175,7 @@ impl LedgerAccess for TestLedger {
             };
 
             let from = PrincipalId::try_from(sender.0)
-                .map_err(|e| ApiError::internal_error(format!("{}", e)))?;
+                .map_err(|e| ApiError::internal_error(format!("{e}")))?;
 
             let SendArgs {
                 memo,

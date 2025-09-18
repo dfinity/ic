@@ -1,11 +1,10 @@
 use ic_canonical_state_tree_hash::{
-    hash_tree::{hash_lazy_tree, HashTree},
+    hash_tree::{HashTree, hash_lazy_tree},
     lazy_tree::{LazyFork, LazyTree},
 };
 use ic_crypto_tree_hash::{
-    hasher::Hasher, Digest, FlatMap, HashTree as CryptoHashTree, HashTreeBuilder,
-    HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree, Witness, WitnessGenerator,
-    WitnessGeneratorImpl,
+    Digest, FlatMap, HashTree as CryptoHashTree, HashTreeBuilder, HashTreeBuilderImpl, Label,
+    LabeledTree, MixedHashTree, Witness, WitnessGenerator, WitnessGeneratorImpl, hasher::Hasher,
 };
 use ic_crypto_tree_hash_test_utils::{
     merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,

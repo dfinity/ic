@@ -34,7 +34,7 @@ use ic_system_test_driver::{
     systest,
     util::spawn_round_robin_workload_engine,
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::process::Command;
 use std::time::Duration;
 
@@ -100,7 +100,10 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
     );
     let app_canister = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
     info!(&log, "Installation of counter canister has succeeded.");
-    info!(&log, "Step 3: Instantiate and start a workload using one node of the Application subnet as target.");
+    info!(
+        &log,
+        "Step 3: Instantiate and start a workload using one node of the Application subnet as target."
+    );
     // Workload sends messages to canister via node agents.
     // As we talk to a single node, we create one agent, accordingly.
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
@@ -136,9 +139,11 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
         "Too many requests have failed."
     );
     let min_expected_counter = rps as u64 * runtime.as_secs();
-    assert!(requests_count_below_threshold
-        .iter()
-        .all(|(_, count)| *count == min_expected_counter));
+    assert!(
+        requests_count_below_threshold
+            .iter()
+            .all(|(_, count)| *count == min_expected_counter)
+    );
 }
 
 fn main() -> Result<()> {

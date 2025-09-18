@@ -5,7 +5,9 @@
 /// body. This has to be canonicalized into a PocketIc Operation before we can
 /// deterministically update the PocketIc state machine.
 ///
-use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
+use super::state::{
+    ApiState, DEFAULT_SYNC_WAIT_DURATION, OpOut, PocketIcError, StateLabel, UpdateReply,
+};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
     DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
@@ -13,50 +15,73 @@ use crate::pocket_ic::{
     QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
-use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
+use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
 use aide::{
-    axum::routing::{delete, get, post, ApiMethodRouter},
-    axum::ApiRouter,
     NoApi,
+    axum::ApiRouter,
+    axum::routing::{ApiMethodRouter, delete, get, post},
 };
 
 use axum::{
+    Json,
     body::{Body, Bytes},
-    extract::{self, Path, State},
+    extract::{self, Path, Request, State},
     http::{self, HeaderMap, HeaderName, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
-use hyper::header;
-use ic_http_endpoints_public::{cors_layer, query, read_state};
+use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
+use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_types::{CanisterId, SubnetId};
+use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig, MockCanisterHttpResponse,
-    NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
     RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
     Topology,
 };
-use pocket_ic::RejectResponse;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::atomic::AtomicU64, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    sync::Arc,
+    sync::atomic::AtomicU64,
+    time::{Duration, SystemTime},
+};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
 
 type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 
+pub(crate) async fn into_api_response(
+    resp: Response,
+) -> (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>) {
+    (
+        resp.status(),
+        resp.headers()
+            .iter()
+            .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+            .collect(),
+        axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+}
+
 /// Name of a header that allows clients to specify for how long their are willing to wait for a
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
+
 const RETRY_TIMEOUT_S: u64 = 300;
 
 #[derive(Clone)]
@@ -108,6 +133,14 @@ where
         .directory_route("/mock_canister_http", post(handler_mock_canister_http))
 }
 
+async fn handle_limit_error(req: Request, next: Next) -> Response {
+    let resp = next.run(req).await;
+    if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        return ErrorClientFacing::PayloadTooLarge(MAX_REQUEST_BODY_SIZE).into_response();
+    }
+    resp
+}
+
 pub fn instance_api_v2_routes<S>() -> ApiRouter<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -118,34 +151,26 @@ where
         .directory_route(
             "/canister/{ecid}/call",
             post(handler_call_v2)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
             "/canister/{ecid}/query",
             post(handler_query_v2)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
             "/canister/{ecid}/read_state",
             post(handler_canister_read_state_v2)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
             "/subnet/{sid}/read_state",
             post(handler_subnet_read_state_v2)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
 }
 
@@ -158,34 +183,26 @@ where
         .directory_route(
             "/canister/{ecid}/call",
             post(handler_call_v3)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
             "/canister/{ecid}/query",
             post(handler_query_v3)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
             "/canister/{ecid}/read_state",
             post(handler_canister_read_state_v3)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
             "/subnet/{sid}/read_state",
             post(handler_subnet_read_state_v3)
-                .layer(RequestBodyLimitLayer::new(
-                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
         )
 }
 
@@ -197,10 +214,8 @@ where
     ApiRouter::new().directory_route(
         "/canister/{ecid}/call",
         post(handler_call_v4)
-            .layer(RequestBodyLimitLayer::new(
-                4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
-            ))
-            .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+            .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+            .layer(axum::middleware::from_fn(handle_limit_error)),
     )
 }
 
@@ -291,9 +306,9 @@ async fn run_operation<T: Serialize + FromOpOut>(
                 break (
                     StatusCode::BAD_REQUEST,
                     ApiResponse::Error {
-                        message: format!("{:?}", e),
+                        message: format!("{e:?}"),
                     },
-                )
+                );
             }
             Ok(update_reply) => {
                 match update_reply {
@@ -310,7 +325,10 @@ async fn run_operation<T: Serialize + FromOpOut>(
                     // Otherwise, the instance is busy with a different computation, so we retry (if appliacable) or return 409.
                     UpdateReply::Busy { state_label, op_id } => {
                         if retry_if_busy {
-                            trace!("run_operation::retry_busy instance_id={} state_label={:?} op_id={}", instance_id, state_label, op_id.0);
+                            trace!(
+                                "run_operation::retry_busy instance_id={} state_label={:?} op_id={}",
+                                instance_id, state_label, op_id.0
+                            );
                             match retry_policy.next_backoff() {
                                 Some(duration) => tokio::time::sleep(duration).await,
                                 None => {
@@ -320,7 +338,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                                             message: "Service is overloaded, try again later."
                                                 .to_string(),
                                         },
-                                    )
+                                    );
                                 }
                             }
                         } else {
@@ -365,21 +383,18 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
             OpOut::Error(e) => (
                 StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
-                    message: format!("{:?}", e),
+                    message: format!("{e:?}"),
                 },
             ),
-            val => {
-                if let Ok(t) = T::try_from(val) {
-                    (StatusCode::OK, ApiResponse::Success(t))
-                } else {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        ApiResponse::Error {
-                            message: "operation returned invalid type".into(),
-                        },
-                    )
-                }
-            }
+            val => match T::try_from(val) {
+                Ok(t) => (StatusCode::OK, ApiResponse::Success(t)),
+                _ => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ApiResponse::Error {
+                        message: "operation returned invalid type".into(),
+                    },
+                ),
+            },
         }
     }
 }
@@ -548,16 +563,23 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
 #[async_trait]
 impl FromOpOut for PocketHttpResponse {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
+        async fn from_bn_err(
+            err: ErrorClientFacing,
+        ) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
+            let resp = err.into_response();
+            let (status, headers, bytes) = into_api_response(resp).await;
+            (status, ApiResponse::Success((headers, bytes)))
+        }
         match value {
             OpOut::RawResponse(fut) => {
                 let (status, headers, bytes) = fut.await;
-                (
-                    StatusCode::from_u16(status).unwrap(),
-                    ApiResponse::Success((headers, bytes)),
-                )
+                (status, ApiResponse::Success((headers, bytes)))
             }
-            OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
-                (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
+            OpOut::Error(PocketIcError::CanisterRequestRoutingError(_)) => {
+                from_bn_err(ErrorClientFacing::CanisterNotFound).await
+            }
+            OpOut::Error(PocketIcError::SubnetRequestRoutingError(_)) => {
+                from_bn_err(ErrorClientFacing::SubnetNotFound).await
             }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -590,7 +612,7 @@ pub async fn handler_json_query(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -663,7 +685,7 @@ pub async fn handler_get_controllers(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -685,7 +707,7 @@ pub async fn handler_get_cycles(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -707,7 +729,7 @@ pub async fn handler_get_stable_memory(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -729,7 +751,7 @@ pub async fn handler_get_subnet(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -912,7 +934,7 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
         }
         ApiResponse::Error { message } => make_plaintext_response(code, message),
         ApiResponse::Busy { .. } | ApiResponse::Started { .. } => {
-            make_plaintext_response(code, format!("{:?}", res))
+            unreachable!("/api endpoints should always produce a response")
         }
     };
     (code, NoApi(response))
@@ -1012,8 +1034,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         OpOut::RawResponse(fut) => {
             let (status, headers, bytes) = fut.await;
-            let code = StatusCode::from_u16(status).unwrap();
-            let mut resp = Response::builder().status(code);
+            let mut resp = Response::builder().status(status);
             for (name, value) in headers {
                 resp = resp.header(name, value);
             }
@@ -1034,10 +1055,9 @@ pub async fn handler_read_graph(
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        if let Some((_new_state_label, op_out)) = api_state.read_graph(&state_label, &op_id) {
-            op_out_to_response(op_out).await
-        } else {
-            (
+        match api_state.read_graph(&state_label, &op_id) {
+            Some((_new_state_label, op_out)) => op_out_to_response(op_out).await,
+            _ => (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::Error {
                     message: format!(
@@ -1048,7 +1068,7 @@ pub async fn handler_read_graph(
                     ),
                 }),
             )
-                .into_response()
+                .into_response(),
         }
     } else {
         (
@@ -1083,7 +1103,7 @@ pub async fn handler_submit_ingress_message(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1105,7 +1125,7 @@ pub async fn handler_await_ingress_message(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1132,7 +1152,7 @@ pub async fn handler_ingress_status(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1181,7 +1201,7 @@ pub async fn handler_add_cycles(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1206,7 +1226,7 @@ pub async fn handler_set_stable_memory(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1274,7 +1294,7 @@ pub async fn create_instance(
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(rest::CreateInstanceResponse::Error {
-                            message: format!("Subnet config failed to validate: {}", e),
+                            message: format!("Subnet config failed to validate: {e}"),
                         }),
                     );
                 }
@@ -1284,7 +1304,7 @@ pub async fn create_instance(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(rest::CreateInstanceResponse::Error {
-                    message: format!("Subnet config failed to validate: {:?}", e),
+                    message: format!("Subnet config failed to validate: {e:?}"),
                 }),
             );
         }
@@ -1306,9 +1326,9 @@ pub async fn create_instance(
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(rest::CreateInstanceResponse::Error {
-                        message: format!("Failed to parse log level: {:?}", e),
+                        message: format!("Failed to parse log level: {e:?}"),
                     }),
-                )
+                );
             }
         }
     } else {
@@ -1319,22 +1339,14 @@ pub async fn create_instance(
         Some(InitialTime::Timestamp(raw_time)) => Some(
             ic_types::Time::from_nanos_since_unix_epoch(raw_time.nanos_since_epoch),
         ),
-        Some(InitialTime::AutoProgress(_)) | None => None,
+        Some(InitialTime::AutoProgress(_)) => Some(SystemTime::now().try_into().unwrap()),
+        None => None,
     };
     let auto_progress = match instance_config.initial_time {
         Some(InitialTime::AutoProgress(config)) => Some(config),
         Some(InitialTime::Timestamp(_)) | None => None,
     };
     let auto_progress_enabled = auto_progress.is_some();
-
-    if instance_config.http_gateway_config.is_some() && !auto_progress_enabled {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(rest::CreateInstanceResponse::Error {
-                message: "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`.".to_string()
-            }),
-        );
-    }
 
     if let Some(ref icp_features) = instance_config.icp_features {
         // using `let IcpFeatures { }` with explicit field names
@@ -1371,7 +1383,9 @@ pub async fn create_instance(
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(rest::CreateInstanceResponse::Error {
-                            message: format!("The `nns_ui` feature requires the `{}` feature to be enabled, too.", icp_feature_str),
+                            message: format!(
+                                "The `nns_ui` feature requires the `{icp_feature_str}` feature to be enabled, too."
+                            ),
                         }),
                     );
                 }
@@ -1387,13 +1401,11 @@ pub async fn create_instance(
                     seed,
                     subnet_configs,
                     instance_config.state_dir,
-                    instance_config
-                        .nonmainnet_features
-                        .unwrap_or(NonmainnetFeatures::default()),
+                    instance_config.icp_config.unwrap_or(IcpConfig::default()),
                     log_level,
                     instance_config.bitcoind_addr,
                     instance_config.icp_features,
-                    instance_config.allow_incomplete_state,
+                    instance_config.incomplete_state,
                     initial_time,
                     auto_progress_enabled,
                     gateway_port,
@@ -1572,45 +1584,6 @@ impl headers::Header for ProcessingTimeout {
 }
 
 pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
-    header_map.typed_get::<ProcessingTimeout>().map(|x| x.0)
-}
-
-// ----------------------------------------------------------------------------------------------------------------- //
-// HTTP handler helpers
-
-const CONTENT_TYPE_TEXT: &str = "text/plain";
-
-fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
-    let mut resp = Response::new(Body::from(message));
-    *resp.status_mut() = status;
-    resp.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static(CONTENT_TYPE_TEXT),
-    );
-    resp
-}
-
-pub async fn verify_cbor_content_header(
-    request: axum::extract::Request,
-    next: Next,
-) -> axum::response::Response {
-    const CONTENT_TYPE_CBOR: &str = "application/cbor";
-    if !request
-        .headers()
-        .get_all(http::header::CONTENT_TYPE)
-        .iter()
-        .any(|value| {
-            if let Ok(v) = value.to_str() {
-                return v.to_lowercase() == CONTENT_TYPE_CBOR;
-            }
-            false
-        })
-    {
-        return make_plaintext_response(
-            StatusCode::BAD_REQUEST,
-            format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
-        );
-    }
-
-    next.run(request).await
+    let timeout_from_header = header_map.typed_get::<ProcessingTimeout>().map(|x| x.0);
+    Some(timeout_from_header.unwrap_or(DEFAULT_SYNC_WAIT_DURATION))
 }

@@ -1,4 +1,5 @@
 use crate::{
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NUM_HOT_KEYS_PER_NEURON,
@@ -6,15 +7,13 @@ use crate::{
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        self as pb,
+        self as pb, AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError,
+        KnownNeuronData, MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
+        Vote, VotingPowerEconomics,
         abridged_neuron::DissolveState,
         governance_error::ErrorType,
-        manage_neuron::{configure::Operation, Configure},
-        AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError, KnownNeuronData,
-        MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Vote,
-        VotingPowerEconomics,
+        manage_neuron::{Configure, configure::Operation},
     },
-    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
@@ -47,7 +46,7 @@ impl TryFrom<i32> for Visibility {
         } else if src == Visibility::Public as i32 {
             Ok(Visibility::Public)
         } else {
-            Err(format!("Invalid visibility code: {:?}.", src,))
+            Err(format!("Invalid visibility code: {src:?}.",))
         }
     }
 }
@@ -708,8 +707,7 @@ impl Neuron {
                     Err(GovernanceError::new_with_message(
                         ErrorType::NotAuthorized,
                         format!(
-                            "Caller '{:?}' must be the controller or hotkey of the neuron to join or leave the neuron fund.",
-                            caller,
+                            "Caller '{caller:?}' must be the controller or hotkey of the neuron to join or leave the neuron fund.",
                         ),
                     ))
                 }
@@ -723,9 +721,7 @@ impl Neuron {
                     Err(GovernanceError::new_with_message(
                         ErrorType::NotAuthorized,
                         format!(
-                            "Caller '{:?}' must be the controller of the neuron to perform this operation:\n{:#?}",
-                            caller,
-                            configure,
+                            "Caller '{caller:?}' must be the controller of the neuron to perform this operation:\n{configure:#?}",
                         ),
                     ))
                 }
@@ -775,7 +771,7 @@ impl Neuron {
                 if current_dd > desired_dd {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
-                        "Can't set a dissolve delay that is smaller than the current dissolve delay."
+                        "Can't set a dissolve delay that is smaller than the current dissolve delay.",
                     ));
                 }
 
@@ -1089,7 +1085,6 @@ impl Neuron {
 
     /// Does NOT touch visiblity. If you want to go private, call set_visibility
     /// after calling this.
-    #[cfg(test)] // This can be used in production, but so far, it is not needed.
     pub(crate) fn clear_known_neuron_data(&mut self) {
         self.known_neuron_data = None;
     }
@@ -1461,7 +1456,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             recent_ballots_next_entry_index: recent_ballots_next_entry_index
                 .map(|x| {
                     u32::try_from(x).map_err(|e| NeuronStoreError::InvalidData {
-                        reason: format!("Failed to convert recent_ballots_next_entry_index: {}", e),
+                        reason: format!("Failed to convert recent_ballots_next_entry_index: {e}"),
                     })
                 })
                 .transpose()?,
@@ -1879,7 +1874,7 @@ impl NeuronBuilder {
 
         #[cfg(test)]
         let visibility = if known_neuron_data.is_some() {
-            assert_eq!(visibility, Visibility::Public, "{:?}", id);
+            assert_eq!(visibility, Visibility::Public, "{id:?}");
             Visibility::Public
         } else {
             visibility

@@ -4,12 +4,12 @@ use candid::{CandidType, Principal};
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::Call,
-    management_canister::{canister_info, CanisterInfoArgs, CanisterInfoResult},
+    management_canister::{CanisterInfoArgs, CanisterInfoResult, canister_info},
     println,
 };
 use serde::Deserialize;
 
-use crate::{processing::ProcessingResult, ValidationError};
+use crate::{ValidationError, processing::ProcessingResult};
 
 // ========================================================================= //
 // `update_settings`
@@ -52,8 +52,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
                         .contains("Only the controllers of the canister")
                     {
                         ProcessingResult::FatalFailure(format!(
-                            "Failed to set controller of canister {:?}",
-                            canister_id
+                            "Failed to set controller of canister {canister_id:?}"
                         ))
                     } else {
                         ProcessingResult::NoProgress
@@ -227,19 +226,20 @@ pub async fn rename_canister(
     source: Principal,
     source_version: u64,
     target: Principal,
+    target_subnet: Principal,
     total_num_changes: u64,
 ) -> ProcessingResult<(), Infallible> {
     let args = RenameCanisterArgs {
-        canister_id: source,
+        canister_id: target,
         rename_to: RenameToArgs {
-            canister_id: target,
+            canister_id: source,
             version: source_version,
             total_num_changes,
         },
         sender_canister_version: canister_version(),
     };
 
-    match Call::bounded_wait(target, "rename_canister")
+    match Call::bounded_wait(target_subnet, "rename_canister")
         .with_arg(args)
         .await
     {

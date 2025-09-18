@@ -1,21 +1,21 @@
 use crate::{
+    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
-    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, Method, Payload as _, ProvisionalTopUpCanisterArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
@@ -271,10 +271,12 @@ impl Request {
                 // No effective canister id.
                 None
             }
-            // `FetchCanisterLogs` method is only allowed for messages sent by
-            // end users in non-replicated mode, so we should never reach this point.
-            // If we do, we return `None` (which should be no-op) to avoid panicking.
-            Ok(Method::FetchCanisterLogs) => None,
+            Ok(Method::FetchCanisterLogs) => {
+                match FetchCanisterLogsRequest::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Err(_) => None,
         }
     }
@@ -549,12 +551,8 @@ pub enum RequestOrResponse {
 impl ValidateEq for RequestOrResponse {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
         match (self, rhs) {
-            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
-                l.validate_eq(r)
-            }
-            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
-                l.validate_eq(r)
-            }
+            (RequestOrResponse::Request(l), RequestOrResponse::Request(r)) => l.validate_eq(r),
+            (RequestOrResponse::Response(l), RequestOrResponse::Response(r)) => l.validate_eq(r),
             _ => Err("RequestOrResponse enum mismatch".to_string()),
         }
     }

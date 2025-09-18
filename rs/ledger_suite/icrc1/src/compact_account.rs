@@ -41,7 +41,7 @@ impl TryFrom<CompactAccount> for Account {
         }
 
         let principal =
-            Principal::try_from(&elems[0][..]).map_err(|e| format!("invalid principal: {}", e))?;
+            Principal::try_from(&elems[0][..]).map_err(|e| format!("invalid principal: {e}"))?;
         let subaccount = if elems.len() > 1 {
             Some(Subaccount::try_from(&elems[1][..]).map_err(|_| {
                 format!(
