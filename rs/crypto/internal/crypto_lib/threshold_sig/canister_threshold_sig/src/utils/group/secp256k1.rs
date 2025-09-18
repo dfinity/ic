@@ -1,12 +1,13 @@
 use hex_literal::hex;
 use k256::elliptic_curve::{
-    group::{ff::PrimeField, GroupEncoding},
-    ops::{LinearCombination, MulByGenerator, Reduce},
+    Field, Group,
+    group::{GroupEncoding, ff::PrimeField},
+    ops::{Invert, LinearCombination, MulByGenerator, Reduce},
     scalar::IsHigh,
     sec1::FromEncodedPoint,
-    Field, Group,
 };
 use std::ops::Neg;
+use std::sync::LazyLock;
 use subtle::{Choice, ConditionallySelectable};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -30,27 +31,51 @@ fe_derive::derive_field_element!(
     SSWU_Z = "-11",
 );
 
-lazy_static::lazy_static! {
-
-    /// The constants that define the isogeny mapping for secp256k1
-    static ref K256_C : [FieldElement; 13] = {
-        let fb = |bs| FieldElement::from_bytes(bs).expect("Constant was invalid");
-        [fb(&hex!("8E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38DAAAAA88C")),
-         fb(&hex!("534C328D23F234E6E2A413DECA25CAECE4506144037C40314ECBD0B53D9DD262")),
-         fb(&hex!("07D3D4C80BC321D5B9F315CEA7FD44C5D595D2FC0BF63B92DFFF1044F17C6581")),
-         fb(&hex!("8E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38DAAAAA8C7")),
-         fb(&hex!("EDADC6F64383DC1DF7C4B2D51B54225406D36B641F5E41BBC52A56612A8C6D14")),
-         fb(&hex!("D35771193D94918A9CA34CCBB7B640DD86CD409542F8487D9FE6B745781EB49B")),
-         fb(&hex!("2F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F38E38D84")),
-         fb(&hex!("29A6194691F91A73715209EF6512E576722830A201BE2018A765E85A9ECEE931")),
-         fb(&hex!("C75E0C32D5CB7C0FA9D0A54B12A0A6D5647AB046D686DA6FDFFC90FC201D71A3")),
-         fb(&hex!("4BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684B8E38E23C")),
-         fb(&hex!("6484AA716545CA2CF3A70C3FA8FE337E0A3D21162F0D6299A7BF8192BFD2A76F")),
-         fb(&hex!("7A06534BB8BDB49FD5E9E6632722C2989467C1BFC8E8D978DFB425D2685C2573")),
-         fb(&hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFF93B")),
-        ]
-    };
-}
+/// The constants that define the isogeny mapping for secp256k1
+static K256_C: LazyLock<[FieldElement; 13]> = LazyLock::new(|| {
+    let fb = |bs| FieldElement::from_bytes(bs).expect("Constant was invalid");
+    [
+        fb(&hex!(
+            "8E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38DAAAAA88C"
+        )),
+        fb(&hex!(
+            "534C328D23F234E6E2A413DECA25CAECE4506144037C40314ECBD0B53D9DD262"
+        )),
+        fb(&hex!(
+            "07D3D4C80BC321D5B9F315CEA7FD44C5D595D2FC0BF63B92DFFF1044F17C6581"
+        )),
+        fb(&hex!(
+            "8E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38DAAAAA8C7"
+        )),
+        fb(&hex!(
+            "EDADC6F64383DC1DF7C4B2D51B54225406D36B641F5E41BBC52A56612A8C6D14"
+        )),
+        fb(&hex!(
+            "D35771193D94918A9CA34CCBB7B640DD86CD409542F8487D9FE6B745781EB49B"
+        )),
+        fb(&hex!(
+            "2F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F38E38D84"
+        )),
+        fb(&hex!(
+            "29A6194691F91A73715209EF6512E576722830A201BE2018A765E85A9ECEE931"
+        )),
+        fb(&hex!(
+            "C75E0C32D5CB7C0FA9D0A54B12A0A6D5647AB046D686DA6FDFFC90FC201D71A3"
+        )),
+        fb(&hex!(
+            "4BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684B8E38E23C"
+        )),
+        fb(&hex!(
+            "6484AA716545CA2CF3A70C3FA8FE337E0A3D21162F0D6299A7BF8192BFD2A76F"
+        )),
+        fb(&hex!(
+            "7A06534BB8BDB49FD5E9E6632722C2989467C1BFC8E8D978DFB425D2685C2573"
+        )),
+        fb(&hex!(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFF93B"
+        )),
+    ]
+});
 
 /// Computes (x,y) where:
 /// * x = x_num / x_den, where
@@ -137,14 +162,9 @@ impl Scalar {
             return None;
         }
 
-        let fb = k256::FieldBytes::from_slice(bytes);
-        let s = k256::Scalar::from_repr(*fb);
-
-        if bool::from(s.is_some()) {
-            Some(Self::new(s.unwrap()))
-        } else {
-            None
-        }
+        k256::Scalar::from_repr(*k256::FieldBytes::from_slice(bytes))
+            .into_option()
+            .map(Self::new)
     }
 
     /// Compute the scalar from a larger value
@@ -218,12 +238,15 @@ impl Scalar {
     /// Returns None if no modular inverse exists (ie because the
     /// scalar is zero)
     pub fn invert(&self) -> Option<Self> {
-        let inv = self.s.invert();
-        if bool::from(inv.is_some()) {
-            Some(Self::new(inv.unwrap()))
-        } else {
-            None
-        }
+        self.s.invert().into_option().map(Self::new)
+    }
+
+    /// Perform modular inversion
+    ///
+    /// Returns None if no modular inverse exists (ie because the
+    /// scalar is zero)
+    pub fn invert_vartime(&self) -> Option<Self> {
+        self.s.invert_vartime().into_option().map(Self::new)
     }
 
     /// Check if the scalar is zero
@@ -257,14 +280,13 @@ pub struct Point {
     p: k256::ProjectivePoint,
 }
 
-lazy_static::lazy_static! {
-
-    /// Static deserialization of the fixed alternative group generator
-    static ref SECP256K1_GENERATOR_H: Point = Point::deserialize(
-        &hex!("037bdcfc024cf697a41fd3cda2436c843af5669e50042be3314a532d5b70572f59"))
-        .expect("The secp256k1 generator_h point is invalid");
-
-}
+/// Static deserialization of the fixed alternative group generator
+static SECP256K1_GENERATOR_H: LazyLock<Point> = LazyLock::new(|| {
+    Point::deserialize(&hex!(
+        "037bdcfc024cf697a41fd3cda2436c843af5669e50042be3314a532d5b70572f59"
+    ))
+    .expect("The secp256k1 generator_h point is invalid")
+});
 
 impl Point {
     /// Internal constructor (private)
@@ -280,15 +302,9 @@ impl Point {
     /// None is returned
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
         match k256::EncodedPoint::from_bytes(bytes) {
-            Ok(ept) => {
-                let apt = k256::AffinePoint::from_encoded_point(&ept);
-
-                if bool::from(apt.is_some()) {
-                    Some(Self::new(k256::ProjectivePoint::from(apt.unwrap())))
-                } else {
-                    None
-                }
-            }
+            Ok(ept) => k256::AffinePoint::from_encoded_point(&ept)
+                .into_option()
+                .map(|p| Self::new(k256::ProjectivePoint::from(p))),
             Err(_) => None,
         }
     }

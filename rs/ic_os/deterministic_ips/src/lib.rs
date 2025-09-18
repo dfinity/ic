@@ -1,6 +1,6 @@
 use std::net::Ipv6Addr;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use config_types::DeploymentEnvironment;
 use ic_crypto_sha2::Sha256;
 use macaddr::MacAddr6;
@@ -48,7 +48,7 @@ fn prefix_octets(prefix: &str) -> Result<[u8; 8]> {
     let full_prefix = if prefix.contains("::") {
         prefix.to_string()
     } else {
-        format!("{}::", prefix)
+        format!("{prefix}::")
     };
 
     // Parse the prefix into an Ipv6Addr
@@ -180,7 +180,7 @@ mod test {
 
         for prefix in invalid_prefixes {
             let result = mac.calculate_slaac(prefix);
-            assert!(result.is_err(), "Prefix '{}' should be invalid", prefix);
+            assert!(result.is_err(), "Prefix '{prefix}' should be invalid");
         }
     }
 

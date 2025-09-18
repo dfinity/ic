@@ -1,11 +1,9 @@
 // This canister is used for testing upgrades with arguments and stable memory.
 
 use ic_cdk::{
-    api::{
-        call::arg_data_raw,
-        stable::{stable_grow, stable_read, stable_write},
-    },
+    api::msg_arg_data,
     post_upgrade, println, query,
+    stable::{stable_grow, stable_read, stable_write},
 };
 use std::cell::RefCell;
 
@@ -17,7 +15,7 @@ fn main() {}
 
 #[post_upgrade]
 fn post_upgrade() {
-    let arg = arg_data_raw();
+    let arg = msg_arg_data();
     println!("Initializing test canister with arg={:?}", arg);
     stable_grow(1).expect("Could not grow stable memory");
     ARG_LEN.with(|len| {

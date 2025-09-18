@@ -132,7 +132,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         )?;
         for (canister_id, call_count) in &canister_status_caller_to_in_flight_count {
             metrics = metrics.value(
-                &[("canister_id", &format!("{}", canister_id))],
+                &[("canister_id", &format!("{canister_id}"))],
                 (*call_count) as f64,
             )?;
         }
@@ -163,7 +163,7 @@ fn principal_name(principal_id: PrincipalId) -> String {
 
     Some(CanisterId::unchecked_from_principal(principal_id))
         .and_then(|canister_id| CANISTER_ID_TO_NAME.get(&canister_id))
-        .map(|name| format!("{}_canister", name))
+        .map(|name| format!("{name}_canister"))
         .unwrap_or_else(|| principal_id.to_string())
 }
 

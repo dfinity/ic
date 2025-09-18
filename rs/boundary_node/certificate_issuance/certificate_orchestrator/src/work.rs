@@ -2,7 +2,7 @@ use std::{cmp::Reverse, time::Duration};
 
 use anyhow::anyhow;
 use certificate_orchestrator_interface::{Id, Registration};
-use ic_cdk::caller;
+use ic_cdk::api::msg_caller;
 use priority_queue::PriorityQueue;
 use prometheus::labels;
 
@@ -15,8 +15,8 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
+    IN_PROGRESS_TTL, LocalRef, StableMap, StorableId, WithMetrics,
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, StableMap, StorableId, WithMetrics, IN_PROGRESS_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -68,7 +68,7 @@ impl Queue for Queuer {
 
 impl<T: Queue, A: Authorize> Queue for WithAuthorize<T, A> {
     fn queue(&self, id: Id, timestamp: u64) -> Result<(), QueueError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => QueueError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => QueueError::UnexpectedError(err),
@@ -145,7 +145,7 @@ impl Peek for Peeker {
 
 impl<T: Peek, A: Authorize> Peek for WithAuthorize<T, A> {
     fn peek(&self) -> Result<Id, PeekError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => PeekError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => PeekError::UnexpectedError(err),
@@ -234,7 +234,7 @@ impl List for Lister {
 
 impl<T: List, A: Authorize> List for WithAuthorize<T, A> {
     fn list(&self) -> Result<Vec<(String, u64, Registration)>, ListError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => ListError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => ListError::UnexpectedError(err),
@@ -310,7 +310,7 @@ impl Dispense for Dispenser {
 
 impl<T: Dispense, A: Authorize> Dispense for WithAuthorize<T, A> {
     fn dispense(&self) -> Result<Id, DispenseError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => DispenseError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => DispenseError::UnexpectedError(err),
@@ -379,7 +379,7 @@ impl Remove for TaskRemover {
 
 impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
     fn remove(&self, id: &str) -> Result<(), RemoveError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => RemoveError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => RemoveError::UnexpectedError(err),

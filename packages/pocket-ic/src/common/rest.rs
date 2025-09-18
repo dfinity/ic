@@ -34,6 +34,14 @@ pub struct HttpsConfig {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InstanceHttpGatewayConfig {
+    pub ip_addr: Option<String>,
+    pub port: Option<u16>,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HttpGatewayConfig {
     pub ip_addr: Option<String>,
     pub port: Option<u16>,
@@ -68,13 +76,14 @@ pub enum CreateInstanceResponse {
     Created {
         instance_id: InstanceId,
         topology: Topology,
+        http_gateway_info: Option<HttpGatewayInfo>,
     },
     Error {
         message: String,
     },
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy, JsonSchema)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
 }
@@ -105,11 +114,11 @@ impl std::fmt::Display for RawEffectivePrincipal {
             RawEffectivePrincipal::None => write!(f, "None"),
             RawEffectivePrincipal::SubnetId(subnet_id) => {
                 let principal = Principal::from_slice(subnet_id);
-                write!(f, "SubnetId({})", principal)
+                write!(f, "SubnetId({principal})")
             }
             RawEffectivePrincipal::CanisterId(canister_id) => {
                 let principal = Principal::from_slice(canister_id);
-                write!(f, "CanisterId({})", principal)
+                write!(f, "CanisterId({principal})")
             }
         }
     }
@@ -215,7 +224,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -226,7 +235,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Started { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -237,7 +246,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Busy { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -246,7 +255,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse error: {}", e),
+                        message: format!("Could not parse error: {e}"),
                     },
                 }
             }
@@ -537,37 +546,95 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum IcpConfigFlag {
+    Disabled,
+    Enabled,
+}
+
+/// Specifies ICP config of this instance.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct IcpConfig {
+    /// Beta features (disabled on the ICP mainnet).
+    pub beta_features: Option<IcpConfigFlag>,
+    /// Canister backtraces (enabled on the ICP mainnet).
+    pub canister_backtrace: Option<IcpConfigFlag>,
+    /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
+    pub function_name_length_limits: Option<IcpConfigFlag>,
+    /// Rate-limiting of canister execution (enabled on the ICP mainnet).
+    /// Canister execution refers to instructions and memory writes here.
+    pub canister_execution_rate_limiting: Option<IcpConfigFlag>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IcpFeaturesConfig {
+    /// Default configuration of an ICP feature resembling mainnet configuration as closely as possible.
+    #[default]
+    DefaultConfig,
+}
+
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
+/// The subnets to which the corresponding system canisters are deployed must be empty.
+/// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
+/// if the corresponding field is not `None`.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
-    pub registry: bool,
-    pub cycles_minting: bool,
-    pub icp_token: bool,
-    pub cycles_token: bool,
+    /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
+    /// Note. The registry used internally by PocketIC is not updated after changing the registry stored in the registry canister
+    /// (e.g., after executing an NNS proposal mutating the registry).
+    pub registry: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS cycles minting canister, sets ICP/XDR conversion rate, and keeps its subnet lists in sync with PocketIC topology.
+    /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
+    pub cycles_minting: Option<IcpFeaturesConfig>,
+    /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
+    pub icp_token: Option<IcpFeaturesConfig>,
+    /// Deploys the cycles ledger and index canisters.
+    pub cycles_token: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
+    /// The initial NNS neuron is controlled by the principal `hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe`.
+    pub nns_governance: Option<IcpFeaturesConfig>,
+    /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
+    /// and uploads the SNS canister WASMs to the SNS-W canister.
+    pub sns: Option<IcpFeaturesConfig>,
+    /// Deploys the Internet Identity canister.
+    pub ii: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS frontend dapp. The HTTP gateway must be specified via `http_gateway_config` in `InstanceConfig`
+    /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
+    pub nns_ui: Option<IcpFeaturesConfig>,
 }
 
-impl IcpFeatures {
-    pub fn all_icp_features() -> Self {
-        Self {
-            registry: true,
-            cycles_minting: true,
-            icp_token: true,
-            cycles_token: true,
-        }
-    }
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum InitialTime {
+    /// Sets the initial timestamp of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    Timestamp(RawTime),
+    /// Configures the new instance to make progress automatically,
+    /// i.e., periodically update the time of the IC instance
+    /// to the real time and execute rounds on the subnets.
+    AutoProgress(AutoProgressConfig),
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IncompleteStateFlag {
+    #[default]
+    Disabled,
+    Enabled,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
+    pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: bool,
+    pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
-    pub allow_incomplete_state: Option<bool>,
+    pub incomplete_state: Option<IncompleteStateFlag>,
+    pub initial_time: Option<InitialTime>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -702,8 +769,7 @@ impl ExtendedSubnetConfigSet {
             if let Some(config) = subnet {
                 if !matches!(config.state_config, SubnetStateConfig::New) {
                     return Err(format!(
-                        "The {} subnet must be empty when specifying the `{}` ICP feature.",
-                        subnet_desc, icp_feature
+                        "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
                     ));
                 }
             }
@@ -716,23 +782,37 @@ impl ExtendedSubnetConfigSet {
             cycles_minting,
             icp_token,
             cycles_token,
+            nns_governance,
+            sns,
+            ii,
+            nns_ui,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
-            (*registry, "registry"),
-            (*cycles_minting, "cycles_minting"),
-            (*icp_token, "icp_token"),
+            (registry, "registry"),
+            (cycles_minting, "cycles_minting"),
+            (icp_token, "icp_token"),
+            (nns_governance, "nns_governance"),
+            (sns, "sns"),
+            (nns_ui, "nns_ui"),
         ] {
-            if flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
                 self.nns = Some(self.nns.unwrap_or_default());
             }
         }
         // canisters on the II subnet
-        for (flag, icp_feature_str) in [(*cycles_token, "cycles_token")] {
-            if flag {
+        for (flag, icp_feature_str) in [(cycles_token, "cycles_token"), (ii, "ii")] {
+            if flag.is_some() {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
+            }
+        }
+        // canisters on the SNS subnet
+        for (flag, icp_feature_str) in [(sns, "sns")] {
+            if flag.is_some() {
+                check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
+                self.sns = Some(self.sns.unwrap_or_default());
             }
         }
         Ok(self)
@@ -746,8 +826,6 @@ pub struct SubnetConfig {
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Node ids of nodes in the subnet.
-    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }

@@ -42,8 +42,20 @@ struct Dashboard<'a> {{
         "ICP_INDEX",
         "CYCLES_LEDGER",
         "CYCLES_LEDGER_INDEX",
+        "GOVERNANCE_TEST",
+        "ROOT",
+        "SNS_WASM",
+        "SNS_ROOT",
+        "SNS_GOVERNANCE",
+        "SNS_SWAP",
+        "SNS_LEDGER",
+        "SNS_LEDGER_ARCHIVE",
+        "SNS_LEDGER_INDEX",
+        "SNS_AGGREGATOR_TEST",
+        "INTERNET_IDENTITY_TEST",
+        "NNS_DAPP_TEST",
     ] {
-        let env_var_name = format!("{}_CANISTER_WASM_PATH", canister_name);
+        let env_var_name = format!("{canister_name}_CANISTER_WASM_PATH");
         if std::env::var(&env_var_name).is_err() {
             let canister_wasm_name = format!("{}.wasm.gz", env_var_name.to_lowercase());
             let canister_wasm_path =

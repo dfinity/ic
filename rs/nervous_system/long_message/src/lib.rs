@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::api::{call_context_instruction_counter, instruction_counter};
 use ic_cdk::query;

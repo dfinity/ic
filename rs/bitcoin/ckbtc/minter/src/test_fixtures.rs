@@ -1,5 +1,5 @@
 use crate::lifecycle::init::InitArgs;
-use crate::{lifecycle, ECDSAPublicKey, GetUtxosResponse, Network, Timestamp};
+use crate::{ECDSAPublicKey, GetUtxosResponse, Network, Timestamp, lifecycle};
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};
@@ -110,10 +110,33 @@ pub fn get_uxos_response() -> GetUtxosResponse {
     }
 }
 
+pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
+    f: F,
+    expected_message: &str,
+) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    let error = result.expect_err(&format!(
+        "Expected panic with message containing: {expected_message}"
+    ));
+    let panic_message = {
+        if let Some(s) = error.downcast_ref::<String>() {
+            s.to_string()
+        } else if let Some(s) = error.downcast_ref::<&str>() {
+            s.to_string()
+        } else {
+            format!("{error:?}")
+        }
+    };
+    assert!(
+        panic_message.contains(expected_message),
+        "Expected panic message to contain: {expected_message}, but got: {panic_message}"
+    );
+}
+
 pub mod mock {
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
-    use crate::{CanisterRuntime, GetUtxosRequest, GetUtxosResponse};
+    use crate::{CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network, tx};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
@@ -137,17 +160,20 @@ pub mod mock {
             async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: DerivationPath, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
+            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
         }
     }
 }
 
 pub mod arbitrary {
     use crate::{
+        WithdrawalFee,
         address::BitcoinAddress,
+        reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
         signature::EncodedSignature,
         state::{
-            eventlog::{Event, EventType},
             ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
+            eventlog::{Event, EventType, ReplacedReason},
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
@@ -160,16 +186,16 @@ pub mod arbitrary {
     use proptest::{
         array::uniform20,
         array::uniform32,
-        collection::{vec as pvec, SizeRange},
+        collection::{SizeRange, vec as pvec},
         option,
-        prelude::{any, Just, Strategy},
+        prelude::{Just, Strategy, any},
         prop_oneof,
     };
     use serde_bytes::ByteBuf;
 
     // Macro to simplify writing strategies that generate structs.
     macro_rules! prop_struct {
-        ($struct_path:path { $($field_name:ident: $strategy:expr),* $(,)? }) => {
+        ($struct_path:path { $($field_name:ident: $strategy:expr_2021),* $(,)? }) => {
             #[allow(unused_parens)]
             ($($strategy),*).prop_map(|($($field_name),*)| {
                 $struct_path {
@@ -245,6 +271,32 @@ pub mod arbitrary {
         prop_oneof![
             Just(SuspendedReason::ValueTooSmall),
             Just(SuspendedReason::Quarantined),
+        ]
+    }
+
+    fn withdrawal_fee() -> impl Strategy<Value = WithdrawalFee> {
+        (any::<u64>(), any::<u64>()).prop_map(|(bitcoin_fee, minter_fee)| WithdrawalFee {
+            bitcoin_fee,
+            minter_fee,
+        })
+    }
+
+    fn withdrawal_reimbursement_reason() -> impl Strategy<Value = WithdrawalReimbursementReason> {
+        (0..2000usize, 500..1000usize).prop_map(|(n, m)| {
+            WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: n + m + 1,
+                    max_num_inputs: n,
+                },
+            )
+        })
+    }
+
+    fn replaced_reason() -> impl Strategy<Value = ReplacedReason> {
+        prop_oneof![
+            Just(ReplacedReason::ToRetry),
+            withdrawal_reimbursement_reason()
+                .prop_map(|reason| ReplacedReason::ToCancel { reason })
         ]
     }
 
@@ -327,8 +379,8 @@ pub mod arbitrary {
     #[allow(deprecated)]
     mod event {
         use super::*;
-        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
         use crate::Network;
+        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
 
         fn btc_network() -> impl Strategy<Value = Network> {
             prop_oneof![
@@ -389,6 +441,7 @@ pub mod arbitrary {
                     change_output: option::of(change_output()),
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: option::of(any::<u64>()),
+                    withdrawal_fee: option::of(withdrawal_fee()),
                 }),
                 prop_struct!(EventType::ReplacedBtcTransaction {
                     old_txid: txid(),
@@ -396,6 +449,9 @@ pub mod arbitrary {
                     change_output: change_output(),
                     submitted_at: any::<u64>(),
                     fee_per_vbyte: any::<u64>(),
+                    withdrawal_fee: option::of(withdrawal_fee()),
+                    reason: option::of(replaced_reason()),
+                    new_utxos: option::of(pvec(utxo(amount()), 0..10_000)),
                 }),
                 prop_struct!(EventType::ConfirmedBtcTransaction { txid: txid() }),
                 prop_struct!(EventType::CheckedUtxo {

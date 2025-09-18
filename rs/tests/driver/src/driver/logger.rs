@@ -2,7 +2,7 @@
 
 use crate::driver::constants;
 use anyhow::Result;
-use slog::{o, Drain, Key, Logger, OwnedKVList, Record, KV};
+use slog::{Drain, KV, Key, Logger, OwnedKVList, Record, o};
 use slog_term::Decorator;
 use std::{fmt, fs::File, io};
 use std::{os::unix::prelude::AsRawFd, path::Path};
@@ -87,11 +87,11 @@ impl<D: Decorator> Drain for SysTestLogFormatter<D> {
             rd.start_location()?;
             write!(rd, "[")?;
             if let Some(ref task_id) = kv_serializer.task_id {
-                write!(rd, "{}:", task_id)?;
+                write!(rd, "{task_id}:")?;
             }
 
             if let Some(ref output_channel) = kv_serializer.output_channel {
-                write!(rd, "{}]", output_channel)?;
+                write!(rd, "{output_channel}]")?;
             } else {
                 write!(
                     rd,
@@ -134,8 +134,8 @@ impl slog::ser::Serializer for KeyValueSerializer {
     /// `output_channel` to be set (on the record) and ignore all other keys.
     fn emit_arguments(&mut self, key: Key, val: &fmt::Arguments) -> slog::Result {
         match key {
-            "task_id" => self.task_id = Some(format!("{}", val)),
-            "output_channel" => self.output_channel = Some(format!("{}", val)),
+            "task_id" => self.task_id = Some(format!("{val}")),
+            "output_channel" => self.output_channel = Some(format!("{val}")),
             _ => (),
         }
         Ok(())

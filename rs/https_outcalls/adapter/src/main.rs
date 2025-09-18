@@ -8,7 +8,7 @@ use ic_adapter_metrics_server::start_metrics_grpc;
 use ic_http_endpoints_async_utils::{
     abort_on_panic, incoming_from_nth_systemd_socket, shutdown_signal,
 };
-use ic_https_outcalls_adapter::{start_server, IncomingSource};
+use ic_https_outcalls_adapter::{IncomingSource, start_server};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;

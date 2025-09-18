@@ -182,28 +182,28 @@
 
 use crate::{
     complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl},
-    metrics::{timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS},
+    metrics::{CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS, IDkgClientMetrics, timed_call},
     pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
     signer::{ThresholdSigner, ThresholdSignerImpl},
     utils::IDkgBlockReaderImpl,
 };
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
-    consensus_pool::ConsensusBlockCache,
+    consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::IDkgMessageId,
-    consensus::idkg::IDkgBlockReader,
+    consensus::{HasHeight, idkg::IDkgBlockReader},
     crypto::canister_threshold_sig::{error::IDkgRetainKeysError, idkg::IDkgTranscript},
     malicious_flags::MaliciousFlags,
-    Height, NodeId, SubnetId,
 };
 use std::{
     collections::HashSet,
@@ -230,7 +230,7 @@ pub use payload_builder::{
     make_bootstrap_summary_with_initial_dealings,
 };
 pub use payload_verifier::{
-    validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
+    IDkgPayloadValidationFailure, InvalidIDkgPayloadReason, validate_payload,
 };
 pub use stats::IDkgStatsImpl;
 
@@ -397,8 +397,7 @@ fn get_active_transcripts(
 
     if error_count > 0 {
         return Err(format!(
-            "Received {} errors when resolving transcipts",
-            error_count
+            "Received {error_count} errors when resolving transcipts"
         ));
     }
 
@@ -491,7 +490,7 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
 /// Implements the BouncerFactory interface for IDkg.
 pub struct IDkgBouncer {
     subnet_id: SubnetId,
-    consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BouncerMetrics,
 }
@@ -501,14 +500,21 @@ impl IDkgBouncer {
     pub fn new(
         metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
-        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
             subnet_id,
-            consensus_block_cache,
+            consensus_pool_cache,
             state_reader,
             metrics: BouncerMetrics::new(metrics_registry, "idkg_pool"),
+        }
+    }
+
+    fn compute_args(&self) -> IDkgBouncerArgs {
+        IDkgBouncerArgs {
+            finalized_height: self.consensus_pool_cache.finalized_block().height(),
+            certified_height: self.state_reader.latest_certified_height(),
         }
     }
 }
@@ -518,25 +524,12 @@ struct IDkgBouncerArgs {
     certified_height: Height,
 }
 
-impl IDkgBouncerArgs {
-    fn new(
-        block_reader: &dyn IDkgBlockReader,
-        state_reader: &dyn StateReader<State = ReplicatedState>,
-    ) -> Self {
-        Self {
-            finalized_height: block_reader.tip_height(),
-            certified_height: state_reader.latest_certified_height(),
-        }
-    }
-}
-
 impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
-        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
+        let args = self.compute_args();
         Box::new(move |id| compute_bouncer(id, subnet_id, &args))
     }
 
@@ -623,24 +616,26 @@ mod tests {
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::idkg::{
-        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        FakeCertifiedStateSnapshot, fake_ecdsa_idkg_master_public_key_id,
+        fake_master_public_key_ids_for_all_algorithms,
         fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
-        fake_signature_request_context_from_id, request_id, FakeCertifiedStateSnapshot,
+        fake_signature_request_context_from_id, request_id,
     };
     use ic_types::{
         consensus::idkg::{
+            IDkgArtifactIdData, PreSigId, RequestId, SigShareIdData, TranscriptRef,
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
-            opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, IDkgArtifactIdData,
-            PreSigId, RequestId, SigShareIdData, TranscriptRef,
+            opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix,
         },
-        crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
+        crypto::{CryptoHash, canister_threshold_sig::idkg::IDkgTranscriptId},
         messages::CallbackId,
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2, subnet_test_id};
 
     #[test]
     fn test_get_active_transcripts() {
@@ -747,18 +742,31 @@ mod tests {
 
     #[test]
     fn test_idkg_priority_fn_args() {
-        let state_manager = Arc::new(RefMockStateManager::default());
-        let height = Height::from(100);
-        state_manager
-            .get_mut()
-            .expect_latest_certified_height()
-            .returning(move || height);
+        const EXPECTED_CERTIFIED_HEIGHT: u64 = 10;
+        const EXPECTED_FINALIZED_HEIGHT: u64 = 12;
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { mut pool, .. } = dependencies(pool_config.clone(), 1);
 
-        let block_reader = TestIDkgBlockReader::for_pre_signer_test(height.increment(), vec![]);
+            let state_manager = Arc::new(RefMockStateManager::default());
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .returning(move || EXPECTED_CERTIFIED_HEIGHT.into());
 
-        let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
-        assert_eq!(args.certified_height, height);
-        assert_eq!(args.finalized_height, height.increment());
+            pool.advance_round_normal_operation_n(EXPECTED_FINALIZED_HEIGHT);
+
+            let bouncer_factory = IDkgBouncer::new(
+                &MetricsRegistry::new(),
+                subnet_test_id(1),
+                pool.get_cache(),
+                state_manager as Arc<_>,
+            );
+
+            let args = bouncer_factory.compute_args();
+
+            assert_eq!(args.certified_height.get(), EXPECTED_CERTIFIED_HEIGHT);
+            assert_eq!(args.finalized_height.get(), EXPECTED_FINALIZED_HEIGHT);
+        });
     }
 
     fn get_fake_artifact_id_data(i: IDkgTranscriptId) -> IDkgArtifactIdData {

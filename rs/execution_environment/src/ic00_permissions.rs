@@ -101,12 +101,13 @@ impl Ic00MethodPermissions {
             },
             Ic00Method::FetchCanisterLogs => Self {
                 method,
-                // `FetchCanisterLogs` method is only allowed for messages sent by users,
-                // all inter-canister call permissions are irrelevant and therefore set to false.
-                allow_remote_subnet_sender: false,
+                // `FetchCanisterLogs` disallows inter-canister calls by default.
+                // A feature flag can enable them, so permissions are preset here,
+                // while the actual handling is done elsewhere.
+                allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: false,
-                does_not_run_on_aborted_canister: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
             Ic00Method::UploadChunk | Ic00Method::TakeCanisterSnapshot => Self {
@@ -161,7 +162,9 @@ impl Ic00MethodPermissions {
         } else {
             Err(UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!("Incorrect sender subnet id: {sender_subnet_id}. Sender should be on the same subnet or on the NNS subnet."),
+                format!(
+                    "Incorrect sender subnet id: {sender_subnet_id}. Sender should be on the same subnet or on the NNS subnet."
+                ),
             ))
         }
     }

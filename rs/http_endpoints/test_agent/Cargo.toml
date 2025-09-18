@@ -8,8 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-http-endpoints-public = { path = "../../http_endpoints/public" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
 reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }

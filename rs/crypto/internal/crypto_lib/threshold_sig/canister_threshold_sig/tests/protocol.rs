@@ -10,8 +10,8 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::*;
 fn insufficient_dealings(r: Result<ProtocolRound, CanisterThresholdError>) {
     match r {
         Err(CanisterThresholdError::InsufficientDealings) => {}
-        Err(e) => panic!("Unexpected error {:?}", e),
-        Ok(r) => panic!("Unexpected success {:?}", r),
+        Err(e) => panic!("Unexpected error {e:?}"),
+        Ok(r) => panic!("Unexpected success {r:?}"),
     }
 }
 
@@ -284,7 +284,7 @@ fn random_subset<R: rand::Rng, T: Clone>(
     let keys = shares.keys().collect::<Vec<_>>();
 
     while result.len() != include {
-        let key_to_add = keys[rng.gen::<usize>() % keys.len()];
+        let key_to_add = keys[rng.r#gen::<usize>() % keys.len()];
 
         if !result.contains_key(key_to_add) {
             result.insert(*key_to_add, shares[key_to_add].clone());
@@ -326,8 +326,8 @@ fn should_basic_signing_protocol_work() -> Result<(), CanisterThresholdError> {
 
         let alg = setup.alg();
 
-        let signed_message = rng.gen::<[u8; 32]>().to_vec();
-        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let signed_message = rng.r#gen::<[u8; 32]>().to_vec();
+        let random_beacon = Randomness::from(rng.r#gen::<[u8; 32]>());
 
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
         let proto = EcdsaSignatureProtocolExecution::new(
@@ -353,7 +353,7 @@ fn should_basic_signing_protocol_work() -> Result<(), CanisterThresholdError> {
 
         // Test that another run of the protocol generates signatures
         // which are not verifiable in the earlier one (due to different rho)
-        let random_beacon2 = Randomness::from(rng.gen::<[u8; 32]>());
+        let random_beacon2 = Randomness::from(rng.r#gen::<[u8; 32]>());
         let proto2 = EcdsaSignatureProtocolExecution::new(
             setup,
             signed_message,
@@ -385,7 +385,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), CanisterThresholdE
         let mut signed_message = vec![0; msg_len];
         rng.fill_bytes(&mut signed_message);
 
-        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let random_beacon = Randomness::from(rng.r#gen::<[u8; 32]>());
 
         let random_seed = Seed::from_rng(&mut rng);
 
@@ -449,9 +449,9 @@ fn should_be_able_to_perform_taproot_signature() -> Result<(), CanisterThreshold
         let mut signed_message = vec![0; msg_len];
         rng.fill_bytes(&mut signed_message);
 
-        let taproot_tree_root = rng.gen::<[u8; 32]>().to_vec();
+        let taproot_tree_root = rng.r#gen::<[u8; 32]>().to_vec();
 
-        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let random_beacon = Randomness::from(rng.r#gen::<[u8; 32]>());
 
         let random_seed = Seed::from_rng(&mut rng);
 
@@ -508,8 +508,8 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), CanisterThreshold
     let corrupted_dealings = 0;
     let threshold = (nodes - 1) / 3;
 
-    let signed_message = rng.gen::<[u8; 32]>().to_vec();
-    let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+    let signed_message = rng.r#gen::<[u8; 32]>().to_vec();
+    let random_beacon = Randomness::from(rng.r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
@@ -572,8 +572,8 @@ fn invalid_signatures_are_rejected() -> Result<(), CanisterThresholdError> {
 
         let alg = setup.alg();
 
-        let signed_message = rng.gen::<[u8; 32]>().to_vec();
-        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let signed_message = rng.r#gen::<[u8; 32]>().to_vec();
+        let random_beacon = Randomness::from(rng.r#gen::<[u8; 32]>());
 
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
         let proto = EcdsaSignatureProtocolExecution::new(
@@ -647,7 +647,7 @@ fn should_fail_on_hashed_message_length_mismatch() {
 
         let alg = setup.alg();
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
-        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let random_beacon = Randomness::from(rng.r#gen::<[u8; 32]>());
 
         let message_with_wrong_length = vec![0; cfg.signature_alg().curve().scalar_bytes() + 1];
 
@@ -666,7 +666,7 @@ fn should_fail_on_hashed_message_length_mismatch() {
             if e.contains("length of hashed_message") && e.contains("not matching expected length")
         );
 
-        let signed_message = rng.gen::<[u8; 32]>().to_vec();
+        let signed_message = rng.r#gen::<[u8; 32]>().to_vec();
 
         let proto = EcdsaSignatureProtocolExecution::new(
             setup.clone(),

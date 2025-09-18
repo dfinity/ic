@@ -18,7 +18,7 @@ fn valid_bls_12_381_signature<R: RngCore + CryptoRng>(
 ) -> (Vec<u8>, CombinedSignatureBytes, PublicKeyBytes) {
     let secret_key = Scalar::random(rng);
     let public_key = G2Affine::generator() * &secret_key;
-    let msg = rng.gen::<[u8; 32]>().to_vec();
+    let msg = rng.r#gen::<[u8; 32]>().to_vec();
     let msg_hash = hash_message_to_g1(&msg);
     let signature = msg_hash * secret_key;
 

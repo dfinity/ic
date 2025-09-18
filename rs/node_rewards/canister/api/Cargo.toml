@@ -11,5 +11,6 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-ic-cdk = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 serde = { workspace = true }

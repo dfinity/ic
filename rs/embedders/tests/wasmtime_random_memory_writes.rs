@@ -4,15 +4,15 @@ use ic_config::{
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::compile,
     wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
-        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
+        ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
+        SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
     },
-    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
@@ -20,12 +20,12 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
-use ic_types::{batch::CanisterCyclesCostSchedule, MemoryAllocation};
 use ic_types::{
+    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
-    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
+use ic_types::{MemoryAllocation, batch::CanisterCyclesCostSchedule};
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -40,11 +40,12 @@ const STABLE_OP_BYTES: u64 = 37;
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
 }
 
 fn test_api_for_update(
@@ -199,7 +200,7 @@ fn make_module_wat(heap_size: usize) -> String {
         (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
       )
 
-      (memory $memory {HEAP_SIZE})
+      (memory $memory {heap_size})
       (export "memory" (memory $memory))
       (export "canister_query dump_heap" (func $dump_heap))
       (export "canister_update write_bytes" (func $write_bytes))
@@ -208,8 +209,7 @@ fn make_module_wat(heap_size: usize) -> String {
       (export "canister_update test_stable64_read_nonzero" (func $test_stable_read_nonzero))
       (export "canister_update test_stable_write_nonzero" (func $test_stable_write_nonzero))
       (export "canister_update test_stable64_write_nonzero" (func $test_stable64_write_nonzero))
-    )"#,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -256,11 +256,10 @@ fn make_module_wat_for_api_calls(heap_size: usize) -> String {
         (call $ic0_stable_read (i32.const 40960) (i32.const 0) (i32.const 4))
       )
 
-      (memory $memory {HEAP_SIZE})
+      (memory $memory {heap_size})
       (export "memory" (memory $memory))
       (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
-    )"#,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -307,11 +306,10 @@ fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
         (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
       )
 
-      (memory $memory i64 {HEAP_SIZE})
+      (memory $memory i64 {heap_size})
       (export "memory" (memory $memory))
       (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
-    )"#,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -326,14 +324,12 @@ fn make_module_wat_with_write_fun(heap_size: usize, write_fun: &str) -> String {
         (func $ic0_msg_arg_data_size (result i32)))
 
       ;; write to memory
-      {WRITE_FUN}
+      {write_fun}
 
-      (memory $memory {HEAP_SIZE})
+      (memory $memory {heap_size})
       (export "memory" (memory $memory))
       (export "canister_update write_bytes" (func $write_bytes))
-    )"#,
-        WRITE_FUN = write_fun,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -370,9 +366,6 @@ fn make_backward_store_module_wat(
         (call $msg_reply)
       )
       "#,
-        store_inst_data_size = store_inst_data_size,
-        store_inst = store_inst,
-        load_inst = load_inst,
     );
     make_module_wat_with_write_fun(heap_size, &write_fun)
 }
@@ -484,9 +477,9 @@ mod tests {
     use super::*;
 
     use ic_embedders::{
-        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
-        wasm_utils::instrumentation::WasmMemoryType,
-        wasmtime_embedder::system_api::ModificationTracking, wasmtime_embedder::CanisterMemoryType,
+        wasm_executor::compute_page_delta, wasm_utils::instrumentation::WasmMemoryType,
+        wasm_utils::instrumentation::instruction_to_cost, wasmtime_embedder::CanisterMemoryType,
+        wasmtime_embedder::system_api::ModificationTracking,
     };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
@@ -584,8 +577,7 @@ mod tests {
                     };
                     assert!(
                         pages_match == 0,
-                        "page({}) of test buffer and Wasm heap doesn't match",
-                        i
+                        "page({i}) of test buffer and Wasm heap doesn't match"
                     );
                     page_map.update(&compute_page_delta(
                         &mut instance,
@@ -613,29 +605,18 @@ mod tests {
                     // Add the target pages.
                     for Write { dst, bytes } in writes {
                         if !bytes.is_empty() {
-                            if embedder.config().feature_flags.write_barrier == FlagStatus::Disabled
-                            {
-                                // A page will not actually be considered dirty
-                                // unless the contents has changed. Memory is
-                                // initially all 0, so this means we should ignore
-                                // all zero bytes.
-                                result.extend(
-                                    bytes
-                                        .iter()
-                                        .enumerate()
-                                        .filter(|(_, b)| **b != 0)
-                                        .map(|(addr, _)| {
-                                            (*dst as u64 + addr as u64) / PAGE_SIZE as u64
-                                        })
-                                        .collect::<BTreeSet<_>>(),
-                                );
-                            } else {
-                                result.extend(
-                                    *dst as u64 / PAGE_SIZE as u64
-                                        ..=(*dst as u64 + bytes.len() as u64 - 1)
-                                            / PAGE_SIZE as u64,
-                                );
-                            }
+                            // A page will not actually be considered dirty
+                            // unless the contents has changed. Memory is
+                            // initially all 0, so this means we should ignore
+                            // all zero bytes.
+                            result.extend(
+                                bytes
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, b)| **b != 0)
+                                    .map(|(addr, _)| (*dst as u64 + addr as u64) / PAGE_SIZE as u64)
+                                    .collect::<BTreeSet<_>>(),
+                            );
                         }
                     }
                     result.iter().cloned().collect()
@@ -643,10 +624,9 @@ mod tests {
 
                 // Check SIGSEGV against expected.
                 assert_eq!(
-                sigsegv_dirty_pages,
-                writes_pages,
-                "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
-            );
+                    sigsegv_dirty_pages, writes_pages,
+                    "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
+                );
             }
         });
     }
@@ -789,11 +769,11 @@ mod tests {
         //! or write, in addition to 7 instructions required for setup.
 
         use super::{
-            get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
+            MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES, SubnetType, get_num_instructions_consumed,
         };
         use ic_config::subnet_config::SchedulerConfig;
-        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_logger::replica_logger::no_op_logger;
 
         // (drop (call $ic0_stable_grow (i32.const 1)))
@@ -1415,8 +1395,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let wat = make_module64_wat_for_api_calls(TEST_NUM_PAGES);
             let wasm = wat2wasm(&wat).unwrap();
-            let mut config = EmbeddersConfig::default();
-            config.feature_flags.wasm64 = FlagStatus::Enabled;
+            let config = EmbeddersConfig::default();
             let embedder = WasmtimeEmbedder::new(config, log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();

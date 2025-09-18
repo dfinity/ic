@@ -10,5 +10,6 @@ exports_files([
 py_console_script_binary(
     name = "sev-snp-measure",
     pkg = "@python_deps//sev_snp_measure",
+    tags = ["manual"],
     visibility = ["//ic-os:__subpackages__"],
 )

@@ -114,7 +114,7 @@ pub async fn start_rosetta(
     if port_file.exists() {
         if let Err(e) = std::fs::remove_file(port_file.clone()) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                panic!("Unable to remove port file: {:?}", e);
+                panic!("Unable to remove port file: {e:?}");
             }
         }
     }
@@ -162,7 +162,7 @@ pub async fn start_rosetta(
     let mut tries_left = NUM_TRIES;
     loop {
         let res = http_client
-            .post(format!("http://localhost:{}/network/list", port).as_str())
+            .post(format!("http://localhost:{port}/network/list").as_str())
             .header("Content-Type", "application/json")
             .send()
             .await

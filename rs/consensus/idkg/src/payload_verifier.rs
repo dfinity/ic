@@ -24,12 +24,12 @@
 
 use crate::{
     metrics::timed_call,
-    payload_builder::{create_data_payload_helper, create_summary_payload, IDkgPayloadError},
+    payload_builder::{IDkgPayloadError, create_data_payload_helper, create_summary_payload},
     pre_signer::IDkgTranscriptBuilder,
     signer::ThresholdSignatureBuilder,
     utils::{
-        block_chain_cache, build_signature_inputs, get_idkg_chain_key_config_if_enabled,
-        IDkgBlockReaderImpl, InvalidChainCacheError, MAX_PARALLELISM,
+        IDkgBlockReaderImpl, InvalidChainCacheError, MAX_PARALLELISM, block_chain_cache,
+        build_signature_inputs, get_idkg_chain_key_config_if_enabled,
     },
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -43,33 +43,32 @@ use ic_management_canister_types_private::{
     Payload, ReshareChainKeyResponse, SignWithECDSAReply, SignWithSchnorrReply,
 };
 use ic_replicated_state::{
+    ReplicatedState,
     metadata_state::subnet_call_context_manager::{
         IDkgSignWithThresholdContext, SignWithThresholdContext,
     },
-    ReplicatedState,
 };
 use ic_types::{
+    Height, SubnetId,
     batch::ValidationContext,
     consensus::{
-        idkg::{
-            self,
-            common::{BuildSignatureInputsError, CombinedSignature, ThresholdSigInputs},
-            IDkgBlockReader, IDkgTranscriptParamsRef, TranscriptRef,
-        },
         Block, BlockPayload, HasHeight,
+        idkg::{
+            self, IDkgBlockReader, IDkgTranscriptParamsRef, TranscriptRef,
+            common::{BuildSignatureInputsError, CombinedSignature, ThresholdSigInputs},
+        },
     },
     crypto::canister_threshold_sig::{
+        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
         error::{
             IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError, ThresholdSchnorrVerifyCombinedSigError,
         },
         idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing},
-        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
     },
     messages::CallbackId,
     registry::RegistryClientError,
     state_manager::StateManagerError,
-    Height, SubnetId,
 };
 use prometheus::HistogramVec;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
@@ -91,6 +90,7 @@ pub enum IDkgPayloadValidationFailure {
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     NewSignatureBuildInputsError(BuildSignatureInputsError),
+    InvalidChainCacheError(InvalidChainCacheError),
 }
 
 #[derive(Debug)]
@@ -102,7 +102,6 @@ pub enum InvalidIDkgPayloadReason {
     // wrapper of other errors
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
-    InvalidChainCacheError(InvalidChainCacheError),
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
@@ -139,9 +138,9 @@ impl From<IDkgPayloadValidationFailure> for IDkgValidationError {
     }
 }
 
-impl From<InvalidChainCacheError> for InvalidIDkgPayloadReason {
+impl From<InvalidChainCacheError> for IDkgPayloadValidationFailure {
     fn from(err: InvalidChainCacheError) -> Self {
-        InvalidIDkgPayloadReason::InvalidChainCacheError(err)
+        IDkgPayloadValidationFailure::InvalidChainCacheError(err)
     }
 }
 
@@ -395,8 +394,20 @@ fn validate_data_payload(
                 parent_block.height()
             )
         });
-    let parent_chain = block_chain_cache(pool_reader, &summary_block, parent_block)
-        .map_err(InvalidIDkgPayloadReason::from)?;
+    // In case the certified height is below the summary height, add the heights in
+    // between to the blockchain. This is needed to calculate the total number of pre-
+    // signatures in the certified state and every block since then.
+    // Note that blocks below the summary are not guaranteed to exist, because they are
+    // purged once the CUP exists. However, if the CUP exists, that implies there is
+    // already a finalized block b with b.certified_height >= summary_height, which means
+    // we should not be validating a block referencing a lower certified height manually here.
+    // This block should instead be validated via the notarization fast-path.
+    let start_height = context
+        .certified_height
+        .increment()
+        .min(summary_block.height());
+    let parent_chain = block_chain_cache(pool_reader, start_height, parent_block.clone())
+        .map_err(IDkgPayloadValidationFailure::from)?;
     let block_reader = IDkgBlockReaderImpl::new(parent_chain);
     let curr_height = parent_block.height().increment();
 
@@ -593,19 +604,19 @@ fn validate_reshare_dealings(
 
 fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidIDkgPayloadReason> {
     let reshare_chain_key_response = ReshareChainKeyResponse::decode(data)
-        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))?;
 
     let initial_dealings = match reshare_chain_key_response {
         ReshareChainKeyResponse::IDkg(initial_idkg_dealings) => initial_idkg_dealings,
         ReshareChainKeyResponse::NiDkg(_) => {
             return Err(InvalidIDkgPayloadReason::DecodingError(
                 "Found an NiDkg response".to_string(),
-            ))
+            ));
         }
     };
 
     InitialIDkgDealings::try_from(&initial_dealings)
-        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))
 }
 
 // Validate new signature agreements in the current payload.
@@ -696,7 +707,7 @@ mod test {
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_dealings, CanisterThresholdSigTestEnvironment,
+        CanisterThresholdSigTestEnvironment, dummy_values::dummy_dealings,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
@@ -706,13 +717,13 @@ mod test {
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        Height,
         consensus::idkg::{
-            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, CompletedSignature,
-            IDkgMasterPublicKeyId,
+            CompletedSignature, IDkgMasterPublicKeyId, common::PreSignatureRef,
+            ecdsa::PreSignatureQuadrupleRef,
         },
         crypto::AlgorithmId,
         messages::CallbackId,
-        Height,
     };
     use idkg::RequestId;
     use std::collections::BTreeSet;
@@ -737,14 +748,16 @@ mod test {
         let mut curr_payload = prev_payload.clone();
 
         // Empty payload verifies
-        assert!(validate_transcript_refs(
-            crypto,
-            &block_reader,
-            &prev_payload,
-            &curr_payload,
-            Height::from(0)
-        )
-        .is_ok());
+        assert!(
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                Height::from(0)
+            )
+            .is_ok()
+        );
 
         // Add a transcript
         let height_100 = Height::new(100);
@@ -822,14 +835,16 @@ mod test {
 
         curr_payload.idkg_transcripts = BTreeMap::new();
         block_reader.add_transcript(*transcript_ref_1.as_ref(), transcript_1);
-        assert!(validate_transcript_refs(
-            crypto,
-            &block_reader,
-            &prev_payload,
-            &curr_payload,
-            Height::from(101),
-        )
-        .is_ok());
+        assert!(
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                Height::from(101),
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -948,11 +963,15 @@ mod test {
     fn test_validate_new_signature_agreements_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_new_signature_agreements(key_id);
+            test_validate_new_signature_agreements(&key_id, false);
+            test_validate_new_signature_agreements(&key_id, true);
         }
     }
 
-    fn test_validate_new_signature_agreements(key_id: IDkgMasterPublicKeyId) {
+    fn test_validate_new_signature_agreements(
+        key_id: &IDkgMasterPublicKeyId,
+        store_pre_signatures_in_state: bool,
+    ) {
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
         let height = Height::from(1);
@@ -1006,6 +1025,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
+            store_pre_signatures_in_state,
         );
         // First signature should now be in "unreported" agreement
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -1032,6 +1052,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
+            store_pre_signatures_in_state,
         );
         // First signature should now be reported, second unreported.
         assert_eq!(idkg_payload.signature_agreements.len(), 2);

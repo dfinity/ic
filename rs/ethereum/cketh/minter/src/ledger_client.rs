@@ -78,7 +78,7 @@ impl LedgerClient {
             .transfer_from(TransferFromArgs {
                 spender_subaccount: None,
                 from,
-                to: ic_cdk::id().into(),
+                to: ic_cdk::api::canister_self().into(),
                 amount: amount.clone(),
                 fee: None,
                 memo: Some(Memo::from(memo)),
@@ -142,9 +142,9 @@ impl LedgerClient {
                         message,
                     } => LedgerBurnError::TemporarilyUnavailable {
                         message: format!(
-                        "{} ledger unreachable, error code: {error_code}, with message: {message}",
-                        self.token_symbol
-                    ),
+                            "{} ledger unreachable, error code: {error_code}, with message: {message}",
+                            self.token_symbol
+                        ),
                         ledger: self.ck_ledger(),
                     },
                 };

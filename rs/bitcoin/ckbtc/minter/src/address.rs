@@ -14,7 +14,9 @@ const BTC_MAINNET_P2SH_PREFIX: u8 = 5;
 const BTC_TESTNET_PREFIX: u8 = 111;
 const BTC_TESTNET_P2SH_PREFIX: u8 = 196;
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize, candid::CandidType,
+)]
 pub enum BitcoinAddress {
     /// Pay to witness public key hash address.
     /// See BIP-173.
@@ -215,15 +217,14 @@ pub enum ParseAddressError {
 impl fmt::Display for ParseAddressError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MalformedAddress(msg) => write!(fmt, "{}", msg),
-            Self::UnsupportedWitnessVersion(v) => write!(fmt, "unsupported witness version {}", v),
+            Self::MalformedAddress(msg) => write!(fmt, "{msg}"),
+            Self::UnsupportedWitnessVersion(v) => write!(fmt, "unsupported witness version {v}"),
             Self::UnexpectedHumanReadablePart { expected, actual } => {
-                write!(fmt, "expected address HRP {}, got {}", expected, actual)
+                write!(fmt, "expected address HRP {expected}, got {actual}")
             }
             Self::BadWitnessLength { expected, actual } => write!(
                 fmt,
-                "expected witness program of length {}, got {}",
-                expected, actual
+                "expected witness program of length {expected}, got {actual}"
             ),
             Self::UnsupportedAddressType => {
                 write!(fmt, "ckBTC supports only P2WPKH and P2PKH addresses")
@@ -231,15 +232,13 @@ impl fmt::Display for ParseAddressError {
             Self::WrongNetwork { expected, actual } => {
                 write!(
                     fmt,
-                    "expected an address from network {}, got an address from network {}",
-                    expected, actual
+                    "expected an address from network {expected}, got an address from network {actual}"
                 )
             }
             Self::NoData => write!(fmt, "the address contains no data"),
             Self::InvalidBech32Variant { expected, found } => write!(
                 fmt,
-                "invalid bech32 variant, expected: {:?}, found: {:?}",
-                expected, found
+                "invalid bech32 variant, expected: {expected:?}, found: {found:?}"
             ),
         }
     }
@@ -360,8 +359,7 @@ fn parse_bip173_address(
             )
             .map_err(|e| {
                 ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {}: {}",
-                    address, e
+                    "failed to decode witness from address {address}: {e}"
                 ))
             })?;
 
@@ -399,8 +397,7 @@ fn parse_bip173_address(
             )
             .map_err(|e| {
                 ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {}: {}",
-                    address, e
+                    "failed to decode witness from address {address}: {e}"
                 ))
             })?;
 
@@ -423,7 +420,7 @@ fn parse_bip173_address(
 
 #[cfg(test)]
 mod tests {
-    use super::{hrp, BitcoinAddress, ParseAddressError};
+    use super::{BitcoinAddress, ParseAddressError, hrp};
     use crate::Network;
     use bech32::u5;
 
@@ -445,8 +442,8 @@ mod tests {
     #[test]
     fn test_check_address() {
         use crate::address::ParseAddressError::BadWitnessLength;
-        use bitcoin::util::address::Payload;
         use bitcoin::Address;
+        use bitcoin::util::address::Payload;
         use std::str::FromStr;
 
         assert_eq!(

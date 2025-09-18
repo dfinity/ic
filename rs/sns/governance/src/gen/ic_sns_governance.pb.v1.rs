@@ -733,6 +733,69 @@ pub struct RegisterExtension {
     #[prost(message, optional, tag = "2")]
     pub extension_init: ::core::option::Option<ExtensionInit>,
 }
+/// WASM specification that can be either direct bytes or chunked
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Wasm {
+    #[prost(oneof = "wasm::Wasm", tags = "1, 2")]
+    pub wasm: ::core::option::Option<wasm::Wasm>,
+}
+/// Nested message and enum types in `Wasm`.
+pub mod wasm {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Wasm {
+        /// Use this field if the WASM fits within the proposal size limit.
+        #[prost(bytes, tag = "1")]
+        Bytes(::prost::alloc::vec::Vec<u8>),
+        /// If the entire WASM does not fit into the 2 MiB ingress limit, use this instead.
+        #[prost(message, tag = "2")]
+        Chunked(super::ChunkedCanisterWasm),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExtensionUpgradeArg {
+    #[prost(message, optional, tag = "1")]
+    pub value: ::core::option::Option<Precise>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpgradeExtension {
+    /// The id of the extension canister to upgrade.
+    #[prost(message, optional, tag = "1")]
+    pub extension_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Arguments passed to the post-upgrade method of the new wasm module.
+    #[prost(message, optional, tag = "2")]
+    pub canister_upgrade_arg: ::core::option::Option<ExtensionUpgradeArg>,
+    /// The new wasm module that the extension canister is upgraded to.
+    #[prost(message, optional, tag = "3")]
+    pub wasm: ::core::option::Option<Wasm>,
+}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -760,6 +823,29 @@ pub struct ExecuteExtensionOperation {
     pub operation_name: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "3")]
     pub operation_arg: ::core::option::Option<ExtensionOperationArg>,
+}
+/// Specification for an SNS extension
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExtensionSpec {
+    /// The name of the extension
+    #[prost(string, optional, tag = "1")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// The version of the extension.
+    #[prost(uint64, optional, tag = "2")]
+    pub version: ::core::option::Option<u64>,
+    /// The topic that the extension's registration proposal will be under
+    #[prost(enumeration = "Topic", optional, tag = "3")]
+    pub topic: ::core::option::Option<i32>,
+    /// The type of the extension, which determines its standard operations.
+    #[prost(enumeration = "ExtensionType", optional, tag = "4")]
+    pub extension_type: ::core::option::Option<i32>,
 }
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(
@@ -893,7 +979,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -1018,6 +1104,11 @@ pub mod proposal {
         /// Id = 18.
         #[prost(message, tag = "22")]
         ExecuteExtensionOperation(super::ExecuteExtensionOperation),
+        /// Upgrade an SNS extension canister.
+        ///
+        /// Id = 19.
+        #[prost(message, tag = "23")]
+        UpgradeExtension(super::UpgradeExtension),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -4138,6 +4229,20 @@ pub struct Account {
     #[prost(message, optional, tag = "2")]
     pub subaccount: ::core::option::Option<Subaccount>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AddAllowedExtensionRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub spec: ::core::option::Option<ExtensionSpec>,
+}
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
 #[derive(
@@ -4272,6 +4377,47 @@ impl Vote {
             "VOTE_UNSPECIFIED" => Some(Self::Unspecified),
             "VOTE_YES" => Some(Self::Yes),
             "VOTE_NO" => Some(Self::No),
+            _ => None,
+        }
+    }
+}
+/// Types of extensions that can be registered
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    strum_macros::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum ExtensionType {
+    Unspecified = 0,
+    TreasuryManager = 1,
+}
+impl ExtensionType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "EXTENSION_TYPE_UNSPECIFIED",
+            Self::TreasuryManager => "EXTENSION_TYPE_TREASURY_MANAGER",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "EXTENSION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "EXTENSION_TYPE_TREASURY_MANAGER" => Some(Self::TreasuryManager),
             _ => None,
         }
     }

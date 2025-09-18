@@ -215,16 +215,14 @@ impl FromStr for SubnetDescriptor {
         let maybe_principal = PrincipalId::from_str(s);
         match (maybe_index, maybe_principal) {
             (Err(e1), Err(e2)) => Err(format!(
-                "Cannot parse argument '{}' as a subnet descriptor. \
-                 It is not an index because {}. It is not a principal because {}.",
-                s, e1, e2
+                "Cannot parse argument '{s}' as a subnet descriptor. \
+                 It is not an index because {e1}. It is not a principal because {e2}."
             )),
             (Ok(i), Err(_)) => Ok(Self::Index(i)),
             (Err(_), Ok(id)) => Ok(Self::Id(id)),
             (Ok(_), Ok(_)) => Err(format!(
-                "Well that's embarrassing. {} can be interpreted both as an index and as a \
-                 principal. I did not think this was possible!",
-                s
+                "Well that's embarrassing. {s} can be interpreted both as an index and as a \
+                 principal. I did not think this was possible!"
             )),
         }
     }

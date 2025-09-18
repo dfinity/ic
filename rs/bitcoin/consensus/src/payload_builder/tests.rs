@@ -1,8 +1,7 @@
-use crate::{payload_builder::parse, BitcoinPayloadBuilder};
-use ic_btc_interface::Network;
+use crate::{BitcoinPayloadBuilder, payload_builder::parse};
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
+    BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
@@ -22,10 +21,10 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
+    Height, NumBytes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     crypto::{CryptoHash, CryptoHashOf},
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, SubnetId,
 };
 use mockall::mock;
 use std::sync::Arc;
@@ -36,9 +35,9 @@ pub(crate) const SELF_VALIDATING_PAYLOAD_BYTE_LIMIT: NumBytes = NumBytes::new(2 
 pub(crate) const MAX_BLOCK_PAYLOAD_SIZE: NumBytes = NumBytes::new(4 * 1024 * 1024); // 4MiB.
 
 mock! {
-    pub BitcoinAdapterClient {}
+    pub AdapterClient {}
 
-    impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClient {
+    impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for AdapterClient {
         type Response = BitcoinAdapterResponseWrapper;
 
         fn send_blocking(
@@ -89,12 +88,12 @@ pub(crate) fn mock_registry_client(max_block_payload_size: NumBytes) -> MockRegi
 /// NOTE: This function was copied from the registry (to not have an unnecessary dependency)
 fn make_subnet_record_key(subnet_id: SubnetId) -> String {
     const SUBNET_RECORD_KEY_PREFIX: &str = "subnet_record_";
-    format!("{}{}", SUBNET_RECORD_KEY_PREFIX, subnet_id)
+    format!("{SUBNET_RECORD_KEY_PREFIX}{subnet_id}")
 }
 
 fn bitcoin_payload_builder_test(
-    bitcoin_mainnet_adapter_client: MockBitcoinAdapterClient,
-    bitcoin_testnet_adapter_client: MockBitcoinAdapterClient,
+    bitcoin_mainnet_adapter_client: MockAdapterClient,
+    bitcoin_testnet_adapter_client: MockAdapterClient,
     state_manager: MockStateManager,
     registry_client: MockRegistryClient,
     run_test: impl FnOnce(ProposalContext, BitcoinPayloadBuilder),
@@ -117,6 +116,8 @@ fn bitcoin_payload_builder_test(
             &MetricsRegistry::new(),
             Box::new(bitcoin_mainnet_adapter_client),
             Box::new(bitcoin_testnet_adapter_client),
+            Box::new(MockAdapterClient::new()),
+            Box::new(MockAdapterClient::new()),
             subnet_test_id(0),
             Arc::new(registry_client),
             Config::default(),
@@ -131,8 +132,8 @@ fn bitcoin_payload_builder_test(
 fn can_successfully_create_bitcoin_payload() {
     // Create a mock bitcoin adapter client that returns a dummy response
     // for each request.
-    fn mock_adapter() -> MockBitcoinAdapterClient {
-        let mut adapter_client = MockBitcoinAdapterClient::new();
+    fn mock_adapter() -> MockAdapterClient {
+        let mut adapter_client = MockAdapterClient::new();
         adapter_client
             .expect_send_blocking()
             .times(1)
@@ -156,12 +157,12 @@ fn can_successfully_create_bitcoin_payload() {
             GetSuccessorsRequestInitial {
                 processed_block_hashes: vec![vec![10; 32]],
                 anchor: vec![10; 32],
-                network: Network::Testnet,
+                network: Network::BitcoinTestnet,
             },
         )]);
 
     bitcoin_payload_builder_test(
-        MockBitcoinAdapterClient::new(),
+        MockAdapterClient::new(),
         mock_adapter(),
         state_manager,
         registry_client,
@@ -195,8 +196,8 @@ fn can_successfully_create_bitcoin_payload() {
 fn includes_responses_in_the_payload() {
     // Create a mock bitcoin adapter client that returns a successful response
     // for the first request and an error for the second.
-    fn mock_adapter() -> MockBitcoinAdapterClient {
-        let mut adapter_client = MockBitcoinAdapterClient::new();
+    fn mock_adapter() -> MockAdapterClient {
+        let mut adapter_client = MockAdapterClient::new();
         adapter_client
             .expect_send_blocking()
             .times(1)
@@ -219,19 +220,19 @@ fn includes_responses_in_the_payload() {
         BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![10; 32]],
             anchor: vec![10; 32],
-            network: Network::Testnet,
+            network: Network::BitcoinTestnet,
         }),
         BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![20; 32]],
             anchor: vec![20; 32],
-            network: Network::Testnet,
+            network: Network::BitcoinTestnet,
         }),
     ]);
 
     let registry_client = mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE);
 
     bitcoin_payload_builder_test(
-        MockBitcoinAdapterClient::new(),
+        MockAdapterClient::new(),
         mock_adapter(),
         state_manager,
         registry_client,
@@ -278,8 +279,7 @@ fn includes_responses_in_the_payload() {
             );
             assert!(
                 validation_result.is_ok(),
-                "validation did not pass {:?}",
-                validation_result
+                "validation did not pass {validation_result:?}"
             );
 
             assert_eq!(payload, expected_payload);
@@ -291,8 +291,8 @@ fn includes_responses_in_the_payload() {
 fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
     // Create a mock bitcoin adapter client that returns a dummy response
     // for each request.
-    let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
-    let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
+    let bitcoin_mainnet_adapter_client = MockAdapterClient::new();
+    let mut bitcoin_testnet_adapter_client = MockAdapterClient::new();
     bitcoin_testnet_adapter_client
         .expect_send_blocking()
         .times(1)
@@ -311,12 +311,12 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
         BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![10; 32]],
             anchor: vec![10; 32],
-            network: Network::Testnet,
+            network: Network::BitcoinTestnet,
         }),
         BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
             processed_block_hashes: vec![vec![20; 32]],
             anchor: vec![20; 32],
-            network: Network::Testnet,
+            network: Network::BitcoinTestnet,
         }),
     ]);
 
@@ -382,8 +382,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             );
             assert!(
                 validation_result.is_ok(),
-                "validation did not pass {:?}",
-                validation_result
+                "validation did not pass {validation_result:?}"
             );
 
             assert_eq!(payload, expected_payload);
@@ -395,8 +394,8 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
 fn bitcoin_payload_builder_fits_largest_blocks() {
     // Create a mock bitcoin adapter client that returns a dummy response
     // for each request.
-    let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
-    let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
+    let bitcoin_mainnet_adapter_client = MockAdapterClient::new();
+    let mut bitcoin_testnet_adapter_client = MockAdapterClient::new();
     bitcoin_testnet_adapter_client
         .expect_send_blocking()
         .returning(move |_, _| {
@@ -415,7 +414,7 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
             GetSuccessorsRequestInitial {
                 processed_block_hashes: vec![vec![10; 32]],
                 anchor: vec![10; 32],
-                network: Network::Testnet,
+                network: Network::BitcoinTestnet,
             },
         )]);
 
@@ -441,8 +440,7 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
             );
             assert!(
                 validation_result.is_ok(),
-                "validation did not pass {:?}",
-                validation_result
+                "validation did not pass {validation_result:?}"
             );
             assert!(!payload.is_empty());
 

@@ -4,11 +4,10 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:candid",
     "@crate_index//:hex-literal",
     "@crate_index//:hmac",
+    "@crate_index//:ic_principal",
     "@crate_index//:k256",
-    "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
     "@crate_index//:pem",
     "@crate_index//:rand",
@@ -38,7 +37,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_secp256k1",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
+    version = "0.2.0",
     deps = DEPENDENCIES,
 )
 

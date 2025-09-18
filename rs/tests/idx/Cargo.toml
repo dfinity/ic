@@ -23,6 +23,7 @@ ic-regedit = { path = "../../registry/regedit" }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 ssh2 = { workspace = true }
+itertools = { workspace = true }
 
 [[bin]]
 name = "colocate_test"

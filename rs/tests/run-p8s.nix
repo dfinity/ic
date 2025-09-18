@@ -2,9 +2,9 @@
 # See: https://dfinity.atlassian.net/browse/VER-1941
 let
   nixpkgs = builtins.fetchTarball {
-    name = "nixpkgs-release-24.05";
-    url = "https://github.com/nixos/nixpkgs/archive/9db4f92627fe77165cf6dbb1fbad1c869db93023.tar.gz";
-    sha256 = "sha256:17pc791yicjg56dw3yzqbmjq28k15kvw11lcpy632l09r1v5h30w";
+    name = "nixpkgs-release-25.05";
+    url = "https://github.com/nixos/nixpkgs/archive/a84e756ad67fa42311e2d22cbc8f566ee46a04fd.tar.gz";
+    sha256 = "sha256:0q04kkss7ayn9yng6qfg7pgdjc3vzl837s7xqiwypjr3f6x23s9q";
   };
   pkgs = import nixpkgs { };
 in

@@ -13,6 +13,7 @@ type Action = variant {
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
   RegisterExtension : RegisterExtension;
+  UpgradeExtension : UpgradeExtension;
   ExecuteExtensionOperation : ExecuteExtensionOperation;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
@@ -765,12 +766,48 @@ type ExtensionOperationArg = record {
   value : opt PreciseValue;
 };
 
+type ExtensionUpgradeArg = record {
+  value : opt PreciseValue;
+};
+
+type Wasm = variant {
+  Bytes : blob;
+  Chunked : ChunkedCanisterWasm;
+};
+
+type UpgradeExtension = record {
+  extension_canister_id : opt principal;
+  canister_upgrade_arg : opt ExtensionUpgradeArg;
+  wasm : opt Wasm;
+};
+
 type ExecuteExtensionOperation = record {
   extension_canister_id : opt principal;
 
   operation_name : opt text;
 
   operation_arg : opt ExtensionOperationArg;
+};
+
+type ExtensionOperationSpec = record {
+  operation_type : opt ExtensionOperationType;
+  description : opt text;
+  extension_type : opt ExtensionType;
+  topic : opt Topic;
+};
+
+type ExtensionOperationType = variant {
+  TreasuryManagerDeposit;
+  TreasuryManagerWithdraw;
+};
+
+type ExtensionType = variant {
+  TreasuryManager;
+};
+
+type RegisteredExtensionOperationSpec = record {
+  canister_id : opt principal;
+  spec : opt ExtensionOperationSpec;
 };
 
 type RegisterVote = record {
@@ -1010,6 +1047,7 @@ type TopicInfo = record {
   description : opt text;
   native_functions : opt vec NervousSystemFunction;
   custom_functions : opt vec NervousSystemFunction;
+  extension_operations : opt vec RegisteredExtensionOperationSpec;
   is_critical : opt bool;
 };
 

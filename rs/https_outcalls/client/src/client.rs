@@ -3,38 +3,34 @@ use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_service::{
-    https_outcalls_service_client::HttpsOutcallsServiceClient, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
+    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    https_outcalls_service_client::HttpsOutcallsServiceClient,
 };
-use ic_interfaces::execution_environment::QueryExecutionService;
+use ic_interfaces::execution_environment::{QueryExecutionInput, QueryExecutionService};
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
-use ic_registry_subnet_type::SubnetType;
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_types::{
+    CanisterId, NumBytes,
     canister_http::{
-        validate_http_headers_and_body, CanisterHttpMethod, CanisterHttpReject,
-        CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseContent, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{CertificateDelegation, Query, QuerySource, Request},
-    CanisterId, NumBytes,
+    messages::{CertificateDelegation, CertificateDelegationMetadata, Query, QuerySource, Request},
 };
 use std::time::Instant;
 use tokio::{
     runtime::Handle,
-    sync::{
-        mpsc::{
-            channel,
-            error::{TryRecvError, TrySendError},
-            Receiver, Sender,
-        },
-        watch,
+    sync::mpsc::{
+        Receiver, Sender, channel,
+        error::{TryRecvError, TrySendError},
     },
 };
-use tonic::{transport::Channel, Code};
+use tonic::{Code, transport::Channel};
 use tower::util::Oneshot;
 use tracing::instrument;
 
@@ -63,8 +59,7 @@ pub struct CanisterHttpAdapterClientImpl {
     rx: Receiver<CanisterHttpResponse>,
     query_service: QueryExecutionService,
     metrics: Metrics,
-    subnet_type: SubnetType,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     log: ReplicaLogger,
 }
 
@@ -75,8 +70,7 @@ impl CanisterHttpAdapterClientImpl {
         query_service: QueryExecutionService,
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
-        subnet_type: SubnetType,
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        nns_delegation_reader: NNSDelegationReader,
         log: ReplicaLogger,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
@@ -88,8 +82,7 @@ impl CanisterHttpAdapterClientImpl {
             rx,
             query_service,
             metrics,
-            subnet_type,
-            delegation_from_nns,
+            nns_delegation_reader,
             log,
         }
     }
@@ -125,8 +118,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone());
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
-        let subnet_type = self.subnet_type;
-        let delegation_from_nns = self.delegation_from_nns.borrow().clone();
+        let delegation_from_nns = self
+            .nns_delegation_reader
+            .get_delegation_with_metadata(CanisterRangesFilter::Flat);
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -180,8 +174,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })
                         .collect(),
                     body: request_body.unwrap_or_default(),
-                    // Socks proxy is only enabled on system subnets.
-                    socks_proxy_allowed: matches!(subnet_type, SubnetType::System),
+                    // TODO(BOUN-1467): Remove this field once everything is done.
+                    socks_proxy_allowed: true,
                     socks_proxy_addrs,
                 })
                 .map_err(|grpc_status| {
@@ -257,8 +251,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                             if transform_result_size as u64 > max_response_size_bytes {
                                 let err_msg = format!(
-                                    "Transformed http response exceeds limit: {}",
-                                    max_response_size_bytes
+                                    "Transformed http response exceeds limit: {max_response_size_bytes}"
                                 );
                                 return Err((RejectCode::SysFatal, err_msg));
                             }
@@ -270,8 +263,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 RejectCode::SysFatal,
                                 format!(
                                     "Failed to parse adapter http response \
-                                    to 'http_response' candid: {}",
-                                    encode_error
+                                    to 'http_response' candid: {encode_error}"
                                 ),
                             )
                         }),
@@ -334,7 +326,7 @@ async fn transform_adapter_response(
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
     let transform_args = TransformArgs {
         response: canister_http_response,
@@ -343,10 +335,7 @@ async fn transform_adapter_response(
     let method_payload = Encode!(&transform_args).map_err(|encode_error| {
         (
             RejectCode::SysFatal,
-            format!(
-                "Failed to parse http response to 'http_response' candid: {}",
-                encode_error
-            ),
+            format!("Failed to parse http response to 'http_response' candid: {encode_error}"),
         )
     })?;
 
@@ -358,7 +347,12 @@ async fn transform_adapter_response(
         method_payload,
     };
 
-    match Oneshot::new(query_handler, (query, delegation_from_nns)).await {
+    let query_execution_input = QueryExecutionInput {
+        query,
+        certificate_delegation_with_metadata: delegation_from_nns,
+    };
+
+    match Oneshot::new(query_handler, query_execution_input).await {
         Ok(query_response) => match query_response {
             Ok((res, _time)) => match res {
                 Ok(wasm_result) => match wasm_result {
@@ -396,27 +390,25 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 mod tests {
     use super::*;
     use ic_https_outcalls_service::{
-        https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
         HttpsOutcallRequest, HttpsOutcallResponse,
+        https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::{Replication, Transform};
     use ic_types::{
-        canister_http::CanisterHttpMethod,
-        messages::{CallbackId, CertificateDelegation},
+        Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
         time::current_time,
-        time::UNIX_EPOCH,
-        Time,
     };
     use std::convert::TryFrom;
     use std::time::Duration;
+    use tokio::sync::watch;
     use tonic::{
-        transport::{Channel, Endpoint, Server, Uri},
         Request, Response, Status,
+        transport::{Channel, Endpoint, Server, Uri},
     };
-    use tower::{service_fn, util::BoxCloneService, Service, ServiceExt};
+    use tower::{Service, ServiceExt, service_fn, util::BoxCloneService};
     use tower_test::mock::Handle;
 
     #[derive(Clone)]
@@ -550,30 +542,25 @@ mod tests {
 
     fn setup_system_query_mock() -> (
         QueryExecutionService,
-        Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>,
+        Handle<QueryExecutionInput, QueryExecutionResponse>,
     ) {
-        let (service, handle) = tower_test::mock::pair::<
-            (Query, Option<CertificateDelegation>),
-            QueryExecutionResponse,
-        >();
+        let (service, handle) =
+            tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
 
-        let infallible_service =
-            tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
-                let mut service_clone = service.clone();
-                async move {
-                    Ok::<QueryExecutionResponse, std::convert::Infallible>({
-                        service_clone
-                            .ready()
-                            .await
-                            .expect("Mocking Infallible service. Waiting for readiness failed.")
-                            .call(request)
-                            .await
-                            .expect(
-                                "Mocking Infallible service and can therefore not return an error.",
-                            )
-                    })
-                }
-            });
+        let infallible_service = tower::service_fn(move |request: QueryExecutionInput| {
+            let mut service_clone = service.clone();
+            async move {
+                Ok::<QueryExecutionResponse, std::convert::Infallible>({
+                    service_clone
+                        .ready()
+                        .await
+                        .expect("Mocking Infallible service. Waiting for readiness failed.")
+                        .call(request)
+                        .await
+                        .expect("Mocking Infallible service and can therefore not return an error.")
+                })
+            }
+        });
         (BoxCloneService::new(infallible_service), handle)
     }
 
@@ -618,8 +605,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -674,8 +660,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -718,7 +703,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (req, rsp) = handle.next_request().await.unwrap();
-            println!("{:?}", req);
+            println!("{req:?}");
             rsp.send_response(Ok((
                 Ok(WasmResult::Reply(vec![
                     0;
@@ -738,8 +723,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -763,8 +747,7 @@ mod tests {
                             UNIX_EPOCH,
                             RejectCode::SysFatal,
                             format!(
-                                "Transformed http response exceeds limit: {}",
-                                MAX_CANISTER_HTTP_RESPONSE_BYTES
+                                "Transformed http response exceeds limit: {MAX_CANISTER_HTTP_RESPONSE_BYTES}"
                             )
                         )
                     );
@@ -800,8 +783,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -889,8 +871,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -965,8 +946,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -1023,8 +1003,7 @@ mod tests {
             svc,
             2,
             MetricsRegistry::default(),
-            SubnetType::Application,
-            rx,
+            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 

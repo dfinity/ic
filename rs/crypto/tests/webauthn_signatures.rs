@@ -22,9 +22,11 @@ fn should_verify_webauthn_signature_sample_1() {
             test_data::ECDSA_P256_SIG_1_DER_HEX.as_ref(),
             test_data::WEBAUTHN_MSG_1_HEX.as_bytes(),
         );
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
+                .is_ok()
+        );
     })
 }
 
@@ -37,9 +39,11 @@ fn should_verify_webauthn_signature_sample_2() {
             test_data::ECDSA_P256_SIG_2_DER_HEX.as_ref(),
             test_data::WEBAUTHN_MSG_2_HEX.as_bytes(),
         );
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
+                .is_ok()
+        );
     })
 }
 
@@ -53,9 +57,11 @@ fn should_verify_webauthn_signature_sample_rsa() {
             test_data::WEBAUTHN_MSG_2_HEX.as_bytes(),
         );
 
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
+                .is_ok()
+        );
     })
 }
 

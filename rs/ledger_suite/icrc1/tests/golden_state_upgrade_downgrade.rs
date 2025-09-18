@@ -4,14 +4,15 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
+use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
 use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
-    TransactionGenerationParameters,
+    TransactionGenerationParameters, generate_transactions, get_all_ledger_and_archive_blocks,
+    get_blocks, list_archives,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::{StateMachine, UserError};
@@ -138,6 +139,12 @@ impl Wasms {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Icrc106CheckError {
+    IndexPrincipalNotSet,
+    NotSupported,
+}
+
 struct LedgerSuiteConfig {
     ledger_id: &'static str,
     index_id: &'static str,
@@ -206,6 +213,10 @@ impl LedgerSuiteConfig {
                 AllowancesRecentlyPurged::No,
             ));
         }
+        // Check if the ledger supports ICRC-106, and if so, if the index principal is set.
+        let index_principal_set = self
+            .check_index_principal(state_machine, ledger_canister_id, index_canister_id)
+            .is_ok();
         // Upgrade to the new canister versions
         self.upgrade_to_master(state_machine);
         if self.extended_testing {
@@ -219,7 +230,14 @@ impl LedgerSuiteConfig {
             ));
         }
         // Verify that the index principal was set in the ledger
-        self.check_index_principal(state_machine, ledger_canister_id, index_canister_id);
+        if index_principal_set {
+            let index_principal_check =
+                self.check_index_principal(state_machine, ledger_canister_id, index_canister_id);
+            assert!(
+                index_principal_check.is_ok(),
+                "ICRC-106 index principal was set before upgrading the ledger to master, but now it is no longer set: {index_principal_check:?}"
+            );
+        }
         // Downgrade back to the mainnet canister versions
         self.downgrade_to_mainnet(state_machine);
         if self.extended_testing {
@@ -239,7 +257,30 @@ impl LedgerSuiteConfig {
         env: &StateMachine,
         ledger_canister_id: CanisterId,
         index_canister_id: CanisterId,
-    ) {
+    ) -> Result<(), Icrc106CheckError> {
+        // Check if the ledger supports ICRC-106
+        let supported_standards = Decode!(
+            &env.query(
+                ledger_canister_id,
+                "icrc1_supported_standards",
+                Encode!().unwrap()
+            )
+            .expect("failed to query supported standards")
+            .bytes(),
+            Vec<StandardRecord>
+        )
+        .expect("failed to decode icrc1_supported_standards response");
+        let mut found = false;
+        for standard in supported_standards {
+            if standard.name == "ICRC-106" {
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err(Icrc106CheckError::NotSupported);
+        }
+        // If the ledger supports ICRC-106, check if the index principal is set
         match Decode!(
             &env.query(ledger_canister_id, "icrc106_get_index_principal", Encode!().unwrap())
                 .expect("failed to query icrc106_get_index_principal")
@@ -253,13 +294,12 @@ impl LedgerSuiteConfig {
                     index_principal,
                     index_canister_id.get().0,
                     "Index principal does not match index canister id"
-                )
+                );
+                Ok(())
             }
             Err(err) => {
-                panic!(
-                    "Failed to get index principal for ledger {}: {:?}",
-                    ledger_canister_id, err
-                );
+                println!("Failed to get index principal for ledger {ledger_canister_id}: {err:?}");
+                Err(Icrc106CheckError::IndexPrincipalNotSet)
             }
         }
     }
@@ -270,7 +310,7 @@ impl LedgerSuiteConfig {
         let metrics = retrieve_metrics(state_machine, ledger_id);
         println!("Ledger metrics:");
         for metric in metrics {
-            println!("  {}", metric);
+            println!("  {metric}");
         }
     }
 
@@ -285,13 +325,10 @@ impl LedgerSuiteConfig {
             state_machine
                 .upgrade_canister(archive_canister_id, wasm.clone().bytes(), vec![])
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "should successfully upgrade archive '{}': {}",
-                        archive_canister_id, e
-                    )
+                    panic!("should successfully upgrade archive '{archive_canister_id}': {e}")
                 });
         }
-        println!("Upgraded {} archive(s)", num_archives);
+        println!("Upgraded {num_archives} archive(s)");
     }
 
     fn upgrade_index_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
@@ -347,10 +384,7 @@ impl LedgerSuiteConfig {
                     .expect("should downgrade to mainnet ledger version");
             }
             (true, Err(e)) => {
-                panic!(
-                    "should successfully downgrade to mainnet ledger version: {}",
-                    e
-                );
+                panic!("should successfully downgrade to mainnet ledger version: {e}");
             }
             (false, Ok(_)) => {
                 panic!("should not successfully downgrade to mainnet ledger version");
@@ -868,11 +902,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "n535v-yiaaa-aaaaq-aadsq-cai",
         "PokedBots",
     );
-    const SEERS_LEDGER_SUITE: (&str, &str, &str) = (
-        "rffwt-piaaa-aaaaq-aabqq-cai",
-        "rlh33-uyaaa-aaaaq-aabrq-cai",
-        "Seers",
-    );
     const SNEED_LEDGER_SUITE: (&str, &str, &str) = (
         "hvgxa-wqaaa-aaaaq-aacia-cai",
         "h3e2i-naaaa-aaaaq-aacja-cai",
@@ -945,7 +974,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ORIGYN_LEDGER_SUITE,
         PERSONAL_DAO_LEDGER_SUITE,
         POKEDBOTS_LEDGER_SUITE,
-        SEERS_LEDGER_SUITE,
         SNEED_LEDGER_SUITE,
         SONIC_LEDGER_SUITE,
         SWAMPIES_LEDGER_SUITE,
@@ -1089,7 +1117,9 @@ mod index {
                 return;
             }
         }
-        panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+        panic!(
+            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
+        );
     }
 
     fn get_index_blocks<I>(

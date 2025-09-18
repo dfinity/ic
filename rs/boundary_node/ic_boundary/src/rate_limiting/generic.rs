@@ -2,8 +2,8 @@ use std::{
     net::IpAddr,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU32, Ordering},
         Arc,
+        atomic::{AtomicU32, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -21,8 +21,8 @@ use axum::{
 use candid::Principal;
 use ic_agent::Agent;
 use ic_bn_lib::prometheus::{
-    register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
-    IntGauge, Registry,
+    IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
+    register_int_gauge_with_registry,
 };
 use ic_bn_lib::{http::ConnInfo, tasks::Run};
 use ic_types::CanisterId;
@@ -31,7 +31,7 @@ use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as Requ
 use ratelimit::Ratelimiter;
 use strum::{Display, IntoStaticStr};
 #[allow(clippy::disallowed_types)]
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{Mutex, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
@@ -40,14 +40,13 @@ use super::{
         CanisterConfigFetcherQuery, CanisterConfigFetcherUpdate, CanisterFetcher, FetchesConfig,
         FetchesRules, FileFetcher,
     },
-    sharded::{create_ratelimiter, ShardedRatelimiter},
+    sharded::{ShardedRatelimiter, create_ratelimiter},
 };
 
 use crate::{
     errors::{ErrorCause, RateLimitCause},
-    persist::RouteSubnet,
     routes::{RequestContext, RequestType},
-    snapshot::RegistrySnapshot,
+    snapshot::{RegistrySnapshot, Subnet},
 };
 
 // Converts between different request types
@@ -468,7 +467,7 @@ impl Run for GenericLimiter {
 pub async fn middleware(
     State(state): State<Arc<GenericLimiter>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet): Extension<Arc<RouteSubnet>>,
+    Extension(subnet): Extension<Arc<Subnet>>,
     Extension(conn_info): Extension<Arc<ConnInfo>>,
     request: Request<Body>,
     next: Next,
@@ -502,18 +501,19 @@ pub async fn middleware(
 #[cfg(test)]
 mod test {
     use super::*;
+    use anyhow::bail;
     use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
 
-    use crate::snapshot::{generate_stub_snapshot, ApiBoundaryNode};
+    use crate::snapshot::{ApiBoundaryNode, generate_stub_snapshot};
 
     struct BrokenFetcher;
 
     #[async_trait]
     impl FetchesRules for BrokenFetcher {
         async fn fetch_rules(&self) -> Result<Vec<RateLimitRule>, Error> {
-            Err(anyhow::anyhow!("boo"))
+            bail!("boo")
         }
     }
 

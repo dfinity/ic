@@ -1,18 +1,18 @@
 use super::{
     canister_state::CanisterState,
     metadata_state::{
-        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
         IngressHistoryState, Stream, StreamMap, SystemMetadata,
+        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
     },
 };
 use crate::{
+    CanisterQueues, DroppedMessageMetrics,
     canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
-        system_state::{push_input, CanisterOutputQueuesIterator},
+        system_state::{CanisterOutputQueuesIterator, push_input},
     },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
-    CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -26,12 +26,12 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::{ConsensusResponse, RawQueryStats},
+    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
+    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -298,35 +298,43 @@ impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StateError::CanisterNotFound(canister_id) => {
-                write!(f, "Canister {} not found", canister_id)
+                write!(f, "Canister {canister_id} not found")
             }
             StateError::CanisterStopped(canister_id) => {
-                write!(f, "Canister {} is stopped", canister_id)
+                write!(f, "Canister {canister_id} is stopped")
             }
             StateError::CanisterStopping(canister_id) => {
-                write!(f, "Canister {} is stopping", canister_id)
+                write!(f, "Canister {canister_id} is stopping")
             }
             StateError::QueueFull { capacity } => {
-                write!(f, "Maximum queue capacity {} reached", capacity)
+                write!(f, "Maximum queue capacity {capacity} reached")
             }
             StateError::OutOfMemory {
                 requested,
                 available,
             } => write!(
                 f,
-                "Cannot enqueue message. Out of memory: requested {}, available {}",
-                requested, available
+                "Cannot enqueue message. Out of memory: requested {requested}, available {available}"
             ),
-            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
+            StateError::NonMatchingResponse {
+                err_str,
+                originator,
+                callback_id,
+                respondent,
+                deadline,
+            } => write!(
                 f,
                 "Cannot enqueue response with callback ID {} due to {} : originator => {}, respondent => {}, deadline => {}",
-                callback_id, err_str, originator, respondent, Time::from(*deadline)
+                callback_id,
+                err_str,
+                originator,
+                respondent,
+                Time::from(*deadline)
             ),
             StateError::BitcoinNonMatchingResponse { callback_id } => {
                 write!(
                     f,
-                    "Bitcoin: Attempted to push a response for callback ID {} without an in-flight corresponding request",
-                    callback_id
+                    "Bitcoin: Attempted to push a response for callback ID {callback_id} without an in-flight corresponding request"
                 )
             }
         }
@@ -546,12 +554,12 @@ impl ReplicatedState {
         &CanisterSnapshots,
     ) {
         let ReplicatedState {
-            ref canister_states,
-            ref metadata,
-            ref subnet_queues,
-            ref consensus_queue,
-            ref epoch_query_stats,
-            ref canister_snapshots,
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+            epoch_query_stats,
+            canister_snapshots,
         } = self;
         (
             canister_states,
@@ -639,7 +647,7 @@ impl ReplicatedState {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
             UserError::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found", canister_id),
+                format!("Canister {canister_id} not found"),
             )
         })?;
 
@@ -658,6 +666,43 @@ impl ReplicatedState {
 
     pub fn system_metadata(&self) -> &SystemMetadata {
         &self.metadata
+    }
+
+    /// Returns the cost schedule of this subnet.
+    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        let subnet_id = self.metadata.own_subnet_id;
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+            .unwrap_or_default()
+    }
+
+    /// Returns the cost schedule of the provided subnet, if it exists.
+    pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+    }
+
+    /// Every round, the cost schedule flag is read from the registry and the
+    /// replicated state's flag is updated.
+    ///
+    /// Don't use this outside of tests or `execute_round`, or state may become
+    /// inconsistent.
+    pub fn set_own_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        let own_subnet_id = self.metadata.own_subnet_id;
+        if let Some(subnet_topology) = self
+            .metadata
+            .network_topology
+            .subnets
+            .get_mut(&own_subnet_id)
+        {
+            subnet_topology.cost_schedule = cost_schedule
+        }
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
@@ -870,16 +915,12 @@ impl ReplicatedState {
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
     /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
-        let subnet_id = self
-            .metadata
-            .network_topology
-            .routing_table
-            .route(principal_id);
+        let subnet_id = self.metadata.network_topology.route(principal_id);
 
         match subnet_id {
             None => Err(UserError::new(
                 ErrorCode::SubnetNotFound,
-                format!("Could not find subnetId given principalId {}", principal_id),
+                format!("Could not find subnetId given principalId {principal_id}"),
             )),
             Some(subnet_id) => Ok(subnet_id),
         }
@@ -961,7 +1002,7 @@ impl ReplicatedState {
     /// Pushes an ingress message into the induction pool (canister or subnet
     /// ingress queue).
     pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), IngressInductionError> {
-        if msg.is_addressed_to_subnet(self.metadata.own_subnet_id) {
+        if msg.is_addressed_to_subnet() {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;
@@ -1362,8 +1403,12 @@ impl ReplicatedState {
         // Retain only canisters hosted by `own_subnet_id`.
         //
         // TODO: Validate that canisters are split across no more than 2 subnets.
-        canister_states
-            .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
+        canister_states.retain(|canister_id, _| {
+            routing_table
+                .lookup_entry(*canister_id)
+                .map(|(_range, subnet_id)| subnet_id)
+                == Some(subnet_id)
+        });
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
@@ -1416,9 +1461,9 @@ impl ReplicatedState {
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            ref mut canister_states,
-            ref mut metadata,
-            ref mut subnet_queues,
+            canister_states,
+            metadata,
+            subnet_queues,
             consensus_queue: _,
             epoch_query_stats: _,
             canister_snapshots: _,

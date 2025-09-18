@@ -1,5 +1,4 @@
 use ic_sns_governance_api::pb::v1::{
-    topics::{ListTopicsRequest, ListTopicsResponse},
     AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, ClaimSwapNeuronsRequest,
     ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
@@ -9,6 +8,7 @@ use ic_sns_governance_api::pb::v1::{
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, ListNeurons, ListNeuronsResponse,
     ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    topics::{ListTopicsRequest, ListTopicsResponse},
 };
 
 use crate::Request;

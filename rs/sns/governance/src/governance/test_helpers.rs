@@ -1,12 +1,13 @@
 use super::*;
 use crate::pb::v1::{Motion, NeuronPermissionType};
 use async_trait::async_trait;
+use candid::Nat;
 use ic_nervous_system_clients::canister_status::{
     CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
 };
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, E8, ONE_DAY_SECONDS,
-    START_OF_2022_TIMESTAMP_SECONDS,
+    E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+    ledger::compute_neuron_staking_subaccount_bytes,
 };
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
@@ -122,6 +123,20 @@ impl ICRC1Ledger for DoNothingLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from(42)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(

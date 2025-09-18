@@ -196,11 +196,11 @@ impl std::fmt::Debug for CspSignature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use CspSignature::*;
         match self {
-            EcdsaP256(data) => write!(f, "CspSignature::EcdsaP256({:?})", data),
-            EcdsaSecp256k1(data) => write!(f, "CspSignature::EcdsaSecp256k1({:?})", data),
-            Ed25519(data) => write!(f, "CspSignature::Ed25519({:?})", data),
-            MultiBls12_381(data) => write!(f, "CspSignature::MultiBls12_381({:?})", data),
-            ThresBls12_381(data) => write!(f, "CspSignature::ThresBls12_381({:?})", data),
+            EcdsaP256(data) => write!(f, "CspSignature::EcdsaP256({data:?})"),
+            EcdsaSecp256k1(data) => write!(f, "CspSignature::EcdsaSecp256k1({data:?})"),
+            Ed25519(data) => write!(f, "CspSignature::Ed25519({data:?})"),
+            MultiBls12_381(data) => write!(f, "CspSignature::MultiBls12_381({data:?})"),
+            ThresBls12_381(data) => write!(f, "CspSignature::ThresBls12_381({data:?})"),
             RsaSha256(data) => write!(f, "CspSignature::RsaSha256({:?})", base64::encode(data)),
         }
     }

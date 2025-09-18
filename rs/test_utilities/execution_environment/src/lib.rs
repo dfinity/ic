@@ -10,16 +10,16 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::{compile, decoding::decode_wasm},
     wasmtime_embedder::system_api::InstructionLimits,
-    WasmtimeEmbedder,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, Hypervisor,
+    IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions,
+    RoundLimits, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -27,7 +27,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
@@ -37,21 +37,21 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    CanisterIdRange, RoutingTable, WellFormedError, CANISTER_IDS_PER_SUBNET,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{
-        execution_state::SandboxMemory, execution_state::WasmExecutionMode, NextExecution,
-    },
-    page_map::{
-        test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
-        PAGE_SIZE,
-    },
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
+    canister_state::{
+        NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
+    },
+    page_map::{
+        PAGE_SIZE, PageMap, TestPageAllocatorFileDescriptorImpl,
+        test_utils::base_only_storage_layout,
+    },
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
@@ -59,16 +59,18 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
+    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
-    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
+    crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query, QuerySource,
-        RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Query, QuerySource, RequestOrResponse,
+        Response,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
@@ -87,7 +89,7 @@ use std::{
 use tempfile::NamedTempFile;
 
 mod wat_canister;
-pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
+pub use wat_canister::{WatCanisterBuilder, WatFnCode, wat_canister, wat_fn};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -342,10 +344,7 @@ impl ExecutionTest {
     pub fn get_xnet_response(&self, index: usize) -> &Arc<Response> {
         match &self.xnet_messages[index] {
             RequestOrResponse::Request(request) => {
-                panic!(
-                    "Expected the xnet message to be a Response, but got a Request: {:?}",
-                    request
-                )
+                panic!("Expected the xnet message to be a Response, but got a Request: {request:?}")
             }
             RequestOrResponse::Response(response) => response,
         }
@@ -508,8 +507,14 @@ impl ExecutionTest {
         self.subnet_available_memory
     }
 
-    pub fn set_subnet_available_memory(&mut self, memory: SubnetAvailableMemory) {
-        self.subnet_available_memory = memory
+    pub fn set_available_execution_memory(&mut self, execution_memory: i64) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            execution_memory,
+            self.subnet_available_memory
+                .get_guaranteed_response_message_memory(),
+            self.subnet_available_memory
+                .get_wasm_custom_sections_memory(),
+        );
     }
 
     pub fn subnet_available_callbacks(&self) -> i64 {
@@ -620,7 +625,7 @@ impl ExecutionTest {
                 Ok(CanisterIdRecord::decode(&data).unwrap().get_canister_id())
             }
             Ok(WasmResult::Reject(error)) => {
-                panic!("Expected reply, got: {:?}", error);
+                panic!("Expected reply, got: {error:?}");
             }
             Err(error) => Err(error),
         }
@@ -1179,6 +1184,7 @@ impl ExecutionTest {
             query,
             Labeled::new(Height::from(0), Arc::clone(&state)),
             data_certificate,
+            /*certification_delegation_metadata=*/ None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1192,6 +1198,22 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        self.non_replicated_query_with_certificate_delegation_metadata(
+            canister_id,
+            method_name,
+            method_payload,
+            /*certificate_delegation_metadata=*/ None,
+        )
+    }
+
+    /// Executes a non-replicated query on the latest state.
+    pub fn non_replicated_query_with_certificate_delegation_metadata<S: ToString>(
+        &mut self,
+        canister_id: CanisterId,
+        method_name: S,
+        method_payload: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+    ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
         let query = Query {
@@ -1204,7 +1226,12 @@ impl ExecutionTest {
             method_name: method_name.to_string(),
             method_payload,
         };
-        let result = self.query(query, Arc::clone(&state), vec![]);
+        let result = self.query(
+            query,
+            Arc::clone(&state),
+            vec![],
+            certificate_delegation_metadata,
+        );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
         result
@@ -1650,7 +1677,7 @@ impl ExecutionTest {
         self.exec_env.should_accept_ingress_message(
             Arc::new(self.state().clone()),
             &ProvisionalWhitelist::new_empty(),
-            ingress.content(),
+            &ingress,
             ExecutionMode::NonReplicated,
             &IngressFilterMetrics::new(&MetricsRegistry::new()),
         )
@@ -1671,6 +1698,7 @@ impl ExecutionTest {
         query: Query,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
     ) -> Result<WasmResult, UserError> {
         // We always pass 0 as the height to the query handler, because we don't run consensus
         // in these tests and therefore there isn't any height.
@@ -1682,6 +1710,7 @@ impl ExecutionTest {
             query,
             Labeled::new(Height::from(0), state),
             data_certificate,
+            certificate_delegation_metadata,
         )
     }
 
@@ -2200,11 +2229,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm64(mut self) -> Self {
-        self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_max_wasm_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
         self.execution_config.embedders_config.max_wasm_memory_size = wasm_memory_size;
         self
@@ -2293,7 +2317,7 @@ impl ExecutionTestBuilder {
             Some(caller_canister) => RoutingTable::try_from(btreemap! {
                 CanisterIdRange { start: caller_canister, end: caller_canister } => self.caller_subnet_id.unwrap(),
                 own_range => self.own_subnet_id,
-            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", caller_canister, own_range)),
+            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {caller_canister} is in the range {own_range:?}")),
         });
 
         self.build_common(routing_table)
@@ -2511,7 +2535,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         );
-        state.metadata.cost_schedule = self.cost_schedule;
+        state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         ExecutionTest {
             state: Some(state),
@@ -2520,7 +2544,7 @@ impl ExecutionTestBuilder {
             execution_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 self.execution_config.subnet_memory_capacity.get() as i64
                     - self.execution_config.subnet_memory_reservation.get() as i64,
                 self.execution_config
@@ -2699,7 +2723,7 @@ pub fn get_routing_table_with_specified_ids_allocation_range(
 /// we can't always compare the Cycles precisely.
 #[macro_export]
 macro_rules! assert_delta {
-    ($x:expr, $y:expr, $d:expr) => {
+    ($x:expr_2021, $y:expr_2021, $d:expr_2021) => {
         // As Cycles use saturating sub, we can't just subtract $x from $y
         if !($x >= $y && $x - $y <= $d) && !($x < $y && $y - $x <= $d) {
             assert_eq!($x, $y, "delta: `{:?}`", $d);

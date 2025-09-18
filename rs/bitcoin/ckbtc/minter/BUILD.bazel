@@ -167,19 +167,30 @@ rust_binary(
 
 rust_test(
     name = "ckbtc_minter_replay_events_tests",
+    timeout = "long",
     srcs = ["tests/replay_events.rs"],
     data = [
         "test_resources/mainnet_events.gz",
         "test_resources/testnet_events.gz",
     ],
+    proc_macro_deps = LIB_PROC_MACRO_DEPS,
+    tags = [
+        "long_test",  # The P90 of this test is over 13m for the week starting on 2025-08-20
+    ],
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/bitcoin/checker:btc_checker_lib",
+        "//rs/types/management_canister_types",
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-stable-structures",
+        "@crate_index//:maplit",
+        "@crate_index//:mockall",
         "@crate_index//:serde",
         "@crate_index//:tokio",
     ],

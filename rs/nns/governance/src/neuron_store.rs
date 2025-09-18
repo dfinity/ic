@@ -1,14 +1,15 @@
 use crate::{
-    governance::{TimeWarp, LOG_PREFIX},
+    CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
+    governance::{LOG_PREFIX, TimeWarp},
+    is_known_neuron_voting_history_enabled,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
-    pb::v1::{governance_error::ErrorType, GovernanceError, Topic, VotingPowerEconomics},
+    pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
-        with_stable_neuron_store_mut,
+        with_stable_neuron_store_mut, with_voting_history_store_mut,
     },
-    Clock, IcClock, CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS,
 };
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
@@ -107,13 +108,12 @@ impl Display for NeuronStoreError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
-                write!(f, "Neuron not found: {:?}", neuron_id)
+                write!(f, "Neuron not found: {neuron_id:?}")
             }
             NeuronStoreError::CorruptedNeuronIndexes(corrupted_neuron_indexes) => {
                 write!(
                     f,
-                    "Neuron indexes are corrupted: {:?}",
-                    corrupted_neuron_indexes
+                    "Neuron indexes are corrupted: {corrupted_neuron_indexes:?}"
                 )
             }
             NeuronStoreError::NeuronIdIsNone => write!(f, "Neuron id is none"),
@@ -122,8 +122,7 @@ impl Display for NeuronStoreError {
                 subaccount_bytes,
             } => write!(
                 f,
-                "Neuron {:?} has an invalid subaccount {:?}",
-                neuron_id, subaccount_bytes
+                "Neuron {neuron_id:?} has an invalid subaccount {subaccount_bytes:?}"
             ),
             NeuronStoreError::NeuronIdModified {
                 old_neuron_id,
@@ -138,18 +137,16 @@ impl Display for NeuronStoreError {
                 new_subaccount,
             } => write!(
                 f,
-                "Attempting to modify neuron subaccount from {:?} to {:?}",
-                old_subaccount, new_subaccount
+                "Attempting to modify neuron subaccount from {old_subaccount:?} to {new_subaccount:?}"
             ),
             NeuronStoreError::NeuronAlreadyExists(neuron_id) => {
                 write!(
                     f,
-                    "Attempting to add a neuron with an existing ID: {:?}",
-                    neuron_id
+                    "Attempting to add a neuron with an existing ID: {neuron_id:?}"
                 )
             }
             NeuronStoreError::InvalidData { reason } => {
-                write!(f, "Failed to store neuron with invalid data: {:?}", reason)
+                write!(f, "Failed to store neuron with invalid data: {reason:?}")
             }
             NeuronStoreError::NotAuthorizedToGetFullNeuron {
                 principal_id,
@@ -157,8 +154,7 @@ impl Display for NeuronStoreError {
             } => {
                 write!(
                     f,
-                    "Principal {:?} is not authorized to get full neuron information for neuron {:?}",
-                    principal_id, neuron_id
+                    "Principal {principal_id:?} is not authorized to get full neuron information for neuron {neuron_id:?}"
                 )
             }
             NeuronStoreError::NeuronIdGenerationUnavailable => {
@@ -169,7 +165,7 @@ impl Display for NeuronStoreError {
                 )
             }
             NeuronStoreError::InvalidOperation { reason } => {
-                write!(f, "Invalid operation: {}", reason)
+                write!(f, "Invalid operation: {reason}")
             }
             NeuronStoreError::TotalPotentialVotingPowerOverflow => {
                 write!(f, "Total potential voting power overflow")
@@ -337,7 +333,7 @@ impl NeuronStore {
             .dissolve_state_and_age()
             .validate()
             .map_err(|reason| NeuronStoreError::InvalidData {
-                reason: format!("Neuron cannot be saved: {}", reason),
+                reason: format!("Neuron cannot be saved: {reason}"),
             })?;
 
         Ok(())
@@ -707,16 +703,36 @@ impl NeuronStore {
         })
     }
 
-    pub fn register_recent_neuron_ballot(
+    /// Records a vote for a neuron.
+    pub fn record_neuron_vote(
         &mut self,
         neuron_id: NeuronId,
         topic: Topic,
         proposal_id: ProposalId,
         vote: Vote,
     ) -> Result<(), NeuronStoreError> {
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store.register_recent_neuron_ballot(neuron_id, topic, proposal_id, vote)
-        })
+        let should_record_voting_history = with_stable_neuron_store_mut(
+            |stable_neuron_store| -> Result<bool, NeuronStoreError> {
+                stable_neuron_store.register_recent_neuron_ballot(
+                    neuron_id,
+                    topic,
+                    proposal_id,
+                    vote,
+                )?;
+                let should_record_voting_history = if is_known_neuron_voting_history_enabled() {
+                    stable_neuron_store.is_known_neuron(neuron_id)
+                } else {
+                    false
+                };
+                Ok(should_record_voting_history)
+            },
+        )?;
+        if should_record_voting_history {
+            with_voting_history_store_mut(|voting_history_store| {
+                voting_history_store.record_vote(neuron_id, proposal_id, vote);
+            });
+        }
+        Ok(())
     }
 
     /// Modifies the maturity of the neuron.
@@ -948,8 +964,7 @@ pub fn approve_genesis_kyc(
         return Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!(
-                "ApproveGenesisKyc can only change the KYC status of up to {} neurons at a time",
-                APPROVE_GENESIS_KYC_MAX_NEURONS
+                "ApproveGenesisKyc can only change the KYC status of up to {APPROVE_GENESIS_KYC_MAX_NEURONS} neurons at a time"
             ),
         ));
     }
@@ -962,10 +977,7 @@ pub fn approve_genesis_kyc(
         });
         // Log errors but continue with the rest of the neurons.
         if let Err(e) = result {
-            eprintln!(
-                "{}ERROR: Failed to approve KYC for neuron {:?}: {:?}",
-                LOG_PREFIX, neuron_id, e
-            );
+            eprintln!("{LOG_PREFIX}ERROR: Failed to approve KYC for neuron {neuron_id:?}: {e:?}");
         }
     }
     Ok(())

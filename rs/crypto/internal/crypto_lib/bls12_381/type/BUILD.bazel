@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:ic_bls12_381",
     "@crate_index//:itertools",
-    "@crate_index//:lazy_static",
     "@crate_index//:pairing",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
