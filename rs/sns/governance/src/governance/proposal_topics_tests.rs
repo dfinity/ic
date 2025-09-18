@@ -1,12 +1,12 @@
 use crate::{
     extensions::{ExtensionSpec, ExtensionType::TreasuryManager, ExtensionVersion},
     governance::{
-        test_helpers::{basic_governance_proto, DoNothingLedger},
         Governance, ValidGovernanceProto,
+        test_helpers::{DoNothingLedger, basic_governance_proto},
     },
     pb::v1::{
-        self as pb, nervous_system_function, ExecuteExtensionOperation,
-        Topic::TreasuryAssetManagement,
+        self as pb, ExecuteExtensionOperation, Topic::TreasuryAssetManagement,
+        nervous_system_function,
     },
     storage::cache_registered_extension,
     types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment},
@@ -188,6 +188,13 @@ fn test_all_topics() {
         ),
         (
             pb::proposal::Action::RegisterExtension(Default::default()),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
+        ),
+        (
+            pb::proposal::Action::UpgradeExtension(Default::default()),
             Ok((
                 Some(pb::Topic::CriticalDappOperations),
                 ProposalCriticality::Critical,

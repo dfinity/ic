@@ -37,7 +37,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::delegations::*;
 use ic_system_test_driver::util::{
-    agent_with_identity, block_on, random_ed25519_identity, MetricsFetcher,
+    MetricsFetcher, agent_with_identity, block_on, random_ed25519_identity,
 };
 use ic_types::messages::Blob;
 use rand::Rng;
@@ -279,7 +279,7 @@ async fn increment_counter_canister(
     info!(
         env.logger(),
         "Making an update call #{call_j} for user #{user_i} on counter canister with delegation (increment counter)"
-        );
+    );
     let _ = app_agents_with_delegation[user_i]
         .update(&ctr_canister_id, "write", Blob(vec![]))
         .await;
@@ -321,7 +321,8 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
                     assert!(
                         num_cache_misses as usize <= user_i + 2,
                         "at most `{} + 1` delegations: 1 x subnet delegation and up to `num_users` sigs for `certified_data`, \
-                        but found {num_cache_misses}", user_i + 1,
+                        but found {num_cache_misses}",
+                        user_i + 1,
                     );
                     if user_i == 0 {
                         assert!(
@@ -348,14 +349,16 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
                         )
                     }
 
-                    info!(env.logger(), "For user={user_i} after call={call_j}, \
+                    info!(
+                        env.logger(),
+                        "For user={user_i} after call={call_j}, \
                         observed (num_cache_hits={num_cache_hits}, num_cache_misses={num_cache_misses}, cache_size={cache_size}) = \
                         with num_cache_hits + num_cache_misses = {} \
                         while expecting (NUM_BLS_SIG_VERS_PER_CALL * (user + 1) * (call + 1)) = {} -> Retrying \
                         {count_waiting_for_expected_values}/{NUM_RETRIES}",
-                        num_cache_hits + num_cache_misses, (NUM_BLS_SIG_VERS_PER_CALL
-                            * (user_i + 1)
-                            * (call_j + 1)));
+                        num_cache_hits + num_cache_misses,
+                        (NUM_BLS_SIG_VERS_PER_CALL * (user_i + 1) * (call_j + 1))
+                    );
                     tokio::time::sleep(RETRY_DELAY).await;
                 }
             }

@@ -2,21 +2,22 @@ mod common;
 
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, MixedHashTree, flatmap};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{maybe_upgrade_to_self, UpgradeTestingScenario},
+    itest_helpers::{UpgradeTestingScenario, maybe_upgrade_to_self},
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_registry_transport::{
     insert,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateRequest, RegistryError,
-        RegistryGetLatestVersionResponse, RegistryGetValueRequest, RegistryGetValueResponse,
+        CertifiedResponse, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryError, RegistryGetLatestVersionResponse, RegistryGetValueRequest,
+        high_capacity_registry_get_value_response, registry_error::Code,
     },
     update,
 };
@@ -25,7 +26,10 @@ use registry_canister::{
     init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder},
     proto_on_wire::protobuf,
 };
-use std::convert::TryInto;
+use std::{
+    convert::TryInto,
+    time::{Duration, SystemTime},
+};
 
 pub async fn install_registry_canister(
     runtime: &Runtime,
@@ -113,18 +117,22 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
     maybe_upgrade_to_self(&mut canister, upgrade_scenario).await;
 
     // Exercise the "get_value" method
-    let get_value_res: RegistryGetValueResponse = canister
+    let get_value_res: HighCapacityRegistryGetValueResponse = canister
         .query_("get_value", protobuf, get_value_request("coimbra", None))
         .await
         .unwrap();
     assert_eq!(
         get_value_res,
-        RegistryGetValueResponse {
+        HighCapacityRegistryGetValueResponse {
             error: None,
             version: 2_u64,
-            value: b"portugal".to_vec()
+            content: Some(high_capacity_registry_get_value_response::Content::Value(
+                b"portugal".to_vec()
+            )),
+            timestamp_nanoseconds: get_value_res.timestamp_nanoseconds,
         }
     );
+    assert_a_short_while_ago(&get_value_res);
 
     // Exercise the "get_latest_version" method
     let get_latest_version_resp: RegistryGetLatestVersionResponse = canister
@@ -155,17 +163,23 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
     maybe_upgrade_to_self(&mut canister, upgrade_scenario).await;
 
     // We can still access both values
-    let get_value_v1_resp: RegistryGetValueResponse = canister
+    let get_value_v1_resp: HighCapacityRegistryGetValueResponse = canister
         .query_("get_value", protobuf, get_value_request("zurich", Some(2)))
         .await
         .unwrap();
-    let get_value_v2_resp: RegistryGetValueResponse = canister
+    let get_value_v2_resp: HighCapacityRegistryGetValueResponse = canister
         .query_("get_value", protobuf, get_value_request("zurich", Some(3)))
         .await
         .unwrap();
 
-    assert_eq!(get_value_v1_resp.value, b"switzerland");
-    assert_eq!(get_value_v2_resp.value, b"die Schweiz");
+    assert_eq!(
+        get_value_v1_resp.content.unwrap(),
+        high_capacity_registry_get_value_response::Content::Value(b"switzerland".to_vec())
+    );
+    assert_eq!(
+        get_value_v2_resp.content.unwrap(),
+        high_capacity_registry_get_value_response::Content::Value(b"die Schweiz".to_vec())
+    );
 
     // Exercise the "get_latest_version" method again
     let get_latest_version_res: RegistryGetLatestVersionResponse = canister
@@ -179,7 +193,7 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
     );
 
     // Try to get a non-existing key
-    let get_value_resp_non_existent: RegistryGetValueResponse = canister
+    let get_value_resp_non_existent: HighCapacityRegistryGetValueResponse = canister
         .query_(
             "get_value",
             protobuf,
@@ -190,14 +204,15 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
 
     assert_eq!(
         get_value_resp_non_existent,
-        RegistryGetValueResponse {
+        HighCapacityRegistryGetValueResponse {
             error: Some(RegistryError {
                 code: Code::KeyNotPresent as i32,
                 key: b"Oh no, that key does not exist!".to_vec(),
                 reason: "".to_string()
             }),
             version: 3,
-            value: vec![]
+            content: None,
+            timestamp_nanoseconds: 0,
         }
     );
 }
@@ -246,5 +261,19 @@ async fn get_latest_version_certified(runtime: &Runtime, upgrade_scenario: Upgra
     assert_eq!(
         data_part(&certified_response),
         T::SubTree(flatmap!(Label::from("current_version") => T::Leaf(vec![0x02])))
+    );
+}
+
+#[track_caller]
+fn assert_a_short_while_ago(read_result: &HighCapacityRegistryGetValueResponse) {
+    let value_set_at = SystemTime::UNIX_EPOCH
+        .checked_add(Duration::from_nanos(read_result.timestamp_nanoseconds))
+        .unwrap();
+    let now = SystemTime::now();
+    assert!(
+        now.duration_since(value_set_at).unwrap() < Duration::from_secs(60),
+        "now={:?} vs. value_set_at={:?}",
+        now,
+        value_set_at,
     );
 }

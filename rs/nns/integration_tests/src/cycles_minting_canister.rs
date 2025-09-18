@@ -2,16 +2,16 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    AuthorizedSubnetsResponse, CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs,
-    CreateCanister, CreateCanisterError, NotifyCreateCanister, NotifyError, NotifyErrorCode,
-    NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
-    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
-    MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    AuthorizedSubnetsResponse, BAD_REQUEST_CYCLES_PENALTY, CanisterSettingsArgs,
+    ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError, MEANINGFUL_MEMOS,
+    MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER, NotifyCreateCanister,
+    NotifyError, NotifyErrorCode, NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp,
+    SubnetListWithType, SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_ledger_core::tokens::CheckedSub;
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
@@ -34,7 +34,7 @@ use ic_nns_test_utils::state_test_helpers::cmc_set_authorized_subnetworks_for_pr
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
         cmc_set_default_authorized_subnetworks, icrc1_balance, icrc1_transfer,
@@ -48,9 +48,8 @@ use ic_test_utilities_metrics::fetch_int_gauge_vec;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, CyclesResponse, Memo,
-    NotifyCanisterArgs, SendArgs, Subaccount, Tokens, TransferArgs, TransferError,
-    DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs,
+    Subaccount, Tokens, TransferArgs, TransferError, tokens_from_proto,
 };
 use icrc_ledger_types::icrc1::{self, account::Account};
 use maplit::btreemap;
@@ -71,9 +70,9 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
         let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
         let icpts = Tokens::new(100, 0).unwrap();
 
-        // The CMC subaccount to send ICP to. In this test we try to top-up an existing
-        // canister, and Governance is simply a convenient pre-existing canister.
-        let subaccount: Subaccount = GOVERNANCE_CANISTER_ID.get_ref().into();
+        // In this test we try to top-up an existing canister, and Governance is simply a
+        // convenient pre-existing canister.
+        let canister_to_top_up = GOVERNANCE_CANISTER_ID.get();
 
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
@@ -95,18 +94,15 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
         let governance_cycles_initial = governance_status_initial.cycles;
 
         // Top-up the Governance canister
-        let cycles_response = send_cycles(
+        top_up_canister(
             icpts,
             &nns_canisters.ledger,
+            &nns_canisters.cycles_minting,
             MEMO_TOP_UP_CANISTER,
-            &subaccount,
+            CanisterId::unchecked_from_principal(canister_to_top_up),
         )
-        .await;
-
-        match cycles_response {
-            CyclesResponse::ToppedUp(_) => (),
-            _ => panic!("Failed to top up canister"),
-        }
+        .await
+        .expect("Failed to top up canister");
 
         // Assert that the correct amount of TEST_USER1's ICP was used to create cycles
         let final_balance: Tokens = nns_canisters
@@ -126,11 +122,7 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
             .checked_sub(&Tokens::new(10, 0).unwrap())
             .unwrap();
         expected_final_balance = expected_final_balance
-            .checked_sub(
-                &DEFAULT_TRANSFER_FEE
-                    .checked_add(&DEFAULT_TRANSFER_FEE)
-                    .unwrap(),
-            )
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
             .unwrap();
         assert_eq!(final_balance, expected_final_balance);
 
@@ -156,16 +148,17 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
 }
 
 /// Sends 10 ICP from `TEST_USER1_PRINCIPAL`s Ledger account to the given
-/// subaccount of the CMC, which then, depending on `memo`, either tries to
-/// create a canister (aka a "cycles wallet") or top-up the canister whose
-/// `CanisterId` corresponds to `subaccount`.
-async fn send_cycles(
+/// subaccount of the CMC, which then tries to top-up the canister whose
+/// `CanisterId` corresponds to `canister_to_top_up`.
+async fn top_up_canister(
     initial_icpts: Tokens,
     ledger: &Canister<'_>,
+    cycles_minting: &Canister<'_>,
     memo: Memo,
-    subaccount: &Subaccount,
-) -> CyclesResponse {
+    canister_to_top_up: CanisterId,
+) -> Result<Cycles, NotifyError> {
     let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let subaccount: Subaccount = canister_to_top_up.get_ref().into();
 
     let initial_balance: Tokens = ledger
         .query_from_sender(
@@ -185,7 +178,7 @@ async fn send_cycles(
         amount: Tokens::new(10, 0).unwrap(),
         fee: DEFAULT_TRANSFER_FEE,
         from_subaccount: None,
-        to: AccountIdentifier::new(CYCLES_MINTING_CANISTER_ID.get(), Some(*subaccount)),
+        to: AccountIdentifier::new(CYCLES_MINTING_CANISTER_ID.get(), Some(subaccount)),
         created_at_time: None,
     };
 
@@ -217,19 +210,16 @@ async fn send_cycles(
     expected_balance = expected_balance.checked_sub(&DEFAULT_TRANSFER_FEE).unwrap();
     assert_eq!(after_send_balance, expected_balance);
 
-    let notify_args = NotifyCanisterArgs::new_from_send(
-        &send_args,
-        block_height,
-        CYCLES_MINTING_CANISTER_ID,
-        Some(*subaccount),
-    )
-    .unwrap();
+    let notify_args = NotifyTopUp {
+        block_index: block_height,
+        canister_id: canister_to_top_up,
+    };
 
-    let cycles_response: CyclesResponse = ledger
+    let cycles_response: Result<Cycles, NotifyError> = cycles_minting
         .update_from_sender(
-            "notify_dfx",
+            "notify_top_up",
             candid_one,
-            notify_args.clone(),
+            notify_args,
             &Sender::from_keypair(&TEST_USER1_KEYPAIR),
         )
         .await
@@ -361,9 +351,11 @@ fn test_cmc_notify_create_with_settings() {
     //specify compute allocation
     let canister = notify_create_canister(
         &state_machine,
-        Some(dbg!(CanisterSettingsArgsBuilder::new()
-            .with_compute_allocation(7)
-            .build())),
+        Some(dbg!(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(7)
+                .build()
+        )),
     );
     let status = dbg!(canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap());
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
@@ -675,7 +667,7 @@ fn test_cmc_cycles_create_with_settings() {
         refund_amount: 100,
     } = error
     else {
-        panic!("Refund failed: {:?}", error)
+        panic!("Refund failed: {error:?}")
     };
     assert!(create_error.contains("Insufficient cycles attached"));
     assert_eq!(
@@ -746,8 +738,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                 state_machine.metrics_registry(),
                 "replicated_state_registered_canisters"
             ),
-            "{}",
-            test_phase,
+            "{test_phase}",
         );
     };
     // This will be called again later to verify that no canisters were added.
@@ -770,7 +761,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             .unwrap()
             .checked_sub(&total_fees)
             .unwrap();
-        assert_eq!(observed_balance, expected_balance, "{}", test_phase);
+        assert_eq!(observed_balance, expected_balance, "{test_phase}");
     };
     // This is more to gain confidence that assert_balance works; there is very
     // little risk that USER1's balance is not 100.
@@ -863,7 +854,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
 
             let result = match result {
                 WasmResult::Reply(ok) => ok,
-                _ => panic!("{:?}", result),
+                _ => panic!("{result:?}"),
             };
 
             Decode!(&result, Result<CanisterId, NotifyError>).unwrap()
@@ -889,7 +880,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
         .into_iter()
         .filter_map(|result| match result {
             Err(NotifyError::Processing) => None,
-            Ok(_) => panic!("{:?}", result),
+            Ok(_) => panic!("{result:?}"),
             Err(err) => Some(err),
         })
         .collect::<Vec<NotifyError>>();
@@ -898,9 +889,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     let last_err = errs.pop().unwrap();
     assert!(
         errs.iter().all(|other_err| other_err == &last_err),
-        "{:?}\nvs.\n{:#?}",
-        last_err,
-        errs,
+        "{last_err:?}\nvs.\n{errs:#?}",
     );
     assert!(
         errs.len() >= 2, // If errs is empty, then the previous assert is trivial.
@@ -930,14 +919,12 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
                 assert!(
                     lower_reason.contains(key_word),
-                    r#""{}" not in {:?}"#,
-                    key_word,
-                    last_err
+                    r#""{key_word}" not in {last_err:?}"#
                 );
             }
         }
 
-        _ => panic!("{:?}", last_err),
+        _ => panic!("{last_err:?}"),
     };
 }
 
@@ -1337,16 +1324,14 @@ fn cmc_notify_mint_cycles() {
             reason,
             block_index: _,
         }) => reason,
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     };
 
     let reason = reason.to_lowercase();
     for key_word in ["memo", "transfer", "correspond", "offer"] {
         assert!(
             reason.contains(key_word),
-            "{} not in reason of {:?}",
-            key_word,
-            result
+            "{key_word} not in reason of {result:?}"
         );
     }
 
@@ -1463,7 +1448,7 @@ fn cmc_notify_mint_cycles_deposit_memo_too_long() {
             assert_eq!(error_code, NotifyErrorCode::DepositMemoTooLong as u64);
             assert!(error_message.contains("exceeds the maximum length"));
         }
-        _ => panic!("Unexpected response: {:?}", response),
+        _ => panic!("Unexpected response: {response:?}"),
     }
 }
 

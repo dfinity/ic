@@ -1,8 +1,9 @@
+use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
+use ic_node_rewards_canister::storage::{METRICS_MANAGER, RegistryStoreStableMemoryBorrower};
 use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -112,28 +113,27 @@ async fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards::<RegistryStoreStableMemoryBorrower>(
-        &CANISTER, request,
-    )
-    .await
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
 }
 
 #[query]
 fn get_node_provider_rewards_calculation(
-    _request: GetNodeProviderRewardsCalculationRequest,
+    request: GetNodeProviderRewardsCalculationRequest,
 ) -> GetNodeProviderRewardsCalculationResponse {
-    // TODO: Add rate limiting and restrictions on reward period before enabling it.
-    // NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
-    //     &CANISTER, request,
-    // );
+    if in_replicated_execution() {
+        return Err(
+            "Replicated execution of this method is not allowed. Use a non-replicated query call."
+                .to_string(),
+        );
+    }
 
-    Err("Not yet active.".to_string())
+    NodeRewardsCanister::get_node_provider_rewards_calculation(&CANISTER, request)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {
         let declared_interface = CandidSource::Text(include_str!("../node-rewards-canister.did"));

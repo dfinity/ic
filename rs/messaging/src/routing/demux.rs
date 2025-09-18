@@ -3,9 +3,9 @@ use crate::{
     scheduling::valid_set_rule::ValidSetRule,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
-use ic_logger::{debug, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, trace};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{batch::BatchMessages, messages::SignedIngressContent};
+use ic_types::batch::BatchMessages;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -71,14 +71,8 @@ impl Demux for DemuxImpl<'_> {
             .stream_handler
             .process_stream_slices(state, decoded_slices);
 
-        let ingress_msgs: Vec<_> = batch_messages
-            .signed_ingress_msgs
-            .into_iter()
-            .map(SignedIngressContent::from)
-            .collect();
-
         self.valid_set_rule
-            .induct_messages(&mut state, ingress_msgs);
+            .induct_messages(&mut state, batch_messages.signed_ingress_msgs);
 
         for response in batch_messages.bitcoin_adapter_responses.into_iter() {
             state.push_response_bitcoin(response).unwrap_or_else(|err| {

@@ -46,8 +46,7 @@ impl TryFrom<CspPublicKey> for UserPublicKey {
             }),
             _ => Err(CryptoError::InvalidArgument {
                 message: format!(
-                    "Unsupported conversion from CspPublicKey to UserPublicKey: {:?}",
-                    pk
+                    "Unsupported conversion from CspPublicKey to UserPublicKey: {pk:?}"
                 ),
             }),
         }
@@ -126,9 +125,20 @@ impl fmt::Debug for CspPopFromPublicKeyProtoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use CspPopFromPublicKeyProtoError::*;
         match self {
-            NoPopForAlgorithm{ algorithm } => write!(f, "CspPopFromPublicKeyProtoError::NoPopForAlgorithm{{ algorithm: {:?} }}", algorithm),
+            NoPopForAlgorithm { algorithm } => write!(
+                f,
+                "CspPopFromPublicKeyProtoError::NoPopForAlgorithm{{ algorithm: {algorithm:?} }}"
+            ),
             MissingProofData => write!(f, "CspPopFromPublicKeyProtoError::MissingProofData"),
-            MalformedPop{ pop_bytes, internal_error } => write!(f, "CspPopFromPublicKeyProtoError::MalformedPop{{ pop_bytes: {:?}, internal_error: {} }}", hex::encode(&pop_bytes[..]), internal_error),
+            MalformedPop {
+                pop_bytes,
+                internal_error,
+            } => write!(
+                f,
+                "CspPopFromPublicKeyProtoError::MalformedPop{{ pop_bytes: {:?}, internal_error: {} }}",
+                hex::encode(&pop_bytes[..]),
+                internal_error
+            ),
         }
     }
 }

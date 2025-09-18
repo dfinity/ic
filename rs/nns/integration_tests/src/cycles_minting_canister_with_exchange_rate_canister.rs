@@ -225,8 +225,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
         let response = get_icp_xdr_conversion_rate(&state_machine);
         assert_eq!(
             response.data.timestamp_seconds, expected_timestamp,
-            "failed at iteration: {}",
-            i
+            "failed at iteration: {i}"
         );
     }
 

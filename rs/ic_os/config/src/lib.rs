@@ -5,7 +5,7 @@ pub mod setupos;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::Path;
 
@@ -193,6 +193,7 @@ mod tests {
                 "malicious_behavior": null,
                 "query_stats_epoch_length": 1000,
                 "bitcoind_addr": "127.0.0.1:8333",
+                "dogecoind_addr": "127.0.0.1:22556",
                 "jaeger_addr": "127.0.0.1:6831",
                 "socks_proxy": "127.0.0.1:1080",
                 "hostname": "my-node",
@@ -245,6 +246,7 @@ mod tests {
                 "malicious_behavior": null,
                 "query_stats_epoch_length": 1000,
                 "bitcoind_addr": "127.0.0.1:8333",
+                "dogecoind_addr": "127.0.0.1:22556",
                 "jaeger_addr": "127.0.0.1:6831",
                 "socks_proxy": "127.0.0.1:1080",
                 "hostname": "my-node",

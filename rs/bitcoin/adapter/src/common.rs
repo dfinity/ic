@@ -1,7 +1,8 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
-use ic_btc_validation::{HeaderStore, ValidateHeaderError};
+use bitcoin::{BlockHash, Work, block::Header as PureHeader};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::{fmt, str::FromStr};
 
 /// This const represents the default version that the adapter will support.
@@ -86,47 +87,6 @@ impl AdapterNetwork {
             AdapterNetwork::Dogecoin(network) => format!("dogecoin:{network}"),
         }
     }
-    /// Call `magic()` function on the respective network.
-    pub fn magic(&self) -> Magic {
-        match self {
-            AdapterNetwork::Bitcoin(network) => network.magic(),
-            AdapterNetwork::Dogecoin(network) => network.magic(),
-        }
-    }
-    /// Call `genesis_block(network).header` function on the respective network.
-    pub fn genesis_block_header(&self) -> bitcoin::block::Header {
-        match self {
-            AdapterNetwork::Bitcoin(network) => {
-                bitcoin::blockdata::constants::genesis_block(network).header
-            }
-            AdapterNetwork::Dogecoin(network) => {
-                bitcoin::dogecoin::constants::genesis_block(network).header
-            }
-        }
-    }
-    /// Validate block header against the network type and known headers.
-    pub fn validate_header(
-        &self,
-        store: &impl HeaderStore,
-        header: &bitcoin::block::Header,
-    ) -> Result<(), ValidateHeaderError> {
-        match self {
-            AdapterNetwork::Bitcoin(network) => {
-                ic_btc_validation::validate_header(network, store, header)
-            }
-            AdapterNetwork::Dogecoin(_network) => {
-                // TODO(XC-422): use real dogecoin validation
-                Ok(())
-            }
-        }
-    }
-    /// Return the p2p protocol version.
-    pub fn p2p_protocol_version(&self) -> u32 {
-        match self {
-            AdapterNetwork::Bitcoin(_) => bitcoin::p2p::PROTOCOL_VERSION,
-            AdapterNetwork::Dogecoin(_) => 70015,
-        }
-    }
 }
 
 impl fmt::Display for AdapterNetwork {
@@ -148,10 +108,10 @@ impl FromStr for AdapterNetwork {
             if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
                 return Ok(network.into());
             }
-        } else if let Some(s) = s.strip_prefix("bitcoin:") {
-            if let Ok(network) = bitcoin::Network::from_str(s) {
-                return Ok(network.into());
-            }
+        } else if let Some(s) = s.strip_prefix("bitcoin:")
+            && let Ok(network) = bitcoin::Network::from_str(s)
+        {
+            return Ok(network.into());
         }
         Err(format!("unknown network name {s}"))
     }
@@ -170,20 +130,170 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
     }
 }
 
-/// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
-pub trait BlockLike: Decodable + Encodable + Clone {
+/// Trait that implements differences between Bitcoin and Dogecoin networks.
+pub trait BlockchainNetwork: Copy + 'static {
+    /// Header type.
+    type Header: BlockchainHeader + Send + Sync;
+    /// Block type.
+    type Block: BlockchainBlock<Header = Self::Header>;
+    /// P2P protocol version number.
+    const P2P_PROTOCOL_VERSION: u32;
+    /// Return genesis block header.
+    fn genesis_block_header(&self) -> Self::Header;
+    /// Helper used to determine if multiple blocks should be returned
+    /// in [GetSuccessorsResponse].
+    fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool;
+    /// Return max blocks bytes.
+    fn max_blocks_bytes(&self) -> usize {
+        crate::get_successors_handler::MAX_BLOCKS_BYTES
+    }
+    /// Return max in-flight blocks that is allowed in the adapter state.
+    fn max_in_flight_blocks(&self) -> usize {
+        crate::get_successors_handler::MAX_IN_FLIGHT_BLOCKS
+    }
+    /// Return the magic number of this network.
+    fn magic(&self) -> Magic;
+    /// Return the p2p port used by the given network type.
+    fn p2p_port(&self) -> u16;
+}
+
+impl BlockchainNetwork for bitcoin::Network {
+    type Header = bitcoin::block::Header;
+    type Block = bitcoin::Block;
+    const P2P_PROTOCOL_VERSION: u32 = bitcoin::p2p::PROTOCOL_VERSION;
+    fn genesis_block_header(&self) -> Self::Header {
+        bitcoin::blockdata::constants::genesis_block(self).header
+    }
+    fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
+        use bitcoin::Network::*;
+        match self {
+            Bitcoin => {
+                anchor_height
+                    <= crate::get_successors_handler::BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            }
+            Testnet | Signet | Regtest | Testnet4 => true,
+            other => unreachable!("Unsupported Bitcoin network: {:?}", other),
+        }
+    }
+    fn max_blocks_bytes(&self) -> usize {
+        match self {
+            bitcoin::Network::Testnet4 => crate::get_successors_handler::TESTNET4_MAX_BLOCKS_BYTES,
+            _ => crate::get_successors_handler::MAX_BLOCKS_BYTES,
+        }
+    }
+    fn max_in_flight_blocks(&self) -> usize {
+        match self {
+            bitcoin::Network::Testnet4 => {
+                crate::get_successors_handler::TESTNET4_MAX_IN_FLIGHT_BLOCKS
+            }
+            _ => crate::get_successors_handler::MAX_IN_FLIGHT_BLOCKS,
+        }
+    }
+    fn magic(&self) -> Magic {
+        bitcoin::Network::magic(*self)
+    }
+    fn p2p_port(&self) -> u16 {
+        use bitcoin::Network::*;
+        match self {
+            Bitcoin => 8333,
+            Testnet => 18333,
+            Testnet4 => 48333,
+            _ => 8333,
+        }
+    }
+}
+
+impl BlockchainNetwork for bitcoin::dogecoin::Network {
+    type Header = bitcoin::dogecoin::Header;
+    type Block = bitcoin::dogecoin::Block;
+    const P2P_PROTOCOL_VERSION: u32 = 70015;
+    fn genesis_block_header(&self) -> Self::Header {
+        bitcoin::dogecoin::constants::genesis_block(self).header
+    }
+    fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
+        use bitcoin::dogecoin::Network::*;
+        match self {
+            Dogecoin => {
+                anchor_height
+                    <= crate::get_successors_handler::DOGE_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            }
+            Testnet | Regtest => true,
+            other => unreachable!("Unsupported Dogecoin network: {:?}", other),
+        }
+    }
+    fn magic(&self) -> Magic {
+        bitcoin::dogecoin::Network::magic(*self)
+    }
+    fn p2p_port(&self) -> u16 {
+        use bitcoin::dogecoin::Network::*;
+        match self {
+            Dogecoin => 22556,
+            Testnet => 44556,
+            _ => 18444,
+        }
+    }
+}
+
+/// A trait that contains the common methods of both Bitcoin and Dogecoin headers.
+pub trait BlockchainHeader: Decodable + Encodable + Clone {
     /// Return block hash.
-    fn block_hash(&self) -> bitcoin::BlockHash;
+    fn block_hash(&self) -> BlockHash;
+    /// Return previous block hash.
+    fn prev_block_hash(&self) -> BlockHash;
+    /// Return the total work of the block.
+    fn work(&self) -> Work;
+    /// Return the 80-byte header.
+    fn into_pure_header(self) -> PureHeader;
+}
+
+impl BlockchainHeader for bitcoin::block::Header {
+    fn block_hash(&self) -> BlockHash {
+        self.block_hash()
+    }
+    fn prev_block_hash(&self) -> BlockHash {
+        self.prev_blockhash
+    }
+    fn work(&self) -> Work {
+        self.work()
+    }
+    fn into_pure_header(self) -> PureHeader {
+        self
+    }
+}
+
+impl BlockchainHeader for bitcoin::dogecoin::Header {
+    fn block_hash(&self) -> BlockHash {
+        self.pure_header.block_hash()
+    }
+    fn prev_block_hash(&self) -> BlockHash {
+        self.pure_header.prev_blockhash
+    }
+    fn work(&self) -> Work {
+        self.pure_header.work()
+    }
+    fn into_pure_header(self) -> PureHeader {
+        self.pure_header
+    }
+}
+
+/// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
+pub trait BlockchainBlock: Decodable + Encodable + Clone {
+    /// Block Header
+    type Header;
+    /// Return block hash.
+    fn block_hash(&self) -> BlockHash;
     /// Compute merkle root.
     fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode>;
     /// Check if the merkle root in block header matches what is computed.
     fn check_merkle_root(&self) -> bool;
     /// Return the block header.
-    fn header(&self) -> bitcoin::block::Header;
+    fn header(&self) -> &Self::Header;
 }
 
-impl BlockLike for bitcoin::Block {
-    fn block_hash(&self) -> bitcoin::BlockHash {
+impl BlockchainBlock for bitcoin::Block {
+    type Header = bitcoin::block::Header;
+
+    fn block_hash(&self) -> BlockHash {
         bitcoin::Block::block_hash(self)
     }
     fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
@@ -192,13 +302,15 @@ impl BlockLike for bitcoin::Block {
     fn check_merkle_root(&self) -> bool {
         bitcoin::Block::check_merkle_root(self)
     }
-    fn header(&self) -> bitcoin::block::Header {
-        self.header
+    fn header(&self) -> &Self::Header {
+        &self.header
     }
 }
 
-impl BlockLike for bitcoin::dogecoin::Block {
-    fn block_hash(&self) -> bitcoin::BlockHash {
+impl BlockchainBlock for bitcoin::dogecoin::Block {
+    type Header = bitcoin::dogecoin::Header;
+
+    fn block_hash(&self) -> BlockHash {
         bitcoin::dogecoin::Block::block_hash(self)
     }
     fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
@@ -207,20 +319,32 @@ impl BlockLike for bitcoin::dogecoin::Block {
     fn check_merkle_root(&self) -> bool {
         bitcoin::dogecoin::Block::check_merkle_root(self)
     }
-    fn header(&self) -> bitcoin::block::Header {
-        self.header
+    fn header(&self) -> &Self::Header {
+        &self.header
     }
+}
+
+/// A trait for validating block headers in a blockchain network.
+pub trait HeaderValidator<Network: BlockchainNetwork> {
+    /// The error type returned when validation fails.
+    type HeaderError: Debug;
+
+    /// Validate a block header against the rules of the given blockchain network.
+    fn validate_header(
+        &self,
+        network: &Network,
+        header: &Network::Header,
+    ) -> Result<(), Self::HeaderError>;
 }
 
 #[cfg(test)]
 pub mod test_common {
-
     use std::{
         collections::{HashSet, VecDeque},
         net::SocketAddr,
     };
 
-    use bitcoin::{consensus::deserialize, Block};
+    use bitcoin::{Block, consensus::deserialize};
     use hex::FromHex;
 
     use crate::{Channel, ChannelError, Command};
@@ -232,16 +356,16 @@ pub mod test_common {
     pub const BLOCK_2_ENCODED: &str = "010000004860eb18bf1b1620e37e9490fc8a427514416fd75159ab86688e9a8300000000d5fdcc541e25de1c7a5addedf24858b8bb665c9f36ef744ee42c316022c90f9bb0bc6649ffff001d08d2bd610101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d010bffffffff0100f2052a010000004341047211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073dee6c89064984f03385237d92167c13e236446b417ab79a0fcae412ae3316b77ac00000000";
 
     /// This struct is used to capture Commands generated by managers.
-    pub struct TestChannel<Network> {
+    pub struct TestChannel<Header, Block> {
         /// This field holds Commands that are generated by managers.
-        received_commands: VecDeque<Command<Network>>,
+        received_commands: VecDeque<Command<Header, Block>>,
         /// The connections available for the test to interact with.
         available_connections: Vec<SocketAddr>,
         /// The addresses that disconnect was called on.
         disconnected_addresses: HashSet<SocketAddr>,
     }
 
-    impl<Network> TestChannel<Network> {
+    impl<Header, Block> TestChannel<Header, Block> {
         pub fn new(available_connections: Vec<SocketAddr>) -> Self {
             Self {
                 received_commands: VecDeque::new(),
@@ -251,16 +375,16 @@ pub mod test_common {
         }
     }
 
-    impl<Network> TestChannel<Network> {
+    impl<Header, Block> TestChannel<Header, Block> {
         pub fn command_count(&self) -> usize {
             self.received_commands.len()
         }
 
-        pub fn pop_front(&mut self) -> Option<Command<Network>> {
+        pub fn pop_front(&mut self) -> Option<Command<Header, Block>> {
             self.received_commands.pop_front()
         }
 
-        pub fn pop_back(&mut self) -> Option<Command<Network>> {
+        pub fn pop_back(&mut self) -> Option<Command<Header, Block>> {
             self.received_commands.pop_back()
         }
 
@@ -272,8 +396,8 @@ pub mod test_common {
         }
     }
 
-    impl<Network> Channel<Network> for TestChannel<Network> {
-        fn send(&mut self, command: Command<Network>) -> Result<(), ChannelError> {
+    impl<Header, Block> Channel<Header, Block> for TestChannel<Header, Block> {
+        fn send(&mut self, command: Command<Header, Block>) -> Result<(), ChannelError> {
             self.received_commands.push_back(command);
             Ok(())
         }

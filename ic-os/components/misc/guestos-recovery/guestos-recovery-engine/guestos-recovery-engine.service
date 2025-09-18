@@ -12,8 +12,6 @@ WantedBy=multi-user.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/guestos-recovery-engine.sh
-Restart=on-failure
-RestartSec=10
 
 # All guestos services that networking depends on log their outputs to the 
 # console to be piped to the host terminal if the verbose flag is enabled.

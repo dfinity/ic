@@ -21,7 +21,7 @@ mod secretkeybytes {
         let (sk, _pk) = keypair_from_rng(&mut reproducible_rng());
 
         let serialized = serde_cbor::to_vec(&sk).expect("failed to serialize SecretKeyBytes");
-        println!("Serialized: {:?}", serialized);
+        println!("Serialized: {serialized:?}");
 
         let deserialized = serde_cbor::from_slice::<SecretKeyBytes>(&serialized)
             .expect("failed to deserialize SecretKeyBytes");

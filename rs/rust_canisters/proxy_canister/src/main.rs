@@ -105,14 +105,11 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
             }
             Err((rejection_code, msg)) => {
                 errors += 1;
-                println!("Request failed: {:?} - {}", rejection_code, msg);
+                println!("Request failed: {rejection_code:?} - {msg}");
             }
         }
     }
-    println!(
-        "Finished batch of {} requests => successes: {}, errors: {}",
-        BATCH_SIZE, successes, errors
-    );
+    println!("Finished batch of {BATCH_SIZE} requests => successes: {successes}, errors: {errors}");
 
     spawn(async move {
         run_continuous_request_loop(request).await;
@@ -301,7 +298,7 @@ mod proxy_canister_test {
             context: vec![0, 1, 2],
         });
         let sanitized_body = std::str::from_utf8(&sanitized.body).unwrap();
-        println!("Sanitized body is: {}", sanitized_body);
+        println!("Sanitized body is: {sanitized_body}");
         assert!(sanitized.headers.is_empty());
         assert_eq!(sanitized_body, "homepage");
     }

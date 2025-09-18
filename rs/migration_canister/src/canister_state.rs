@@ -5,11 +5,11 @@
 use std::{cell::RefCell, collections::BTreeSet};
 
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     BTreeMap, Cell, DefaultMemoryImpl,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 
-use crate::{Event, RequestState, DEFAULT_MAX_ACTIVE_REQUESTS};
+use crate::{DEFAULT_MAX_ACTIVE_REQUESTS, Event, RequestState};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -32,6 +32,10 @@ thread_local! {
     static HISTORY: RefCell<BTreeMap<Event, (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))));
 
+    // TODO: consider a fail counter for active requests.
+    // This way we see if a request never makes progress which would
+    // indicate a bug in this canister or a problem with a subnet.
+    // BTreeMap<(Request, Reqstate: String), (Counter: u64, FirstTs: Time, LastTs: Time)>
 }
 
 pub fn migrations_disabled() -> bool {
@@ -67,7 +71,7 @@ pub mod privileged {
 
 // ============================== Request API ============================== //
 pub mod requests {
-    use crate::{canister_state::REQUESTS, RequestState};
+    use crate::{RequestState, canister_state::REQUESTS};
 
     pub fn insert_request(request: RequestState) {
         REQUESTS.with_borrow_mut(|r| r.insert(request, ()));

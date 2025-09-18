@@ -16,12 +16,12 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
 use k8s_openapi::chrono::Duration;
 use k8s_openapi::chrono::Utc;
+use kube::ResourceExt;
 use kube::api::{DeleteParams, PostParams};
 use kube::core::ObjectMeta;
-use kube::ResourceExt;
 use kube::{
-    api::{Api, DynamicObject, GroupVersionKind},
     Client,
+    api::{Api, DynamicObject, GroupVersionKind},
 };
 use serde::{Deserialize, Serialize};
 use tokio;
@@ -411,9 +411,6 @@ impl TNet {
                 test -f /tnet/{vm_name}/config_disk.img || exit 1; \
                 chmod -R 777 /tnet/{vm_name}; \
                 rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
-                vm_name = vm_name,
-                image_url = image_url,
-                config_image_url = config_image_url,
             );
             create_job(
                 &vm_name.clone(),
@@ -462,13 +459,12 @@ impl TNet {
 apiVersion: v1
 kind: Pod
 metadata:
-  name: {name}
+  name: {vm_name}
 spec:
   containers:
     - name: nginx
       image: registry.k8s.io/pause:3.8
     "#,
-            name = vm_name,
         ))?;
         ipam_pod.metadata.owner_references = vec![self.owner_reference()].into();
 
@@ -528,13 +524,12 @@ spec:
 apiVersion: crd.projectcalico.org/v1
 kind: IPReservation
 metadata:
-  name: {name}
+  name: {vm_name}
 spec:
   reservedCIDRs:
     - {ipv4}
     - {ipv6}
     "#,
-            name = vm_name,
         ))?;
         ip_reservation.metadata.owner_references = vec![self.owner_reference()].into();
 
@@ -577,7 +572,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {name}
+  name: {vm_name}
 spec:
   ipFamilyPolicy: PreferDualStack
   ipFamilies:
@@ -640,10 +635,9 @@ spec:
     - port: 20443
       name: port-20443
   selector:
-    kubevirt.io/vm: {name}
+    kubevirt.io/vm: {vm_name}
   type: ClusterIP
     "#,
-            name = vm_name,
         ))?;
         svc.metadata.owner_references = vec![self.owner_reference()].into();
 
@@ -804,7 +798,7 @@ spec:
                     &PostParams::default(),
                     &ConfigMap {
                         metadata: ObjectMeta {
-                            name: format!("{}{}", playnet_prefix, random_number).into(),
+                            name: format!("{playnet_prefix}{random_number}").into(),
                             labels: [(TNET_PLAYNET_LABEL.to_string(), random_number.to_string())]
                                 .into_iter()
                                 .collect::<BTreeMap<String, String>>()

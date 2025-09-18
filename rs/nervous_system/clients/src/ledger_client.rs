@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use candid::types::number::Nat;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_ledger_core::{block::BlockIndex, Tokens};
+use ic_ledger_core::{Tokens, block::BlockIndex};
 pub use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
 use icrc_ledger_client::{ICRC1Client, Runtime};
@@ -54,14 +54,12 @@ impl ICRC1Ledger for LedgerCanister {
         let res = self.client.transfer(args).await
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(format!(
-                    "Error calling method 'icrc1_transfer' of the icrc1 ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'icrc1_transfer' of the icrc1 ledger canister. Code: {code:?}. Message: {msg}"
                 ))
             })?;
         res.map_err(|err| {
             NervousSystemError::new_with_message(format!(
-                "'icrc1_transfer' of the icrc1 ledger canister failed. Error: {:?}",
-                err
+                "'icrc1_transfer' of the icrc1 ledger canister failed. Error: {err:?}"
             ))
         })
         .map(|n| n.0.to_u64().expect("nat does not fit into u64"))
@@ -73,8 +71,7 @@ impl ICRC1Ledger for LedgerCanister {
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
-                        "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
-                        code, msg
+                        "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {code:?}. Message: {msg}"
                     )
                 )
             })
@@ -86,8 +83,7 @@ impl ICRC1Ledger for LedgerCanister {
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
-                        "Error calling method 'icrc1_balance_of' of the ledger canister. Code: {:?}. Message: {}",
-                        code, msg
+                        "Error calling method 'icrc1_balance_of' of the ledger canister. Code: {code:?}. Message: {msg}"
                     )
                 )
             })
@@ -105,6 +101,7 @@ impl ICRC1Ledger for LedgerCanister {
         expires_at: Option<u64>,
         fee: u64,
         from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError> {
         let args = ApproveArgs {
             spender,
@@ -114,10 +111,7 @@ impl ICRC1Ledger for LedgerCanister {
             from_subaccount,
             memo: None,
             created_at_time: None,
-            // If the expected_allowance field is set, the ledger
-            // MUST ensure that the current allowance for the spender
-            // from the caller's account is equal to the given value.
-            expected_allowance: Some(Nat::from(0_u64)),
+            expected_allowance: expected_allowance.map(Nat::from),
         };
 
         let result: Result<Nat, ApproveError> = self
@@ -126,15 +120,13 @@ impl ICRC1Ledger for LedgerCanister {
             .await
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(format!(
-                    "Error calling method 'icrc2_approve' of the icrc1 ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'icrc2_approve' of the icrc1 ledger canister. Code: {code:?}. Message: {msg}"
                 ))
             })?;
 
         result.map_err(|err| {
             NervousSystemError::new_with_message(format!(
-                "'icrc2_approve' of the icrc1 ledger canister failed. Error: {:?}",
-                err
+                "'icrc2_approve' of the icrc1 ledger canister failed. Error: {err:?}"
             ))
         })
     }
@@ -170,7 +162,7 @@ impl ICRC1Ledger for LedgerCanister {
             .map(|result: (GetBlocksResult,)| result.0);
 
         result.map_err(|(code, msg)| {
-            NervousSystemError::new_with_message(format!("Error calling method 'icrc3_get_blocks' of the ledger canister. Code: {:?}. Message: {}", code, msg))
+            NervousSystemError::new_with_message(format!("Error calling method 'icrc3_get_blocks' of the ledger canister. Code: {code:?}. Message: {msg}"))
         })
     }
 }

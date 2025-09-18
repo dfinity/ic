@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
@@ -12,9 +12,9 @@ use prometheus::{
 
 use crate::{
     metrics::{
-        cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-        memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets,
-        ScopedMetrics,
+        ScopedMetrics, cycles_histogram, dts_pause_or_abort_histogram, duration_histogram,
+        instructions_histogram, memory_histogram, messages_histogram, slices_histogram,
+        unique_sorted_buckets,
     },
     scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH,
 };
@@ -115,6 +115,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) inducted_messages: IntCounterVec,
     pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) exceeding_pre_signatures: IntCounterVec,
     pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
     pub(super) pre_signature_stash_size: IntGaugeVec,
@@ -282,6 +283,11 @@ impl SchedulerMetrics {
                 "execution_idkg_delivered_pre_signatures",
                 "Number of IDkg pre-signatures delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
+                &["key_id"],
+            ),
+            exceeding_pre_signatures: metrics_registry.int_counter_vec(
+                "execution_idkg_exceeding_pre_signatures",
+                "Number of IDkg pre-signatures delivered to execution that exceeded the maximum stash size",
                 &["key_id"],
             ),
             in_flight_signature_request_contexts: metrics_registry.histogram_vec(

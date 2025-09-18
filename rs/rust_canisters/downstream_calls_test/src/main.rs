@@ -52,7 +52,7 @@ async fn reply_or_defer(mut state: State) -> State {
                     call_count: state.call_count,
                     current_depth: state.current_depth.saturating_sub(1),
                     depth_total: state.depth_total,
-                }
+                };
             }
         }
     }

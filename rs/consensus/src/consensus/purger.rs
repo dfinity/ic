@@ -20,20 +20,20 @@
 //!    in the latest CatchUpPackage can be purged.
 use super::bounds::validated_pool_within_bounds;
 use crate::consensus::metrics::PurgerMetrics;
-use ic_consensus_utils::{pool_reader::PoolReader, MINIMUM_CHAIN_LENGTH};
+use ic_consensus_utils::{MINIMUM_CHAIN_LENGTH, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height,
     consensus::{ConsensusMessage, HasHeight, HashedBlock},
     replica_config::ReplicaConfig,
-    Height,
 };
 use std::{cell::RefCell, collections::BTreeSet, sync::Arc};
 
@@ -225,8 +225,7 @@ impl Purger {
             ));
             trace!(
                 self.log,
-                "Purge unvalidated pool below {:?}",
-                expected_batch_height
+                "Purge unvalidated pool below {:?}", expected_batch_height
             );
             self.metrics
                 .unvalidated_pool_purge_height
@@ -353,8 +352,7 @@ impl Purger {
         self.state_manager.remove_states_below(cup_height);
         trace!(
             self.log,
-            "Purge replicated states below [disk] {:?}",
-            cup_height
+            "Purge replicated states below [disk] {:?}", cup_height
         );
         self.metrics
             .replicated_state_purge_height_disk
@@ -477,7 +475,7 @@ fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
@@ -486,9 +484,9 @@ mod tests {
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::{fake::FakeContentUpdate, idkg::empty_idkg_payload};
     use ic_types::{
+        CryptoHashOfState, SubnetId,
         consensus::{BlockPayload, BlockProposal, Payload, Rank},
         crypto::CryptoHash,
-        CryptoHashOfState, SubnetId,
     };
     use std::{
         collections::HashSet,

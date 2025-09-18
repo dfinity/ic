@@ -109,7 +109,7 @@ system_test_nns(
         "long_test",
     ],
     uses_guestos_img = False,
-    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
     runtime_deps =
         XNET_TEST_CANISTER_RUNTIME_DEPS +

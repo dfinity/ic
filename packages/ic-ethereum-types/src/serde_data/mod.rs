@@ -4,9 +4,9 @@
 mod tests;
 
 use hex::{FromHex, ToHex};
-use serde::de::{Error, Visitor};
 use serde::Deserializer;
 use serde::Serializer;
+use serde::de::{Error, Visitor};
 use std::fmt;
 use std::marker::PhantomData;
 

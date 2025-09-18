@@ -21,7 +21,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{Result, anyhow, ensure};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams::{
         get_upstreams_uvm_ipv6, setup_upstreams_uvm, spoof_node_dns, uvm_serve_recovery_artifacts,
@@ -35,7 +35,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, secs, HasTopologySnapshot, IcNodeContainer, SshSession,
+            HasTopologySnapshot, IcNodeContainer, SshSession, get_dependency_path_from_env,
+            read_dependency_from_env_to_string, secs,
         },
     },
     retry_with_msg, systest,
@@ -43,26 +44,12 @@ use ic_system_test_driver::{
 use slog::info;
 use ssh2::Session;
 
-fn read_env_var_path(env_var: &str) -> Vec<u8> {
-    let dependency_path = get_dependency_path(
-        std::env::var(env_var)
-            .unwrap_or_else(|_| panic!("{} environment variable not found", env_var)),
-    );
-    std::fs::read(&dependency_path)
-        .unwrap_or_else(|_| panic!("Failed to read content from {:?}", dependency_path))
-}
-
-fn read_env_var_path_to_string(env_var: &str) -> String {
-    String::from_utf8(read_env_var_path(env_var))
-        .unwrap_or_else(|_| panic!("Content of {} is not valid UTF-8", env_var))
-}
-
 fn verify_content(ssh_session: &Session, remote_file_path: &str, expected_b64: &str) -> Result<()> {
     // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
     // we read their base64 encoding and compare those.
     let actual_b64 = execute_bash_command(
         ssh_session,
-        format!("base64 {} | tr -d '\\n'", remote_file_path),
+        format!("base64 {remote_file_path} | tr -d '\\n'"),
     )
     .map_err(|e| anyhow!(e))?;
     ensure!(
@@ -85,8 +72,7 @@ fn verify_permissions_recursively(
         ssh_session,
         format!(
             // File type | Permissions | Owner | Group | File Name
-            "find {} -exec stat -c '%F|%A|%U|%G|%n' {{}} \\;",
-            folder_path
+            "find {folder_path} -exec stat -c '%F|%A|%U|%G|%n' {{}} \\;"
         ),
     )
     .map_err(|e| anyhow!(e))?;
@@ -144,8 +130,10 @@ pub fn setup(env: TestEnv) {
     setup_upstreams_uvm(&env);
     uvm_serve_recovery_artifacts(
         &env,
-        read_env_var_path("RECOVERY_ARTIFACTS_PATH"),
-        read_env_var_path_to_string("RECOVERY_HASH_PATH").trim(),
+        &get_dependency_path_from_env("RECOVERY_ARTIFACTS_PATH"),
+        read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
+            .unwrap()
+            .trim(),
     )
     .unwrap();
 
@@ -162,16 +150,18 @@ pub fn setup(env: TestEnv) {
         .unwrap();
 
     let server_ipv6 = get_upstreams_uvm_ipv6(&env);
-    spoof_node_dns(&node, &server_ipv6);
+    spoof_node_dns(&node, &server_ipv6).unwrap();
 }
 
 pub fn test(env: TestEnv) {
     let log = env.logger();
     info!(log, "Running recovery engine test...");
 
-    let expected_cup_b64 = read_env_var_path_to_string("RECOVERY_CUP_B64_PATH");
-    let expected_local_store_1_b64 = read_env_var_path_to_string("RECOVERY_STORE_1_B64_PATH");
-    let expected_local_store_2_b64 = read_env_var_path_to_string("RECOVERY_STORE_2_B64_PATH");
+    let expected_cup_b64 = read_dependency_from_env_to_string("RECOVERY_CUP_B64_PATH").unwrap();
+    let expected_local_store_1_b64 =
+        read_dependency_from_env_to_string("RECOVERY_STORE_1_B64_PATH").unwrap();
+    let expected_local_store_2_b64 =
+        read_dependency_from_env_to_string("RECOVERY_STORE_2_B64_PATH").unwrap();
 
     let node = env
         .topology_snapshot()

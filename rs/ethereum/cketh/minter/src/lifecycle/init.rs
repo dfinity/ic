@@ -51,20 +51,18 @@ impl TryFrom<InitArg> for State {
         use std::str::FromStr;
 
         let initial_nonce = TransactionNonce::try_from(next_transaction_nonce)
-            .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {}", e)))?;
+            .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
         let minimum_withdrawal_amount = Wei::try_from(minimum_withdrawal_amount).map_err(|e| {
-            InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
+            InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {e}"))
         })?;
         let eth_helper_contract_address = ethereum_contract_address
             .map(|a| Address::from_str(&a))
             .transpose()
             .map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
+                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
             })?;
-        let last_scraped_block_number =
-            BlockNumber::try_from(last_scraped_block_number).map_err(|e| {
-                InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {}", e))
-            })?;
+        let last_scraped_block_number = BlockNumber::try_from(last_scraped_block_number)
+            .map_err(|e| InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {e}")))?;
         let first_scraped_block_number =
             last_scraped_block_number
                 .checked_increment()
@@ -82,7 +80,7 @@ impl TryFrom<InitArg> for State {
             log_scrapings
                 .set_contract_address(LogScrapingId::EthDepositWithoutSubaccount, contract_address)
                 .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
                 })?;
         }
         let state = Self {

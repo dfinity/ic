@@ -2,7 +2,9 @@ name: Schedule Daily
 
 on:
   schedule:
-    - cron: "0 1 * * *"
+    # Note that we would like there to be no overlap between the system-tests-benchmarks-nightly job below
+    # and the Release Testing workflow triggered by the Schedule RC workflow.
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 env:
@@ -14,7 +16,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+    image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
 
   backup-pod-access: &backup-pod-access
     run: |
@@ -42,6 +44,10 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+  generate-bazel-invocation-ids: &generate-bazel-invocation-ids
+    name: Generate Bazel invocation IDs
+    id: gen-uuids
+    uses: ./.github/actions/generate-invocation-ids
 
 jobs:
 
@@ -51,6 +57,20 @@ jobs:
     environment: Nightly Tests
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "HSM Test",
+              "output_id": "hsm_test_id",
+            }, {
+              "name": "Benchmark",
+              "output_id": "benchmark_id",
+            }, {
+              "name": "HostOS metrics",
+              "output_id": "hostos_metrics_id",
+            }]
+
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -58,6 +78,9 @@ jobs:
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
           launch_bare_metal() {
+            local invocation_id="$1"
+            shift
+
             # shellcheck disable=SC2046,SC2086
             bazel --output_base=/var/tmp/bazel-output run \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
@@ -66,18 +89,19 @@ jobs:
                 --file_share_ssh_key "$(realpath file2)" \
                 --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
                 --file_share_username ci_interim \
+                --invocation_id="$invocation_id" \
                 --ci_mode \
                 $@
           }
 
           # Run bare metal installation test
-          launch_bare_metal --hsm
+          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hsm_test_id }}" --hsm
 
           # Run bare metal node performance benchmarks
-          launch_bare_metal --benchmark
+          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).benchmark_id }}" --benchmark
 
           # Run bare metal node hostOS metrics check
-          launch_bare_metal --check_hostos_metrics
+          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hostos_metrics_id }}" --check_hostos_metrics
 
           bazel clean
         env:
@@ -93,12 +117,21 @@ jobs:
       - <<: *checkout
       - name: Set up backup pod access
         <<: *backup-pod-access
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
+
       - name: Run FI Tests Nightly
         uses: ./.github/actions/bazel
         with:
           run: |
             bazel test \
               --config=stamped \
+              --invocation_id="${{  fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=fi_tests_nightly \
               //rs/ledger_suite/... \
               --test_env=SSH_AUTH_SOCK \
@@ -114,6 +147,14 @@ jobs:
       - <<: *checkout
       - name: Set up backup pod access
         <<: *backup-pod-access
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
+
       - name: Run NNS Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -121,10 +162,19 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=nns_tests_nightly \
-              //rs/nns/... \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
+              //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: eng-nns
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
   pocketic-tests-nightly:
     name: Bazel Test PocketIC Nightly
@@ -132,6 +182,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
+
       - name: Run PocketIC Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -139,6 +197,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=pocketic_tests_nightly \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //rs/pocket_ic_server/... \
               --test_env=SSH_AUTH_SOCK \
               --keep_going
@@ -158,6 +217,14 @@ jobs:
     timeout-minutes: 480
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
+
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel
@@ -178,6 +245,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=system_test_benchmark \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --//bazel:enable_upload_perf_systest_results=True \
               --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
@@ -187,7 +255,7 @@ jobs:
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()
         with:
-          channel-id: eng-crypto-alerts
+          channel-id: eng-ic-benchmark-alerts
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

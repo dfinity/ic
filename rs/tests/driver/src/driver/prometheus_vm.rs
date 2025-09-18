@@ -7,12 +7,12 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info, warn, Logger};
+use slog::{Logger, debug, info, warn};
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -47,7 +47,9 @@ const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
     "3af874174d48f5c9a59c9bc54dd73cbfc65b17b952fbacd7611ee07d19de369b";
 
 fn get_default_prometheus_vm_img_url() -> String {
-    format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
+    format!(
+        "http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
+    )
 }
 
 const PROMETHEUS_DATA_DIR_TARBALL: &str = "prometheus-data-dir.tar.zst";
@@ -160,7 +162,11 @@ impl PrometheusVm {
     ///
     /// This process automatically discovers all `*.json` files, which are interpreted as Grafana dashboards. It then copies these files to a destination, where they will be sent to the Prometheus VM for use with the testnets. The expected name of the dashboards directory is determined by reading the `commonAnnotations.k8s-sidecar-target-directory` path from the `kustomize.yaml` file. This value specifies the location where the dashboards should be placed so that the links don't get broken.
     fn transform_dashboards_root_dir(logger: Logger, destination: &Path) -> Result<()> {
-        let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
+        let dashboards_root = PathBuf::from_str(
+            &std::env::var("IC_DASHBOARDS_DIR")
+                .context("Failed to load `IC_DASHBOARDS_DIR` env variable")?,
+        )
+        .context("Failed to create PathBuf from the content of `IC_DASHBOARDS_DIR` env variable")?;
 
         for directory in dashboards_root.read_dir().map_err(|e| {
             anyhow::anyhow!(
@@ -274,15 +280,21 @@ fi
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
         std::fs::create_dir_all(&grafana_dashboards_dst).unwrap();
         let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
-        if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
-            warn!(
-                log,
-                "Failed to sync k8s dashboards to grafana. Error: {}",
-                e.to_string()
-            )
-        } else {
-            debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
-            TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        match Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
+            Err(e) => {
+                warn!(
+                    log,
+                    "Failed to sync k8s dashboards to grafana. Error: {e:#}"
+                )
+            }
+            _ => {
+                debug!(
+                    log,
+                    "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ..."
+                );
+                TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst)
+                    .unwrap();
+            }
         }
 
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();

@@ -1,8 +1,7 @@
 use crate::types::{
-    manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal::Action,
-    ExecuteNnsFunction, InstallCode, InstallCodeRequest, MakeProposalRequest, ManageNeuron,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction, Proposal,
-    ProposalActionRequest,
+    ExecuteNnsFunction, InstallCodeRequest, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest,
+    manage_neuron_response::Command as CommandResponse,
 };
 use candid::{CandidType, Decode, Encode};
 use ic_crypto_sha2::Sha256;
@@ -60,12 +59,7 @@ pub fn create_make_proposal_payload(
 
 pub fn decode_make_proposal_response(response: Vec<u8>) -> Result<ProposalId, String> {
     match Decode!(&response, ManageNeuronResponse)
-        .map_err(|e| {
-            format!(
-                "Cannot candid-deserialize the response from manage_neuron: {}",
-                e
-            )
-        })?
+        .map_err(|e| format!("Cannot candid-deserialize the response from manage_neuron: {e}"))?
         .command
     {
         Some(CommandResponse::MakeProposal(resp)) => {
@@ -76,107 +70,36 @@ pub fn decode_make_proposal_response(response: Vec<u8>) -> Result<ProposalId, St
     }
 }
 
-// The code below exists only because the API types cannot define its own `Debug` trait while still
-// being `prost::Message`. The API types still are `prost::Message` because we have some legacy pb
-// endpoints. The conversions make it possible for ic-admin to print the proposal in the format of
-// the response API types.
-//
-// TODO: Remove this after defining the `Debug` trait in the API types and using them to print
-// proposals in ic-admin.
-fn calculate_hash(bytes: &[u8]) -> [u8; 32] {
-    let mut wasm_sha = Sha256::new();
-    wasm_sha.write(bytes);
-    wasm_sha.finish()
+fn calculate_and_encode_hash(bytes: &[u8]) -> String {
+    hex::encode(Sha256::hash(bytes))
 }
 
-impl From<ProposalActionRequest> for Action {
-    fn from(action: ProposalActionRequest) -> Self {
-        match action {
-            ProposalActionRequest::ManageNeuron(v) => Action::ManageNeuron(Box::new((*v).into())),
-            ProposalActionRequest::ManageNetworkEconomics(v) => Action::ManageNetworkEconomics(v),
-            ProposalActionRequest::Motion(v) => Action::Motion(v),
-            ProposalActionRequest::ExecuteNnsFunction(v) => Action::ExecuteNnsFunction(v),
-            ProposalActionRequest::ApproveGenesisKyc(v) => Action::ApproveGenesisKyc(v),
-            ProposalActionRequest::AddOrRemoveNodeProvider(v) => Action::AddOrRemoveNodeProvider(v),
-            ProposalActionRequest::RewardNodeProvider(v) => Action::RewardNodeProvider(v),
-            ProposalActionRequest::RewardNodeProviders(v) => Action::RewardNodeProviders(v),
-            ProposalActionRequest::RegisterKnownNeuron(v) => Action::RegisterKnownNeuron(v),
-            ProposalActionRequest::CreateServiceNervousSystem(v) => {
-                Action::CreateServiceNervousSystem(v)
-            }
-            ProposalActionRequest::InstallCode(v) => Action::InstallCode(v.into()),
-            ProposalActionRequest::StopOrStartCanister(v) => Action::StopOrStartCanister(v),
-            ProposalActionRequest::UpdateCanisterSettings(v) => Action::UpdateCanisterSettings(v),
-            ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
-                Action::FulfillSubnetRentalRequest(v)
-            }
-        }
-    }
-}
-
-impl From<ManageNeuronRequest> for ManageNeuron {
-    fn from(manage_neuron_request: ManageNeuronRequest) -> Self {
-        Self {
-            id: manage_neuron_request.id,
-            neuron_id_or_subaccount: manage_neuron_request.neuron_id_or_subaccount,
-            command: manage_neuron_request.command.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<ManageNeuronCommandRequest> for Command {
-    fn from(item: ManageNeuronCommandRequest) -> Self {
-        match item {
-            ManageNeuronCommandRequest::Configure(v) => Command::Configure(v),
-            ManageNeuronCommandRequest::Disburse(v) => Command::Disburse(v),
-            ManageNeuronCommandRequest::Spawn(v) => Command::Spawn(v),
-            ManageNeuronCommandRequest::Follow(v) => Command::Follow(v),
-            ManageNeuronCommandRequest::MakeProposal(v) => {
-                Command::MakeProposal(Box::new((*v).into()))
-            }
-            ManageNeuronCommandRequest::RegisterVote(v) => Command::RegisterVote(v),
-            ManageNeuronCommandRequest::Split(v) => Command::Split(v),
-            ManageNeuronCommandRequest::DisburseToNeuron(v) => Command::DisburseToNeuron(v),
-            ManageNeuronCommandRequest::ClaimOrRefresh(v) => Command::ClaimOrRefresh(v),
-            ManageNeuronCommandRequest::MergeMaturity(v) => Command::MergeMaturity(v),
-            ManageNeuronCommandRequest::Merge(v) => Command::Merge(v),
-            ManageNeuronCommandRequest::StakeMaturity(v) => Command::StakeMaturity(v),
-            ManageNeuronCommandRequest::RefreshVotingPower(v) => Command::RefreshVotingPower(v),
-            ManageNeuronCommandRequest::DisburseMaturity(v) => Command::DisburseMaturity(v),
-            ManageNeuronCommandRequest::SetFollowing(v) => Command::SetFollowing(v),
-        }
-    }
-}
-
-impl From<MakeProposalRequest> for Proposal {
-    fn from(item: MakeProposalRequest) -> Self {
-        Self {
-            title: item.title,
-            summary: item.summary,
-            url: item.url,
-            action: item.action.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<InstallCodeRequest> for InstallCode {
-    fn from(item: InstallCodeRequest) -> Self {
-        let wasm_module_hash = item
-            .wasm_module
-            .map(|wasm_module| calculate_hash(&wasm_module).to_vec());
-        let arg = item.arg.unwrap_or_default();
-        let arg_hash = if arg.is_empty() {
-            Some(vec![])
-        } else {
-            Some(calculate_hash(&arg).to_vec())
-        };
-
-        Self {
-            canister_id: item.canister_id,
-            install_mode: item.install_mode,
-            skip_stopping_before_installing: item.skip_stopping_before_installing,
-            wasm_module_hash,
-            arg_hash,
-        }
+impl std::fmt::Debug for InstallCodeRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InstallCodeRequest")
+            .field("canister_id", &self.canister_id)
+            .field("install_mode", &self.install_mode)
+            .field(
+                "skip_stopping_before_installing",
+                &self.skip_stopping_before_installing,
+            )
+            .field(
+                "wasm_module_hash",
+                &self
+                    .wasm_module
+                    .as_ref()
+                    .map(|wasm_module| calculate_and_encode_hash(wasm_module)),
+            )
+            .field(
+                "arg_hash",
+                &self.arg.as_ref().map(|arg| {
+                    if arg.is_empty() {
+                        "".to_string()
+                    } else {
+                        calculate_and_encode_hash(arg)
+                    }
+                }),
+            )
+            .finish()
     }
 }

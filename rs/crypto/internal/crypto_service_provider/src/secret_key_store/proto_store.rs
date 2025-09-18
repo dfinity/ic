@@ -8,7 +8,7 @@ use crate::types::CspSecretKey;
 use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::{debug, info, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, replica_logger::no_op_logger, warn};
 use parking_lot::RwLock;
 use prost::Message;
 use std::borrow::BorrowMut;
@@ -26,7 +26,7 @@ mod tests;
 const CURRENT_SKS_VERSION: u32 = 3;
 
 fn key_id_from_hex(key_id_hex: &str) -> KeyId {
-    KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {}", key_id_hex))
+    KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {key_id_hex}"))
 }
 
 /// The secret key store protobuf definitions
@@ -49,15 +49,15 @@ pub struct ProtoSecretKeyStore {
 
 #[derive(Debug, Error)]
 enum CleanupError {
-    #[error("error determining the existence of the old secret key store file '{old_sks_file}': {source:?}")]
+    #[error(
+        "error determining the existence of the old secret key store file '{old_sks_file}': {source:?}"
+    )]
     OldFileExistenceDetermination {
         old_sks_file: String,
         #[source]
         source: std::io::Error,
     },
-    #[error(
-        "error determining the existence of the current file '{current_sks_file}': {source:?}"
-    )]
+    #[error("error determining the existence of the current file '{current_sks_file}': {source:?}")]
     CurrentFileExistenceDetermination {
         current_sks_file: String,
         #[source]
@@ -69,14 +69,18 @@ enum CleanupError {
         #[source]
         source: std::io::Error,
     },
-    #[error("error determining if secret key store file '{current_sks_file}' and old secret key store '{old_sks_file}' are the same file: {source:?}")]
+    #[error(
+        "error determining if secret key store file '{current_sks_file}' and old secret key store '{old_sks_file}' are the same file: {source:?}"
+    )]
     InodesComparison {
         old_sks_file: String,
         current_sks_file: String,
         #[source]
         source: std::io::Error,
     },
-    #[error("inconsistent state - the old file '{old_sks_file}' exists but the current file '{current_sks_file}' does not")]
+    #[error(
+        "inconsistent state - the old file '{old_sks_file}' exists but the current file '{current_sks_file}' does not"
+    )]
     OldFileExistsButCurrentFileDoesNot {
         old_sks_file: String,
         current_sks_file: String,
@@ -87,7 +91,9 @@ enum CleanupError {
     OldFileMetadataRetrieval(#[source] std::io::Error),
     #[error("error opening file for writing: {0:?}")]
     OpeningFileForWriting(#[source] std::io::Error),
-    #[error("error creating hard link to existing file (original: '{original}', link: '{link}'): {source:?}")]
+    #[error(
+        "error creating hard link to existing file (original: '{original}', link: '{link}'): {source:?}"
+    )]
     HardLinkCreation {
         original: String,
         link: String,
@@ -121,7 +127,7 @@ impl ProtoSecretKeyStore {
         if let Ok(true) = proto_file.try_exists() {
             Self::check_proto_file_is_regular_file_or_panic(&proto_file);
         }
-        let old_proto_file_to_zeroize = dir.join(format!("{}.old", file_name));
+        let old_proto_file_to_zeroize = dir.join(format!("{file_name}.old"));
         let secret_keys = Self::sks_data_from_disk_or_new(&proto_file);
         let logger = logger.unwrap_or_else(no_op_logger);
         let sks = ProtoSecretKeyStore {
@@ -205,7 +211,7 @@ impl ProtoSecretKeyStore {
                 "error(s) cleaning up old secret key store file: [{}]",
                 cleanup_error
                     .iter()
-                    .map(|e| format!("{}", e))
+                    .map(|e| format!("{e}"))
                     .collect::<Vec<String>>()
                     .join(", ")
             );
@@ -280,8 +286,7 @@ impl ProtoSecretKeyStore {
                 Ok(())
             }
             Err(e) => Err(SecretKeyStoreWriteError::TransientError(format!(
-                "Secret key store internal error writing protobuf using tmp file: {}",
-                e
+                "Secret key store internal error writing protobuf using tmp file: {e}"
             ))),
         }
     }
@@ -310,7 +315,7 @@ impl ProtoSecretKeyStore {
                 if err.kind() == ErrorKind::NotFound {
                     None
                 } else {
-                    panic!("Error reading SKS data: {}", err)
+                    panic!("Error reading SKS data: {err}")
                 }
             }
         };
@@ -346,7 +351,7 @@ impl ProtoSecretKeyStore {
 
     fn parse_csp_secret_key(key_bytes: &[u8], key_id: &KeyId) -> CspSecretKey {
         serde_cbor::from_slice(key_bytes).unwrap_or_else(|_ignored_so_that_no_data_is_leaked| {
-            panic!("Error deserializing key with ID {}", key_id)
+            panic!("Error deserializing key with ID {key_id}")
         })
     }
 
@@ -356,7 +361,7 @@ impl ProtoSecretKeyStore {
         } else {
             Some(
                 Scope::from_str(scope_proto)
-                    .unwrap_or_else(|_| panic!("Unknown scope: {}", scope_proto)),
+                    .unwrap_or_else(|_| panic!("Unknown scope: {scope_proto}")),
             )
         }
     }
@@ -376,7 +381,7 @@ impl ProtoSecretKeyStore {
     fn ensure_version_is_supported(version: u32) {
         let supported_versions = [1, 2, CURRENT_SKS_VERSION];
         if !supported_versions.contains(&version) {
-            panic!("Unexpected SecretKeyStore-proto version: {}", version)
+            panic!("Unexpected SecretKeyStore-proto version: {version}")
         }
     }
 
@@ -392,8 +397,7 @@ impl ProtoSecretKeyStore {
             let key_as_cbor =
                 serde_cbor::to_vec(&csp_key).map_err(|_ignored_so_that_no_data_is_leaked| {
                     SecretKeyStoreWriteError::SerializationError(format!(
-                        "Error serializing key with ID {}",
-                        key_id
+                        "Error serializing key with ID {key_id}"
                     ))
                 })?;
             let sk_pb = match maybe_scope {

@@ -33,14 +33,14 @@ component_files = {
 
     # misc
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
-    Label("misc/config/setupos/config.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/config/config-setupos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/serial-getty@/setupos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
 
     # networking
-    Label("networking/generate-network-config/setupos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
+    Label("networking/generate-network-config/generate-network-config-setupos.service"): "/etc/systemd/system/generate-network-config.service",
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/hosts"): "/etc/hosts",
