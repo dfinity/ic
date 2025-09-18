@@ -131,7 +131,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
             MinterArg::Init(_) => panic!("expected Option<UpgradeArgs> got InitArgs."),
         };
     }
-    lifecycle::upgrade::post_upgrade(upgrade_arg);
+    lifecycle::upgrade::post_upgrade(upgrade_arg, &IC_CANISTER_RUNTIME);
     setup_tasks();
 }
 
