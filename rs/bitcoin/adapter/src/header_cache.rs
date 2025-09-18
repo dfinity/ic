@@ -21,6 +21,9 @@ use thiserror::Error;
 /// size. It is a constant because it cannot be changed once DB is created.
 const MAX_LMDB_CACHE_SIZE: usize = 0x2_0000_0000; // 8GB
 
+/// Database key used to store tip header.
+const TIP_KEY: &str = "TIP";
+
 /// Block header with its height in the blockchain and other info.
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct HeaderData<Header> {
@@ -278,6 +281,16 @@ impl From<lmdb::Error> for LMDBCacheError {
     }
 }
 
+/// Macro that logs the error when result is not Ok.
+macro_rules! log_err {
+    ($r:expr, $log:expr, $reason:expr) => {
+        $r.map_err(|err| {
+            error!($log, "Error in DB operation {}: {:?}", $reason, err);
+            err
+        })
+    };
+}
+
 /// Like log_err, but won't log the error if it matches the given error code.
 macro_rules! log_err_except {
     ($r:expr, $log:expr, $code:pat, $reason:expr) => {
@@ -298,7 +311,11 @@ pub struct LMDBHeaderCache {
 
 impl LMDBHeaderCache {
     /// Load the cache with a genesis header and cache directory.
-    pub fn new(mut cache_dir: PathBuf, log: ReplicaLogger) -> Self {
+    pub fn new_with_genesis<Header: BlockchainHeader>(
+        mut cache_dir: PathBuf,
+        log: ReplicaLogger,
+        genesis: Tip<Header>,
+    ) -> Result<Self, LMDBCacheError> {
         cache_dir.push("headers");
         let path = cache_dir.as_path();
         std::fs::create_dir_all(path).unwrap_or_else(|err| {
@@ -308,11 +325,27 @@ impl LMDBHeaderCache {
         let headers = db_env
             .create_db(Some("HEADERS"), DatabaseFlags::empty())
             .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
-        LMDBHeaderCache {
+        let cache = LMDBHeaderCache {
             log,
             db_env,
             headers,
-        }
+        };
+        // Initialize DB with genesis if there is no tip yet
+        log_err!(
+            cache.run_rw_txn(|tx| match cache.tx_get_tip_hash(tx) {
+                Ok(_) => Ok(()),
+                Err(LMDBCacheError::Lmdb(lmdb::Error::NotFound)) => {
+                    let hash = genesis.header.block_hash();
+                    cache.tx_add_header(tx, hash, genesis.clone().into())?;
+                    cache.tx_update_tip(tx, hash)?;
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }),
+            cache.log,
+            "iniialize genesis"
+        )?;
+        Ok(cache)
     }
 
     fn tx_get_header<Tx: Transaction, Header: BlockchainHeader>(
@@ -338,7 +371,7 @@ impl LMDBHeaderCache {
     }
 
     fn tx_get_tip_hash<Tx: Transaction>(&self, tx: &Tx) -> Result<BlockHash, LMDBCacheError> {
-        let mut bytes = tx.get(self.headers, b"TIP")?;
+        let mut bytes = tx.get(self.headers, &TIP_KEY)?;
         let hash = <BlockHash>::consensus_decode(&mut bytes)?;
         Ok(hash)
     }
@@ -356,7 +389,7 @@ impl LMDBHeaderCache {
         tx: &mut RwTransaction,
         tip_hash: BlockHash,
     ) -> Result<(), LMDBCacheError> {
-        tx.put(self.headers, b"TIP", &tip_hash, WriteFlags::empty())?;
+        tx.put(self.headers, &TIP_KEY, &tip_hash, WriteFlags::empty())?;
         Ok(())
     }
 
@@ -402,26 +435,30 @@ pub struct HybridHeaderCache<Header> {
 }
 
 impl<Header: BlockchainHeader> HybridHeaderCache<Header> {
-    pub fn new(genesis: Header, cache_dir: Option<PathBuf>, log: ReplicaLogger) -> Self {
-        let genesis_hash = genesis.block_hash();
-        let on_disk = cache_dir.map(|dir| LMDBHeaderCache::new(dir, log));
+    pub fn new(genesis_header: Header, cache_dir: Option<PathBuf>, log: ReplicaLogger) -> Self {
+        let genesis_hash = genesis_header.block_hash();
+        let genesis = HeaderData {
+            work: genesis_header.work(),
+            header: genesis_header,
+            height: 0,
+        };
+        let on_disk = cache_dir.map(|dir| {
+            LMDBHeaderCache::new_with_genesis(dir, log, genesis.clone())
+                .expect("Error initializing LMDBHeaderCache")
+        });
         // Try reading the anchor (tip of the chain) from disk.
         // If it doesn't exist, use genesis header.
         let anchor = on_disk
             .as_ref()
-            .and_then(|cache| {
-                log_err_except!(
+            .map(|cache| {
+                log_err!(
                     cache.run_ro_txn(|tx| cache.tx_get_tip(tx)),
                     cache.log,
-                    LMDBCacheError::Lmdb(lmdb::Error::NotFound),
                     "tx_get_tip()"
                 )
+                .expect("LMDBHeaderCache contains no tip")
             })
-            .unwrap_or_else(|| HeaderData {
-                header: genesis.clone(),
-                height: 0,
-                work: genesis.work(),
-            });
+            .unwrap_or(genesis);
         let in_memory = RwLock::new(InMemoryHeaderCache::new_with_anchor(anchor));
         Self {
             in_memory,
@@ -595,12 +632,14 @@ pub(crate) mod test {
 
     #[test]
     fn test_hybrid_header_cache() {
+        type Header = bitcoin::block::Header;
+
         let dir = tempdir().unwrap();
         let network = bitcoin::Network::Bitcoin;
         let genesis_block_header = network.genesis_block_header();
         let genesis_block_hash = genesis_block_header.block_hash();
         with_test_replica_logger(|logger| {
-            let cache = <HybridHeaderCache<bitcoin::block::Header>>::new(
+            let cache = <HybridHeaderCache<Header>>::new(
                 genesis_block_header,
                 Some(dir.path().to_path_buf()),
                 logger,
@@ -653,17 +692,40 @@ pub(crate) mod test {
             }
             let tips = get_tips(&cache);
             assert_eq!(tips.len(), 5);
+            // Test pruning below genesis, should be no-op
+            cache
+                .persist_and_prune_headers_below_anchor(genesis_block_hash)
+                .unwrap();
+            let tips = get_tips(&cache);
+            assert_eq!(tips.len(), 5);
             cache
                 .persist_and_prune_headers_below_anchor(intermediate_hash)
                 .unwrap();
+
             // Check if the chain from genesis to tip can still be found
             assert!(cache.get_header(genesis_block_hash).is_some());
             let mut hash = tip.header.block_hash();
             while hash != genesis_block_hash {
                 let header = *next_headers.get(&hash).unwrap();
-                assert_eq!(Some(header), cache.get_header(hash).map(|x| x.data.header));
+                let node = cache.get_header(hash).unwrap();
+                assert_eq!(header, node.data.header);
+                // If height <= anchor, it can be found on-disk
+                if node.data.height <= intermediate.height {
+                    let on_disk = cache.on_disk.as_ref().unwrap();
+                    assert!(
+                        on_disk
+                            .run_ro_txn(|tx| on_disk.tx_get_header::<_, Header>(tx, hash))
+                            .is_ok()
+                    );
+                }
+                // If height >= anchor, it can be found in-memory
+                if node.data.height >= intermediate.height {
+                    let in_memory = &cache.in_memory;
+                    assert!(in_memory.get_header(hash).is_some())
+                }
                 hash = header.prev_block_hash();
             }
+
             // Check if all tip ancestors can be found.
             let tips = get_tips(&cache);
             assert_eq!(tips.len(), 3);
