@@ -652,7 +652,7 @@ fn local_recovery(
         {maybe_replay_until_height}\
         {maybe_upgrade_image_url}\
         {maybe_upgrade_image_hash}\
-        --download-method local \
+        --download-state-method local \
         --upload-method local \
         --wait-for-cup-node {node_ip} \
         {maybe_backup_key_file}\
