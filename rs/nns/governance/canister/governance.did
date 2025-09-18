@@ -449,6 +449,7 @@ type KnownNeuronData = record {
   name : text;
   description : opt text;
   links : opt vec text;
+  committed_topics : opt vec TopicToFollow;
 };
 
 type LedgerParameters = record {
@@ -1331,6 +1332,31 @@ type MaturityDisbursement = record {
   finalize_disbursement_timestamp_seconds : opt nat64;
   account_to_disburse_to : opt Account;
   account_identifier_to_disburse_to : opt AccountIdentifier;
+};
+
+// A topic that can be followed. It is almost the same as the topic on the
+// proposal, except that the `CatchAll` is a special value and following on this
+// `topic` will let the neuron follow the votes on all topics except for
+// Governance and SnsAndCommunityFund.
+type TopicToFollow = variant {
+  CatchAll;
+  NeuronManagement;
+  ExchangeRate;
+  NetworkEconomics;
+  Governance;
+  NodeAdmin;
+  ParticipantManagement;
+  SubnetManagement;
+  Kyc;
+  NodeProviderRewards;
+  IcOsVersionDeployment;
+  IcOsVersionElection;
+  SnsAndCommunityFund;
+  ApiBoundaryNodeManagement;
+  SubnetRental;
+  ApplicationCanisterManagement;
+  ProtocolCanisterManagement;
+  ServiceNervousSystemManagement;
 };
 
 service : (Governance) -> {

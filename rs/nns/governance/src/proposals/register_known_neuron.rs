@@ -2,6 +2,7 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{GovernanceError, KnownNeuron, governance_error::ErrorType},
 };
+use std::collections::HashSet;
 
 use ic_nervous_system_common_validation::validate_url;
 
@@ -27,8 +28,9 @@ impl KnownNeuron {
     ///  - Name is not already used in another known neuron.
     ///  - Links array has at most MAX_KNOWN_NEURON_LINKS entries.
     ///  - Each link is a valid URL and at most MAX_KNOWN_NEURON_LINK_SIZE bytes.
+    ///  - Committed_topics array contains no duplicate topics.
     pub fn validate(&self, neuron_store: &NeuronStore) -> Result<(), GovernanceError> {
-        let neuron_id = self.id.as_ref().ok_or_else(|| {
+        let neuron_id = self.id.ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "No neuron ID specified in the request to register a known neuron.",
@@ -36,7 +38,7 @@ impl KnownNeuron {
         })?;
 
         // Check that the neuron exists
-        if !neuron_store.contains(*neuron_id) {
+        if !neuron_store.contains(neuron_id) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 format!("Neuron {} not found", neuron_id.id),
@@ -103,6 +105,20 @@ impl KnownNeuron {
                     format!("Link at index {index} is not valid. Error: {error}"),
                 )
             })?;
+        }
+
+        // Validate committed_topics for duplicates
+        let mut topic_set = HashSet::new();
+        for (index, topic) in known_neuron_data.committed_topics.iter().enumerate() {
+            if !topic_set.insert(topic) {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "Duplicate topic found in committed_topics at index {}: {:?}",
+                        index, topic
+                    ),
+                ));
+            }
         }
 
         // Check that the name is not already used by another known neuron

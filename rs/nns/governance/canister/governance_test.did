@@ -1,2 +1,0 @@
-// This empty Candid file is to make `cargo clippy` happy since it will be include at build time into Rust files.
-// Bazel will actually generate a real governance_test.did based on governance.did and governance_test.did.patch.
