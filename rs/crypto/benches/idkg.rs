@@ -54,7 +54,7 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
             let group =
                 &mut criterion.benchmark_group(format!("{}_{vault_type:?}", test_case.name()));
             group
-                .warm_up_time(std::time::Duration::from_micros(1))
+                .warm_up_time(WARMUP_TIME)
                 .sample_size(test_case.sample_size)
                 .sampling_mode(test_case.sampling_mode);
 
