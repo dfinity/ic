@@ -28,3 +28,61 @@ impl From<RetrieveDogeWithApprovalArgs>
         }
     }
 }
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct RetrieveDogeOk {
+    // the index of the burn block on the ckDOGE ledger
+    pub block_index: u64,
+}
+
+impl From<ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcOk> for RetrieveDogeOk {
+    fn from(args: ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcOk) -> Self {
+        Self {
+            block_index: args.block_index,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub enum RetrieveDogeWithApprovalError {
+    /// There is another request for this principal.
+    AlreadyProcessing,
+
+    /// The withdrawal amount is too low.
+    AmountTooLow(u64),
+
+    /// The Bitcoin address is not valid.
+    MalformedAddress(String),
+
+    /// The withdrawal account does not hold the requested ckBTC amount.
+    InsufficientFunds { balance: u64 },
+
+    /// The caller didn't approve enough funds for spending.
+    InsufficientAllowance { allowance: u64 },
+
+    /// There are too many concurrent requests, retry later.
+    TemporarilyUnavailable(String),
+
+    /// A generic error reserved for future extensions.
+    GenericError {
+        error_message: String,
+        /// See the [ErrorCode] enum above for the list of possible values.
+        error_code: u64,
+    },
+}
+
+impl From<ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError>
+    for RetrieveDogeWithApprovalError
+{
+    fn from(args: ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError) -> Self {
+        match args {
+            ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::AlreadyProcessing => Self::AlreadyProcessing,
+            ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::AmountTooLow(amount) => Self::AmountTooLow(amount),
+            ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::MalformedAddress(addr) => Self::MalformedAddress(addr),
+            ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::InsufficientFunds { balance } => Self::InsufficientFunds { balance },
+            ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::InsufficientAllowance { allowance } => Self::InsufficientAllowance { allowance },
+            ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::TemporarilyUnavailable(msg) => Self::TemporarilyUnavailable(msg),
+            ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::GenericError { error_message, error_code } => Self::GenericError { error_message, error_code },
+        }
+    }
+}

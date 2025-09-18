@@ -7362,6 +7362,7 @@ name = "ic-ckdoge-minter"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-cdk",
  "ic-ckbtc-minter",
  "icrc-ledger-types",
  "serde",
