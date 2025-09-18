@@ -58,3 +58,16 @@ rust_library(
         ),
     ]
 ]
+
+rust_test(
+    name = "ckbtc_candid_api_tests",
+    crate = ":_wasm_ckdoge_minter",
+    data = [":ckdoge_minter.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/dogecoin/ckdoge/minter",
+    },
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid_parser",
+    ],
+)

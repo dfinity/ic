@@ -7,7 +7,7 @@ use serde::Deserialize;
 /// The arguments of the [retrieve_btc_with_approval] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct RetrieveDogeWithApprovalArgs {
-    /// Amount to retrieve in satoshi
+    /// Amount to retrieve in koinu (the smallest denomination of DOGE)
     pub amount: u64,
 
     /// Address where to send dogecoins
@@ -31,7 +31,7 @@ impl From<RetrieveDogeWithApprovalArgs>
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct RetrieveDogeOk {
-    // the index of the burn block on the ckDOGE ledger
+    /// The index of the burn block on the ckDOGE ledger
     pub block_index: u64,
 }
 
