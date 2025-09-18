@@ -6,8 +6,6 @@ use crate::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReaso
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
-use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
 use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
@@ -20,6 +18,9 @@ use serde_bytes::ByteBuf;
 use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
+
+pub use ic_btc_checker::CheckTransactionResponse;
+pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
 pub mod dashboard;

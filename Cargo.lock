@@ -7361,6 +7361,7 @@ dependencies = [
 name = "ic-ckdoge-minter"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "candid_parser",
  "ic-cdk",
