@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+rust_canister(
+    name = "ckdoge_minter",
+    srcs = ["src/main.rs"],
+    compile_data = [":ckdoge_minter.did"],
+    crate_features = [],
+    crate_name = "ic_ckdoge_minter_canister",
+    proc_macro_deps = [
+        # Keep sorted.
+    ],
+    rustc_env = {
+        "CKDOGE_MINTER_DID_PATH": "$(execpath :ckdoge_minter.did)",
+    },
+    service_file = ":ckdoge_minter.did",
+    deps = [
+        # Keep sorted.
+    ],
+)

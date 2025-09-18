@@ -1,0 +1,11 @@
+[package]
+name = "ic-ckdoge-minter"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ic-doge-minter"
+path = "src/main.rs"
