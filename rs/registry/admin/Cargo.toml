@@ -79,7 +79,7 @@ ic-registry-canister-api = { path = "../canister/api" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 
 [lib]
-name = "admin"
+name = "ic_admin"
 path = "src/lib.rs"
 
 [[bin]]
