@@ -1,6 +1,6 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
-    pb::v1::{governance_error::ErrorType, FulfillSubnetRentalRequest, GovernanceError},
+    pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
 };
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
