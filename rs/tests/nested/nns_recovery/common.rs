@@ -629,6 +629,11 @@ fn local_recovery(
         .upgrade_image_hash
         .map(|h| format!("--upgrade-image-hash {h} "))
         .unwrap_or_default();
+    let maybe_download_pool_node = subnet_recovery_tool
+        .params
+        .download_pool_node
+        .map(|n| format!("--download-pool-node {n} "))
+        .unwrap_or_default();
     let maybe_skips = subnet_recovery_tool
         .params
         .skip
@@ -652,6 +657,7 @@ fn local_recovery(
         {maybe_replay_until_height}\
         {maybe_upgrade_image_url}\
         {maybe_upgrade_image_hash}\
+        {maybe_download_pool_node}\
         --download-state-method local \
         --upload-method local \
         --wait-for-cup-node {node_ip} \
