@@ -374,7 +374,8 @@ jobs:
               //packages/pocket-ic:all \
               //rs/pocket_ic_server:test \
               //rs/pocket_ic_server:gateway \
-              //rs/pocket_ic_server:pocket-ic-server
+              //rs/pocket_ic_server:pocket-ic-server \
+              //publish/binaries:pocket-ic.gz
 
           mkdir -p build
           cp \
