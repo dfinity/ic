@@ -66,8 +66,10 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu plucky main universe restricted m
 ARG PACKAGE_FILES=packages.common
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
+# libvirt-daemon-config-network must be installed early to avoid a broken dependency ordering
 RUN apt-get -y update && \
     apt-get -y upgrade && \
+    apt-get -y --no-install-recommends install libvirt-daemon-config-network && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
 

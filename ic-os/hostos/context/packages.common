@@ -35,7 +35,8 @@ less
 lvm2
 net-tools
 nftables
-parted
+# Parted has a conflict with the new libvirt, install it below
+# parted
 python-is-python3
 rsync
 sudo
@@ -77,16 +78,20 @@ qemu-system-x86/plucky # Top level
 # Install >=2025 OVMF
 ovmf/plucky # Top level
 
+# Parted has a conflict with the new libvirt, it should be installed above once
+# this is resolved
+parted/plucky
+
 # Install >=10.5.0 libvirt
 libvirt-daemon-system/plucky # Top level
 libvirt-dev/plucky # Top level
-libvirt-daemon-log/plucky # Dependency
+libvirt-daemon-config-network/plucky # Dependency
+libvirt-daemon-config-nwfilter/plucky # Dependency
+libvirt-daemon-driver-network/plucky # Dependency
 libvirt-daemon-driver-nodedev/plucky # Dependency
+libvirt-daemon-driver-nwfilter/plucky # Dependency
 libvirt-daemon-driver-qemu/plucky # Dependency
 libvirt-daemon-driver-secret/plucky # Dependency
 libvirt-daemon-driver-storage/plucky # Dependency
-libvirt-daemon-system-systemd/plucky # Dependency
-libvirt-daemon-config-nwfilter/plucky # Dependency
-libvirt-daemon-config-network/plucky # Dependency
+libvirt-daemon-log/plucky # Dependency
 libvirt-daemon/plucky # Dependency
-libvirt-clients/plucky # Dependency
