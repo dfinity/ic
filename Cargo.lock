@@ -7360,6 +7360,12 @@ dependencies = [
 [[package]]
 name = "ic-ckdoge-minter"
 version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-ckbtc-minter",
+ "icrc-ledger-types",
+ "serde",
+]
 
 [[package]]
 name = "ic-cketh-minter"

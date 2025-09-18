@@ -1,6 +1,28 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
+
+rust_library(
+    name = "ckdoge_minter_lib",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_features = [],
+    crate_name = "ic_ckdoge_minter",
+    proc_macro_deps = [
+        # Keep sorted.
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
+)
+
 rust_canister(
     name = "ckdoge_minter",
     srcs = ["src/main.rs"],
@@ -16,5 +38,6 @@ rust_canister(
     service_file = ":ckdoge_minter.did",
     deps = [
         # Keep sorted.
+        ":ckdoge_minter_lib",
     ],
 )

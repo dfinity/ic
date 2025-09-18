@@ -9,3 +9,9 @@ documentation.workspace = true
 [[bin]]
 name = "ic-doge-minter"
 path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-ckbtc-minter = { path = "../../../bitcoin/ckbtc/minter" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+serde = { workspace = true }
