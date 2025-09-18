@@ -483,6 +483,10 @@ type delete_canister_snapshot_args = record {
 
 type fetch_canister_logs_args = record {
     canister_id : canister_id;
+    filter_by_idx: opt record {
+           start: nat64;
+           end: nat64;
+    };
 };
 
 type canister_log_record = record {
