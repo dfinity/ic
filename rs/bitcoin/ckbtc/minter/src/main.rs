@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
@@ -105,7 +104,7 @@ fn check_postcondition<T>(t: T) -> T {
 }
 
 fn check_anonymous_caller() {
-    if ic_cdk::caller() == Principal::anonymous() {
+    if ic_cdk::api::msg_caller() == Principal::anonymous() {
         panic!("anonymous caller not allowed")
     }
 }
@@ -180,7 +179,7 @@ fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrieva
 fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
     read_state(|s| {
         s.known_utxos_for_account(&Account {
-            owner: args.owner.unwrap_or(ic_cdk::caller()),
+            owner: args.owner.unwrap_or(ic_cdk::api::msg_caller()),
             subaccount: args.subaccount,
         })
     })
@@ -193,15 +192,12 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
-    ic_cdk::api::management_canister::main::canister_status(
-        ic_cdk::api::management_canister::main::CanisterIdRecord {
-            canister_id: ic_cdk::id(),
-        },
-    )
+async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
+    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+        canister_id: ic_cdk::api::canister_self(),
+    })
     .await
     .expect("failed to fetch canister status")
-    .0
 }
 
 #[cfg(feature = "self_check")]

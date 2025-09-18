@@ -48,6 +48,7 @@ rust_test(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:itertools",
         "@crate_index//:serde",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
