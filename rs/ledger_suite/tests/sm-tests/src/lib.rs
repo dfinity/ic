@@ -62,7 +62,6 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
-use std::time::{Instant, UNIX_EPOCH};
 use std::{
     collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
