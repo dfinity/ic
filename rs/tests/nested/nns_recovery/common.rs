@@ -665,21 +665,20 @@ fn local_recovery(
     // The command is expected to reboot the node as part of the recovery, so if it returns
     // successfully, it means something went wrong.
     info!(logger, "Executing local recovery command: \n{command}");
-    if let Ok(ret) = node.block_on_bash_script_from_session(session, &command) {
-        panic!("Local recovery completed without rebooting: \n{ret}");
-    } else {
-        info!(logger, "Node rebooted as part of the recovery");
-    }
+    node.block_on_bash_script_from_session(session, &command)
+        .expect_err("Local recovery command completed without rebooting");
+
+    info!(logger, "Node rebooted as part of the recovery");
 
     // Resume the recovery by re-executing the command starting from WaitForCUP. The command should
     // succeed this time.
     let session = &node.block_on_ssh_session().unwrap(); // New session after reboot
     let command = command + r#"--resume WaitForCUP \"#;
     info!(logger, "Resuming local recovery command: \n{command}");
-    match node.block_on_bash_script_from_session(session, &command) {
-        Ok(ret) => info!(logger, "Local recovery completed successfully: \n{ret}"),
-        Err(e) => panic!("Local recovery failed to complete: \n{e}"),
-    }
+    node.block_on_bash_script_from_session(session, &command)
+        .expect("Local recovery failed to complete");
+
+    info!(logger, "Local recovery completed successfully");
 
     if let Some(local_output_dir) = &subnet_recovery_tool.params.output_dir {
         info!(
