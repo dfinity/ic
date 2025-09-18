@@ -209,7 +209,7 @@ fn add_block_headers_for<Network: BlockchainNetwork + fmt::Display>(
     let headers_to_add = &headers.as_slice()[1..];
     assert_eq!(headers_to_add.len(), expected_num_headers_to_add);
     let mut group = criterion.benchmark_group(format!("{network}_{expected_num_headers_to_add}"));
-    group.sample_size(10);
+    group.sample_size(1);
 
     bench_add_headers(&mut group, network, headers_to_add);
 }
