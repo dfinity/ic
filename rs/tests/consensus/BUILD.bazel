@@ -348,6 +348,19 @@ system_test(
     ],
 )
 
+system_test(
+    name = "scp_test",
+    tags = [
+        "k8s",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
 system_test_nns(
     name = "consensus_performance",
     additional_colocate_tags = [

@@ -96,6 +96,10 @@ name = "ic-systest-safety-test"
 path = "safety_test.rs"
 
 [[bin]]
+name = "ic-systest-scp-test"
+path = "scp_test.rs"
+
+[[bin]]
 name = "ic-systest-catch-up-possible-test"
 path = "catch_up_possible_test.rs"
 
