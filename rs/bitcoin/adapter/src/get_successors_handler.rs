@@ -1,6 +1,6 @@
 use std::{
     collections::{HashSet, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use bitcoin::{BlockHash, consensus::Encodable};
@@ -86,7 +86,7 @@ pub struct GetSuccessorsResponse<Header> {
 /// Contains the functionality to respond to GetSuccessorsRequests via the RPC
 /// server.
 pub struct GetSuccessorsHandler<Network: BlockchainNetwork> {
-    state: Arc<Mutex<BlockchainState<Network>>>,
+    state: Arc<BlockchainState<Network>>,
     blockchain_manager_tx: Sender<BlockchainManagerRequest>,
     network: Network,
     metrics: GetSuccessorMetrics,
@@ -97,7 +97,7 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
     /// inside of the adapter when a `GetSuccessorsRequest` is received.
     pub fn new(
         network: Network,
-        state: Arc<Mutex<BlockchainState<Network>>>,
+        state: Arc<BlockchainState<Network>>,
         blockchain_manager_tx: Sender<BlockchainManagerRequest>,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
@@ -124,21 +124,21 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             .observe(request.processed_block_hashes.len() as f64);
 
         let (blocks, next, obsolete_blocks) = {
-            let state = self.state.lock().unwrap();
-            let anchor_height = state
+            let anchor_height = self
+                .state
                 .get_cached_header(&request.anchor)
                 .map_or(0, |cached| cached.data.height);
 
             let allow_multiple_blocks = self.network.are_multiple_blocks_allowed(anchor_height);
             let blocks = get_successor_blocks(
-                &state,
+                &self.state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 allow_multiple_blocks,
                 &self.network,
             );
             let next = get_next_headers(
-                &state,
+                &self.state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
@@ -151,8 +151,8 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             // There is also a chance that they are reachable from the anchor, just not through the cache.
             // Meaning that we still need to download some other blocks first. (hence we need to free the cache).
             let mut obsolete_blocks = request.processed_block_hashes;
-            if blocks.is_empty() && state.is_block_cache_full() {
-                obsolete_blocks.extend(state.get_cached_blocks())
+            if blocks.is_empty() && self.state.is_block_cache_full() {
+                obsolete_blocks.extend(self.state.get_cached_blocks())
             }
             (blocks, next, obsolete_blocks)
         };
@@ -311,8 +311,6 @@ fn get_next_headers<Network: BlockchainNetwork>(
 mod test {
     use super::*;
 
-    use std::sync::{Arc, Mutex};
-
     use bitcoin::{Block, consensus::Decodable};
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
@@ -336,7 +334,7 @@ mod test {
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -379,16 +377,20 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
-            blockchain.add_headers(&side_chain);
-            blockchain.add_headers(&side_chain_2);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
+            blockchain.add_headers(&side_chain).await;
+            blockchain.add_headers(&side_chain_2).await;
 
             // Add main block 2
-            blockchain.add_block(main_block_2).expect("invalid block");
+            blockchain
+                .add_block(main_block_2)
+                .await
+                .expect("invalid block");
             // Add side block 1
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
 
@@ -444,7 +446,7 @@ mod test {
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -461,13 +463,15 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
             blockchain
                 .add_block(main_block_1.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(main_block_2.clone())
+                .await
                 .expect("invalid block");
         }
         let request = GetSuccessorsRequest {
@@ -492,7 +496,7 @@ mod test {
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -521,17 +525,20 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
-            blockchain.add_headers(&side_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
+            blockchain.add_headers(&side_chain).await;
             blockchain
                 .add_block(main_block_1.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(main_block_2.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
         //             |-> 1'
@@ -563,20 +570,20 @@ mod test {
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
         let main_chain = generate_headers(genesis_hash, genesis.time, 120, &[]);
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
             for header in main_chain {
                 let block = Block {
                     header,
                     txdata: vec![],
                 };
-                blockchain.add_block(block).expect("invalid block");
+                blockchain.add_block(block).await.expect("invalid block");
             }
         }
 
@@ -599,7 +606,7 @@ mod test {
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -624,22 +631,26 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (_, maybe_err) = blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            let (_, maybe_err) = blockchain.add_headers(&main_chain).await;
             assert!(
                 maybe_err.is_none(),
                 "Error was found in main chain: {maybe_err:#?}"
             );
 
-            let (_, maybe_err) = blockchain.add_headers(&side_chain);
+            let (_, maybe_err) = blockchain.add_headers(&side_chain).await;
             assert!(
                 maybe_err.is_none(),
                 "Error was found in side chain: {maybe_err:#?}"
             );
-            blockchain.add_block(main_block_2).expect("invalid block");
+            blockchain
+                .add_block(main_block_2)
+                .await
+                .expect("invalid block");
 
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
 
@@ -689,7 +700,7 @@ mod test {
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -712,16 +723,20 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (added_headers, _) = blockchain.add_headers(&headers);
+            let blockchain = &handler.state;
+            let (added_headers, _) = blockchain.add_headers(&headers).await;
             assert_eq!(added_headers.len(), 1);
-            let (added_headers, _) = blockchain.add_headers(&additional_headers);
+            let (added_headers, _) = blockchain.add_headers(&additional_headers).await;
             assert_eq!(added_headers.len(), 1);
 
             blockchain
                 .add_block(large_block.clone())
+                .await
                 .expect("invalid block");
-            blockchain.add_block(small_block).expect("invalid block");
+            blockchain
+                .add_block(small_block)
+                .await
+                .expect("invalid block");
         };
 
         let request = GetSuccessorsRequest {
@@ -751,7 +766,7 @@ mod test {
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -761,8 +776,8 @@ mod test {
             generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (added_headers, _) = blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            let (added_headers, _) = blockchain.add_headers(&main_chain).await;
             assert_eq!(added_headers.len(), 5);
             let main_blocks = main_chain
                 .iter()
@@ -772,11 +787,11 @@ mod test {
                 })
                 .collect::<Vec<_>>();
             for block in main_blocks {
-                blockchain.add_block(block).unwrap();
+                blockchain.add_block(block).await.unwrap();
             }
 
             for block in &large_blocks {
-                blockchain.add_block(block.clone()).unwrap();
+                blockchain.add_block(block.clone()).await.unwrap();
             }
         };
 

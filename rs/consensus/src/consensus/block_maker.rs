@@ -766,14 +766,8 @@ mod tests {
             assert!(run_block_maker().is_none());
 
             time_source.set_time(expected_time).unwrap();
-            match run_block_maker() {
-                Some(proposal) => {
-                    assert_eq!(proposal.as_ref(), &expected_block);
-                }
-                _ => {
-                    panic!("Expected a new block proposal");
-                }
-            }
+            let proposal = run_block_maker().expect("Expected a new block proposal");
+            assert_eq!(proposal.as_ref(), &expected_block);
 
             // insert a rank 0 block for the current round
             let next_block = pool.make_next_block();

@@ -6894,6 +6894,7 @@ version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.5-doge.0",
  "csv",
+ "hex",
  "rstest",
 ]
 
@@ -7839,6 +7840,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-secp256k1 0.2.0",
  "ic-secp256r1",
+ "ic-sys",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-time",
@@ -7863,6 +7865,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
+ "thiserror 2.0.12",
  "tokio",
 ]
 
@@ -9458,6 +9461,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
@@ -10731,6 +10735,7 @@ dependencies = [
  "ic-management-canister-types",
  "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
+ "itertools 0.12.1",
  "pocket-ic",
  "registry-canister",
  "serde",
@@ -14330,6 +14335,7 @@ version = "0.9.0"
 name = "ic-test-utilities-consensus"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "bincode",
  "ic-base-types",
  "ic-crypto-test-utils-canister-threshold-sigs",
@@ -16474,26 +16480,6 @@ name = "language-tags"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
-
-[[package]]
-name = "launch-single-vm"
-version = "0.1.0"
-dependencies = [
- "clap 4.5.27",
- "config",
- "config_types",
- "ic-prep",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "reqwest 0.12.15",
- "serde",
- "slog",
- "slog-async",
- "slog-term",
- "tempfile",
- "url",
-]
 
 [[package]]
 name = "lazy_static"
@@ -19062,6 +19048,7 @@ dependencies = [
  "bitcoin 0.28.2",
  "candid",
  "candid_parser",
+ "cycles-minting-canister",
  "ed25519-dalek",
  "flate2",
  "hex",
@@ -19070,13 +19057,16 @@ dependencies = [
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
  "ic-management-canister-types",
+ "ic-nns-governance-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
+ "ic-sns-wasm",
  "ic-transport-types",
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
+ "registry-canister",
  "reqwest 0.12.15",
  "schemars",
  "serde",
@@ -19153,6 +19143,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
+ "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-delegation-manager",
