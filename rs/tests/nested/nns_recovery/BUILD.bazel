@@ -47,7 +47,9 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS,
+    runtime_deps = RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+    ],
     deps = [
         # Keep sorted.
         ":common",
