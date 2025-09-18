@@ -156,17 +156,22 @@ pub fn uvm_serve_recovery_artifacts(
 
 fn uvm_serve_file(env: &TestEnv, local_path: &Path, uri: &Path) -> Result<()> {
     let uvm = get_upstreams_uvm(env);
-    let session = uvm.block_on_ssh_session()?;
 
     // Create the web root directory and the uri subdirectories.
     let remote_path = Path::new(WEB_ROOT).join(uri);
-    uvm.block_on_bash_script_from_session(
-        &session,
-        &format!("mkdir -p {}", remote_path.parent().unwrap().display(),),
-    )?;
+    uvm.block_on_bash_script(&format!(
+        "mkdir -p {}",
+        remote_path.parent().unwrap().display(),
+    ))?;
 
     // Send the file to the UVM.
-    scp_send_to(env.logger(), &session, local_path, &remote_path, 0o644);
+    scp_send_to(
+        env.logger(),
+        &uvm.block_on_ssh_session()?,
+        local_path,
+        &remote_path,
+        0o644,
+    );
 
     // The static server is already running and will serve the file at the given URI.
 
