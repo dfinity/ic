@@ -19,6 +19,9 @@ pub struct KeyMutation {
     /// If this is `UNSET`, `value` must assume the default value.
     #[prost(enumeration = "MutationType", tag = "3")]
     pub mutation_type: i32,
+    /// If this is not 0, represents the timestamp of the entry.
+    #[prost(uint64, tag = "5")]
+    pub timestamp_nanoseconds: u64,
 }
 /// The time when the last certified update was successfully received.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
