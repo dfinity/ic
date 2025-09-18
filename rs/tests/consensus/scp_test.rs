@@ -18,16 +18,12 @@ fn setup(env: TestEnv) {
 
 fn test(env: TestEnv) {
     let expected_size: usize = 1457471;
+    let buffer = vec![0u8; expected_size];
+    rand::thread_rng().fill(&mut buffer[..]);
 
     let path = get_dependency_path("test.txt");
     let mut file = std::fs::File::create(&path).unwrap();
-    file.write_all(
-        (1..=expected_size)
-            .map(|i| i as u8)
-            .collect::<Vec<_>>()
-            .as_slice(),
-    )
-    .unwrap();
+    file.write_all(&buffer).unwrap();
 
     let actual = path.metadata().unwrap().len() as usize;
     assert_eq!(
@@ -39,7 +35,7 @@ fn test(env: TestEnv) {
     for i in 0..50 {
         info!(
             env.logger(),
-            "Phase 1 - Copying file iteration {}/100 to /tmp/test-{i}.txt",
+            "Phase 1 - Copying file iteration {}/50 to /tmp/test-{i}.txt",
             i + 1
         );
 
@@ -67,7 +63,7 @@ fn test(env: TestEnv) {
     for i in 0..50 {
         info!(
             env.logger(),
-            "Phase 2 - Copying file iteration {}/100 to /tmp/test-{i}.txt",
+            "Phase 2 - Copying file iteration {}/50 to /tmp/test-{i}.txt",
             i + 1
         );
 
