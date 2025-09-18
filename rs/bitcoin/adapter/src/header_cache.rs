@@ -483,7 +483,9 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
             .into_pure_header()
     }
 
-    fn get_header_on_disk(&self, hash: BlockHash) -> Option<HeaderNode<Header>> {
+    // Lookup header from the on-disk cache. Return None if it is not found or
+    // the on-disk cache is not enabled.
+    fn get_header_from_disk(&self, hash: BlockHash) -> Option<HeaderNode<Header>> {
         self.on_disk.as_ref().and_then(|cache| {
             log_err_except!(
                 cache.run_ro_txn(|tx| cache.tx_get_header(tx, hash)),
@@ -498,7 +500,7 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
     pub fn get_header(&self, hash: BlockHash) -> Option<HeaderNode<Header>> {
         self.in_memory
             .get_header(hash)
-            .or_else(|| self.get_header_on_disk(hash))
+            .or_else(|| self.get_header_from_disk(hash))
     }
 
     /// Add a new header.
@@ -711,17 +713,11 @@ pub(crate) mod test {
                 assert_eq!(header, node.data.header);
                 // If height <= anchor, it can be found on-disk
                 if node.data.height <= intermediate.height {
-                    let on_disk = cache.on_disk.as_ref().unwrap();
-                    assert!(
-                        on_disk
-                            .run_ro_txn(|tx| on_disk.tx_get_header::<_, Header>(tx, hash))
-                            .is_ok()
-                    );
+                    assert!(cache.get_header_from_disk(hash).is_some());
                 }
                 // If height >= anchor, it can be found in-memory
                 if node.data.height >= intermediate.height {
-                    let in_memory = &cache.in_memory;
-                    assert!(in_memory.get_header(hash).is_some())
+                    assert!(cache.in_memory.get_header(hash).is_some())
                 }
                 hash = header.prev_block_hash();
             }
