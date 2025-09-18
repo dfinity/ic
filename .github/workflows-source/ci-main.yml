@@ -252,7 +252,7 @@ jobs:
               # if bazel targets is empty we don't need to run any tests
               if [ "$num_targets" -eq 0 ]; then
                 echo "No bazel targets to $bazel_cmd"
-                continue
+                return
               fi
 
               echo "${bazel_cmd}ing $num_targets targets ..."
