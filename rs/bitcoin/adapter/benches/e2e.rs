@@ -2,7 +2,8 @@ use bitcoin::{BlockHash, block::Header as BlockHeader};
 use criterion::measurement::Measurement;
 use criterion::{BenchmarkGroup, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ic_btc_adapter::{
-    BlockchainNetwork, BlockchainState, Config, IncomingSource, MAX_HEADERS_SIZE, start_server,
+    BlockchainNetwork, BlockchainState, Config, HeaderValidator, IncomingSource, MAX_HEADERS_SIZE,
+    start_server,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
@@ -198,6 +199,7 @@ fn add_block_headers_for<Network: BlockchainNetwork + fmt::Display>(
     expected_num_headers_to_add: usize,
 ) where
     Network::Header: for<'de> serde::Deserialize<'de>,
+    BlockchainState<Network>: HeaderValidator<Network>,
 {
     let headers_data_path = PathBuf::from(
         std::env::var(headers_data_env).expect("Failed to get test data path env variable"),
@@ -216,16 +218,20 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
     group: &mut BenchmarkGroup<'_, M>,
     network: Network,
     headers: &[Network::Header],
-) {
+) where
+    BlockchainState<Network>: HeaderValidator<Network>,
+{
     fn add_headers<Network: BlockchainNetwork>(
         blockchain_state: &mut BlockchainState<Network>,
-        network: Network,
         headers: &[Network::Header],
-    ) {
+        handle: &tokio::runtime::Handle,
+    ) where
+        BlockchainState<Network>: HeaderValidator<Network>,
+    {
         // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
         for chunk in headers.chunks(MAX_HEADERS_SIZE) {
             let (added_headers, error) =
-            rt.block_on(async { blockchain_state.add_headers(chunk).await });
+                handle.block_on(async { blockchain_state.add_headers(chunk).await });
             assert!(error.is_none(), "Failed to add headers: {}", error.unwrap());
             assert_eq!(added_headers.len(), chunk.len())
         }
@@ -236,7 +242,7 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
     group.bench_function(BenchmarkId::new("add_headers", "in_memory"), |bench| {
         bench.iter(|| {
             let mut blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
-            add_headers(&mut blockchain_state, network, headers);
+            add_headers(&mut blockchain_state, headers, rt.handle());
         })
     });
 
@@ -249,7 +255,7 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
                 &MetricsRegistry::default(),
                 no_op_logger(),
             );
-            add_headers(&mut blockchain_state, network, headers);
+            add_headers(&mut blockchain_state, headers, rt.handle());
         })
     });
 }
