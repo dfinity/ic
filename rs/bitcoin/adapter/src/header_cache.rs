@@ -421,7 +421,7 @@ impl LMDBHeaderCache {
 ///
 /// 2. The in-memory cache contains headers from the anchor to latest.
 ///
-/// 3. The on-disk headers form a single list, where the anchor is the tip and has no child.
+/// 3. The on-disk headers form a linear chain with no forks, where the anchor is the tip and has no child.
 ///
 /// 4. The two caches would overlap only at the anchor header, in which case
 ///    [get_header] would always return the header stored at in-memory cache.
