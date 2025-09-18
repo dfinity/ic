@@ -8,6 +8,7 @@ use ic_system_test_driver::driver::{group::SystemTestGroup, universal_vm::Univer
 use ic_system_test_driver::systest;
 
 use anyhow::Result;
+use rand::Rng;
 use slog::info;
 
 fn setup(env: TestEnv) {
@@ -18,7 +19,7 @@ fn setup(env: TestEnv) {
 
 fn test(env: TestEnv) {
     let expected_size: usize = 1457471;
-    let buffer = vec![0u8; expected_size];
+    let mut buffer = vec![0u8; expected_size];
     rand::thread_rng().fill(&mut buffer[..]);
 
     let path = get_dependency_path("test.txt");
