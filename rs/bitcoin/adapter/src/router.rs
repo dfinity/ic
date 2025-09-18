@@ -4,7 +4,7 @@ use crate::{
     AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
     ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
     blockchainmanager::BlockchainManager,
-    common::{BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE},
+    common::{BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, HeaderValidator},
     config::Config,
     connectionmanager::ConnectionManager,
     metrics::RouterMetrics,
@@ -15,7 +15,7 @@ use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
     sync::mpsc::{Receiver, channel},
@@ -30,15 +30,18 @@ use tokio::{
 pub fn start_main_event_loop<Network>(
     config: &Config<Network>,
     logger: ReplicaLogger,
-    blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
+    blockchain_state: Arc<BlockchainState<Network>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
     mut adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
     metrics_registry: &MetricsRegistry,
-) where
-    Network: BlockchainNetwork + Send + 'static,
+) -> tokio::task::JoinHandle<()>
+where
+    Network: BlockchainNetwork + Send + Sync + 'static,
     Network::Header: Send,
-    Network::Block: Send,
+    Network::Block: Send + Sync,
+    BlockchainState<Network>: HeaderValidator<Network>,
+    <BlockchainState<Network> as HeaderValidator<Network>>::HeaderError: Send + Sync,
 {
     let (network_message_sender, mut network_message_receiver) = channel::<(
         SocketAddr,
@@ -88,7 +91,7 @@ pub fn start_main_event_loop<Network>(
                         connection_manager.discard(&address);
                     }
 
-                    if let Err(ProcessNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message).await {
                         connection_manager.discard(&address);
                     }
                     if let Err(ProcessNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
@@ -114,11 +117,11 @@ pub fn start_main_event_loop<Network>(
                 _ = tick_interval.tick() => {
                     // After an event is dispatched, the managers `tick` method is called to process possible
                     // outgoing messages.
-                    connection_manager.tick(blockchain_manager.get_height(), handle_stream);
+                    connection_manager.tick(blockchain_manager.get_height(), handle_stream).await;
                     blockchain_manager.tick(&mut connection_manager);
                     transaction_manager.advertise_txids(&mut connection_manager);
                 }
             };
         }
-    });
+    })
 }

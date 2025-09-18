@@ -41,7 +41,9 @@ fn main() -> Result<()> {
                 },
             )
         })
-        .add_test(systest!(test; TestConfig {}))
+        .add_test(systest!(test; TestConfig {
+            break_dfinity_owned_node: false,
+        }))
         .with_timeout_per_test(Duration::from_secs(60 * 60))
         .with_overall_timeout(Duration::from_secs(65 * 60))
         .execute_from_args()?;

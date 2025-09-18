@@ -154,11 +154,11 @@ jobs:
         with:
           targets: |
             [{
-              "name": "Test",
-              "output_id": "test_id",
-            }, {
               "name": "Build",
               "output_id": "build_id",
+            }, {
+              "name": "Test",
+              "output_id": "test_id",
             }]
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
@@ -210,12 +210,10 @@ jobs:
                 )
             fi
 
-            # Values map to `output_id` in `gen-uuids` step
-            declare -A invocation_ids=(
-              [build]="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
-              [test]="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
-            )
-            for bazel_cmd in "${!invocation_ids[@]}"; do
+            bazel_do() {
+              bazel_cmd="$1"
+              invocation_id="$2"
+
               "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
 
@@ -223,7 +221,7 @@ jobs:
               # if bazel targets is empty we don't need to run any tests
               if [ "$num_targets" -eq 0 ]; then
                 echo "No bazel targets to $bazel_cmd"
-                continue
+                return
               fi
 
               echo "${bazel_cmd}ing $num_targets targets ..."
@@ -240,8 +238,11 @@ jobs:
 
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "--invocation_id=${invocation_ids[$bazel_cmd]}" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
-            done
+              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+            }
+
+            bazel_do build "${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
+            bazel_do test "${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
