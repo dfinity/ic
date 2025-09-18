@@ -212,13 +212,7 @@ fn create_ledger_canister(
             canister.canister_id().get()
         );
         let encoded = Encode!(&ledger_init_args).unwrap();
-        install_rust_canister(
-            &mut canister,
-            "ledger-canister",
-            &["notify-method"],
-            Some(encoded),
-        )
-        .await;
+        install_rust_canister(&mut canister, "ledger-canister", &[], Some(encoded)).await;
 
         canister.canister_id()
     })

@@ -94,13 +94,11 @@ rust_ic_test(
     data = [
         ":ic-icp-index-canister.wasm.gz",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
-        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
         "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm.gz)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     tags = ["cpu:4"],

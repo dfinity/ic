@@ -78,7 +78,7 @@ _canister_download_name_for_nns_canister_type() {
     if [ "$CANISTER_TYPE" == "lifeline" ]; then
         echo "$CANISTER_TYPE"_canister
     elif [ "$CANISTER_TYPE" == "ledger" ]; then
-        echo "ledger-canister_notify-method"
+        echo "ledger-canister"
     elif [ "$CANISTER_TYPE" == "icp-ledger-archive" ] || [ "$CANISTER_TYPE" == "icp-ledger-archive-1" ] || [ "$CANISTER_TYPE" == "icp-ledger-archive-2" ]; then
         echo "ledger-archive-node-canister"
     elif [ "$CANISTER_TYPE" == "icp-index" ]; then

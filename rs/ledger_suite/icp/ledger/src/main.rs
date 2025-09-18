@@ -398,7 +398,6 @@ thread_local! {
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
 
-#[cfg(feature = "notify-method")]
 fn trap_since_notify_is_no_longer_supported() {
     let caller_principal_id = PrincipalId::from(caller());
     print(format!(
@@ -771,7 +770,6 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
     })
 }
 
-#[cfg(feature = "notify-method")]
 #[unsafe(export_name = "canister_update notify_pb")]
 fn notify_() {
     trap_since_notify_is_no_longer_supported();
@@ -871,7 +869,6 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 }
 
 /// See caveats of use on send_dfx
-#[cfg(feature = "notify-method")]
 #[unsafe(export_name = "canister_update notify_dfx")]
 fn notify_dfx_() {
     trap_since_notify_is_no_longer_supported();

@@ -177,10 +177,8 @@ fn test_ledger_upgrade_synchronization() {
                     .await;
 
                     // Now we upgrade the ledger canister to the latest version of the current branch
-                    let ledger_wasm_current_branch = std::fs::read(
-                        std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap(),
-                    )
-                    .unwrap();
+                    let ledger_wasm_current_branch =
+                        std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap();
                     env.pocket_ic
                         .upgrade_canister(
                             ledger_canister_id,

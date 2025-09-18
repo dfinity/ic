@@ -146,7 +146,7 @@ impl Setup {
                     .expect("Could not read mainnet ledger wasm")
             }
             UpgradeToVersion::Latest => {
-                std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+                std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap())
                     .expect("Could not read ledger wasm")
             }
         };
