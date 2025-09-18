@@ -1128,6 +1128,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             }),
             Method::CanisterMetadata => test_supported(|aborted_canister_id| {
                 let args =
+                    // The "git_commit_id" is one of the metadata sections in the universal canister
+                    // wasm (for any canister wasm built in the monorepo).
                     CanisterMetadataRequest::new(aborted_canister_id, "git_commit_id".to_string())
                         .encode();
                 (method, call_args().other_side(args))

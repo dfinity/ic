@@ -759,6 +759,7 @@ impl Payload<'_> for CanisterMetadataRequest {}
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterMetadataResponse {
+    #[serde(with = "serde_bytes")]
     value: Vec<u8>,
 }
 
