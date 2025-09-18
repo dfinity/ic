@@ -345,7 +345,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     info!(
         logger,
         "Recovery artifacts SHA256 after transfer: {}",
-        Sha256::digest(&std::fs::read(&artifacts_path).unwrap())
+        Sha256::digest(std::fs::read(&artifacts_path).unwrap())
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect::<String>(),
