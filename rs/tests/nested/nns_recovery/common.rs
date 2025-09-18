@@ -325,7 +325,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     if cfg.local_recovery {
         info!(logger, "Performing a local recovery");
-        local_recovery(&dfinity_owned_node, subnet_recovery_tool, &logger);
+        local_recovery(dfinity_owned_node, subnet_recovery_tool, &logger);
     } else {
         info!(logger, "Performing a remote recovery");
         remote_recovery(subnet_recovery_tool, &logger);
