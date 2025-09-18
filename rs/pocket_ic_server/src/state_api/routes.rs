@@ -49,7 +49,13 @@ use pocket_ic::common::rest::{
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::Arc, sync::atomic::AtomicU64, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    sync::Arc,
+    sync::atomic::AtomicU64,
+    time::{Duration, SystemTime},
+};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -1333,7 +1339,8 @@ pub async fn create_instance(
         Some(InitialTime::Timestamp(raw_time)) => Some(
             ic_types::Time::from_nanos_since_unix_epoch(raw_time.nanos_since_epoch),
         ),
-        Some(InitialTime::AutoProgress(_)) | None => None,
+        Some(InitialTime::AutoProgress(_)) => Some(SystemTime::now().try_into().unwrap()),
+        None => None,
     };
     let auto_progress = match instance_config.initial_time {
         Some(InitialTime::AutoProgress(config)) => Some(config),
