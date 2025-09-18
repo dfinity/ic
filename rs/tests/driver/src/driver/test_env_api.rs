@@ -2520,6 +2520,10 @@ pub fn scp_send_to(
                 "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} (written {written:?})."
             );
             remote_file.flush()?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
             Ok(())
         }
     )
@@ -2549,6 +2553,11 @@ pub fn scp_recv_from(
                 log,
                 "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."
             );
+            remote_file.flush()?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
             Ok(())
         }
     )
