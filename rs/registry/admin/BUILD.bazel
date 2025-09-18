@@ -92,6 +92,9 @@ rust_binary(
 rust_test(
     name = "ic-admin_unit_test",
     crate = ":ic-admin",
+    deps = [
+        "@crate_index//:pretty_assertions",
+    ],
 )
 
 rust_test(
