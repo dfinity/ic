@@ -10,6 +10,8 @@ on the process that this file is part of, see
 ## Added
 
 * Record votes by known neurons before clearing ballots.
+* Added `committed_topics` to the `KnownNeuronData` that can be submitted as part of the
+  `RegisterKnownNeuron` proposal.
 
 ## Changed
 
