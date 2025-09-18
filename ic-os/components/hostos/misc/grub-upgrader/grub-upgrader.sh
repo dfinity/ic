@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SRC="/boot/grub.cfg"
-DST="/grub/grub.cfg"
+DST="/boot/grub/grub.cfg"
 
 read_boot_state() {
     local grubenv_file="/grub/grubenv"
