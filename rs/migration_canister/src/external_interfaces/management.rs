@@ -263,7 +263,7 @@ pub async fn rename_canister(
 pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(), ValidationError> {
     match list_canister_snapshots(&ListCanisterSnapshotsArgs { canister_id }).await {
         Ok(snapshots) => {
-            if snapshots.len() == 0 {
+            if snapshots.is_empty() {
                 ProcessingResult::Success(())
             } else {
                 ProcessingResult::FatalFailure(ValidationError::TargetHasSnapshots)
