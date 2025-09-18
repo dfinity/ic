@@ -60,6 +60,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-hpke/                              @dfinity/crypto-team
 /packages/ic-http-types/                        @dfinity/cross-chain-team
 /packages/ic-metrics-assert/                    @dfinity/cross-chain-team
+/packages/ic-pub-key/                           @dfinity/crypto-team
 /packages/ic-secp256k1/                         @dfinity/crypto-team
 /packages/ic-secp256r1/                         @dfinity/crypto-team
 /packages/ic-sha3/                              @dfinity/crypto-team
@@ -167,7 +168,7 @@ go_deps.bzl               @dfinity/idx
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
-/rs/migration_canister/                                 @dfinity/execution 
+/rs/migration_canister/                                 @dfinity/execution
 /rs/monitoring/                                         @dfinity/consensus
 /rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
@@ -227,6 +228,7 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/canister_creator                     @dfinity/execution
 /rs/rust_canisters/load_simulator                       @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
+/rs/rust_canisters/xrc_mock/                            @dfinity/finint
 /rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
 /rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
 /rs/sns/                                                @dfinity/governance-team
@@ -262,6 +264,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners
 /rs/tests/nested/                                       @dfinity/node
+/rs/tests/nested/nns_recovery/                          @dfinity/consensus @dfinity/node
 /rs/tests/networking/                                   @dfinity/consensus
 /rs/tests/nns/                                          @dfinity/governance-team
 /rs/tests/node/                                         @dfinity/node

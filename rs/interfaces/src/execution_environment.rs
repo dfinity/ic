@@ -13,8 +13,7 @@ use ic_types::{
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
     messages::{
-        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query,
-        SignedIngressContent,
+        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -508,11 +507,8 @@ pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
-pub type IngressFilterService = BoxCloneService<
-    (ProvisionalWhitelist, SignedIngressContent),
-    Result<(), UserError>,
-    Infallible,
->;
+pub type IngressFilterService =
+    BoxCloneService<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>, Infallible>;
 
 /// Errors that can occur when handling a query execution request.
 #[derive(Debug, Error)]

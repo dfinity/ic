@@ -2303,7 +2303,7 @@ impl StateMachine {
         // Run `IngressFilter` on the ingress message.
         let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
-            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
+            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()
             .map_err(SubmitIngressError::UserError)?;
 
@@ -3845,7 +3845,7 @@ impl StateMachine {
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
         let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
-            msg.content(),
+            &msg,
             effective_canister_id,
             subnet_size,
             self.cost_schedule,
@@ -3876,7 +3876,7 @@ impl StateMachine {
         // Run `IngressFilter` on the ingress message.
         let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
-            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
+            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()?;
 
         let msg_id = msg.content().id();
