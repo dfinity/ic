@@ -385,7 +385,7 @@ jobs:
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
         with:
-          name: pocket-ic-server-arm64-linux
+          name: pocket-ic-server-arm64-linux.gz
           path: ./build/pocket-ic-server-arm64-linux.gz
 
   bazel-test-arm64-darwin:
@@ -435,7 +435,7 @@ jobs:
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
         with:
-          name: pocket-ic-server-arm64-darwin
+          name: pocket-ic-server-arm64-darwin.gz
           path: ./build/pocket-ic-server-arm64-darwin.gz
 
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
