@@ -1,3 +1,4 @@
+use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
 #[cfg(not(windows))]
 use ic_base_types::{PrincipalId, SubnetId};
@@ -35,15 +36,14 @@ use pocket_ic::{
     },
     query_candid, start_server, update_candid,
 };
-use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::net::{IpAddr, Ipv4Addr};
+#[cfg(not(windows))]
+use std::net::SocketAddr;
 use std::{
     io::Read,
-    net::SocketAddr,
     sync::OnceLock,
     time::{Duration, SystemTime},
 };
@@ -62,6 +62,8 @@ use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
 
+mod common;
+
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
 
@@ -74,36 +76,6 @@ enum RejectionCode {
     CanisterReject,
     CanisterError,
     Unknown,
-}
-
-fn frontend_canister(
-    pic: &PocketIc,
-    canister_id: Principal,
-    raw: bool,
-    path: impl ToString,
-) -> (Client, Url) {
-    let mut url = pic.url().unwrap();
-    assert_eq!(url.host_str().unwrap(), "localhost");
-    let maybe_raw = if raw { ".raw" } else { "" };
-    let host = format!("{canister_id}{maybe_raw}.localhost");
-    url.set_host(Some(&host)).unwrap();
-    url.set_path(&path.to_string());
-    // Windows doesn't automatically resolve localhost subdomains.
-    let client = if cfg!(windows) {
-        Client::builder()
-            .resolve(
-                &host,
-                SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    pic.get_server_url().port().unwrap(),
-                ),
-            )
-            .build()
-            .unwrap()
-    } else {
-        Client::new()
-    };
-    (client, url)
 }
 
 // Create a counter canister and charge it with 2T cycles.
@@ -3587,27 +3559,62 @@ fn payload_too_large() {
     );
     for url in [instances_url, gateway_url] {
         let client = reqwest::blocking::Client::new();
-        let resp = client
-            .post(url)
-            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
-            .body(vec![42; 5 * 1024 * 1024])
-            .send()
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
-        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-        assert!(bytes.contains("error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes."));
+        retry_send_too_large_body(
+            &client,
+            &url,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes.",
+        );
     }
 
     // Too large frontend request for canister via HTTP gateway.
     let (client, url) = frontend_canister(&pic, canister_id, false, "/index.html");
+    retry_send_too_large_body(
+        &client,
+        url.as_ref(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "503 - upstream error",
+    );
+}
+
+#[cfg(not(windows))]
+fn retry_send_too_large_body(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    expected_status: StatusCode,
+    expected_body: &str,
+) {
+    let started = Instant::now();
+    while let Err(err) = send_too_large_body(client, url, expected_status, expected_body) {
+        println!("{err}");
+        if started.elapsed() > Duration::from_secs(5 * 60) {
+            panic!("Retrying requests with too large body timed out.");
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(not(windows))]
+fn send_too_large_body(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    expected_status: StatusCode,
+    expected_body: &str,
+) -> Result<(), String> {
     let resp = client
         .post(url)
         .body(vec![42; 5 * 1024 * 1024])
         .send()
-        .unwrap();
+        .map_err(|err| format!("Failed to send request: {err}"))?;
 
-    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    assert!(bytes.contains("503 - upstream error"));
+    if resp.status() != expected_status {
+        return Err(format!("Unexpected status code: {:?}", resp.status()));
+    }
+
+    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    if !body.contains(expected_body) {
+        return Err(format!("Unexpected response body: {body}"));
+    }
+
+    Ok(())
 }

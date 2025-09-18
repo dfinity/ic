@@ -257,7 +257,7 @@ impl Step for MergeCertificationPoolsStep {
 
 pub struct DownloadIcStateStep {
     pub logger: Logger,
-    pub try_readonly: bool,
+    pub ssh_user: SshUser,
     pub node_ip: IpAddr,
     pub target: String,
     pub working_dir: String,
@@ -285,14 +285,9 @@ impl Step for DownloadIcStateStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let account = if self.try_readonly {
-            SshUser::Readonly.to_string()
-        } else {
-            SshUser::Admin.to_string()
-        };
         let mut ssh_helper = SshHelper::new(
             self.logger.clone(),
-            account,
+            self.ssh_user.to_string(),
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -339,6 +334,15 @@ impl Step for DownloadIcStateStep {
             info!(self.logger, "Excluding certifications from download");
             excludes.push("certification");
             excludes.push("certifications");
+        }
+
+        // If we already have the consensus pool, we do not download it again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/consensus")
+            .exists()
+        {
+            info!(self.logger, "Excluding consensus pool from download");
+            excludes.push("ic_consensus_pool/consensus");
         }
 
         let target = if self.keep_downloaded_state {
@@ -406,9 +410,17 @@ impl Step for CopyLocalIcStateStep {
             .join("data/ic_consensus_pool/certification")
             .exists()
         {
-            info!(self.logger, "Excluding certifications from download");
+            info!(self.logger, "Excluding certifications from copy");
             excludes.push("certification");
             excludes.push("certifications");
+        }
+        // If we already have the consensus pool, we do not copy it again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/consensus")
+            .exists()
+        {
+            info!(self.logger, "Excluding consensus pool from copy");
+            excludes.push("ic_consensus_pool/consensus");
         }
 
         rsync(
@@ -1108,18 +1120,16 @@ impl Step for CreateNNSRecoveryTarStep {
             info!(self.logger, "{}", res);
         }
 
-        match exec_cmd(Command::new("cat").arg(self.output_dir.join(Self::get_sha_name())))? {
-            Some(sha256) => {
-                info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
-            }
-            _ => {
-                return Err(RecoveryError::invalid_output_error(format!(
-                    "Could not read {}/{}",
-                    self.output_dir.display(),
-                    Self::get_sha_name()
-                )));
-            }
-        }
+        let Some(sha256) =
+            exec_cmd(Command::new("cat").arg(self.output_dir.join(Self::get_sha_name())))?
+        else {
+            return Err(RecoveryError::invalid_output_error(format!(
+                "Could not read {}/{}",
+                self.output_dir.display(),
+                Self::get_sha_name()
+            )));
+        };
+        info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
 
         Ok(())
     }
@@ -1162,14 +1172,14 @@ impl Step for DownloadRegistryStoreStep {
         let backoff = 10;
         let mut child_subnet_found = false;
         for i in 0..tries {
-            match ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
-            { Err(e) => {
+            if let Err(e) = ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
+            {
                 info!(self.logger, "Try {}: {}", i, e);
-            } _ => {
+            } else {
                 info!(self.logger, "Found subnet with original NNS id!");
                 child_subnet_found = true;
                 break;
-            }}
+            }
             thread::sleep(time::Duration::from_secs(backoff));
         }
 

@@ -1,6 +1,6 @@
 use crate::{
-    CUPS_DIR, RecoveryArgs, RecoveryResult,
-    cli::{read_optional, read_optional_data_location, read_optional_version},
+    CUPS_DIR, IC_STATE_DIR, RecoveryArgs, RecoveryResult,
+    cli::{print_height_info, read_optional, read_optional_data_location, read_optional_version},
     error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
@@ -26,6 +26,7 @@ pub enum StepType {
     StopReplica,
     DownloadCertifications,
     MergeCertificationPools,
+    DownloadConsensusPool,
     DownloadState,
     ICReplay,
     ValidateReplayOutput,
@@ -63,11 +64,15 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
+    /// IP address of the node to download the consensus pool from.
+    #[clap(long)]
+    pub download_pool_node: Option<IpAddr>,
+
     /// The method of downloading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the source node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
     #[clap(long, value_parser=crate::util::data_location_from_str)]
-    pub download_method: Option<DataLocation>,
+    pub download_state_method: Option<DataLocation>,
 
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
@@ -165,10 +170,25 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
             StepType::StopReplica | StepType::DownloadState => {
-                if self.params.download_method.is_none() {
-                    self.params.download_method = read_optional_data_location(
+                if self.params.download_state_method.is_none() {
+                    self.params.download_state_method = read_optional_data_location(
                         &self.logger,
-                        "Enter download location [local/<ipv6>]:",
+                        "Enter state download location (admin access required) [local/<ipv6>]:",
+                    );
+                }
+            }
+
+            StepType::DownloadConsensusPool => {
+                print_height_info(
+                    &self.logger,
+                    &self.recovery.registry_helper,
+                    self.params.subnet_id,
+                );
+
+                if self.params.download_pool_node.is_none() {
+                    self.params.download_pool_node = read_optional(
+                        &self.logger,
+                        "Enter consensus pool download IP (backup access required):",
                     );
                 }
             }
@@ -220,7 +240,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
             StepType::StopReplica => {
-                if let Some(method) = self.params.download_method {
+                if let Some(method) = self.params.download_state_method {
                     let node_ip = match method {
                         DataLocation::Remote(ip) => ip,
                         DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
@@ -244,15 +264,31 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
             }
 
+            StepType::DownloadConsensusPool => {
+                if let Some(node_ip) = self.params.download_pool_node {
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        SshUser::Backup,
+                        /*keep_downloaded_state=*/ false,
+                        /*additional_excludes=*/
+                        vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
+                                                                      // download only the
+                                                                      // consensus pool
+                    )))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
+
             StepType::DownloadState => {
-                match self.params.download_method {
+                match self.params.download_state_method {
                     Some(DataLocation::Local) => {
                         Ok(Box::new(self.recovery.get_copy_local_state_step()))
                     }
                     Some(DataLocation::Remote(node_ip)) => {
                         Ok(Box::new(self.recovery.get_download_state_step(
                             node_ip,
-                            /*try_readonly=*/ false,
+                            /*try_readonly=*/ SshUser::Admin,
                             /*keep_downloaded_state=*/ false,
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))

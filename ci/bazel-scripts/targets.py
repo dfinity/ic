@@ -188,13 +188,13 @@ def targets(
     )
 
     # Finally, exclude targets that have any of the excluded tags:
-    excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
-
+    excluded_tags = EXCLUDED_TAGS
     if skip_didc_checks:
-        query = f"({query}) except attr(tags, didc, //...)"
+        excluded_tags.append("didc")
     if skip_buf_checks:
-        query = f"({query}) except attr(tags, buf, //...)"
+        excluded_tags.append("buf")
+    excluded_tags_regex = "|".join(excluded_tags)
+    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))

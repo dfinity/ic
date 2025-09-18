@@ -43,6 +43,7 @@ fn main() -> Result<()> {
         })
         .add_test(systest!(test; TestConfig {
             local_recovery: false,
+            break_dfinity_owned_node: false,
         }))
         .with_timeout_per_test(Duration::from_secs(60 * 60))
         .with_overall_timeout(Duration::from_secs(75 * 60))

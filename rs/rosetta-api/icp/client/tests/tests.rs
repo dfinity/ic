@@ -3,7 +3,7 @@ use candid::Principal;
 use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_runner::RosettaOptions;
 use ic_icp_rosetta_runner::start_rosetta;
-use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_test_utils::path_from_env;
 use icp_ledger::LedgerCanisterInitPayload;
 use pocket_ic::PocketIcBuilder;

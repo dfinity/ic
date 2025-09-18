@@ -173,22 +173,17 @@ impl CertificationPoolImpl {
     }
 
     fn insert_validated_certification(&self, certification: Certification) {
-        match self
+        if self
             .validated
             .certifications()
             .get_by_height(certification.height)
             .next()
+            .is_some_and(|existing_certification| certification != existing_certification)
         {
-            Some(existing_certification) => {
-                if certification != existing_certification {
-                    panic!(
-                        "Certifications are not expected to be added more than once per height."
-                    );
-                }
-            }
-            _ => self
-                .validated
-                .insert(CertificationMessage::Certification(certification)),
+            panic!("Certifications are not expected to be added more than once per height.");
+        } else {
+            self.validated
+                .insert(CertificationMessage::Certification(certification));
         }
     }
 
