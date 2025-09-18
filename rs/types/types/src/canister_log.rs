@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::collections::VecDeque;
 
 /// The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
 fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
     let max_content_size =
