@@ -209,7 +209,7 @@ fn add_block_headers_for<Network: BlockchainNetwork + fmt::Display>(
     let headers_to_add = &headers.as_slice()[1..];
     assert_eq!(headers_to_add.len(), expected_num_headers_to_add);
     let mut group = criterion.benchmark_group(format!("{network}_{expected_num_headers_to_add}"));
-    group.sample_size(1);
+    group.sample_size(10);
 
     bench_add_headers(&mut group, network, headers_to_add);
 }
@@ -224,14 +224,14 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
     fn add_headers<Network: BlockchainNetwork>(
         blockchain_state: &mut BlockchainState<Network>,
         headers: &[Network::Header],
-        handle: &tokio::runtime::Handle,
+        runtime: &tokio::runtime::Runtime,
     ) where
         BlockchainState<Network>: HeaderValidator<Network>,
     {
         // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
         for chunk in headers.chunks(MAX_HEADERS_SIZE) {
             let (added_headers, error) =
-                handle.block_on(async { blockchain_state.add_headers(chunk).await });
+                runtime.block_on(async { blockchain_state.add_headers(chunk).await });
             assert!(error.is_none(), "Failed to add headers: {}", error.unwrap());
             assert_eq!(added_headers.len(), chunk.len())
         }
@@ -242,7 +242,7 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
     group.bench_function(BenchmarkId::new("add_headers", "in_memory"), |bench| {
         bench.iter(|| {
             let mut blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
-            add_headers(&mut blockchain_state, headers, rt.handle());
+            add_headers(&mut blockchain_state, headers, &rt);
         })
     });
 
@@ -255,7 +255,7 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
                 &MetricsRegistry::default(),
                 no_op_logger(),
             );
-            add_headers(&mut blockchain_state, headers, rt.handle());
+            add_headers(&mut blockchain_state, headers, &rt);
         })
     });
 }
