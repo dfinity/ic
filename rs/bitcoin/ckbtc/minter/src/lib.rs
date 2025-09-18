@@ -1411,18 +1411,26 @@ pub fn estimate_retrieve_btc_fee(
 #[async_trait]
 pub trait CanisterRuntime {
     /// Returns the caller of the current call.
-    fn caller(&self) -> Principal;
+    fn caller(&self) -> Principal {
+        ic_cdk::api::msg_caller()
+    }
 
     /// Returns the canister id
-    fn id(&self) -> Principal;
+    fn id(&self) -> Principal {
+        ic_cdk::api::canister_self()
+    }
 
     /// Gets current timestamp, in nanoseconds since the epoch (1970-01-01)
-    fn time(&self) -> u64;
+    fn time(&self) -> u64 {
+        ic_cdk::api::time()
+    }
 
     /// Set a global timer to make the system schedule a call to the exported `canister_global_timer` Wasm method after the specified time.
     /// The time must be provided as nanoseconds since 1970-01-01.
     /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
-    fn global_timer_set(&self, timestamp: u64);
+    fn global_timer_set(&self, timestamp: u64) {
+        ic_cdk::api::global_timer_set(timestamp);
+    }
 
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
@@ -1447,7 +1455,7 @@ pub trait CanisterRuntime {
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
-        derivation_path: DerivationPath,
+        derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError>;
 
@@ -1463,22 +1471,6 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
-    fn caller(&self) -> Principal {
-        ic_cdk::api::msg_caller()
-    }
-
-    fn id(&self) -> Principal {
-        ic_cdk::api::canister_self()
-    }
-
-    fn time(&self) -> u64 {
-        ic_cdk::api::time()
-    }
-
-    fn global_timer_set(&self, timestamp: u64) {
-        ic_cdk::api::global_timer_set(timestamp);
-    }
-
     async fn bitcoin_get_utxos(
         &self,
         request: &GetUtxosRequest,
@@ -1507,12 +1499,12 @@ impl CanisterRuntime for IcCanisterRuntime {
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
-        derivation_path: DerivationPath,
+        derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
         ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
             message_hash: message_hash.to_vec(),
-            derivation_path: derivation_path.into_inner(),
+            derivation_path,
             key_id: ic_cdk::management_canister::EcdsaKeyId {
                 curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
                 name: key_name.clone(),
