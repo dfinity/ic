@@ -53,7 +53,6 @@ async fn main() -> Result<(), Error> {
     // Update config.ini
     let config_ini = NamedTempFile::new()?;
     write_config(config_ini.path(), &cli.config_ini)
-        .await
         .context("failed to write config file")?;
     config
         .write_file(config_ini.path(), Path::new("/config.ini"))
