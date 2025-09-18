@@ -1,7 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
-
 rust_library(
     name = "ckdoge_minter_lib",
     srcs = glob(
@@ -26,25 +25,25 @@ rust_library(
 
 [
     rust_canister(
-    name = name,
-    srcs = ["src/main.rs"],
-    compile_data = [":ckdoge_minter.did"],
-    crate_features = features,
-    crate_name = "ic_ckdoge_minter_canister",
-    proc_macro_deps = [
-        # Keep sorted.
-    ],
-    rustc_env = {
-        "CKDOGE_MINTER_DID_PATH": "$(execpath :ckdoge_minter.did)",
-    },
-    service_file = ":ckdoge_minter.did",
-    deps = [
-        # Keep sorted.
-        ":ckdoge_minter_lib",
-        "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
-        "@crate_index//:candid",
-        "@crate_index//:ic-cdk",
-    ],
+        name = name,
+        srcs = ["src/main.rs"],
+        compile_data = [":ckdoge_minter.did"],
+        crate_features = features,
+        crate_name = "ic_ckdoge_minter_canister",
+        proc_macro_deps = [
+            # Keep sorted.
+        ],
+        rustc_env = {
+            "CKDOGE_MINTER_DID_PATH": "$(execpath :ckdoge_minter.did)",
+        },
+        service_file = ":ckdoge_minter.did",
+        deps = [
+            # Keep sorted.
+            ":ckdoge_minter_lib",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+            "@crate_index//:candid",
+            "@crate_index//:ic-cdk",
+        ],
     )
     for (name, features) in [
         # Production version without debug assertions.
