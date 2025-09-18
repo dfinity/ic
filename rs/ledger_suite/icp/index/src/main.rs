@@ -56,9 +56,8 @@ type BlockLog = StableLog<Vec<u8>, VM, VM>;
 type AccountIdentifierBlockIdsMapKey = ([u8; 28], Reverse<u64>);
 type AccountIdentifierBlockIdsMap = StableBTreeMap<AccountIdentifierBlockIdsMapKey, (), VM>;
 
-// The second element of this tuple is the account represented
-// as principal of type Blob<29> and the effective subaccount
-type AccountIdentifierDataMapKey = (AccountIdentifierDataType, [u8; 28]);
+type AccountIdentifierBytes = [u8; 28];
+type AccountIdentifierDataMapKey = (AccountIdentifierDataType, AccountIdentifierBytes);
 type AccountIdentifierDataMap = StableBTreeMap<AccountIdentifierDataMapKey, u64, VM>;
 
 thread_local! {

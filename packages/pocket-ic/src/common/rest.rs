@@ -593,7 +593,7 @@ pub struct IcpFeatures {
     /// Deploys the cycles ledger and index canisters.
     pub cycles_token: Option<IcpFeaturesConfig>,
     /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
-    /// The initial NNS neuron is controlled by the principal `hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe`.
+    /// The initial NNS neuron is controlled by the anonymous principal.
     pub nns_governance: Option<IcpFeaturesConfig>,
     /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
     /// and uploads the SNS canister WASMs to the SNS-W canister.

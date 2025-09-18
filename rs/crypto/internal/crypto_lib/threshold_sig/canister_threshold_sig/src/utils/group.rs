@@ -199,6 +199,20 @@ impl EccScalar {
         }
     }
 
+    /// Compute the modular inverse of Self
+    ///
+    /// This function may leak the value of self to side channels, and should only
+    /// be used for public inputs
+    ///
+    /// Returns None if self is equal to zero
+    pub fn invert_vartime(&self) -> Option<Self> {
+        match self {
+            Self::K256(s) => s.invert_vartime().map(Self::K256),
+            Self::P256(s) => s.invert_vartime().map(Self::P256),
+            Self::Ed25519(s) => s.invert_vartime().map(Self::Ed25519),
+        }
+    }
+
     /// Serialize the scalar
     ///
     /// For P-256 and secp256k1 this uses a big-endian encoding.

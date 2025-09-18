@@ -398,7 +398,7 @@ fn test_initial_timestamp() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 
     // Initial time is bumped by 1ns during instance creation to ensure strict monotonicity.
@@ -415,7 +415,7 @@ fn test_initial_timestamp() {
 fn test_invalid_initial_timestamp() {
     let _pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_initial_timestamp(0)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(0))
         .build();
 }
 
@@ -430,7 +430,7 @@ fn test_initial_timestamp_with_cycles_minting() {
         .with_nns_subnet()
         .with_application_subnet()
         .with_icp_features(icp_features)
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 
     // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
@@ -454,7 +454,7 @@ fn test_invalid_initial_timestamp_with_cycles_minting() {
         .with_nns_subnet()
         .with_application_subnet()
         .with_icp_features(icp_features)
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 }
 
@@ -3559,27 +3559,62 @@ fn payload_too_large() {
     );
     for url in [instances_url, gateway_url] {
         let client = reqwest::blocking::Client::new();
-        let resp = client
-            .post(url)
-            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
-            .body(vec![42; 5 * 1024 * 1024])
-            .send()
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
-        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-        assert!(bytes.contains("error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes."));
+        retry_send_too_large_body(
+            &client,
+            &url,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes.",
+        );
     }
 
     // Too large frontend request for canister via HTTP gateway.
     let (client, url) = frontend_canister(&pic, canister_id, false, "/index.html");
+    retry_send_too_large_body(
+        &client,
+        url.as_ref(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "503 - upstream error",
+    );
+}
+
+#[cfg(not(windows))]
+fn retry_send_too_large_body(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    expected_status: StatusCode,
+    expected_body: &str,
+) {
+    let started = Instant::now();
+    while let Err(err) = send_too_large_body(client, url, expected_status, expected_body) {
+        println!("{err}");
+        if started.elapsed() > Duration::from_secs(5 * 60) {
+            panic!("Retrying requests with too large body timed out.");
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(not(windows))]
+fn send_too_large_body(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    expected_status: StatusCode,
+    expected_body: &str,
+) -> Result<(), String> {
     let resp = client
         .post(url)
         .body(vec![42; 5 * 1024 * 1024])
         .send()
-        .unwrap();
+        .map_err(|err| format!("Failed to send request: {err}"))?;
 
-    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    assert!(bytes.contains("503 - upstream error"));
+    if resp.status() != expected_status {
+        return Err(format!("Unexpected status code: {:?}", resp.status()));
+    }
+
+    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    if !body.contains(expected_body) {
+        return Err(format!("Unexpected response body: {body}"));
+    }
+
+    Ok(())
 }

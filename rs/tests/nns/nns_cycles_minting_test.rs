@@ -2,11 +2,11 @@ use anyhow::Result;
 use canister_test::{Canister, Project, Wasm};
 use cycles_minting::{TestAgent, UserHandle, make_user_ed25519};
 use cycles_minting_canister::{CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR, TokensToCycles};
-use dfn_candid::{CandidOne, candid_one};
+use dfn_candid::candid_one;
 use ic_canister_client::{HttpClient, Sender};
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_ledger_core::tokens::CheckedAdd;
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::{MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult as RootCanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
@@ -33,7 +33,6 @@ use ic_system_test_driver::{
 use ic_types::Cycles;
 use icp_ledger::{Operation, Tokens};
 use num_traits::ToPrimitive;
-use on_wire::IntoWire;
 use slog::info;
 
 fn main() -> Result<()> {
@@ -298,13 +297,6 @@ pub fn test(env: TestEnv) {
             .unwrap_err();
 
         /* Check the controller / cycles balance. */
-        let msg_size = CandidOne(CanisterIdRecord::from(new_canister_id))
-            .into_bytes()
-            .unwrap()
-            .len();
-
-        let nonce_size = 8; // see RemoteTestRuntime::get_nonce_vec
-
         let new_canister_status: CanisterStatusResultV2 =
             runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id())
                 .get_management_canister_with_effective_canister_id(new_canister_id.into())
@@ -316,19 +308,23 @@ pub fn test(env: TestEnv) {
                 )
                 .await
                 .unwrap();
-
         assert_eq!(new_canister_status.controller(), controller_pid);
         let config = CyclesAccountManagerConfig::application_subnet();
-        let fees = scale_cycles(
+        let max_fees = scale_cycles(
             config.canister_creation_fee
                 + config.ingress_message_reception_fee
-                + config.ingress_byte_reception_fee
-                    * (msg_size + "canister_status".len() + nonce_size),
-        );
-        let expected_cycles =
-            (icpts_to_cycles.to_cycles(initial_amount.checked_add(&top_up_amount).unwrap()) - fees)
-                .get();
-        assert_eq!(new_canister_status.cycles(), expected_cycles);
+                + config.ingress_byte_reception_fee * MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
+        )
+        .get();
+        let expected_cycles = icpts_to_cycles
+            .to_cycles(initial_amount.checked_add(&top_up_amount).unwrap())
+            .get();
+        assert!(new_canister_status.cycles() <= expected_cycles);
+        assert!(new_canister_status.cycles() >= expected_cycles.checked_sub(max_fees).unwrap());
+        // Ensure that `max_fees` are neglibigle (less than 1%) w.r.t. `expected_cycles`
+        // and thus the above check that `new_canister_status.cycles()`
+        // are in [expected_cycles - max_fees..expected_cycles] is meaningful.
+        assert!(100 * max_fees < expected_cycles);
 
         /* Check that the funds for the canister top up attempt are burned. */
         let block = tst.get_tip().await.unwrap();

@@ -1676,7 +1676,7 @@ impl ExecutionTest {
         self.exec_env.should_accept_ingress_message(
             Arc::new(self.state().clone()),
             &ProvisionalWhitelist::new_empty(),
-            ingress.content(),
+            &ingress,
             ExecutionMode::NonReplicated,
             &IngressFilterMetrics::new(&MetricsRegistry::new()),
         )

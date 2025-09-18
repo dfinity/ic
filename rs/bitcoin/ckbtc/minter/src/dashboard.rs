@@ -276,7 +276,7 @@ pub fn build_account_to_utxos_table(s: &CkBtcMinterState, start: u64, page_size:
 
 pub fn build_metadata(s: &CkBtcMinterState) -> String {
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
     format!(

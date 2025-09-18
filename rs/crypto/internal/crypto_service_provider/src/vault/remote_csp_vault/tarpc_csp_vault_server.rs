@@ -98,9 +98,10 @@ where
             return;
         }
         let result = job();
-        let _ = tx.send(result); // Errors occur if the associated receiver
-        // handle was dropped and are considered
+
+        // Errors occur if the associated receiver handle was dropped and are considered
         // legitimate and are thus ignored.
+        let _ = tx.send(result);
     });
     rx.await.expect("the sender was dropped")
 }

@@ -271,7 +271,7 @@ pub fn start_timers() {
 }
 
 pub fn rate_limited() -> bool {
-    num_active_requests() > max_active_requests()
+    num_active_requests() >= max_active_requests()
 }
 
 #[allow(dead_code)]

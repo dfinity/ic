@@ -632,7 +632,7 @@ impl CkBtcMinterState {
         target: Option<Account>,
     ) -> Vec<BtcRetrievalStatusV2> {
         let target_account = target.unwrap_or(Account {
-            owner: ic_cdk::caller(),
+            owner: ic_cdk::api::msg_caller(),
             subaccount: None,
         });
 
