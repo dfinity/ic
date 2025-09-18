@@ -5,7 +5,7 @@ SRC="/boot/grub.cfg"
 DST="/boot/grub/grub.cfg"
 
 read_boot_state() {
-    local grubenv_file="/grub/grubenv"
+    local grubenv_file="/boot/grub/grubenv"
 
     if [ ! -f "${grubenv_file}" ]; then
         echo "Grubenv file ${grubenv_file} not found. Cannot determine boot cycle state." >&2
