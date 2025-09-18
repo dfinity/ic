@@ -351,13 +351,9 @@ fn endpoint_rejects_requests_with_missing_fields(env: TestEnv, endpoint: Endpoin
 
 fn endpoint_rejects_requests_with_empty_sender(env: TestEnv, endpoint: Endpoint) {
     let logger = env.logger();
-    match endpoint {
-        Endpoint::SubnetReadState(_) => {
-            info!(logger, "Skipping the test for subnet read state endpoints");
-
-            return;
-        }
-        _ => {}
+    if let Endpoint::SubnetReadState(_) = endpoint {
+        info!(logger, "Skipping the test for subnet read state endpoints");
+        return;
     }
     let snapshot = env.topology_snapshot();
     let (_, app_subnet) = get_subnets(&snapshot);
@@ -512,6 +508,7 @@ impl Endpoint {
 
     /// Returns `true` iff the endpoints accept the same types of requests.
     fn is_compatible(&self, other: &Endpoint) -> bool {
+        #[allow(clippy::match_like_matches_macro)]
         match (self, other) {
             (Endpoint::Query(_), Endpoint::Query(_)) => true,
             (Endpoint::Call(_), Endpoint::Call(_)) => true,
