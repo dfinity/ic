@@ -120,7 +120,8 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
         ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
     ).stdout.splitlines()
 
-    log("Calculating targets to test for the following {n} modified files:".format(n=len(modified_files)))
+    n = len(modified_files)
+    log(f"Calculating targets to {command} for the following {n} modified files:")
     for file in modified_files:
         log(file)
 
@@ -188,13 +189,13 @@ def targets(
     )
 
     # Finally, exclude targets that have any of the excluded tags:
-    excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
-
+    excluded_tags = EXCLUDED_TAGS
     if skip_didc_checks:
-        query = f"({query}) except attr(tags, didc, //...)"
+        excluded_tags.append("didc")
     if skip_buf_checks:
-        query = f"({query}) except attr(tags, buf, //...)"
+        excluded_tags.append("buf")
+    excluded_tags_regex = "|".join(excluded_tags)
+    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))

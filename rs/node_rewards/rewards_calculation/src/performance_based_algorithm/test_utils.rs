@@ -1,5 +1,4 @@
-#![allow(dead_code)]
-use crate::types::{NodeMetricsDailyRaw, Region};
+use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
@@ -16,14 +15,6 @@ pub fn test_provider_id(id: u64) -> PrincipalId {
 
 pub fn test_subnet_id(id: u64) -> SubnetId {
     SubnetId::from(PrincipalId::new_subnet_test_id(id))
-}
-
-#[derive(Eq, Hash, PartialEq, Clone, Ord, PartialOrd, Debug)]
-pub struct RewardableNode {
-    pub node_id: NodeId,
-    pub region: Region,
-    pub node_reward_type: NodeRewardType,
-    pub dc_id: String,
 }
 
 impl Default for RewardableNode {

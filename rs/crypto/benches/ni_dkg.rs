@@ -19,6 +19,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgDealing, NiDkgTag, NiDkgTranscript, config::NiDkgConfig,
 };
 use rand::Rng;
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashSet};
 
 criterion_main!(benches);
@@ -58,12 +59,16 @@ fn bench_create_initial_dealing<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config) = prepare_create_initial_dealing_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("create_initial_dealing", |bench| {
         bench.iter_batched_ref(
-            || config.random_dealer_id(rng),
-            |creator_node_id| {
+            || {
+                let (env, config) = bench_context
+                    .get_or_init(|| prepare_create_initial_dealing_test_vectors(test_case, rng));
+                (env, config, config.random_dealer_id(rng))
+            },
+            |(env, config, creator_node_id)| {
                 create_dealing(config.get(), &env.crypto_components, *creator_node_id)
             },
             SmallInput,
@@ -76,13 +81,17 @@ fn bench_create_reshare_dealing<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config) = prepare_create_reshare_dealing_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("create_reshare_dealing", |bench| {
-        bench.iter_batched_ref(
-            || config.random_dealer_id(rng),
-            |creator_node_id| {
-                create_dealing(config.get(), &env.crypto_components, *creator_node_id)
+        bench.iter_batched(
+            || {
+                let (env, config) = bench_context
+                    .get_or_init(|| prepare_create_reshare_dealing_test_vectors(test_case, rng));
+                (env, config, config.random_dealer_id(rng))
+            },
+            |(env, config, creator_node_id)| {
+                create_dealing(config.get(), &env.crypto_components, creator_node_id)
             },
             SmallInput,
         )
@@ -94,20 +103,28 @@ fn bench_verify_dealing<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config, dealings) = prepare_verify_dealing_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("verify_dealing", |bench| {
         bench.iter_batched_ref(
             || {
+                let (env, config, dealings) = bench_context
+                    .get_or_init(|| prepare_verify_dealing_test_vectors(test_case, rng));
                 let (dealer_id, dealing) = dealings
                     .get(rng.gen_range(0..test_case.num_of_dealers))
                     .unwrap();
 
                 let receiver_id = config.random_receiver_id(rng);
 
-                (&env.crypto_components, *dealer_id, dealing, receiver_id)
+                (
+                    config,
+                    &env.crypto_components,
+                    *dealer_id,
+                    dealing,
+                    receiver_id,
+                )
             },
-            |(crypto_components, dealer, dealing, receiver_id)| {
+            |(config, crypto_components, dealer, dealing, receiver_id)| {
                 verify_dealing(
                     config.get(),
                     crypto_components,
@@ -126,14 +143,18 @@ fn bench_create_transcript<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config, dealings, creator_node_id) =
-        prepare_create_transcript_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("create_transcript", |bench| {
         bench.iter_batched_ref(
-            || &env.crypto_components,
-            |crypto_components| {
-                create_transcript(&config, crypto_components, &dealings, creator_node_id)
+            || {
+                let (env, config, dealings, creator_node_id) = bench_context
+                    .get_or_init(|| prepare_create_transcript_test_vectors(test_case, rng));
+
+                (config, dealings, creator_node_id, &env.crypto_components)
+            },
+            |(config, dealings, creator_node_id, crypto_components)| {
+                create_transcript(config, crypto_components, dealings, **creator_node_id)
             },
             SmallInput,
         )
@@ -145,14 +166,16 @@ fn bench_load_transcript<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env_to_copy, config, transcript_to_load) =
-        prepare_load_transcript_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     let path = std::path::Path::new("load_transcript_env");
 
     group.bench_function("load_transcript", |bench| {
         bench.iter_batched_ref(
             || {
+                let (env_to_copy, config, transcript_to_load) = bench_context
+                    .get_or_init(|| prepare_load_transcript_test_vectors(test_case, rng));
+
                 // clean-up the dir if it exists
                 let _ = std::fs::remove_dir_all(path);
 
@@ -184,8 +207,7 @@ fn bench_retain_keys<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env_to_copy, config, transcript1, transcript2) =
-        prepare_retain_keys_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
     let path = std::path::Path::new("retain_active_keys_env");
 
     for exp in [0, 1, 5, 15, 30].iter() {
@@ -195,6 +217,9 @@ fn bench_retain_keys<M: Measurement, R: Rng + CryptoRng>(
             |bench, exp| {
                 bench.iter_batched(
                     || {
+                        let (env_to_copy, config, transcript1, transcript2) = bench_context
+                            .get_or_init(|| prepare_retain_keys_test_vectors(test_case, rng));
+
                         let retainer_node_id = config.random_receiver_id(rng);
                         // clean-up the dir if it exists
                         let _ = std::fs::remove_dir_all(path);

@@ -1,5 +1,6 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, GoogleOpenIdConfig, InternetIdentityInit, RateLimitConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, GoogleOpenIdConfig,
+    InternetIdentityInit, NnsDappCanisterArguments, RateLimitConfig, SnsAggregatorConfig,
     StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
@@ -11,7 +12,7 @@ use axum::{
     response::{Html, IntoResponse},
 };
 use bitcoin::Network;
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload,
     DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
@@ -61,6 +62,7 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
+use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
@@ -309,7 +311,6 @@ impl BitcoinAdapterParts {
         log_level: Option<Level>,
         replica_logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-        runtime: Arc<Runtime>,
     ) -> Self {
         let bitcoin_adapter_config = BitcoinAdapterConfig {
             nodes: bitcoind_addr,
@@ -321,12 +322,7 @@ impl BitcoinAdapterParts {
             ..BitcoinAdapterConfig::default_with(Network::Regtest.into())
         };
         let adapter = tokio::spawn(async move {
-            start_btc_server(
-                &replica_logger,
-                &metrics_registry,
-                runtime.handle(),
-                bitcoin_adapter_config,
-            )
+            start_btc_server(replica_logger, metrics_registry, bitcoin_adapter_config).await
         });
         let start = std::time::Instant::now();
         loop {
@@ -862,7 +858,6 @@ impl PocketIcSubnets {
                 self.log_level,
                 sm.replica_logger.clone(),
                 sm.metrics_registry.clone(),
-                self.runtime.clone(),
             ));
         }
 
@@ -1394,17 +1389,6 @@ impl PocketIcSubnets {
             return;
         };
 
-        // Cycles ledger init args.
-        #[derive(CandidType)]
-        struct CyclesLedgerConfig {
-            max_blocks_per_request: u64,
-            index_id: Option<Principal>,
-        }
-        #[derive(CandidType)]
-        enum CyclesLedgerArgs {
-            Init(CyclesLedgerConfig),
-        }
-
         if !ii_subnet
             .state_machine
             .canister_exists(CYCLES_LEDGER_CANISTER_ID)
@@ -1562,12 +1546,6 @@ impl PocketIcSubnets {
             );
             assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
 
-            // The following fixed principal has a high ICP balance in test environments.
-            let rich_principal = Principal::from_text(
-                "hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe",
-            )
-            .unwrap();
-
             // Install the governance canister with a tiny initial neuron to satisfy the governance canister invariants.
             let mut governance_init_payload_builder = GovernanceCanisterInitPayloadBuilder::new();
             let neuron_id = governance_init_payload_builder.new_neuron_id();
@@ -1577,11 +1555,16 @@ impl PocketIcSubnets {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
+            // We create an initial NNS neuron so that the total voting power is not zero.
+            // The initial NNS neuron has the following properties:
+            // - controlled by the anonymous principal;
+            // - stake of 1 ICP;
+            // - the maximum possible dissolve delay (8 years).
             let initial_neuron = Neuron {
                 id: Some(neuron_id.into()),
-                controller: Some(PrincipalId(rich_principal)),
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(183 * 86400)), // 183 days so that it contributes to the total voting power
-                cached_neuron_stake_e8s: 100_000_000,                                   // 1 ICP
+                controller: Some(PrincipalId(Principal::anonymous())),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(8 * ONE_YEAR_SECONDS)),
+                cached_neuron_stake_e8s: 100_000_000,
                 created_timestamp_seconds: current_timestamp_seconds,
                 aging_since_timestamp_seconds: 0,
                 account: DEFAULT_SUBACCOUNT.into(),
@@ -1806,12 +1789,7 @@ impl PocketIcSubnets {
             //       update_interval_ms = 120_000 : nat64;
             //       fast_interval_ms = 10_000 : nat64;
             //     },
-            #[derive(CandidType)]
-            struct Config {
-                update_interval_ms: u64,
-                fast_interval_ms: u64,
-            }
-            let sns_aggregator_init_payload = Config {
+            let sns_aggregator_init_payload = SnsAggregatorConfig {
                 update_interval_ms: 120_000,
                 fast_interval_ms: 10_000,
             };
@@ -2024,10 +2002,6 @@ impl PocketIcSubnets {
             // Install the NNS dapp canister.
             // The configuration values have been adapted from
             // `https://github.com/dfinity/nns-dapp/blob/5126b011ac52f9f8544c37d18bc15603756a7e3c/scripts/nns-dapp/test-config-assets/mainnet/arg.did`.
-            #[derive(CandidType)]
-            struct CanisterArguments {
-                args: Vec<(String, String)>,
-            }
             let localhost_url = format!("http://localhost:{gateway_port}");
             let args = vec![
               ("API_HOST".to_string(), localhost_url.clone()),
@@ -2051,7 +2025,7 @@ impl PocketIcSubnets {
               ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
               ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
             ];
-            let nns_dapp_test_init_payload = CanisterArguments { args };
+            let nns_dapp_test_init_payload = NnsDappCanisterArguments { args };
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -3784,6 +3758,12 @@ impl Operation for CanisterReadStateRequest {
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
+                let nns_subnet_id = pic
+                    .nns_subnet()
+                    .map(|subnet| subnet.get_subnet_id())
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let builder = delegation.map(|delegation| {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
@@ -3800,6 +3780,7 @@ impl Operation for CanisterReadStateRequest {
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                    nns_subnet_id,
                     self.version,
                 )
                 .with_time_source(subnet.time_source.clone())
@@ -3866,9 +3847,16 @@ impl Operation for SubnetReadStateRequest {
                 });
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
+                let nns_subnet_id = pic
+                    .nns_subnet()
+                    .map(|subnet| subnet.get_subnet_id())
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let svc = SubnetReadStateServiceBuilder::builder(
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    nns_subnet_id,
                     self.version,
                 )
                 .build_service();

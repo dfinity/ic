@@ -1,8 +1,7 @@
-/// Verifies that the url is within the allowed length, and begins with
-/// `http://` or `https://`. In addition, it will return an error in case of a
-/// possibly "dangerous" condition, such as the url containing a username or
-/// password, or having a port, or not having a domain name.
-pub fn validate_proposal_url(
+/// Verifies that the url is within the allowed length, and begins with `https://`. In addition, it
+/// will return an error in case of a possibly "dangerous" condition, such as the url containing a
+/// username or password, or having a port, or not having a domain name.
+pub fn validate_url(
     url: &str,
     min_length: usize,
     max_length: usize,
