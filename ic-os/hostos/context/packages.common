@@ -35,7 +35,7 @@ less
 lvm2
 net-tools
 nftables
-# Parted has a conflict with the new libvirt, install it below
+# NODE-1718: Parted has a conflict with the new libvirt, install it below
 # parted
 python-is-python3
 rsync
@@ -78,7 +78,7 @@ qemu-system-x86/plucky # Top level
 # Install >=2025 OVMF
 ovmf/plucky # Top level
 
-# Parted has a conflict with the new libvirt, it should be installed above once
+# NODE-1718: Parted has a conflict with the new libvirt, it should be installed above once
 # this is resolved
 parted/plucky
 
