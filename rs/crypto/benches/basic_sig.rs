@@ -25,6 +25,8 @@ const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
 // \[small, medium, large\]
 const MSG_SIZES: [usize; 3] = [32, 10_000, 1_000_000];
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 #[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
     Local,
@@ -50,7 +52,7 @@ fn crypto_basicsig_ed25519(criterion: &mut Criterion) {
             let group =
                 &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
 
-            group.warm_up_time(std::time::Duration::from_millis(1));
+            group.warm_up_time(WARMUP_TIME);
 
             if vault_type == VaultType::default() {
                 crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
@@ -69,7 +71,7 @@ fn crypto_basicsig_p256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
-        group.warm_up_time(std::time::Duration::from_millis(1));
+        group.warm_up_time(WARMUP_TIME);
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
@@ -81,7 +83,7 @@ fn crypto_basicsig_secp256k1(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
-        group.warm_up_time(std::time::Duration::from_millis(1));
+        group.warm_up_time(WARMUP_TIME);
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
@@ -93,7 +95,7 @@ fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
-        group.warm_up_time(std::time::Duration::from_millis(1));
+        group.warm_up_time(WARMUP_TIME);
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }

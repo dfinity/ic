@@ -23,6 +23,8 @@ use std::collections::HashSet;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 #[derive(Copy, Clone, PartialEq, Default, EnumIter)]
 enum VaultType {
     Local,
