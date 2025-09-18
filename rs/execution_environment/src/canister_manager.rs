@@ -21,17 +21,17 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
-    CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
-    CanisterStatusType, ChunkHash, Global, GlobalTimer, Method as Ic00Method,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkReply,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
+    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Global, GlobalTimer,
+    Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
+    SnapshotSource, StoredChunksReply, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_replicated_state::canister_state::execution_state::SandboxMemory;
+use ic_replicated_state::canister_state::execution_state::{CustomSectionType, SandboxMemory};
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     CHUNK_SIZE, ChunkValidationResult, WasmChunkHash,
 };
@@ -1121,6 +1121,42 @@ impl CanisterManager {
             wasm_memory_threshold.get(),
             canister.system_state.environment_variables.clone(),
         ))
+    }
+
+    /// Gets the metadata of the canister.
+    pub(crate) fn get_canister_metadata(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+        section_name: &str,
+    ) -> Result<CanisterMetadataResponse, CanisterManagerError> {
+        let Some(execution_state) = &canister.execution_state else {
+            return Err(CanisterManagerError::CanisterMetadataNoWasmModule {
+                canister_id: canister.canister_id(),
+            });
+        };
+        let Some(custom_section) = execution_state.metadata.get_custom_section(section_name) else {
+            return Err(CanisterManagerError::CanisterMetadataSectionNotFound {
+                canister_id: canister.canister_id(),
+                section_name: section_name.to_string(),
+            });
+        };
+
+        let is_sender_controller = canister.controllers().contains(&sender);
+        let can_non_controller_read_section = match custom_section.visibility() {
+            CustomSectionType::Public => true,
+            CustomSectionType::Private => false,
+        };
+        if is_sender_controller || can_non_controller_read_section {
+            Ok(CanisterMetadataResponse::new(
+                custom_section.content().to_vec(),
+            ))
+        } else {
+            Err(CanisterManagerError::CanisterMetadataSectionNotFound {
+                canister_id: canister.canister_id(),
+                section_name: section_name.to_string(),
+            })
+        }
     }
 
     /// Permanently deletes a canister from `ReplicatedState`.

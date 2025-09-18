@@ -1105,7 +1105,7 @@ fn get_canister_metadata_success() {
 #[test]
 fn get_canister_metadata_no_execution_state_fails() {
     let mut test = ExecutionTestBuilder::new().build();
-    let canister = test.empty_canister();
+    let canister = test.create_canister_with_default_cycles();
     let caller = test.universal_canister().unwrap();
 
     let canister_metadata_args =
@@ -1122,7 +1122,10 @@ fn get_canister_metadata_no_execution_state_fails() {
     let result = test.ingress(caller, "update", get_canister_metadata);
 
     let reject = get_reject(result);
-    assert_eq!(reject, "Canister has no execution state");
+    assert!(
+        reject.contains("has no Wasm module and hence no metadata is available")
+            && reject.contains(&canister.to_string())
+    );
 }
 
 #[test]
@@ -1145,7 +1148,10 @@ fn get_canister_metadata_not_found_fails() {
     let result = test.ingress(caller, "update", get_canister_metadata);
 
     let reject = get_reject(result);
-    assert_eq!(reject, "Metadata section 'my_not_found_section' not found");
+    assert!(
+        reject.contains("has no metadata section with the name my_not_found_section")
+            && reject.contains(&canister.to_string())
+    );
 }
 
 #[test]
@@ -1168,7 +1174,34 @@ fn get_canister_metadata_private_section_fails() {
     let result = test.ingress(caller, "update", get_canister_metadata);
 
     let reject = get_reject(result);
-    assert_eq!(reject, "Metadata section 'my_private_section' is private");
+    assert!(
+        reject.contains("has no metadata section with the name my_private_section")
+            && reject.contains(&canister.to_string())
+    );
+}
+
+#[test]
+fn get_canister_metadata_private_section_succeeds_for_controller() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller = test.universal_canister().unwrap();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    test.canister_update_controller(canister, vec![caller.get()])
+        .unwrap();
+
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_private_section".to_string()).encode();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args().other_side(canister_metadata_args),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reply = get_reply(result);
+    let response = CanisterMetadataResponse::decode(&reply).unwrap();
+    assert_eq!(response.value(), b"my_private_section_value");
 }
 
 #[test]

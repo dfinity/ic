@@ -1032,7 +1032,7 @@ impl ExecutionTest {
         self.canister_from_cycles_and_wat(self.initial_canister_cycles, wat)
     }
 
-    pub fn empty_canister(&mut self) -> CanisterId {
+    pub fn create_canister_with_default_cycles(&mut self) -> CanisterId {
         self.create_canister(self.initial_canister_cycles)
     }
 
