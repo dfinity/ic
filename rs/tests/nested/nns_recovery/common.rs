@@ -342,6 +342,14 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     info!(logger, "Recovery artifacts SHA256: {}", &artifacts_hash);
     impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
         .expect("Failed to serve recovery artifacts from UVM");
+    info!(
+        logger,
+        "Recovery artifacts SHA256 after transfer: {}",
+        Sha256::digest(&std::fs::read(&artifacts_path).unwrap())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>(),
+    );
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_guestos_image(
