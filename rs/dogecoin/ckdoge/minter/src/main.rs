@@ -1,7 +1,17 @@
-use ic_cdk::update;
+use ic_cdk::{init, post_upgrade, update};
 use ic_ckdoge_minter::candid_api::{
     RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
 };
+
+#[init]
+fn init() {
+    todo!()
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    todo!()
+}
 
 #[update]
 async fn retrieve_doge_with_approval(
@@ -74,10 +84,16 @@ fn check_candid_interface_compatibility() {
     // check the public interface against the actual one
     let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("ckdoge_minter.did");
+    let old_interface_content = std::fs::read_to_string(&old_interface)
+        .unwrap_or_else(|e| panic!("Failed to read interface file {:?}: {}", old_interface, e));
 
     service_equal(
-        CandidSource::Text(dbg!(&new_interface)),
-        CandidSource::File(old_interface.as_path()),
+        CandidSource::Text(&new_interface),
+        CandidSource::File(&old_interface),
     )
-    .unwrap();
+    .unwrap_or_else(|e| {
+        panic!(
+            "New interface {new_interface} is not equal to old interface {old_interface_content}: {e}",
+        )
+    });
 }
