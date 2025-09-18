@@ -4,7 +4,7 @@ use ic_base_types::PrincipalId;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::{Block, endpoints::StandardRecord};
 use ic_ledger_core::Tokens;
-use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::tokens::TokensType;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
