@@ -42,6 +42,10 @@ HTTP_ENDPOINTS_DEPS = [
     "//rs/http_endpoints/test_agent",
     "//rs/tests/consensus/utils",
     "//rs/types/types",
+    "//rs/universal_canister/lib",
+    "@crate_index//:candid",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
     "@crate_index//:url",
 ]
 
