@@ -30,7 +30,7 @@ Malformed HTTP request tests:
 1. Update call with omitted sender (anonymous principal) is rejected with 4xx.
 2. Update call with omitted request type is rejected with 4xx.
 3. Update call with wrong request type is rejected with 4xx.
-4. Update call with malformed textual representation of its effective canister ID.
+4. Update call with malformed textual representation of its effective canister ID is rejected with 4xx.
 
 end::catalog[] */
 
