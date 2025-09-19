@@ -1901,7 +1901,7 @@ pub struct StartServerParams {
     /// The server stops if no request has been received during its TTL
     /// and if there are no more pending requests.
     /// A default value of TTL is used if no `ttl` is specified here.
-    /// Note. The TTL might not be overriden if the same process sets `reuse` to `true`
+    /// Note: The TTL might not be overriden if the same process sets `reuse` to `true`
     /// and passes different values of `ttl`.
     pub ttl: Option<Duration>,
 }
