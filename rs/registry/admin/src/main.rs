@@ -5643,6 +5643,10 @@ async fn get_node_list_since(
                     dc_id,
                     hostos_version_id: node_record.hostos_version_id,
                     domain: node_record.domain,
+                    node_reward_type: NodeRewardType::try_from(
+                        node_record.node_reward_type.unwrap_or_default(),
+                    )
+                    .expect("Invalid node_reward_type value"),
                 },
             )
         })
