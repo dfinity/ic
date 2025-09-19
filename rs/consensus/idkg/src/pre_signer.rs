@@ -33,6 +33,10 @@ use ic_types::{
     },
     signature::BasicSignatureBatch,
 };
+use rayon::{
+    ThreadPool,
+    iter::{IntoParallelIterator, ParallelIterator},
+};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
@@ -74,6 +78,7 @@ pub struct IDkgPreSignerImpl {
     pub(crate) node_id: NodeId,
     pub(crate) consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
+    thread_pool: Arc<ThreadPool>,
     pub(crate) metrics: IDkgPreSignerMetrics,
     pub(crate) log: ReplicaLogger,
     validated_dealing_supports:
@@ -85,6 +90,7 @@ impl IDkgPreSignerImpl {
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
+        thread_pool: Arc<ThreadPool>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
@@ -92,6 +98,7 @@ impl IDkgPreSignerImpl {
             node_id,
             consensus_block_cache,
             crypto,
+            thread_pool,
             metrics: IDkgPreSignerMetrics::new(metrics_registry),
             log,
             validated_dealing_supports: RwLock::new(BTreeMap::new()),
@@ -112,41 +119,36 @@ impl IDkgPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
-        block_reader
-            .requested_transcripts()
-            .filter_map(|transcript_params_ref| {
-                let mut ret = None;
-                if let Some(transcript_params) =
-                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealings")
-                {
-                    // Issue a dealing if we are in the dealer list and we haven't
-                    //already issued a dealing for this transcript
-                    if transcript_params.dealers().contains(self.node_id)
+        let requested = block_reader.requested_transcripts().collect::<Vec<_>>();
+
+        self.thread_pool.install(|| {
+            requested
+                .into_par_iter()
+                .filter(|transcript_params_ref| {
+                    transcript_params_ref.dealers.contains(&self.node_id)
                         && !self.has_dealer_issued_dealing(
                             idkg_pool,
-                            &transcript_params.transcript_id(),
+                            &transcript_params_ref.transcript_id,
                             &self.node_id,
                         )
-                    {
-                        ret = Some(transcript_params);
+                })
+                .flat_map(|transcript_params_ref| {
+                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealings")
+                })
+                .flat_map(|transcript_params| {
+                    if target_subnet_xnet_transcripts.contains(&transcript_params.transcript_id()) {
+                        self.metrics
+                            .pre_sign_errors_inc("create_dealing_for_xnet_transcript");
+                        warn!(
+                            self.log,
+                            "Dealing creation: dealing for target xnet dealing: {:?}",
+                            transcript_params,
+                        );
                     }
-                }
-                ret
-            })
-            .flat_map(|transcript_params| {
-                if target_subnet_xnet_transcripts.contains(&transcript_params.transcript_id()) {
-                    self.metrics
-                        .pre_sign_errors_inc("create_dealing_for_xnet_transcript");
-                    warn!(
-                        self.log,
-                        "Dealing creation: dealing for target xnet dealing: {:?}",
-                        transcript_params,
-                    );
-                }
-
-                self.crypto_create_dealing(idkg_pool, transcript_loader, &transcript_params)
-            })
-            .collect()
+                    self.crypto_create_dealing(idkg_pool, transcript_loader, &transcript_params)
+                })
+                .collect()
+        })
     }
 
     /// Processes the dealings received from peer dealers
