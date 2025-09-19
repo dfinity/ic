@@ -1,34 +1,40 @@
 /* tag::catalog[]
-Title:: Basic HTTP requests from canisters
+Title:: IC public HTTP interface tests.
 
-Goal:: Ensure simple HTTP requests can be made from canisters.
+Goal:: IC public HTTP interface complies with public Interface Specification.
 
 Runbook::
-0. Create an IC with two subnets with one node each
-1. Instanciate two universal canisters, two on the system subnet, one on the app subnet
-2. Run the specific spec tests
+0. Create an IC with one API BN and two subnets (one system subnet and one app subnet) each with one node.
+1. Instantiate two universal canisters on the system subnet and one universal canister on the app subnet.
+2. Run the specific specification compliance tests.
 
 
 Success::
-1. Received expected http response code as per specification
+1. Received expected HTTP response code as per specification.
 
 
-Effective Canister test:
+Invalid effective canister ID tests:
 1. Update call with canister_id A to the endpoint /api/v{2,3,4}/canister/B/call with a different canister ID B in the URL is rejected with 4xx;
-2. Query call with canister_id A to the endpoint /api/v2/canister/B/query with a different canister ID B in the URL is rejected with 4xx;
+2. Query call with canister_id A to the endpoint /api/v{2,3}/canister/B/query with a different canister ID B in the URL is rejected with 4xx;
 3. Read state request for the path /canisters/A/controllers to the endpoints /api/{v2,v3}/canister/B/read_state with a different canister ID B in the URL is rejected with 4xx;
 4. Read state request for the path /time to the endpoints /api/{v2,v3}/canister/aaaaa-aa/read_state is rejected with 4xx.
 
 The different canister ID B is
 1. The canister ID of a different canister on the same subnet;
 2. The canister ID of a different canister on a different subnet;
-3. A malformed principal;
+3. A malformed principal (invalid textual representation);
 4. The management canister ID.
 
+
+Invalid HTTP request body tests:
+1. Update/query call and read state request with omitted request type is rejected with 4xx.
+2. Update/query call and read state request with omitted sender (anonymous principal) is rejected with 4xx.
+3. Update/query call and read state request sent to the endpoint for a different request type is rejected with 4xx.
 
 end::catalog[] */
 
 use anyhow::Result;
+use candid::Principal;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
@@ -47,10 +53,14 @@ use ic_system_test_driver::{
     systest,
     util::{UniversalCanister, block_on},
 };
+use ic_types::messages::HttpRequestEnvelope;
 use ic_types::{CanisterId, PrincipalId};
-use reqwest::Response;
+use ic_universal_canister::wasm;
+use reqwest::{Response, StatusCode};
+use serde::Serialize;
 use slog::{Logger, info};
 use std::net::SocketAddr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
 
 fn setup(env: TestEnv) {
@@ -237,6 +247,81 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
     });
 }
 
+fn invalid_http_request_body(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+    let subnet_replica_url = get_subnet_replica_url(&snapshot);
+    let api_bn_url = get_api_bn_url(&snapshot);
+
+    block_on(async {
+        for url in [subnet_replica_url, api_bn_url] {
+            let client = reqwest::Client::new();
+
+            let mut update_url = url;
+            update_url.set_path(&format!("/api/v2/canister/{}/call", primary));
+            info!(logger, "Well-formed update call to {}", update_url);
+            #[derive(Serialize)]
+            pub struct HttpCanisterUpdate {
+                pub canister_id: Vec<u8>,
+                pub method_name: String,
+                pub arg: Vec<u8>,
+                pub sender: Vec<u8>,
+                pub ingress_expiry: u64,
+            }
+            let ingress_expiry =
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
+            let envelope: HttpRequestEnvelope<HttpCanisterUpdate> = HttpRequestEnvelope {
+                content: HttpCanisterUpdate {
+                    canister_id: primary.get().as_slice().to_vec(),
+                    method_name: "update".to_string(),
+                    arg: wasm().reply().build(),
+                    sender: Principal::anonymous().as_slice().to_vec(),
+                    ingress_expiry: ingress_expiry.as_nanos() as u64,
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+            let bytes = serde_cbor::to_vec(&envelope).unwrap();
+            let resp = client
+                .post(update_url.clone())
+                .body(bytes)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+            info!(logger, "Malformed update call to {}", update_url);
+            #[derive(Serialize)]
+            pub struct MalformedHttpCanisterUpdate {
+                pub canister_id: Vec<u8>,
+                pub method_name: String,
+                pub arg: Vec<u8>,
+                pub ingress_expiry: u64,
+            }
+            let ingress_expiry =
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
+            let envelope: HttpRequestEnvelope<MalformedHttpCanisterUpdate> = HttpRequestEnvelope {
+                content: MalformedHttpCanisterUpdate {
+                    canister_id: primary.get().as_slice().to_vec(),
+                    method_name: "update".to_string(),
+                    arg: wasm().reply().build(),
+                    ingress_expiry: ingress_expiry.as_nanos() as u64,
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+            let bytes = serde_cbor::to_vec(&envelope).unwrap();
+            let resp = client.post(update_url).body(bytes).send().await.unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+            let bytes = resp.bytes().await.unwrap();
+            info!(logger, "Response bytes: {:?}", bytes);
+        }
+    });
+}
+
 async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16 {
     let status = response.status().as_u16();
     let text = if !(200..300).contains(&status) {
@@ -359,6 +444,7 @@ fn main() -> Result<()> {
         .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V3))
         .add_test(systest!(read_time; read_state::canister::Version::V2))
         .add_test(systest!(read_time; read_state::canister::Version::V3))
+        .add_test(systest!(invalid_http_request_body))
         .execute_from_args()?;
 
     Ok(())
