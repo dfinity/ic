@@ -73,7 +73,7 @@ download_and_verify_upgrade() {
 
     local download_successful=false
     for base_url in "${base_urls[@]}"; do
-        local url="${base_url}/ic/${version}/guest-os/update-img/update-img.tar.zst"
+        local url="${base_url}/ic/${version}/guest-os/update-img-recovery/update-img.tar.zst"
         echo "Attempting to download upgrade from $url..."
 
         if curl -L --fail -o "$tmpdir/upgrade.tar.zst" "$url"; then
@@ -180,7 +180,7 @@ main() {
     echo "Starting GuestOS Recovery Upgrader"
 
     VERSION="$(get_cmdline_var version)"
-    SHORT_HASH="$(get_cmdline_var hash)"
+    SHORT_HASH="$(get_cmdline_var version-hash)"
 
     if [ -z "$VERSION" ] || [ -z "$SHORT_HASH" ]; then
         echo "ERROR: Both version and hash parameters are required"

@@ -36,7 +36,7 @@ pub fn setup(env: TestEnv) {
 }
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
-/// This is much faster than the full config() setup.
+/// This is much faster than the full setup() setup.
 pub fn simple_setup(env: TestEnv) {
     NestedNodes::new(&[HOST_VM_NAME])
         .setup_and_start(&env)
@@ -282,7 +282,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             "Remounting /boot as read-write and updating boot_args file"
         );
         let boot_args_command = format!(
-            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={target_version} hash={target_short_hash}\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={target_version} version-hash={target_short_hash}\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
         );
         host.block_on_bash_script(&boot_args_command)
             .expect("Failed to update boot_args file");
