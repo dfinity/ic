@@ -62,7 +62,11 @@ system_test_nns(
     enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
-    tags = ["system_test_large"],
+    tags = [
+        # TODO: This test is highly flaky (50%) so we disable running it nightly for now and mark it as manual:
+        # "system_test_large"
+        "manual",
+    ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
