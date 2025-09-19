@@ -270,11 +270,11 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         info!(logger, "Current boot_args content:\n{}", current_boot_args);
 
         let target_version = get_guestos_update_img_version();
-        let target_short_hash = &get_guestos_update_img_sha256()[..6]; // node providers only expected to input the first 6 characters of the hash
+        let target_version_hash = get_guestos_update_img_sha256();
 
         info!(
             logger,
-            "Using target version: {} and short hash: {}", target_version, target_short_hash
+            "Using target version: {} and version-hash: {}", target_version, target_version_hash
         );
 
         info!(
@@ -282,7 +282,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             "Remounting /boot as read-write and updating boot_args file"
         );
         let boot_args_command = format!(
-            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={target_version} version-hash={target_short_hash}\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={target_version} version-hash={target_version_hash}\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
         );
         host.block_on_bash_script(&boot_args_command)
             .expect("Failed to update boot_args file");
