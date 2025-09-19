@@ -1,8 +1,9 @@
-use bitcoin::{BlockHash, Network, block::Header as BlockHeader};
+use bitcoin::{BlockHash, block::Header as BlockHeader};
 use criterion::measurement::Measurement;
-use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkGroup, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ic_btc_adapter::{
-    BlockchainNetwork, BlockchainState, Config, IncomingSource, MAX_HEADERS_SIZE, start_server,
+    BlockchainNetwork, BlockchainState, Config, HeaderValidator, IncomingSource, MAX_HEADERS_SIZE,
+    start_server,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
@@ -17,9 +18,9 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use rand::{CryptoRng, Rng};
 use sha2::Digest;
+use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
-use tempfile::Builder;
+use tempfile::{Builder, tempdir};
 
 type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
@@ -65,8 +66,13 @@ fn prepare(
     }
 }
 
+// This simulation constructs a blockchain comprising four forks, each of 2000 blocks.
+// For an extended BFS execution, the initial 1975 blocks of every branch are marked in
+// the request as being processed, with the aim to receive the last 25 blocks of each fork.
+// Performance metrics are captured from the sending of the deserialised request through
+// to receiving the response and its deserialisation.
 fn e2e(criterion: &mut Criterion) {
-    let network = Network::Regtest;
+    let network = bitcoin::Network::Regtest;
     let mut config = Config::default_with(network.into());
 
     let mut processed_block_hashes = vec![];
@@ -171,33 +177,85 @@ fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
     header
 }
 
-fn add_800k_block_headers(criterion: &mut Criterion) {
-    static BITCOIN_HEADERS: LazyLock<Vec<bitcoin::block::Header>> = LazyLock::new(|| {
-        let headers_data_path = PathBuf::from(
-            std::env::var("BITCOIN_MAINNET_HEADERS_DATA_PATH")
-                .expect("Failed to get test data path env variable"),
-        );
-        retrieve_headers::<bitcoin::Network>(&headers_data_path)
-    });
-    // Call BITCOIN_HEADERS once before benchmarking to avoid biasing the first sample (lazy instantiation).
+fn add_block_headers(criterion: &mut Criterion) {
+    add_block_headers_for(
+        criterion,
+        bitcoin::Network::Bitcoin,
+        "BITCOIN_MAINNET_HEADERS_DATA_PATH",
+        800_000,
+    );
+    add_block_headers_for(
+        criterion,
+        bitcoin::dogecoin::Network::Dogecoin,
+        "DOGECOIN_MAINNET_HEADERS_DATA_PATH",
+        800_000,
+    );
+}
+
+fn add_block_headers_for<Network: BlockchainNetwork + fmt::Display>(
+    criterion: &mut Criterion,
+    network: Network,
+    headers_data_env: &str,
+    expected_num_headers_to_add: usize,
+) where
+    Network::Header: for<'de> serde::Deserialize<'de>,
+    BlockchainState<Network>: HeaderValidator<Network>,
+{
+    let headers_data_path = PathBuf::from(
+        std::env::var(headers_data_env).expect("Failed to get test data path env variable"),
+    );
+    let headers = retrieve_headers::<Network>(&headers_data_path);
     // Genesis block header is automatically added when instantiating BlockchainState
-    let bitcoin_headers_to_add = &BITCOIN_HEADERS.as_slice()[1..];
-    assert_eq!(bitcoin_headers_to_add.len(), 800_000);
-    let mut group = criterion.benchmark_group("bitcoin_800k");
+    let headers_to_add = &headers.as_slice()[1..];
+    assert_eq!(headers_to_add.len(), expected_num_headers_to_add);
+    let mut group = criterion.benchmark_group(format!("{network}_{expected_num_headers_to_add}"));
     group.sample_size(10);
 
-    group.bench_function("add_headers", |bench| {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+    bench_add_headers(&mut group, network, headers_to_add);
+}
+
+fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
+    group: &mut BenchmarkGroup<'_, M>,
+    network: Network,
+    headers: &[Network::Header],
+) where
+    BlockchainState<Network>: HeaderValidator<Network>,
+{
+    fn add_headers<Network: BlockchainNetwork>(
+        blockchain_state: &mut BlockchainState<Network>,
+        headers: &[Network::Header],
+        runtime: &tokio::runtime::Runtime,
+    ) where
+        BlockchainState<Network>: HeaderValidator<Network>,
+    {
+        // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
+        for chunk in headers.chunks(MAX_HEADERS_SIZE) {
+            let (added_headers, error) =
+                runtime.block_on(async { blockchain_state.add_headers(chunk).await });
+            assert!(error.is_none(), "Failed to add headers: {}", error.unwrap());
+            assert_eq!(added_headers.len(), chunk.len())
+        }
+    }
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    group.bench_function(BenchmarkId::new("add_headers", "in_memory"), |bench| {
         bench.iter(|| {
-            let blockchain_state =
-                BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
-            // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
-            for chunk in bitcoin_headers_to_add.chunks(MAX_HEADERS_SIZE) {
-                let (added_headers, error) =
-                    rt.block_on(async { blockchain_state.add_headers(chunk).await });
-                assert!(error.is_none(), "Failed to add headers: {}", error.unwrap());
-                assert_eq!(added_headers.len(), chunk.len())
-            }
+            let mut blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+            add_headers(&mut blockchain_state, headers, &rt);
+        })
+    });
+
+    group.bench_function(BenchmarkId::new("add_headers", "lmdb"), |bench| {
+        bench.iter(|| {
+            let dir = tempdir().unwrap();
+            let mut blockchain_state = BlockchainState::new_with_cache_dir(
+                network,
+                dir.path().to_path_buf(),
+                &MetricsRegistry::default(),
+                no_op_logger(),
+            );
+            add_headers(&mut blockchain_state, headers, &rt);
         })
     });
 }
@@ -227,12 +285,7 @@ fn decompress<P: AsRef<Path>>(location: P) -> Vec<u8> {
     decompressed
 }
 
-// This simulation constructs a blockchain comprising four forks, each of 2000 blocks.
-// For an extended BFS execution, the initial 1975 blocks of every branch are marked in
-// the request as being processed, with the aim to receive the last 25 blocks of each fork.
-// Performance metrics are captured from the sending of the deserialised request through
-// to receiving the response and its deserialisation.
-criterion_group!(benches, e2e, hash_block_header, add_800k_block_headers);
+criterion_group!(benches, e2e, hash_block_header, add_block_headers);
 
 // The benchmark can be run using:
 // bazel run //rs/bitcoin/adapter:e2e_bench
