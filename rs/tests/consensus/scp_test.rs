@@ -19,7 +19,7 @@ fn setup(env: TestEnv) {
 }
 
 fn test(env: TestEnv) {
-    let expected_size: usize = 1457471;
+    let expected_size: usize = 20_000_000;
     let mut buffer = vec![0u8; expected_size];
     let mut rng = rand::thread_rng();
 
