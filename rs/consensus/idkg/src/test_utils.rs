@@ -1,7 +1,7 @@
 use crate::{
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
-    signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
+    signer::{ThresholdSignatureBuilder, ThresholdSignerImpl}, utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -411,6 +411,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        build_thread_pool(),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -431,6 +432,7 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
         NODE_1,
         pool.get_block_cache(),
         crypto,
+        build_thread_pool(),
         metrics_registry.clone(),
         logger.clone(),
     );

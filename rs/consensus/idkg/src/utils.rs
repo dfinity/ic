@@ -1,6 +1,7 @@
 //! Common utils for the IDKG implementation.
 
 use crate::{
+    MAX_PARALLELISM,
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
@@ -43,6 +44,7 @@ use ic_types::{
     registry::RegistryClientError,
 };
 use phantom_newtype::Id;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -610,6 +612,15 @@ impl<T: Ord + Copy> IDkgSchedule<T> {
         let prev = self.last_purge.replace(new);
         new > prev
     }
+}
+
+pub(crate) fn build_thread_pool() -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(MAX_PARALLELISM)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
 }
 
 #[cfg(test)]
