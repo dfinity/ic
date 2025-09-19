@@ -9,6 +9,7 @@ use ic_system_test_driver::systest;
 
 use anyhow::Result;
 use rand::Rng;
+use sha2::Sha256;
 use slog::info;
 
 fn setup(env: TestEnv) {
