@@ -513,8 +513,11 @@ fn instruction_and_reserved_cycles_exceed_canister_balance() {
     assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
 }
 
-fn reserved_cycles_memory_grow_to_full_capacity<F>(grow: F, expected_reserved_cycles: u128)
-where
+fn reserved_cycles_memory_grow_to_full_capacity<F>(
+    grow: F,
+    num_canisters: usize,
+    expected_reserved_cycles: u128,
+) where
     F: Fn(&StateMachine, CanisterId),
 {
     // Create application subnet `StateMachine`.
@@ -529,13 +532,12 @@ where
 
     // We create a few universal canisters with a lot of cycles and reserved cycles limit effectively turned off
     // (set to the full amount of initial cycles).
-    const NUM_CANISTERS: usize = 5;
     let mut canisters = vec![];
     let initial_cycles = Cycles::from(u128::MAX / 2);
     let settings = CanisterSettingsArgsBuilder::new()
         .with_reserved_cycles_limit(initial_cycles.get())
         .build();
-    for _ in 0..NUM_CANISTERS {
+    for _ in 0..num_canisters {
         let canister_id = env
             .install_canister_with_cycles(
                 UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -578,7 +580,7 @@ where
             initial_cycles,
         )
         .unwrap_err();
-    // If this fails, then `NUM_CANISTERS` might have to be increased to fill up the entire subnet.
+    // If this fails, then `num_canisters` might have to be increased to fill up the entire subnet.
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
 }
 
@@ -615,8 +617,13 @@ fn reserved_cycles_stable_memory_grow_to_full_capacity() {
     };
 
     // The total amount of reserved cycles to claim the full subnet memory capacity.
+    const NUM_CANISTERS: usize = 5; // we need multiple canisters since the stable memory of a single canister cannot fill the subnet
     const EXPECTED_RESERVED_CYCLES: u128 = 24_954 * T;
-    reserved_cycles_memory_grow_to_full_capacity(stable_grow, EXPECTED_RESERVED_CYCLES);
+    reserved_cycles_memory_grow_to_full_capacity(
+        stable_grow,
+        NUM_CANISTERS,
+        EXPECTED_RESERVED_CYCLES,
+    );
 }
 
 #[test]
@@ -649,6 +656,11 @@ fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
 
     // The total amount of reserved cycles to claim the full subnet memory capacity
     // while reserving a lot of memory at once.
+    const NUM_CANISTERS: usize = 1; // a single canister can fill the subnet with its memory allocation
     const EXPECTED_RESERVED_CYCLES: u128 = 35_136 * T;
-    reserved_cycles_memory_grow_to_full_capacity(ic00_grow, EXPECTED_RESERVED_CYCLES);
+    reserved_cycles_memory_grow_to_full_capacity(
+        ic00_grow,
+        NUM_CANISTERS,
+        EXPECTED_RESERVED_CYCLES,
+    );
 }
