@@ -389,7 +389,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     &env,
                     &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
-                    &recovery_img_hash[..6],
+                    &recovery_img_hash,
                     &artifacts_hash,
                 )
                 .await
@@ -459,7 +459,7 @@ async fn simulate_node_provider_action(
     env: &TestEnv,
     host: &NestedVm,
     img_version: &str,
-    img_short_hash: &str,
+    img_version_hash: &str,
     artifacts_hash: &str,
 ) {
     let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
@@ -472,7 +472,7 @@ async fn simulate_node_provider_action(
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_short_hash, &artifacts_hash
+        &img_version, &img_version_hash, &artifacts_hash
     );
     host.block_on_bash_script_async(&boot_args_command)
         .await

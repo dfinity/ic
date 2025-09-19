@@ -220,6 +220,7 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
@@ -1392,6 +1393,12 @@ pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
     fn get_host_ip(&self) -> Result<IpAddr>;
 
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    fn get_ssh_session(&self) -> Result<Session> {
+        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
+            .context("Failed to get SSH session")
+    }
+
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
     fn block_on_ssh_session(&self) -> Result<Session> {
         let ip = self.get_host_ip()?;
@@ -1400,10 +1407,7 @@ pub trait SshSession: HasTestEnv {
             self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
-            || {
-                get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
-                    .context("Failed to get SSH session")
-            }
+            || { self.get_ssh_session() }
         )
     }
 
@@ -1416,14 +1420,7 @@ pub trait SshSession: HasTestEnv {
             &self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
-            || async {
-                get_ssh_session_from_env_with_timeout(
-                    &self.test_env(),
-                    self.get_host_ip()?,
-                    RETRY_BACKOFF,
-                )
-                .context("Failed to get SSH session")
-            }
+            || async { self.get_ssh_session() }
         )
         .await
     }
@@ -2016,20 +2013,7 @@ where
 }
 
 pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
-    let tcp = TcpStream::connect((ip, 22))?;
-    get_ssh_session_from_env_impl(env, tcp)
-}
-
-pub fn get_ssh_session_from_env_with_timeout(
-    env: &TestEnv,
-    ip: IpAddr,
-    timeout: Duration,
-) -> Result<Session> {
-    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), timeout)?;
-    get_ssh_session_from_env_impl(env, tcp)
-}
-
-fn get_ssh_session_from_env_impl(env: &TestEnv, tcp: TcpStream) -> Result<Session> {
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;
