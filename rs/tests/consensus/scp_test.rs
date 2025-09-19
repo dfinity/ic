@@ -20,54 +20,23 @@ fn setup(env: TestEnv) {
 fn test(env: TestEnv) {
     let expected_size: usize = 1457471;
     let mut buffer = vec![0u8; expected_size];
-    rand::thread_rng().fill(&mut buffer[..]);
+    let mut rng = rand::thread_rng();
 
-    let path = get_dependency_path("test.txt");
-    let mut file = std::fs::File::create(&path).unwrap();
-    file.write_all(&buffer).unwrap();
+    for i in 0..100 {
+        info!(env.logger(), "Copying file iteration {}/100", i + 1);
 
-    let actual = path.metadata().unwrap().len() as usize;
-    assert_eq!(
-        actual, expected_size,
-        "Unexpected local file size: {actual} vs {expected_size}"
-    );
+        let path = get_dependency_path(&format!("test{-i}.txt"));
+        let mut file = std::fs::File::create(&path).unwrap();
+        rng.fill(&mut buffer[..]);
+        file.write_all(&buffer).unwrap();
 
-    let uvm = env.get_deployed_universal_vm("my_uvm").unwrap();
-    for i in 0..50 {
-        info!(
-            env.logger(),
-            "Phase 1 - Copying file iteration {}/50 to /tmp/test-{i}.txt",
-            i + 1
-        );
-
-        let session = uvm.block_on_ssh_session().unwrap();
-        scp_send_to(
-            env.logger(),
-            &session,
-            &path,
-            PathBuf::from(format!("/tmp/test-{i}.txt")).as_path(),
-            0o644,
-        );
-
-        let actual = uvm
-            .block_on_bash_script(&format!("wc -c /tmp/test-{i}.txt | awk '{{print $1}}'"))
-            .unwrap()
-            .trim()
-            .parse::<usize>()
-            .unwrap();
+        let actual = path.metadata().unwrap().len() as usize;
         assert_eq!(
             actual, expected_size,
-            "Unexpected remote file size: {actual} vs {expected_size}"
-        );
-    }
-
-    for i in 0..50 {
-        info!(
-            env.logger(),
-            "Phase 2 - Copying file iteration {}/50 to /tmp/test-{i}.txt",
-            i + 1
+            "Unexpected local file size: {actual} vs {expected_size}"
         );
 
+        let uvm = env.get_deployed_universal_vm("my_uvm").unwrap();
         let session = uvm.block_on_ssh_session().unwrap();
 
         uvm.block_on_bash_script_from_session(&session, &format!("mkdir -p /tmp/testdir-{i}"))
