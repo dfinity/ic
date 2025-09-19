@@ -12,17 +12,14 @@ use crate::{
     external_interfaces::{
         management::{
             CanisterStatusType, assert_no_snapshots, canister_status, get_canister_info,
-            rename_canister, set_exclusive_controller, set_original_controllers,
+            get_registry_version, rename_canister, set_exclusive_controller,
+            set_original_controllers,
         },
         registry::migrate_canister,
     },
 };
 use futures::future::join_all;
-use ic_cdk::{
-    api::time,
-    management_canister::{SubnetInfoArgs, subnet_info},
-    println,
-};
+use ic_cdk::{api::time, println};
 use std::{convert::Infallible, future::Future, iter::zip};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
@@ -229,31 +226,28 @@ pub async fn process_updated(
     let RequestState::UpdatedRoutingTable {
         request,
         stopped_since,
-        registry_version: _,
+        registry_version,
     } = request
     else {
         println!("Error: list_by UpdatedRoutingTable returned bad variant");
         return ProcessingResult::NoProgress;
     };
     // call both subnets
-    let Ok(_source_subnet_info) = subnet_info(&SubnetInfoArgs {
-        subnet_id: request.source_subnet,
-    })
-    .await
+    let ProcessingResult::Success(source_subnet_version) =
+        get_registry_version(request.source_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    let Ok(_target_subnet_info) = subnet_info(&SubnetInfoArgs {
-        subnet_id: request.target_subnet,
-    })
-    .await
+    let ProcessingResult::Success(target_subnet_version) =
+        get_registry_version(request.target_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    // TODO: this version of the CDK does not include registry_version in the response to subnet_info.
-    // if source_subnet_info.registry_version >= registry_version && target_subnet_info.registry_version >= registry_version {}
-    let now = time();
-    if now - stopped_since < 3 * 60 * 1_000_000_000 {
+    println!(
+        "Registry version: {} {} {}",
+        registry_version, source_subnet_version, target_subnet_version
+    );
+    if source_subnet_version < registry_version || target_subnet_version < registry_version {
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
