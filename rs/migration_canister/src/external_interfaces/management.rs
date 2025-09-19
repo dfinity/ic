@@ -42,10 +42,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
         Ok(_) => ProcessingResult::Success(()),
         // if we fail due to not being controller, this is a fatal failure
         Err(e) => {
-            println!(
-                "Call `update_settings` for {:?} failed {:?}",
-                canister_id, e
-            );
+            println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
             match e {
                 ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
                 | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
@@ -94,10 +91,7 @@ pub async fn set_original_controllers(
                 {
                     ProcessingResult::Success(())
                 } else {
-                    println!(
-                        "Call `update_settings` for {:?} failed {:?}",
-                        canister_id, e
-                    );
+                    println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
                     ProcessingResult::NoProgress
                 }
             }
@@ -157,7 +151,7 @@ pub async fn canister_status(
             Ok(canister_status) => ProcessingResult::Success(canister_status),
             Err(e) => {
                 println!(
-                    "Decoding `CanisterStatusResponse` for {:?}, {:?} failed: {:?}",
+                    "Decoding `CanisterStatusResponse` for {}, {} failed: {:?}",
                     canister_id, subnet_id, e
                 );
                 ProcessingResult::NoProgress
@@ -165,7 +159,7 @@ pub async fn canister_status(
         },
         Err(e) => {
             println!(
-                "Call `canister_status` for {:?}, {:?} failed {:?}",
+                "Call `canister_status` for {}, {} failed: {:?}",
                 canister_id, subnet_id, e
             );
             match e {
@@ -202,7 +196,7 @@ pub async fn get_canister_info(
     match canister_info(&args).await {
         Ok(canister_info) => ProcessingResult::Success(canister_info),
         Err(e) => {
-            println!("Call `canister_info` for {:?}, failed {:?}", canister_id, e);
+            println!("Call `canister_info` for {}, failed: {:?}", canister_id, e);
             ProcessingResult::NoProgress
         }
     }
@@ -249,7 +243,7 @@ pub async fn rename_canister(
     {
         Ok(_) => ProcessingResult::Success(()),
         Err(e) => {
-            println!("Call `rename_canister` for {:?} failed {:?}", target, e);
+            println!("Call `rename_canister` for {} failed: {:?}", target, e);
             // All fatal error conditions have been checked upfront and should not be possible now.
             // CanisterAlreadyExists, RenameCanisterNotStopped, RenameCanisterHasSnapshot.
             ProcessingResult::NoProgress
@@ -271,7 +265,7 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
         }
         Err(e) => {
             println!(
-                "Call `list_canister_snapshots` for {:?} failed: {:?}",
+                "Call `list_canister_snapshots` for {} failed: {:?}",
                 canister_id, e
             );
             ProcessingResult::NoProgress

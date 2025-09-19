@@ -348,7 +348,7 @@ impl<S, F> ProcessingResult<S, F> {
 
 impl<S, F> ProcessingResult<S, F>
 where
-    F: std::fmt::Debug,
+    F: std::fmt::Display,
 {
     /// Turns any `FatalFailure` into a `NoProgress`.
     ///
@@ -358,7 +358,7 @@ where
             ProcessingResult::Success(x) => ProcessingResult::Success(x),
             ProcessingResult::NoProgress => ProcessingResult::NoProgress,
             ProcessingResult::FatalFailure(f) => {
-                println!("Unreachable: Ignore failure {:?} and retry.", f);
+                println!("Unreachable: Ignore failure {} and retry.", f);
                 ProcessingResult::NoProgress
             }
         }
