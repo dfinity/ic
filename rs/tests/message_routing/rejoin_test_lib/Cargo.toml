@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 chrono = { workspace = true }

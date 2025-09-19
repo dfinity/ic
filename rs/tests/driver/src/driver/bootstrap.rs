@@ -1,3 +1,5 @@
+use crate::driver::ic_gateway_vm::HasIcGatewayVm;
+use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
@@ -16,10 +18,10 @@ use crate::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
-            get_build_setupos_config_image_tool, get_create_setupos_config_tool,
-            get_guestos_img_version, get_guestos_initial_update_img_sha256,
-            get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
-            get_setupos_img_version, try_get_guestos_img_version,
+            get_build_setupos_config_image_tool, get_guestos_img_version,
+            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
+            get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
+            try_get_guestos_img_version,
         },
         test_setup::InfraProvider,
     },
@@ -41,6 +43,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
+use setupos_image_config::{ConfigIni, DeploymentConfig};
 use slog::{Logger, info, warn};
 use std::{
     collections::BTreeMap,
@@ -56,9 +59,6 @@ use std::{
 };
 use url::Url;
 use zstd::stream::write::Encoder;
-
-use crate::driver::ic_gateway_vm::HasIcGatewayVm;
-use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -258,6 +258,7 @@ pub fn setup_and_start_vms(
         let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
+        let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behavior.clone());
         let tnet_node = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => tnet
@@ -276,6 +277,7 @@ pub fn setup_and_start_vms(
                 query_stats_epoch_length,
                 ipv4_config,
                 domain,
+                recovery_hash,
                 &t_env,
             )?;
 
@@ -476,6 +478,7 @@ fn create_config_disk_image(
     query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
+    recovery_hash: Option<String>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
@@ -498,6 +501,7 @@ fn create_config_disk_image(
         enable_trusted_execution_environment: None,
         use_node_operator_private_key: Some(true),
         use_ssh_authorized_keys: Some(true),
+        recovery_hash,
         inject_ic_crypto: Some(false),
         inject_ic_state: Some(false),
         inject_ic_registry_local_store: Some(false),
@@ -675,7 +679,6 @@ fn create_setupos_config_image(
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_build_setupos_config_image_tool();
-    let create_setupos_config = get_create_setupos_config_tool();
 
     let nested_vm = env.get_nested_vm(name)?;
 
@@ -706,44 +709,33 @@ fn create_setupos_config_image(
     let data_dir = tmp_dir.join("data");
     std::fs::create_dir_all(&data_dir)?;
 
-    // Prep config contents
-    let mut cmd = Command::new(create_setupos_config);
-    cmd.arg("--config-dir")
-        .arg(&config_dir)
-        .arg("--data-dir")
-        .arg(&data_dir)
-        .arg("--deployment-environment")
-        .arg("testnet")
-        .arg("--mgmt-mac")
-        .arg(&mac)
-        .arg("--ipv6-prefix")
-        .arg(&prefix)
-        .arg("--ipv6-gateway")
-        .arg(&gateway)
-        .arg("--memory-gb")
-        .arg((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).to_string())
-        .arg("--cpu")
-        .arg(cpu)
-        .arg("--nr-of-vcpus")
-        .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
-        .arg("--nns-urls")
-        .arg(nns_url.to_string())
-        .arg("--nns-public-key")
-        .arg(nns_public_key)
-        .arg("--node-reward-type")
-        .arg("type3.1")
-        .arg("--admin-keys")
-        .arg(ssh_authorized_pub_keys_dir.join("admin"));
+    let node_operator_private_key = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from);
 
-    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH")
-        && !node_key.trim().is_empty()
-    {
-        cmd.arg("--node-operator-private-key").arg(node_key);
-    }
-
-    if !cmd.status()?.success() {
-        bail!("Could not create SetupOS config");
-    }
+    setupos_image_config::create_setupos_config(
+        &config_dir,
+        &data_dir,
+        ConfigIni {
+            node_reward_type: Some("type3.1".to_string()),
+            ipv6_prefix: Some(prefix),
+            ipv6_gateway: Some(gateway.parse().context("Failed to parse ipv6 gateway")?),
+            ..ConfigIni::default()
+        },
+        node_operator_private_key.as_deref(),
+        Some(&ssh_authorized_pub_keys_dir.join("admin")),
+        DeploymentConfig {
+            nns_urls: Some(nns_url.clone()),
+            nns_public_key: Some(nns_public_key.to_string()),
+            memory_gb: Some((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).get() as u32),
+            cpu: Some(cpu.to_string()),
+            nr_of_vcpus: Some((HOSTOS_VCPUS_PER_VM / 2).get() as u32),
+            mgmt_mac: Some(mac.to_string()),
+            deployment_environment: Some(DeploymentEnvironment::Testnet),
+        },
+    )
+    .context("Could not create SetupOS config")?;
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
