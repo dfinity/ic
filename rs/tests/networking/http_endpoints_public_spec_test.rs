@@ -356,7 +356,7 @@ fn malformed_http_request(env: TestEnv) {
                 logger.clone(),
                 malformed_url.clone(),
                 valid_content,
-                "Invalid URL: Cannot parse `effective_canister_id` with value `this-is-not-a-valid-canister-id`: Text must be in valid Base32 encoding.".to_string(),
+                "Text must be in valid Base32 encoding.".to_string(),
             )
             .await;
         }
