@@ -159,6 +159,48 @@ install_upgrade() {
     echo "Upgrade installation complete"
 }
 
+download_and_verify_recovery() {
+    local expected_recovery_hash="$1"
+    local tmpdir="$2"
+
+    local base_urls=(
+        "https://download.dfinity.systems"
+        "https://download.dfinity.network"
+    )
+
+    local download_successful=false
+    for base_url in "${base_urls[@]}"; do
+        local recovery_url="${base_url}/recovery/${expected_recovery_hash}/recovery.tar.zst"
+        echo "Attempting to download recovery artifact from $recovery_url..."
+
+        if curl --proto '=https' --location --proto-redir '=https' --tlsv1.2 --silent --show-error --fail -o "$tmpdir/recovery.tar.zst" "$recovery_url"; then
+            echo "Download from $base_url completed successfully"
+            download_successful=true
+            break
+        else
+            echo "WARNING: Failed to download from $base_url"
+            # Remove partial download file if it exists
+            rm -f "$tmpdir/recovery.tar.zst"
+        fi
+    done
+
+    if [ "$download_successful" = false ]; then
+        echo "ERROR: Failed to download recovery artifact from all available URLs"
+        return 1
+    fi
+
+    echo "Verifying recovery artifact hash..."
+    local actual_hash=$(sha256sum "$tmpdir/recovery.tar.zst" | cut -d' ' -f1)
+    if [ "$actual_hash" != "$expected_recovery_hash" ]; then
+        echo "ERROR: Recovery artifact hash verification failed"
+        echo "Expected hash: $expected_recovery_hash"
+        echo "Got hash: $actual_hash"
+        return 1
+    fi
+    echo "Recovery artifact hash verification successful"
+    return 0
+}
+
 guestos_upgrade_cleanup() {
     echo "Starting cleanup"
     if [ -n "${grubdir}" ] && mountpoint -q "${grubdir}"; then
@@ -180,15 +222,17 @@ main() {
 
     VERSION="$(get_cmdline_var version)"
     VERSION_HASH="$(get_cmdline_var version-hash)"
+    RECOVERY_HASH="$(get_cmdline_var recovery-hash)"
 
-    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
-        echo "ERROR: Both version and version-hash parameters are required"
-        echo "Usage: version=<commit-hash> version-hash=<sha256>"
+    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ] || [ -z "$RECOVERY_HASH" ]; then
+        echo "ERROR: version, version-hash, and recovery-hash parameters are required"
+        echo "Usage: version=<commit-hash> version-hash=<sha256> recovery-hash=<sha256>"
         exit 1
     fi
 
     echo "Version: $VERSION"
     echo "Version hash: $VERSION_HASH"
+    echo "Recovery hash: $RECOVERY_HASH"
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
@@ -218,6 +262,32 @@ main() {
 
     if [ $attempt -gt $MAX_ATTEMPTS ]; then
         echo "ERROR: Failed to download and verify upgrade file after $MAX_ATTEMPTS attempts"
+        exit 1
+    fi
+
+    echo "Starting recovery artifact download and verification with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
+
+    attempt=1
+    while [ $attempt -le $MAX_ATTEMPTS ]; do
+        echo "=== Recovery download attempt $attempt/$MAX_ATTEMPTS ==="
+
+        if download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
+            echo "✓ Recovery download and verification completed successfully on attempt $attempt"
+            break
+        else
+            echo "✗ Recovery download and verification failed on attempt $attempt"
+
+            if [ $attempt -lt $MAX_ATTEMPTS ]; then
+                echo "Waiting ${RETRY_DELAY} seconds before retry..."
+                sleep $RETRY_DELAY
+            fi
+        fi
+
+        ((attempt++))
+    done
+
+    if [ $attempt -gt $MAX_ATTEMPTS ]; then
+        echo "ERROR: Failed to download and verify recovery artifact after $MAX_ATTEMPTS attempts"
         exit 1
     fi
 
