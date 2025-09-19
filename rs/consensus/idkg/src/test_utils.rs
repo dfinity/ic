@@ -1,7 +1,8 @@
 use crate::{
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
-    signer::{ThresholdSignatureBuilder, ThresholdSignerImpl}, utils::build_thread_pool,
+    signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
+    utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
