@@ -564,18 +564,14 @@ impl TryFrom<NumBytes> for MemoryAllocation {
                 bytes.get(),
             )));
         }
-        // A memory allocation of 0 means that the canister's memory growth will be
-        // best-effort.
-        if bytes.get() == 0 {
-            Ok(MemoryAllocation::BestEffort)
-        } else {
-            Ok(MemoryAllocation::Reserved(bytes))
-        }
+        MemoryAllocation::new_unchecked(bytes)
     }
 }
 
 impl MemoryAllocation {
-    // TODO: replace by `From<NumBytes>` after dropping the bound `MAX_MEMORY_ALLOCATION`
+    // This function should only be used when loading a checkpoint.
+    // Otherwise, `TryFrom<NumBytes>` must be used.
+    // TODO: replace by `From<NumBytes>` after dropping the bound `MAX_MEMORY_ALLOCATION`.
     pub fn new_unchecked(bytes: NumBytes) -> Self {
         // A memory allocation of 0 means that the canister's memory growth will be
         // best-effort.
