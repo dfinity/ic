@@ -20,6 +20,8 @@ on the process that this file is part of, see
 * Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
   proposal.
 
+* Record votes by known neurons before clearing ballots.
+
 ## Changed
 
 ## Deprecated

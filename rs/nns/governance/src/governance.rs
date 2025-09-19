@@ -12,6 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
+    is_known_neuron_voting_history_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -69,7 +70,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
-    storage::VOTING_POWER_SNAPSHOTS,
+    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store_mut},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -6915,6 +6916,8 @@ impl Governance {
             );
         }
 
+        let known_neuron_ids = self.neuron_store.list_known_neuron_ids();
+
         // Mark the proposals that we just considered as "rewarded". More
         // formally, causes their reward_status to be Settled; whereas, before,
         // they were in the ReadyToSettle state.
@@ -6947,7 +6950,8 @@ impl Governance {
                         })
                     };
                     p.reward_event_round = new_reward_event.day_after_genesis;
-                    p.ballots.clear();
+                    let ballots = std::mem::take(&mut p.ballots);
+                    record_known_neuron_votes(&known_neuron_ids, *pid, ballots);
                 }
             };
         }
@@ -8249,6 +8253,21 @@ impl From<ic_nervous_system_clients::canister_status::CanisterStatusType>
     }
 }
 
+fn record_known_neuron_votes(
+    known_neuron_ids: &[NeuronId],
+    proposal_id: ProposalId,
+    ballots: HashMap<u64, Ballot>,
+) {
+    if is_known_neuron_voting_history_enabled() {
+        for known_neuron_id in known_neuron_ids {
+            if let Some(ballot) = ballots.get(&known_neuron_id.id) {
+                with_voting_history_store_mut(|voting_history_store| {
+                    voting_history_store.record_vote(*known_neuron_id, proposal_id, ballot.vote());
+                });
+            }
+        }
+    }
+}
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
