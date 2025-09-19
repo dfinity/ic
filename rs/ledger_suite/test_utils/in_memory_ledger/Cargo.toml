@@ -20,3 +20,8 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+
+[features]
+default = []
+u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+icp-tokens = []

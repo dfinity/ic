@@ -19,9 +19,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
-ALIASES = {
-}
-
 [
     rust_library(
         name = "ic-ledger-suite-in-memory-ledger" + name_suffix,
