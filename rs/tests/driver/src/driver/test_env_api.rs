@@ -2017,7 +2017,7 @@ where
 }
 
 pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
-    let tcp = TcpStream::connect_timeout((ip, 22), TCP_CONNECT_TIMEOUT)?;
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;
