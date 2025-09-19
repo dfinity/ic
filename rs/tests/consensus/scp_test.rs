@@ -25,7 +25,7 @@ fn test(env: TestEnv) {
     for i in 0..100 {
         info!(env.logger(), "Copying file iteration {}/100", i + 1);
 
-        let path = get_dependency_path(&format!("test-{i}.txt"));
+        let path = get_dependency_path(format!("test-{i}.txt"));
         let mut file = std::fs::File::create(&path).unwrap();
         rng.fill(&mut buffer[..]);
         file.write_all(&buffer).unwrap();
