@@ -12,7 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
-use ic_types::{CanisterId, Cycles, MAX_MEMORY_ALLOCATION, NumBytes};
+use ic_types::{CanisterId, Cycles, NumBytes};
 use more_asserts::{assert_gt, assert_lt};
 
 const B: u128 = 1_000_000_000;
@@ -531,8 +531,7 @@ where
     // (set to the full amount of initial cycles).
     const NUM_CANISTERS: usize = 5;
     let mut canisters = vec![];
-    let instruction_cycles = 100 * T; // instructions should not take up more than 100T cycles
-    let initial_cycles = Cycles::from(expected_reserved_cycles + instruction_cycles);
+    let initial_cycles = Cycles::from(u128::MAX / 2);
     let settings = CanisterSettingsArgsBuilder::new()
         .with_reserved_cycles_limit(initial_cycles.get())
         .build();
@@ -626,8 +625,8 @@ fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
         // Set memory allocation to `total` WASM pages.
         let mut total = 0;
         // `pages` specify the increase of memory allocation in WASM pages at a time.
-        // We use the maximum possible initial value to reserve a lot of memory at once in this test.
-        let mut pages = MAX_MEMORY_ALLOCATION.get();
+        // We use a very large initial value to reserve a lot of memory at once in this test.
+        let mut pages = 1 << 47; // `1 << 63` bytes
         loop {
             let settings = CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation((total + pages) << 16) // memory allocation is in bytes
@@ -650,6 +649,6 @@ fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
 
     // The total amount of reserved cycles to claim the full subnet memory capacity
     // while reserving a lot of memory at once.
-    const EXPECTED_RESERVED_CYCLES: u128 = 41_449 * T;
+    const EXPECTED_RESERVED_CYCLES: u128 = 35_136 * T;
     reserved_cycles_memory_grow_to_full_capacity(ic00_grow, EXPECTED_RESERVED_CYCLES);
 }

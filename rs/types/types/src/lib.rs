@@ -515,15 +515,6 @@ impl PartialOrd for MemoryAllocation {
     }
 }
 
-/// The error that occurs when an end-user specifies an invalid
-/// [`MemoryAllocation`].
-#[derive(Clone, Debug)]
-pub struct InvalidMemoryAllocationError {
-    pub min: candid::Nat,
-    pub max: candid::Nat,
-    pub given: candid::Nat,
-}
-
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// The upper limit on the stable memory size.
@@ -541,35 +532,14 @@ pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
 pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 6 * GIB;
 
-const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
-pub const MAX_MEMORY_ALLOCATION: NumBytes =
-    NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES);
-
-impl InvalidMemoryAllocationError {
-    pub fn new(given: candid::Nat) -> Self {
-        Self {
-            min: candid::Nat::from(MIN_MEMORY_ALLOCATION.get()),
-            max: candid::Nat::from(MAX_MEMORY_ALLOCATION.get()),
-            given,
-        }
-    }
-}
-
-impl TryFrom<NumBytes> for MemoryAllocation {
-    type Error = InvalidMemoryAllocationError;
-
-    fn try_from(bytes: NumBytes) -> Result<Self, Self::Error> {
-        if bytes > MAX_MEMORY_ALLOCATION {
-            return Err(InvalidMemoryAllocationError::new(candid::Nat::from(
-                bytes.get(),
-            )));
-        }
+impl From<NumBytes> for MemoryAllocation {
+    fn from(bytes: NumBytes) -> Self {
         // A memory allocation of 0 means that the canister's memory growth will be
         // best-effort.
         if bytes.get() == 0 {
-            Ok(MemoryAllocation::BestEffort)
+            MemoryAllocation::BestEffort
         } else {
-            Ok(MemoryAllocation::Reserved(bytes))
+            MemoryAllocation::Reserved(bytes)
         }
     }
 }

@@ -16,9 +16,8 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SnapshotId, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, InvalidComputeAllocationError, MemoryAllocation,
+    NumBytes, NumInstructions, PrincipalId, SnapshotId, SubnetId,
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext},
 };
@@ -260,7 +259,6 @@ impl InstallCodeContext {
 #[derive(Debug)]
 pub enum InstallCodeContextError {
     ComputeAllocation(InvalidComputeAllocationError),
-    MemoryAllocation(InvalidMemoryAllocationError),
     InvalidHash(String),
 }
 
@@ -276,13 +274,6 @@ impl From<InstallCodeContextError> for UserError {
                     err.given()
                 ),
             ),
-            InstallCodeContextError::MemoryAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
-                ),
-            ),
             InstallCodeContextError::InvalidHash(err) => {
                 UserError::new(ErrorCode::CanisterContractViolation, err)
             }
@@ -293,12 +284,6 @@ impl From<InstallCodeContextError> for UserError {
 impl From<InvalidComputeAllocationError> for InstallCodeContextError {
     fn from(err: InvalidComputeAllocationError) -> Self {
         Self::ComputeAllocation(err)
-    }
-}
-
-impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidMemoryAllocationError) -> Self {
-        Self::MemoryAllocation(err)
     }
 }
 
