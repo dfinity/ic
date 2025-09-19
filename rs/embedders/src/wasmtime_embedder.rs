@@ -26,7 +26,7 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions, NumOsPages,
+    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
