@@ -44,6 +44,7 @@ rust_library(
         "//rs/ic_os/config:config_lib_dev",
         "//rs/ic_os/config_types",
         "//rs/ic_os/deterministic_ips",
+        "//rs/ic_os/dev_test_tools/setupos-image-config",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/ledger_suite/common/ledger_core",

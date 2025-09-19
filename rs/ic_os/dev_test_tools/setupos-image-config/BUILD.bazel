@@ -37,22 +37,3 @@ rust_binary(
         "@crate_index//:tokio",
     ],
 )
-
-rust_binary(
-    name = "setupos-create-config",
-    srcs = ["src/bin/create.rs"],
-    version = "0.1.0",
-    visibility = [
-        "//rs:ic-os-pkg",
-        "//rs:system-tests-pkg",
-    ],
-    deps = [
-        ":setupos-image-config",
-        "//rs/ic_os/config:config_lib",
-        "//rs/ic_os/config_types",
-        "@crate_index//:anyhow",
-        "@crate_index//:clap",
-        "@crate_index//:serde_json",
-        "@crate_index//:tokio",
-    ],
-)
