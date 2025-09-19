@@ -310,6 +310,8 @@ pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + Par
             serde_json::to_string_pretty(&state).expect("Failed to stringify the recovery state"),
         );
 
+        // In system tests where `recovery_args.skip_prompts` is set, we want to execute the CLI
+        // arguments without making any assumptions on the saved state.
         if !recovery_args.skip_prompts
             && consent_given(logger, "Resume previously started recovery?")
         {
