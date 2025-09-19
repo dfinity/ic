@@ -1220,10 +1220,6 @@ pub fn get_build_setupos_config_image_tool() -> PathBuf {
     get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG")
 }
 
-pub fn get_create_setupos_config_tool() -> PathBuf {
-    get_dependency_path_from_env("ENV_DEPS__SETUPOS_CREATE_CONFIG")
-}
-
 pub trait HasGroupSetup {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }

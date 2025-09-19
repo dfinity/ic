@@ -64,7 +64,7 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .unwrap();
 }
 
-pub fn uvm_serve_guestos_image(
+pub fn uvm_serve_recovery_image(
     env: &TestEnv,
     image_path: &Path,
     image_version: &str,
@@ -79,7 +79,7 @@ pub fn uvm_serve_guestos_image(
         env,
         image_path,
         Path::new(&format!(
-            "ic/{image_version}/guest-os/update-img/update-img.tar.zst"
+            "ic/{image_version}/guest-os/update-img-recovery/update-img.tar.zst"
         )),
     )?;
 
@@ -89,7 +89,7 @@ pub fn uvm_serve_guestos_image(
         "Remote image checksum: {}",
         uvm.block_on_bash_script(&format!(
             r#"
-            sha256sum {WEB_ROOT}/ic/{image_version}/guest-os/update-img/update-img.tar.zst
+            sha256sum {WEB_ROOT}/ic/{image_version}/guest-os/update-img-recovery/update-img.tar.zst
         "#
         ))?
     );
@@ -99,7 +99,7 @@ pub fn uvm_serve_guestos_image(
         "Length of remote recovery-GuestOS image: {}",
         uvm.block_on_bash_script(&format!(
             r#"
-            wc -c {WEB_ROOT}/ic/{image_version}/guest-os/update-img/update-img.tar.zst | awk '{{print $1}}'
+            wc -c {WEB_ROOT}/ic/{image_version}/guest-os/update-img-recovery/update-img.tar.zst | awk '{{print $1}}'
         "#
         ))?,
     );
