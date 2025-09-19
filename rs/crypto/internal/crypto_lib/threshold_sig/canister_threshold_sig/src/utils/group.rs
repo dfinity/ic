@@ -247,7 +247,7 @@ impl EccScalar {
         for s in scalars {
             // This will fail if any of the elements are not of the
             // expected curve type
-            accum = accum.mul(&s)?;
+            accum = accum.mul(s)?;
             products.push(accum.clone());
         }
 
@@ -265,9 +265,9 @@ impl EccScalar {
             Ok(result)
         } else {
             // There was a zero...
-            Err(CanisterThresholdError::InvalidArguments(format!(
-                "Zero during batch inversion"
-            )))
+            Err(CanisterThresholdError::InvalidArguments(
+                "Zero during batch inversion".to_string(),
+            ))
         }
     }
 
