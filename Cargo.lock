@@ -14210,6 +14210,7 @@ dependencies = [
  "serde_json",
  "serde_regex",
  "serde_yaml",
+ "setupos-image-config",
  "slog",
  "slog-async",
  "slog-term",
