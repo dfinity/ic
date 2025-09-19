@@ -564,7 +564,7 @@ impl TryFrom<NumBytes> for MemoryAllocation {
                 bytes.get(),
             )));
         }
-        MemoryAllocation::new_unchecked(bytes)
+        Ok(MemoryAllocation::new_unchecked(bytes))
     }
 }
 
