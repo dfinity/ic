@@ -16,7 +16,7 @@ use std::{
 };
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
-pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(99);
+pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
 // TODO:
 // - test all conditions of validation after the MC is unique controller and fail there.
@@ -97,6 +97,17 @@ async fn setup(
     // Setup a unique controller each, and a shared one.
     let source_controllers = vec![c1, c2];
     let target_controllers = vec![c1, c3];
+
+    // install fresh version of registry canister:
+    let registry_wasm = Project::cargo_bin_maybe_from_env("registry-canister", &[]);
+    pic.upgrade_canister(
+        REGISTRY_CANISTER_ID.into(),
+        registry_wasm.bytes(),
+        vec![],
+        Some(Principal::from_text("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap()), /* root canister */
+    )
+    .await
+    .unwrap();
 
     let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
 
