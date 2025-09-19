@@ -27,8 +27,8 @@ ic-icrc1-tokens-u64 = { path = "../../icrc1/tokens_u64" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
+ic-ledger-suite-state-machine-helpers = { path = "../../test_utils/state_machine_helpers" }
 ic-ledger-suite-state-machine-tests-constants = { path = "constants" }
-ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
@@ -41,7 +41,6 @@ icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = { workspace = true }
-serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [features]

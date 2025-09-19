@@ -9924,6 +9924,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
  "ic-ledger-suite-state-machine-tests-constants",
  "ic-nns-test-utils-golden-nns-state",
@@ -9990,10 +9991,10 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
  "ic-metrics-encoder",
  "ic-registry-subnet-type",
- "ic-rosetta-test-utils",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -10034,6 +10035,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
  "ic-ledger-suite-state-machine-tests-constants",
  "ic-metrics-encoder",
@@ -10451,6 +10453,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-suite-state-machine-helpers"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-http-types",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "ic-management-canister-types-private",
+ "ic-state-machine-tests",
+ "ic-types",
+ "ic-universal-canister",
+ "icp-ledger",
+ "icrc-ledger-types",
+ "num-traits",
+]
+
+[[package]]
 name = "ic-ledger-suite-state-machine-tests"
 version = "0.9.0"
 dependencies = [
@@ -10474,10 +10494,10 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests-constants",
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
- "ic-rosetta-test-utils",
  "ic-state-machine-tests",
  "ic-types",
  "ic-universal-canister",
@@ -10488,7 +10508,6 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
- "serde",
  "serde_bytes",
 ]
 
@@ -10740,6 +10759,8 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_cbor",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tempfile",
  "tokio",
 ]
@@ -15463,6 +15484,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
  "ic-ledger-test-utils",
  "ic-nns-constants",
@@ -16529,6 +16551,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
  "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
@@ -24188,7 +24211,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
