@@ -90,7 +90,7 @@ fn poly_compute_lagrange(c: &mut Criterion) {
         for n in [13, 34, 40] {
             let node_indicies = (0..n).collect::<Vec<NodeIndex>>();
 
-            group.bench_function(&format!("setup/{n}"), |b| {
+            group.bench_function(format!("setup/{n}"), |b| {
                 b.iter(|| {
                     let _ = LagrangeCoefficients::at_zero(curve, &node_indicies);
                 })

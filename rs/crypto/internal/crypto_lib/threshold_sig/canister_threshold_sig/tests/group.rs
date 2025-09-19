@@ -685,7 +685,7 @@ fn test_scalar_inversion() -> CanisterThresholdResult<()> {
                 assert_eq!(inverses.len(), scalars.len());
 
                 for (s, i) in scalars.iter().zip(&inverses) {
-                    assert_eq!(hex::encode(s.mul(&i)?.serialize()), hex_one);
+                    assert_eq!(hex::encode(s.mul(i)?.serialize()), hex_one);
                 }
             }
         }

@@ -36,7 +36,7 @@ fn scalar_math(c: &mut Criterion) {
         group.bench_function("add", |b| {
             b.iter_batched_ref(
                 || random_scalar_pair(curve_type, rng),
-                |(x, y)| x.add(&y),
+                |(x, y)| x.add(y),
                 BatchSize::SmallInput,
             )
         });
@@ -44,7 +44,7 @@ fn scalar_math(c: &mut Criterion) {
         group.bench_function("mul", |b| {
             b.iter_batched_ref(
                 || random_scalar_pair(curve_type, rng),
-                |(x, y)| x.add(&y),
+                |(x, y)| x.mul(y),
                 BatchSize::SmallInput,
             )
         });
@@ -69,7 +69,7 @@ fn scalar_math(c: &mut Criterion) {
             group.bench_function(format!("batch_invert_vartime_{}", n), |b| {
                 b.iter_batched_ref(
                     || n_random_scalar(n, curve_type, rng),
-                    |x| EccScalar::batch_invert_vartime(&x),
+                    |x| EccScalar::batch_invert_vartime(x),
                     BatchSize::SmallInput,
                 )
             });
