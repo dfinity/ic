@@ -22,14 +22,15 @@ Invalid effective canister ID tests:
 The different canister ID B is
 1. The canister ID of a different canister on the same subnet;
 2. The canister ID of a different canister on a different subnet;
-3. A malformed principal (invalid textual representation);
+3. Invalid canister ID (non-existing canister, user ID).
 4. The management canister ID.
 
 
-Invalid HTTP request body tests:
+Malformed HTTP request tests:
 1. Update call with omitted sender (anonymous principal) is rejected with 4xx.
 2. Update call with omitted request type is rejected with 4xx.
 3. Update call with wrong request type is rejected with 4xx.
+4. Update call with malformed textual representation of its effective canister ID.
 
 end::catalog[] */
 
@@ -53,12 +54,13 @@ use ic_system_test_driver::{
     systest,
     util::{UniversalCanister, block_on},
 };
-use ic_types::messages::{Blob, HttpRequestEnvelope};
 use ic_types::{CanisterId, PrincipalId};
 use ic_universal_canister::wasm;
+use maplit::btreemap;
 use reqwest::{Response, StatusCode};
-use serde::Serialize;
+use serde_cbor::Value;
 use slog::{Logger, info};
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
@@ -247,7 +249,7 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
     });
 }
 
-fn invalid_http_request_body(env: TestEnv) {
+fn malformed_http_request(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _test_ids) = get_canister_test_ids(&snapshot);
@@ -256,40 +258,27 @@ fn invalid_http_request_body(env: TestEnv) {
 
     block_on(async {
         for url in [subnet_replica_url, api_bn_url] {
+            let mut update_url = url.clone();
+            update_url.set_path(&format!("/api/v2/canister/{}/call", primary));
+
+            let ingress_expiry =
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
+            let valid_content = btreemap! {
+                Value::Text("request_type".to_string()) => Value::Text("call".to_string()),
+                Value::Text("canister_id".to_string()) => Value::Bytes(primary.get().as_slice().to_vec()),
+                Value::Text("method_name".to_string()) => Value::Text("update".to_string()),
+                Value::Text("arg".to_string()) => Value::Bytes(wasm().reply().build()),
+                Value::Text("sender".to_string()) => Value::Bytes(Principal::anonymous().as_slice().to_vec()),
+                Value::Text("ingress_expiry".to_string()) => Value::Integer(ingress_expiry.as_nanos() as i128),
+            };
+            let envelope = |content: BTreeMap<Value, Value>| {
+                Value::Map(btreemap! {Value::Text("content".to_string()) => Value::Map(content) })
+            };
+            let bytes = serde_cbor::to_vec(&envelope(valid_content.clone())).unwrap();
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
                 .unwrap();
-
-            let mut update_url = url;
-            update_url.set_path(&format!("/api/v2/canister/{}/call", primary));
-
-            info!(logger, "Well-formed update call to {}", update_url);
-            #[derive(Serialize)]
-            pub struct HttpCanisterUpdate {
-                pub request_type: String,
-                pub canister_id: Blob,
-                pub method_name: String,
-                pub arg: Blob,
-                pub sender: Blob,
-                pub ingress_expiry: u64,
-            }
-            let ingress_expiry =
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
-            let envelope: HttpRequestEnvelope<HttpCanisterUpdate> = HttpRequestEnvelope {
-                content: HttpCanisterUpdate {
-                    request_type: "call".to_string(),
-                    canister_id: Blob(primary.get().as_slice().to_vec()),
-                    method_name: "update".to_string(),
-                    arg: Blob(wasm().reply().build()),
-                    sender: Blob(Principal::anonymous().as_slice().to_vec()),
-                    ingress_expiry: ingress_expiry.as_nanos() as u64,
-                },
-                sender_pubkey: None,
-                sender_sig: None,
-                sender_delegation: None,
-            };
-            let bytes = serde_cbor::to_vec(&envelope).unwrap();
             let resp = client
                 .post(update_url.clone())
                 .header("Content-Type", "application/cbor")
@@ -299,119 +288,77 @@ fn invalid_http_request_body(env: TestEnv) {
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::ACCEPTED);
 
-            info!(
-                logger,
-                "Malformed update call (missing `sender`) to {}", update_url
-            );
-            #[derive(Serialize)]
-            pub struct NoSenderHttpCanisterUpdate {
-                pub request_type: String,
-                pub canister_id: Blob,
-                pub method_name: String,
-                pub arg: Blob,
-                pub ingress_expiry: u64,
-            }
-            let ingress_expiry =
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
-            let envelope: HttpRequestEnvelope<NoSenderHttpCanisterUpdate> = HttpRequestEnvelope {
-                content: NoSenderHttpCanisterUpdate {
-                    request_type: "call".to_string(),
-                    canister_id: Blob(primary.get().as_slice().to_vec()),
-                    method_name: "update".to_string(),
-                    arg: Blob(wasm().reply().build()),
-                    ingress_expiry: ingress_expiry.as_nanos() as u64,
-                },
-                sender_pubkey: None,
-                sender_sig: None,
-                sender_delegation: None,
+            let assert_bad_request = |logger: Logger,
+                                      url: Url,
+                                      content: BTreeMap<Value, Value>,
+                                      expected_err: String| async move {
+                let client = reqwest::Client::builder()
+                    .danger_accept_invalid_certs(true)
+                    .build()
+                    .unwrap();
+                let bytes = serde_cbor::to_vec(&envelope(content)).unwrap();
+                let resp = client
+                    .post(url)
+                    .header("Content-Type", "application/cbor")
+                    .body(bytes)
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+                let bytes = resp.bytes().await.unwrap();
+                let err = String::from_utf8(bytes.to_vec()).unwrap();
+                info!(logger, "Response: {}", err);
+                assert!(err.contains(&expected_err));
             };
-            let bytes = serde_cbor::to_vec(&envelope).unwrap();
-            let resp = client
-                .post(update_url.clone())
-                .header("Content-Type", "application/cbor")
-                .body(bytes)
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-            let bytes = resp.bytes().await.unwrap();
-            let err = String::from_utf8(bytes.to_vec()).unwrap();
-            info!(logger, "Response: {}", err);
-            assert!(err.contains("missing field `sender`"));
 
-            info!(
-                logger,
-                "Malformed update call (missing `request_type`) to {}", update_url
-            );
-            #[derive(Serialize)]
-            pub struct NoRequestTypeHttpCanisterUpdate {
-                pub canister_id: Blob,
-                pub method_name: String,
-                pub arg: Blob,
-                pub sender: Blob,
-                pub ingress_expiry: u64,
-            }
-            let ingress_expiry =
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
-            let envelope: HttpRequestEnvelope<NoRequestTypeHttpCanisterUpdate> =
-                HttpRequestEnvelope {
-                    content: NoRequestTypeHttpCanisterUpdate {
-                        canister_id: Blob(primary.get().as_slice().to_vec()),
-                        method_name: "update".to_string(),
-                        arg: Blob(wasm().reply().build()),
-                        sender: Blob(Principal::anonymous().as_slice().to_vec()),
-                        ingress_expiry: ingress_expiry.as_nanos() as u64,
-                    },
-                    sender_pubkey: None,
-                    sender_sig: None,
-                    sender_delegation: None,
-                };
-            let bytes = serde_cbor::to_vec(&envelope).unwrap();
-            let resp = client
-                .post(update_url.clone())
-                .header("Content-Type", "application/cbor")
-                .body(bytes)
-                .send()
-                .await
+            let mut no_sender_content = valid_content.clone();
+            no_sender_content
+                .remove(&Value::Text("sender".to_string()))
                 .unwrap();
-            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-            let bytes = resp.bytes().await.unwrap();
-            let err = String::from_utf8(bytes.to_vec()).unwrap();
-            info!(logger, "Response: {}", err);
-            assert!(err.contains("missing field `request_type`"));
+            assert_bad_request(
+                logger.clone(),
+                update_url.clone(),
+                no_sender_content,
+                "missing field `sender`".to_string(),
+            )
+            .await;
 
-            info!(
-                logger,
-                "Malformed update call (wrong `request_type`) to {}", update_url
-            );
-            let ingress_expiry =
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
-            let envelope: HttpRequestEnvelope<HttpCanisterUpdate> = HttpRequestEnvelope {
-                content: HttpCanisterUpdate {
-                    request_type: "query".to_string(),
-                    canister_id: Blob(primary.get().as_slice().to_vec()),
-                    method_name: "update".to_string(),
-                    arg: Blob(wasm().reply().build()),
-                    sender: Blob(Principal::anonymous().as_slice().to_vec()),
-                    ingress_expiry: ingress_expiry.as_nanos() as u64,
-                },
-                sender_pubkey: None,
-                sender_sig: None,
-                sender_delegation: None,
-            };
-            let bytes = serde_cbor::to_vec(&envelope).unwrap();
-            let resp = client
-                .post(update_url)
-                .header("Content-Type", "application/cbor")
-                .body(bytes)
-                .send()
-                .await
+            let mut no_request_type_content = valid_content.clone();
+            no_request_type_content
+                .remove(&Value::Text("request_type".to_string()))
                 .unwrap();
-            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-            let bytes = resp.bytes().await.unwrap();
-            let err = String::from_utf8(bytes.to_vec()).unwrap();
-            info!(logger, "Response: {}", err);
-            assert!(err.contains("unknown variant `query`, expected `call`"));
+            assert_bad_request(
+                logger.clone(),
+                update_url.clone(),
+                no_request_type_content,
+                "missing field `request_type`".to_string(),
+            )
+            .await;
+
+            let mut wrong_request_type_content = valid_content.clone();
+            wrong_request_type_content
+                .insert(
+                    Value::Text("request_type".to_string()),
+                    Value::Text("query".to_string()),
+                )
+                .unwrap();
+            assert_bad_request(
+                logger.clone(),
+                update_url.clone(),
+                wrong_request_type_content,
+                "unknown variant `query`, expected `call`".to_string(),
+            )
+            .await;
+
+            let mut malformed_url = url;
+            malformed_url.set_path("/api/v2/canister/this-is-not-a-valid-canister-id/call");
+            assert_bad_request(
+                logger.clone(),
+                malformed_url.clone(),
+                valid_content,
+                "Invalid URL: Cannot parse `effective_canister_id` with value `this-is-not-a-valid-canister-id`: Text must be in valid Base32 encoding.".to_string(),
+            )
+            .await;
         }
     });
 }
@@ -504,7 +451,7 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
             CanisterId::from(1337),
             // Management canister
             CanisterId::ic_00(),
-            // Invalid canister id
+            // User id
             CanisterId::try_from(PrincipalId::new_user_test_id(42)).unwrap(),
         ],
     )
@@ -538,7 +485,7 @@ fn main() -> Result<()> {
         .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V3))
         .add_test(systest!(read_time; read_state::canister::Version::V2))
         .add_test(systest!(read_time; read_state::canister::Version::V3))
-        .add_test(systest!(invalid_http_request_body))
+        .add_test(systest!(malformed_http_request))
         .execute_from_args()?;
 
     Ok(())
