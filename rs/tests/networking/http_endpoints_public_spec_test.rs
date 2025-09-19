@@ -27,8 +27,8 @@ The different canister ID B is
 
 
 Invalid HTTP request body tests:
-1. Update call with omitted request type is rejected with 4xx.
-2. Update call with omitted sender (anonymous principal) is rejected with 4xx.
+1. Update call with omitted sender (anonymous principal) is rejected with 4xx.
+2. Update call with omitted request type is rejected with 4xx.
 3. Update call with wrong request type is rejected with 4xx.
 
 end::catalog[] */
