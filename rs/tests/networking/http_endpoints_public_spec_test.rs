@@ -290,7 +290,10 @@ fn invalid_http_request_body(env: TestEnv) {
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(resp.status(), StatusCode::ACCEPTED);
+            let status = resp.status();
+            let bytes = resp.bytes().await.unwrap();
+            info!(logger, "Response bytes: {:?}", bytes);
+            assert_eq!(status, StatusCode::ACCEPTED);
 
             info!(logger, "Malformed update call to {}", update_url);
             #[derive(Serialize)]
