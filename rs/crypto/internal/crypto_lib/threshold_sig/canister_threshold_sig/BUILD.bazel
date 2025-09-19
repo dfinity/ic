@@ -110,7 +110,6 @@ rust_bench(
     ],
 )
 
-
 rust_bench(
     name = "scalar_bench",
     testonly = True,
