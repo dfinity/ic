@@ -81,7 +81,7 @@ async fn main() -> Result<(), Error> {
             urls: cli.deployment.nns_urls.into_iter().collect(),
         },
         vm_resources: VmResources {
-            memory: cli.deployment.memory_gb.unwrap_or(490),
+            memory: cli.deployment.memory_gb,
             cpu: cli.deployment.cpu.unwrap_or("kvm".to_string()),
             nr_of_vcpus: cli.deployment.nr_of_vcpus.unwrap_or(64),
         },

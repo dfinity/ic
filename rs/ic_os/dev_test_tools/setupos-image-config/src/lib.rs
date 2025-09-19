@@ -145,7 +145,7 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
     }
 
     if let Some(memory) = cfg.memory_gb {
-        deployment_json.vm_resources.memory = memory;
+        deployment_json.vm_resources.memory = Some(memory);
     }
 
     if let Some(cpu) = &cfg.cpu {
