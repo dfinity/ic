@@ -574,6 +574,19 @@ impl TryFrom<NumBytes> for MemoryAllocation {
     }
 }
 
+impl MemoryAllocation {
+    // TODO: replace by `From<NumBytes>` after dropping the bound `MAX_MEMORY_ALLOCATION`
+    pub fn new_unchecked(bytes: NumBytes) -> Self {
+        // A memory allocation of 0 means that the canister's memory growth will be
+        // best-effort.
+        if bytes.get() == 0 {
+            MemoryAllocation::BestEffort
+        } else {
+            MemoryAllocation::Reserved(bytes)
+        }
+    }
+}
+
 /// Allow an object to report its own byte size. It is only meant to be an
 /// estimate, and not an exact measure of its heap usage or length of serialized
 /// bytes.
