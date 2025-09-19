@@ -2,7 +2,11 @@ use std::time::Duration;
 
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
-    driver::{nested::NestedVms, test_env::TestEnv, test_env_api::*},
+    driver::{
+        nested::{HasNestedVms, NestedNodes},
+        test_env::TestEnv,
+        test_env_api::*,
+    },
     retry_with_msg,
     util::block_on,
 };
@@ -11,11 +15,9 @@ use slog::info;
 
 pub mod util;
 use util::{
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, assert_version_compatibility,
-    check_hostos_version, elect_guestos_version, elect_hostos_version,
-    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
-    setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
-    simple_setup_nested_vm_group, start_nested_vm_group, update_nodes_hostos_version,
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, check_hostos_version,
+    elect_guestos_version, elect_hostos_version, get_blessed_guestos_versions, get_host_boot_id,
+    get_unassigned_nodes_config, setup_ic_infrastructure, update_nodes_hostos_version,
     update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
 };
 
@@ -26,18 +28,19 @@ const HOST_VM_NAME: &str = "host-1";
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn setup(env: TestEnv) {
-    assert_version_compatibility();
-
     setup_ic_infrastructure(&env, /*dkg_interval=*/ None, /*is_fast=*/ true);
 
-    setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
-    setup_vector_targets_for_vm(&env, HOST_VM_NAME);
+    NestedNodes::new(&[HOST_VM_NAME])
+        .setup_and_start(&env)
+        .unwrap();
 }
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
-/// This is much faster than the full config() setup.
-pub fn simple_config(env: TestEnv) {
-    simple_setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
+/// This is much faster than the full setup() setup.
+pub fn simple_setup(env: TestEnv) {
+    NestedNodes::new(&[HOST_VM_NAME])
+        .setup_and_start(&env)
+        .unwrap();
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -54,8 +57,6 @@ pub fn registration(env: TestEnv) {
     // Check that there are initially no unassigned nodes.
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
-
-    start_nested_vm_group(env.clone());
 
     let nested_vms = env.get_all_nested_vms().unwrap();
     let n = nested_vms.len();
@@ -119,7 +120,6 @@ pub fn upgrade_hostos(env: TestEnv) {
     let update_image_sha256 = get_hostos_update_img_sha256();
 
     let initial_topology = env.topology_snapshot();
-    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     let new_topology = block_on(
         initial_topology.block_for_newer_registry_version_within_duration(
@@ -190,8 +190,7 @@ pub fn upgrade_hostos(env: TestEnv) {
             host_boot_id_pre_upgrade
         ),
         logger.clone(),
-        // TODO: Revert change after extending image version support
-        Duration::from_secs(15 * 60), // long wait for hostos upgrade to apply and reboot
+        Duration::from_secs(7 * 60), // long wait for hostos upgrade to apply and reboot
         Duration::from_secs(5),
         || {
             let host_boot_id = get_host_boot_id(&host);
@@ -229,8 +228,6 @@ pub fn upgrade_hostos(env: TestEnv) {
 /// from the HostOS based on injected version/hash boot parameters.
 pub fn recovery_upgrader_test(env: TestEnv) {
     let logger = env.logger();
-
-    start_nested_vm_group(env.clone());
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -285,7 +282,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             "Remounting /boot as read-write and updating boot_args file"
         );
         let boot_args_command = format!(
-            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={target_version} hash={target_short_hash}\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={target_version} version-hash={target_short_hash}\"/' /boot/boot_args && sudo mount -o remount,ro /boot"
         );
         host.block_on_bash_script(&boot_args_command)
             .expect("Failed to update boot_args file");
@@ -348,7 +345,6 @@ pub fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
 
     let initial_topology = env.topology_snapshot();
-    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     block_on(
         initial_topology.block_for_newer_registry_version_within_duration(
@@ -469,8 +465,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             &guest_ipv6,
             &target_version,
             &logger,
-            // TODO: Revert change after extending image version support
-            Duration::from_secs(15 * 60), // Long wait for GuestOS upgrade to apply and reboot
+            Duration::from_secs(7 * 60), // Long wait for GuestOS upgrade to apply and reboot
             Duration::from_secs(5),
         )
         .await

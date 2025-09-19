@@ -572,8 +572,7 @@ mod load_transcript {
                 *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                     && *epoch_ == epoch(REG_V1)
                     && *transcript == csp_transcript
-                    && *receiver_index == 2 // index of NODE_3 in (sorted)
-                // resharing committee
+                    && *receiver_index == 2 // index of NODE_3 in (sorted) resharing committee
             })
             .times(1)
             .return_const(Ok(()));

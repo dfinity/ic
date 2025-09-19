@@ -17,7 +17,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
@@ -25,6 +25,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "HSM Test",
+              "output_id": "hsm_test_id",
+            }, {
+              "name": "Benchmark",
+              "output_id": "benchmark_id",
+            }, {
+              "name": "HostOS metrics",
+              "output_id": "hostos_metrics_id",
+            }]
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -32,8 +47,12 @@ jobs:
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
           launch_bare_metal() {
+            local invocation_id="$1"
+            shift
+
             # shellcheck disable=SC2046,SC2086
             bazel --output_base=/var/tmp/bazel-output run \
+              --invocation_id="$invocation_id" \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
                 --csv_filename "$(realpath file1)" \
@@ -45,13 +64,13 @@ jobs:
           }
 
           # Run bare metal installation test
-          launch_bare_metal --hsm
+          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hsm_test_id }}" --hsm
 
           # Run bare metal node performance benchmarks
-          launch_bare_metal --benchmark
+          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).benchmark_id }}" --benchmark
 
           # Run bare metal node hostOS metrics check
-          launch_bare_metal --check_hostos_metrics
+          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hostos_metrics_id }}" --check_hostos_metrics
 
           bazel clean
         env:
@@ -62,7 +81,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 720 # 12 hours
@@ -85,12 +104,22 @@ jobs:
           mkdir -p ~/.ssh
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - name: Run FI Tests Nightly
         uses: ./.github/actions/bazel
         with:
           run: |
             bazel test \
               --config=stamped \
+              --invocation_id="${{  fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=fi_tests_nightly \
               //rs/ledger_suite/... \
               --test_env=SSH_AUTH_SOCK \
@@ -101,7 +130,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 30
@@ -124,6 +153,15 @@ jobs:
           mkdir -p ~/.ssh
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - name: Run NNS Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -131,6 +169,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=nns_tests_nightly \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going
@@ -148,13 +187,22 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - name: Run PocketIC Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -162,6 +210,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=pocketic_tests_nightly \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //rs/pocket_ic_server/... \
               --test_env=SSH_AUTH_SOCK \
               --keep_going
@@ -179,13 +228,22 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 480
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel
@@ -206,6 +264,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=system_test_benchmark \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --//bazel:enable_upload_perf_systest_results=True \
               --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
@@ -225,7 +284,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 60
@@ -276,7 +335,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 120
