@@ -220,6 +220,7 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
@@ -2012,7 +2013,7 @@ where
 }
 
 pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
-    let tcp = TcpStream::connect((ip, 22))?;
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;

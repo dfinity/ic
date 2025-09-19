@@ -145,6 +145,7 @@ prepare_guestos_upgrade() {
 download_and_verify_upgrade() {
     local version="$1"
     local expected_hash="$2"
+    local expected_hash="$2"
     local tmpdir="$3"
 
     local url_path="/ic/${version}/guest-os/update-img-recovery/update-img.tar.zst"
