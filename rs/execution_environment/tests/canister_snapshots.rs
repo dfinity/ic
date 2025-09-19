@@ -781,7 +781,7 @@ const COUNTER_GROW_CANISTER_WAT: &str = r#"
     )
     (call $msg_reply)
   )
-  
+
   (func $write
     ;; grow by a page
     (i32.const 1)
@@ -883,4 +883,94 @@ fn take_frozen_canister_snapshot_fails() {
     };
     let err = env.take_canister_snapshot(args).unwrap_err();
     assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn load_canister_snapshot_works_on_another_canister() {
+    let subnet_type = SubnetType::Application;
+    let subnet_config = SubnetConfig::new(subnet_type);
+    let execution_config = ExecutionConfig::default();
+    let config = StateMachineConfig::new(subnet_config, execution_config);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(config))
+        .with_snapshot_download_enabled(true)
+        .with_subnet_type(subnet_type)
+        .build();
+
+    const T: u128 = 1_000_000_000_000;
+    let initial_cycles = 10 * T;
+    let canister_id_1 = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            initial_cycles.into(),
+        )
+        .unwrap();
+
+    let canister_id_2 = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            initial_cycles.into(),
+        )
+        .unwrap();
+
+    env.execute_ingress(
+        canister_id_1,
+        "update",
+        wasm().stable_grow(100).reply().build(),
+    )
+    .unwrap();
+
+    let snapshot_id_1 = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_1, None))
+        .unwrap()
+        .snapshot_id();
+
+    // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` should
+    // fail if there is non-empty page delta in the shared page map.
+    // This limitation will be lifted in the future.
+    let err = env
+        .load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+            canister_id_2,
+            snapshot_id_1,
+            None,
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Snapshot {} is not currently loadable on the specified canister {}. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes).",
+            snapshot_id_1, canister_id_2
+        ),
+    );
+
+    // Checkpoint the state before loading the snapshot to ensure that
+    // there no outstanding page delta in the shared page map by the
+    // two canisters (the one owning the snapshot and the one loading it).
+    env.checkpointed_tick();
+
+    // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` succeeds.
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id_2,
+        snapshot_id_1,
+        None,
+    ))
+    .unwrap();
+
+    // The two canisters now should have the same state (equivalently, their current snapshots should be equal).
+    let snapshot_id_2 = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_2, None))
+        .unwrap()
+        .snapshot_id();
+    assert_snapshot_eq(
+        &env,
+        canister_id_1,
+        snapshot_id_1,
+        canister_id_2,
+        snapshot_id_2,
+    );
 }

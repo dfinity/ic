@@ -5,7 +5,7 @@ use crate::{
         execution_state::{Memory, WasmExecutionMode},
         system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
     },
-    page_map::{Buffer, PageAllocatorFileDescriptor},
+    page_map::{Buffer, PageAllocatorFileDescriptor, PersistenceError},
 };
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
@@ -300,6 +300,17 @@ impl From<&Memory> for PageMemory {
 impl From<&PageMemory> for Memory {
     fn from(pg_memory: &PageMemory) -> Self {
         Memory::new(pg_memory.page_map.clone(), pg_memory.size)
+    }
+}
+
+impl TryFrom<(&PageMemory, Arc<dyn PageAllocatorFileDescriptor>)> for Memory {
+    type Error = PersistenceError;
+
+    fn try_from(
+        (pg_memory, fd_factory): (&PageMemory, Arc<dyn PageAllocatorFileDescriptor>),
+    ) -> Result<Self, PersistenceError> {
+        let new_page_map = pg_memory.page_map.clean_copy(fd_factory)?;
+        Ok(Memory::new(new_page_map, pg_memory.size))
     }
 }
 
