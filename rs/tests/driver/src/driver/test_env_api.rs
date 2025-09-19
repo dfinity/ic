@@ -203,7 +203,6 @@ use std::{
     future::Future,
     io::{Read, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
-    os::fd::AsRawFd,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -1422,9 +1421,12 @@ pub trait SshSession: HasTestEnv {
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                get_ssh_session_from_env_async(&self.test_env(), self.get_host_ip()?)
-                    .await
-                    .context("Failed to get SSH session")
+                get_ssh_session_from_env_with_timeout(
+                    &self.test_env(),
+                    self.get_host_ip()?,
+                    RETRY_BACKOFF,
+                )
+                .context("Failed to get SSH session")
             }
         )
         .await
@@ -2022,15 +2024,16 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     get_ssh_session_from_env_impl(env, tcp)
 }
 
-pub async fn get_ssh_session_from_env_async(env: &TestEnv, ip: IpAddr) -> Result<Session> {
-    let tcp = tokio::net::TcpStream::connect((ip, 22)).await?;
+pub fn get_ssh_session_from_env_with_timeout(
+    env: &TestEnv,
+    ip: IpAddr,
+    timeout: Duration,
+) -> Result<Session> {
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), timeout)?;
     get_ssh_session_from_env_impl(env, tcp)
 }
 
-fn get_ssh_session_from_env_impl<S>(env: &TestEnv, tcp: S) -> Result<Session>
-where
-    S: 'static + AsRawFd,
-{
+fn get_ssh_session_from_env_impl(env: &TestEnv, tcp: TcpStream) -> Result<Session> {
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;
