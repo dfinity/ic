@@ -275,7 +275,7 @@ main() {
 
     prepare_guestos_upgrade
 
-    if ! retry_operation "upgrade download and verification" download_and_verify_upgrade "$VERSION" "$VERSION_HASH" "$TMPDIR"; then
+    if ! retry_operation "recovery-GuestOS upgrade image download and verification" download_and_verify_upgrade "$VERSION" "$VERSION_HASH" "$TMPDIR"; then
         exit 1
     fi
 
