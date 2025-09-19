@@ -358,6 +358,7 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
+        "@crate_index//:sha2",
         "@crate_index//:slog",
     ],
 )

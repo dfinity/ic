@@ -40,6 +40,7 @@ registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 slog = { workspace = true }
 ssh2 = { workspace = true }
 ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }

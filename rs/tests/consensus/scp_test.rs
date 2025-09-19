@@ -36,6 +36,11 @@ fn test(env: TestEnv) {
             "Unexpected local file size: {actual} vs {expected_size}"
         );
 
+        let actual_sha256 = Sha256::digest(&buffer)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+
         let uvm = env.get_deployed_universal_vm("my_uvm").unwrap();
         let session = uvm.block_on_ssh_session().unwrap();
 
@@ -61,6 +66,18 @@ fn test(env: TestEnv) {
         assert_eq!(
             actual, expected_size,
             "Unexpected remote file size: {actual} vs {expected_size}"
+        );
+
+        let remote_sha256 = uvm
+            .block_on_bash_script(&format!(
+                "sha256sum /tmp/testdir-{i}/test-{i}.txt | awk '{{print $1}}'"
+            ))
+            .unwrap()
+            .trim()
+            .to_string();
+        assert_eq!(
+            actual_sha256, remote_sha256,
+            "Unexpected remote file sha256: {remote_sha256} vs {actual_sha256}"
         );
     }
 }
