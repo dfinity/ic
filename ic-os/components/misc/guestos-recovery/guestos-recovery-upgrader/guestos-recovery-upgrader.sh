@@ -256,15 +256,19 @@ main() {
     VERSION_HASH="$(get_cmdline_var version-hash)"
     RECOVERY_HASH="$(get_cmdline_var recovery-hash)"
 
-    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ] || [ -z "$RECOVERY_HASH" ]; then
-        echo "ERROR: version, version-hash, and recovery-hash parameters are required"
-        echo "Usage: version=<commit-hash> version-hash=<sha256> recovery-hash=<sha256>"
+    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
+        echo "ERROR: version and version-hash parameters are required"
+        echo "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
         exit 1
     fi
 
     echo "Version: $VERSION"
     echo "Version hash: $VERSION_HASH"
-    echo "Recovery hash: $RECOVERY_HASH"
+    if [ -n "$RECOVERY_HASH" ]; then
+        echo "Recovery hash: $RECOVERY_HASH"
+    else
+        echo "Recovery hash not provided (optional)"
+    fi
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
@@ -275,8 +279,12 @@ main() {
         exit 1
     fi
 
-    if ! retry_operation "recovery artifact download and verification" download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
-        exit 1
+    if [ -n "$RECOVERY_HASH" ]; then
+        if ! retry_operation "recovery artifact download and verification" download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
+            exit 1
+        fi
+    else
+        echo "Skipping recovery artifact download and verification (recovery-hash not provided)"
     fi
 
     extract_upgrade "$TMPDIR"
