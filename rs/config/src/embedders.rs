@@ -135,7 +135,7 @@ impl FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
-            environment_variables: FlagStatus::Disabled,
+            environment_variables: FlagStatus::Enabled,
         }
     }
 }

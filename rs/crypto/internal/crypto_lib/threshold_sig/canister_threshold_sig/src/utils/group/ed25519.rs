@@ -250,6 +250,15 @@ impl Scalar {
         Some(Self::new(self.s.invert()))
     }
 
+    /// Perform modular inversion
+    ///
+    /// Returns None if no modular inverse exists (ie because the
+    /// scalar is zero)
+    pub fn invert_vartime(&self) -> Option<Self> {
+        // Currently, Dalek doesn't support a variable time inversion
+        self.invert()
+    }
+
     /// Check if the scalar is zero
     pub fn is_zero(&self) -> bool {
         bool::from(self.s.is_zero())

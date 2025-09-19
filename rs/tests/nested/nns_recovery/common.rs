@@ -23,7 +23,8 @@ use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        nested::{NestedVm, NestedVms},
+        nested::NestedVm,
+        nested::{HasNestedVms, NestedNodes},
         test_env::TestEnv,
         test_env_api::*,
     },
@@ -31,10 +32,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
     util::block_on,
 };
-use nested::util::{
-    assert_version_compatibility, get_host_boot_id_async, setup_ic_infrastructure,
-    setup_nested_vm_group, setup_vector_targets_for_vm,
-};
+use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{Logger, info};
@@ -62,7 +60,9 @@ pub struct SetupConfig {
 }
 
 #[derive(Debug)]
-pub struct TestConfig {}
+pub struct TestConfig {
+    pub break_dfinity_owned_node: bool,
+}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{i}")).collect()
@@ -118,8 +118,6 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
 }
 
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
-    assert_version_compatibility();
-
     if cfg.impersonate_upstreams {
         impersonate_upstreams::setup_upstreams_uvm(&env);
     }
@@ -127,15 +125,12 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
-    setup_nested_vm_group(env.clone(), &host_vm_names_refs);
-
-    for vm_name in &host_vm_names {
-        setup_vector_targets_for_vm(&env, vm_name);
-    }
+    NestedNodes::new(&host_vm_names)
+        .setup_and_start(&env)
+        .unwrap();
 }
 
-pub fn test(env: TestEnv, _cfg: TestConfig) {
+pub fn test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
@@ -218,11 +213,25 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     let f = (subnet_size - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
+    // TODO(CON-1587): Consider breaking all nodes.
+    let healthy_node = healthy_nodes.first().unwrap();
     info!(
         logger,
         "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
         faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
         healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+    );
+    let dfinity_owned_node = if cfg.break_dfinity_owned_node {
+        faulty_nodes.first().unwrap()
+    } else {
+        // TODO(CON-1587): Consider breaking all nodes.
+        healthy_nodes.first().unwrap()
+    };
+    info!(
+        logger,
+        "Selected DFINITY-owned NNS node: {} ({:?})",
+        dfinity_owned_node.node_id,
+        dfinity_owned_node.get_ip_addr()
     );
     // Break faulty nodes by SSHing into them and breaking the replica binary.
     info!(
@@ -249,15 +258,13 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         });
     }
 
-    if let Some(healthy) = healthy_nodes.first() {
-        info!(logger, "Ensure a healthy node still works in read mode");
-        assert!(can_read_msg(
-            &logger,
-            &healthy.get_public_url(),
-            app_can_id,
-            msg
-        ));
-    }
+    info!(logger, "Ensure a healthy node still works in read mode");
+    assert!(can_read_msg(
+        &logger,
+        &healthy_node.get_public_url(),
+        app_can_id,
+        msg
+    ));
     info!(
         logger,
         "Ensure the subnet does not work in write mode anymore"
@@ -273,8 +280,8 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         "Success: Subnet is broken - cannot store new messages"
     );
 
-    // Choose the DFINITY-owned node to be the one with the highest certification share height
-    let (dfinity_owned_node, highest_certification_share_height) = nns_subnet
+    // Download pool from the node with the highest certification share height
+    let (download_pool_node, highest_certification_share_height) = nns_subnet
         .nodes()
         .filter_map(|n| {
             block_on(get_node_metrics(&logger, &n.get_ip_addr()))
@@ -283,16 +290,9 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         .max_by_key(|&(_, cert_share_height)| cert_share_height)
         .expect("No download node found");
 
-    info!(
-        logger,
-        "Selected DFINITY-owned NNS node: {} ({:?})",
-        dfinity_owned_node.node_id,
-        dfinity_owned_node.get_ip_addr()
-    );
-
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
-        nns_url: dfinity_owned_node.get_public_url(),
+        nns_url: healthy_node.get_public_url(),
         replica_version: Some(ic_version),
         key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
@@ -308,7 +308,8 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         replay_until_height: Some(highest_certification_share_height),
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
-        download_node: Some(dfinity_owned_node.get_ip_addr()),
+        download_pool_node: Some(download_pool_node.get_ip_addr()),
+        download_state_node: Some(dfinity_owned_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         backup_key_file: Some(ssh_priv_key_path),
         output_dir: Some(output_dir.clone()),

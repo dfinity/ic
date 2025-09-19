@@ -7,7 +7,6 @@ use bitcoin::{
     consensus::{Decodable, Encodable, encode},
     io,
 };
-use ic_btc_validation::ValidateHeaderError;
 use ic_logger::{ReplicaLogger, error};
 use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
@@ -88,10 +87,7 @@ pub enum AddHeaderResult {
 }
 
 #[derive(Debug, Error)]
-pub enum AddHeaderError {
-    /// When the received header is invalid (eg: not of the right format).
-    #[error("Received an invalid block header: {0}")]
-    InvalidHeader(BlockHash, ValidateHeaderError),
+pub enum AddHeaderCacheError {
     /// When the predecessor of the input header is not part of header_cache.
     #[error("Received a block header where we do not have the previous header in the cache: {0}")]
     PrevHeaderNotCached(BlockHash),
@@ -125,7 +121,7 @@ pub trait HeaderCache: Send + Sync {
         &self,
         block_hash: BlockHash,
         header: Self::Header,
-    ) -> Result<AddHeaderResult, AddHeaderError>;
+    ) -> Result<AddHeaderResult, AddHeaderCacheError>;
 
     /// Return the tip header with the highest cumulative work.
     fn get_active_chain_tip(&self) -> Tip<Self::Header>;
@@ -176,13 +172,13 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         &self,
         block_hash: BlockHash,
         header: Header,
-    ) -> Result<AddHeaderResult, AddHeaderError> {
+    ) -> Result<AddHeaderResult, AddHeaderCacheError> {
         let mut this = self.write().unwrap();
         let prev_hash = header.prev_block_hash();
         let prev_node = this
             .cache
             .get_mut(&prev_hash)
-            .ok_or(AddHeaderError::PrevHeaderNotCached(prev_hash))?;
+            .ok_or(AddHeaderCacheError::PrevHeaderNotCached(prev_hash))?;
 
         let tip = HeaderData {
             header: header.clone(),
@@ -474,18 +470,18 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
         &self,
         block_hash: BlockHash,
         header: Header,
-    ) -> Result<AddHeaderResult, AddHeaderError> {
+    ) -> Result<AddHeaderResult, AddHeaderCacheError> {
         let prev_hash = header.prev_block_hash();
         let prev_node = self
             .get_header(prev_hash)
-            .ok_or(AddHeaderError::PrevHeaderNotCached(prev_hash))?;
+            .ok_or(AddHeaderCacheError::PrevHeaderNotCached(prev_hash))?;
 
         log_err!(
             self.run_rw_txn(move |tx| self.tx_add_header(tx, Some(&prev_node), block_hash, header)),
             self.log,
             format!("tx_add_header({block_hash})")
         )
-        .map_err(|err| AddHeaderError::Internal(format!("{err:?}")))
+        .map_err(|err| AddHeaderCacheError::Internal(format!("{err:?}")))
     }
 
     /// This method returns the tip header with the highest cumulative work.

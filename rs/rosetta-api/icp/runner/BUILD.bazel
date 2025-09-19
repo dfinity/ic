@@ -40,7 +40,7 @@ rust_test(
         ":ic-icp-rosetta-runner",
         "//packages/pocket-ic",
         "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/ledger_suite/icp/test_utils",
+        "//rs/nns/constants",
         "//rs/rosetta-api/icp/test_utils",
         "@crate_index//:candid",
         "@crate_index//:reqwest",
