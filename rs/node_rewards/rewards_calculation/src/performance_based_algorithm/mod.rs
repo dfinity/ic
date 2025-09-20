@@ -7,7 +7,6 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
-use maplit::btreemap;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal_macros::dec;
@@ -82,12 +81,6 @@ pub trait DataProvider {
         &self,
         day: &DayUtc,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        day: &DayUtc,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String>;
 }
 
 trait PerformanceBasedAlgorithm {
@@ -161,12 +154,12 @@ trait PerformanceBasedAlgorithm {
     ) -> Result<DailyResults, String> {
         let rewards_table = data_provider.get_rewards_table(day)?;
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(day)?;
-        let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
-            let rewardable_nodes = data_provider.get_provider_rewardable_nodes(day, provider_id)?;
-            btreemap! { *provider_id => rewardable_nodes }
-        } else {
-            data_provider.get_rewardable_nodes(day)?
-        };
+        let mut rewardable_nodes_by_provider = data_provider.get_rewardable_nodes(day)?;
+
+        if let Some(provider_id) = node_provider_filter {
+            rewardable_nodes_by_provider.retain(|k, _| k == provider_id);
+        }
+
         let mut results_per_provider = BTreeMap::new();
 
         // Calculate failure rates for subnets and individual nodes
@@ -176,7 +169,7 @@ trait PerformanceBasedAlgorithm {
         } = Self::calculate_failure_rates(metrics_by_subnet);
 
         // Process each provider's nodes
-        for (provider_id, rewardable_nodes) in providers_rewardable_nodes {
+        for (provider_id, rewardable_nodes) in rewardable_nodes_by_provider {
             let provider_results = Self::calculate_provider_rewards(
                 &rewards_table,
                 &mut nodes_metrics_daily,

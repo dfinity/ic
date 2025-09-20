@@ -316,8 +316,11 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     for _ in 0..MAX_TIMES {
         mm.update_subnets_metrics(vec![subnet_id(1)]).await;
     }
-    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> =
-        mm.metrics_by_subnet(&0.into()).into_values().collect();
+    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
+        .get_metrics_by_subnet(&0.into())
+        .unwrap()
+        .into_values()
+        .collect();
 
     println!("{:?}", daily_metrics);
 
@@ -329,7 +332,8 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][1].num_blocks_failed, 21);
 
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .metrics_by_subnet(&ONE_DAY_NANOS.into())
+        .get_metrics_by_subnet(&ONE_DAY_NANOS.into())
+        .unwrap()
         .into_values()
         .collect();
 
@@ -342,7 +346,8 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][1].num_blocks_failed, 1);
 
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .metrics_by_subnet(&(2 * ONE_DAY_NANOS).into())
+        .get_metrics_by_subnet(&(2 * ONE_DAY_NANOS).into())
+        .unwrap()
         .into_values()
         .collect();
 
@@ -351,7 +356,8 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][0].num_blocks_failed, 0);
 
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .metrics_by_subnet(&(3 * ONE_DAY_NANOS).into())
+        .get_metrics_by_subnet(&(3 * ONE_DAY_NANOS).into())
+        .unwrap()
         .into_values()
         .collect();
 
@@ -397,9 +403,10 @@ async fn daily_metrics_correct_2_subs() {
     }
 
     let mut node_1_daily_metrics = Vec::new();
-    for day in 0..8 {
+    for day in 0..5 {
         let daily_metrics = mm
-            .metrics_by_subnet(&(day * ONE_DAY_NANOS).into())
+            .get_metrics_by_subnet(&(day * ONE_DAY_NANOS).into())
+            .unwrap()
             .into_iter()
             .collect::<BTreeMap<_, _>>()
             .into_iter()
@@ -497,7 +504,8 @@ async fn daily_metrics_correct_overlapping_days() {
     for idx in 0..4 {
         let day = (idx * ONE_DAY_NANOS).into();
         let metrics = mm
-            .metrics_by_subnet(&day)
+            .get_metrics_by_subnet(&day)
+            .unwrap()
             .into_iter()
             .collect::<BTreeMap<_, _>>()
             .into_iter()
