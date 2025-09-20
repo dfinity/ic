@@ -43,6 +43,7 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
         if len == 0 {
             return None;
         }
+        // Since len > 0, len - 1 will not underflow.
         log.get(len - 1)
     })
 }
