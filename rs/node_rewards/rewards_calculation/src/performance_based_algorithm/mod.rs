@@ -82,12 +82,6 @@ pub trait DataProvider {
         &self,
         day: &DayUtc,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        day: &DayUtc,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String>;
 }
 
 trait PerformanceBasedAlgorithm {
@@ -117,7 +111,6 @@ trait PerformanceBasedAlgorithm {
     fn calculate_rewards(
         from_day: &DayUtc,
         to_day: &DayUtc,
-        node_provider_filter: Option<PrincipalId>,
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         if from_day > to_day {
@@ -130,8 +123,7 @@ trait PerformanceBasedAlgorithm {
 
         // Process each day in the reward period
         for day in reward_period {
-            let result_for_day =
-                Self::calculate_daily_rewards(&data_provider, &day, &node_provider_filter)?;
+            let result_for_day = Self::calculate_daily_rewards(&data_provider, &day)?;
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
@@ -157,16 +149,10 @@ trait PerformanceBasedAlgorithm {
     fn calculate_daily_rewards(
         data_provider: &impl DataProvider,
         day: &DayUtc,
-        node_provider_filter: &Option<PrincipalId>,
     ) -> Result<DailyResults, String> {
         let rewards_table = data_provider.get_rewards_table(day)?;
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(day)?;
-        let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
-            let rewardable_nodes = data_provider.get_provider_rewardable_nodes(day, provider_id)?;
-            btreemap! { *provider_id => rewardable_nodes }
-        } else {
-            data_provider.get_rewardable_nodes(day)?
-        };
+        let providers_rewardable_nodes = data_provider.get_rewardable_nodes(day)?;
         let mut results_per_provider = BTreeMap::new();
 
         // Calculate failure rates for subnets and individual nodes
