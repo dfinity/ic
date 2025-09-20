@@ -6,6 +6,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{SshSession, get_dependency_path, scp_send_to},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
+use slog::info;
 
 const UNIVERSAL_VM_NAME: &str = "upstreams";
 
@@ -68,13 +69,42 @@ pub fn uvm_serve_recovery_image(
     image_path: &Path,
     image_version: &str,
 ) -> Result<()> {
+    info!(
+        env.logger(),
+        "Length of recovery-GuestOS image: {}",
+        image_path.metadata()?.len(),
+    );
+
     uvm_serve_file(
         env,
         image_path,
         Path::new(&format!(
             "ic/{image_version}/guest-os/update-img-recovery/update-img.tar.zst"
         )),
-    )
+    )?;
+
+    let uvm = get_upstreams_uvm(env);
+    info!(
+        env.logger(),
+        "Remote image checksum: {}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            sha256sum {WEB_ROOT}/ic/{image_version}/guest-os/update-img-recovery/update-img.tar.zst
+        "#
+        ))?
+    );
+
+    info!(
+        env.logger(),
+        "Length of remote recovery-GuestOS image: {}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            wc -c {WEB_ROOT}/ic/{image_version}/guest-os/update-img-recovery/update-img.tar.zst | awk '{{print $1}}'
+        "#
+        ))?,
+    );
+
+    Ok(())
 }
 
 pub fn uvm_serve_recovery_artifacts(
@@ -82,26 +112,66 @@ pub fn uvm_serve_recovery_artifacts(
     artifacts_path: &Path,
     artifacts_hash: &str,
 ) -> Result<()> {
+    info!(
+        env.logger(),
+        "Content of recovery artifacts (length {}): {:?}",
+        artifacts_path.metadata()?.len(),
+        std::fs::read(artifacts_path)?
+    );
+
     uvm_serve_file(
         env,
         artifacts_path,
         Path::new(&format!("recovery/{artifacts_hash}/recovery.tar.zst")),
-    )
+    )?;
+
+    let uvm = get_upstreams_uvm(env);
+    info!(
+        env.logger(),
+        "Remote artifacts checksum: {}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            sha256sum {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst
+        "#
+        ))?
+    );
+
+    info!(
+        env.logger(),
+        "Content of remote recovery artifacts (length {}): {:?}",
+        uvm.block_on_bash_script(&format!(
+            r#"
+            wc -c {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst | awk '{{print $1}}'
+        "#
+        ))?,
+        uvm.block_on_bash_script(&format!(
+            r#"
+            od -An -t u1 {WEB_ROOT}/recovery/{artifacts_hash}/recovery.tar.zst | awk '{{for(i=1;i<=NF;i++) {{if(NR==1 && i==1){{printf "["}} else {{printf ","}}; printf "%s",$i}}}} END{{print "]"}}'
+        "#
+        ))?
+    );
+
+    Ok(())
 }
 
 fn uvm_serve_file(env: &TestEnv, local_path: &Path, uri: &Path) -> Result<()> {
     let uvm = get_upstreams_uvm(env);
-    let session = uvm.block_on_ssh_session()?;
 
     // Create the web root directory and the uri subdirectories.
     let remote_path = Path::new(WEB_ROOT).join(uri);
-    uvm.block_on_bash_script_from_session(
-        &session,
-        &format!("mkdir -p {}", remote_path.parent().unwrap().display(),),
-    )?;
+    uvm.block_on_bash_script(&format!(
+        "mkdir -p {}",
+        remote_path.parent().unwrap().display(),
+    ))?;
 
     // Send the file to the UVM.
-    scp_send_to(env.logger(), &session, local_path, &remote_path, 0o644);
+    scp_send_to(
+        env.logger(),
+        &uvm.block_on_ssh_session()?,
+        local_path,
+        &remote_path,
+        0o644,
+    );
 
     // The static server is already running and will serve the file at the given URI.
 

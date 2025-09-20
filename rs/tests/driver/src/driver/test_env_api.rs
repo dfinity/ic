@@ -2494,11 +2494,12 @@ pub fn scp_send_to(
         || {
             let mut remote_file = session.scp_send(to_remote, mode, size, None)?;
             let mut from_file = std::fs::File::open(from_local)?;
-            std::io::copy(&mut from_file, &mut remote_file)?;
+            let written = std::io::copy(&mut from_file, &mut remote_file)?;
             info!(
                 log,
-                "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} ."
+                "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} (written {written:?})."
             );
+
             Ok(())
         }
     )
@@ -2528,6 +2529,7 @@ pub fn scp_recv_from(
                 log,
                 "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."
             );
+
             Ok(())
         }
     )
