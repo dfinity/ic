@@ -6,6 +6,8 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 criterion_group!(benches, crypto_canister_sig_verify);
 criterion_main!(benches);
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 fn crypto_canister_sig_verify(criterion: &mut Criterion) {
     for group_suffix in ["cached", "uncached"] {
         crypto_canister_sig_verify_impl(criterion, group_suffix);
@@ -14,6 +16,7 @@ fn crypto_canister_sig_verify(criterion: &mut Criterion) {
 
 fn crypto_canister_sig_verify_impl(criterion: &mut Criterion, group_suffix: &str) {
     let group = &mut criterion.benchmark_group(format!("crypto_canister_sig_{group_suffix}"));
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 

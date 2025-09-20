@@ -9,12 +9,14 @@ use std::time::Duration;
 
 const KIBIBYTE: u128 = 1024; // 2 ^ 10
 const MEBIBYTE: u128 = 1_048_576; // 2 ^ 20
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
 
 criterion_main!(benches);
 criterion_group!(benches, bench_hash);
 
 fn bench_hash(criterion: &mut Criterion) {
     let group = &mut criterion.benchmark_group("crypto_hash");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
