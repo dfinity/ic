@@ -4,7 +4,7 @@ use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader};
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
@@ -584,11 +584,32 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
     (public_keys, pre_signatures)
 }
 
-/// Updates the latest purge height, and returns true if
-/// it increased. Otherwise returns false.
-pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) -> bool {
-    let prev_purge_height = cell.replace(new_height);
-    new_height > prev_purge_height
+/// A struct that maintains a round-robin schedule of calls to be made,
+/// and a watermark of the last purge.
+pub(crate) struct IDkgSchedule<T: Ord + Copy> {
+    schedule: RoundRobin,
+    pub(crate) last_purge: RefCell<T>,
+}
+
+impl<T: Ord + Copy> IDkgSchedule<T> {
+    pub(crate) fn new(init: T) -> Self {
+        Self {
+            schedule: RoundRobin::default(),
+            last_purge: RefCell::new(init),
+        }
+    }
+
+    /// Call the next function in the schedule.
+    pub(crate) fn call_next<C>(&self, calls: &[&dyn Fn() -> Vec<C>]) -> Vec<C> {
+        self.schedule.call_next(calls)
+    }
+
+    /// Updates the latest purge watermark, and returns true if
+    /// it increased. Otherwise returns false.
+    pub(crate) fn update_last_purge(&self, new: T) -> bool {
+        let prev = self.last_purge.replace(new);
+        new > prev
+    }
 }
 
 #[cfg(test)]
