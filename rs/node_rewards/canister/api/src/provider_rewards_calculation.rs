@@ -1,7 +1,6 @@
 use candid::{CandidType, Deserialize};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_proto::pb::v1::Decimal;
-use ic_protobuf::registry::node::v1::NodeRewardType;
 use rewards_calculation::performance_based_algorithm::results;
 use rewards_calculation::types;
 use rust_decimal::Decimal as RustDecimal;
@@ -173,7 +172,7 @@ impl From<results::NodeResults> for NodeResults {
     fn from(results: results::NodeResults) -> Self {
         Self {
             node_id: Some(results.node_id.get()),
-            node_reward_type: Some(results.node_reward_type.to_string()),
+            node_reward_type: Some(results.node_reward_type.into()),
             region: Some(results.region),
             dc_id: Some(results.dc_id),
             node_status: Some(results.node_status.into()),
@@ -189,7 +188,7 @@ impl From<NodeResults> for results::NodeResults {
     fn from(results: NodeResults) -> Self {
         Self {
             node_id: results.node_id.unwrap_or_default().into(),
-            node_reward_type: parse_node_reward_type(&results.node_reward_type.unwrap_or_default()),
+            node_reward_type: results.node_reward_type.unwrap().into(),
             region: results.region.unwrap_or_default(),
             dc_id: results.dc_id.unwrap_or_default(),
             node_status: results.node_status.unwrap_or_default().into(),
