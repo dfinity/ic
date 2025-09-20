@@ -59,6 +59,10 @@ name = "zk"
 harness = false
 
 [[bench]]
+name = "scalar"
+harness = false
+
+[[bench]]
 name = "group_ops"
 harness = false
 
