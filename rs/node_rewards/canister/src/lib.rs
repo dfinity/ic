@@ -13,7 +13,6 @@ use ic_stable_structures::storable::Bound;
 use prost::Message;
 use std::borrow::Cow;
 
-pub mod api_conversion;
 pub mod canister;
 pub mod metrics;
 pub mod pb;
