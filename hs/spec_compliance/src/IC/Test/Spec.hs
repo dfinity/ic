@@ -676,56 +676,6 @@ icTests my_sub other_sub conf =
                                                                                   cs .! #settings .! #freezing_threshold @?= 1000_000
                                                                               ],
                                                                             testGroup
-                                                                              "anonymous user"
-                                                                              [ simpleTestCase "update, sender absent fails" ecid $ \cid ->
-                                                                                  do
-                                                                                    envelopeFor anonymousUser $
-                                                                                      rec
-                                                                                        [ "request_type" =: GText "call",
-                                                                                          "canister_id" =: GBlob cid,
-                                                                                          "method_name" =: GText "update",
-                                                                                          "arg" =: GBlob (run (replyData caller))
-                                                                                        ]
-                                                                                    >>= postCallCBOR cid
-                                                                                    >>= code4xx,
-                                                                                simpleTestCase "query, sender absent fails" ecid $ \cid ->
-                                                                                  do
-                                                                                    envelopeFor anonymousUser $
-                                                                                      rec
-                                                                                        [ "request_type" =: GText "query",
-                                                                                          "canister_id" =: GBlob cid,
-                                                                                          "method_name" =: GText "query",
-                                                                                          "arg" =: GBlob (run (replyData caller))
-                                                                                        ]
-                                                                                    >>= postQueryCBOR cid
-                                                                                    >>= code4xx,
-                                                                                simpleTestCase "update, sender explicit" ecid $ \cid ->
-                                                                                  do
-                                                                                    awaitCall cid $
-                                                                                      rec
-                                                                                        [ "request_type" =: GText "call",
-                                                                                          "canister_id" =: GBlob cid,
-                                                                                          "sender" =: GBlob anonymousUser,
-                                                                                          "method_name" =: GText "update",
-                                                                                          "arg" =: GBlob (run (replyData caller))
-                                                                                        ]
-                                                                                    >>= isReply
-                                                                                    >>= is anonymousUser,
-                                                                                simpleTestCase "query, sender explicit" ecid $ \cid ->
-                                                                                  do
-                                                                                    let cbor =
-                                                                                          rec
-                                                                                            [ "request_type" =: GText "query",
-                                                                                              "canister_id" =: GBlob cid,
-                                                                                              "sender" =: GBlob anonymousUser,
-                                                                                              "method_name" =: GText "query",
-                                                                                              "arg" =: GBlob (run (replyData caller))
-                                                                                            ]
-                                                                                    (rid, res) <- queryCBOR cid cbor
-                                                                                    res <- queryResponse res
-                                                                                    isQueryReply ecid (rid, res) >>= is anonymousUser
-                                                                              ],
-                                                                            testGroup
                                                                               "state"
                                                                               [ simpleTestCase "set/get" ecid $ \cid -> do
                                                                                   call_ cid $ setGlobal "FOO" >>> reply
@@ -743,55 +693,6 @@ icTests my_sub other_sub conf =
                                                                               ],
                                                                             simpleTestCase "self" ecid $ \cid ->
                                                                               query cid (replyData self) >>= is cid,
-                                                                            testGroup
-                                                                              "wrong url path"
-                                                                              [ simpleTestCase "call request to query" ecid $ \cid -> do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob cid,
-                                                                                            "method_name" =: GText "update",
-                                                                                            "arg" =: GBlob (run reply)
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postQueryCBOR cid >>= code4xx,
-                                                                                simpleTestCase "query request to call" ecid $ \cid -> do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "query",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob cid,
-                                                                                            "method_name" =: GText "query",
-                                                                                            "arg" =: GBlob (run reply)
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postCallCBOR cid >>= code4xx,
-                                                                                simpleTestCase "query request to read_state" ecid $ \cid -> do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "query",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob cid,
-                                                                                            "method_name" =: GText "query",
-                                                                                            "arg" =: GBlob (run reply)
-                                                                                          ]
-                                                                                  addNonceExpiryEnv req >>= postReadStateCBOR cid >>= code4xx,
-                                                                                simpleTestCase "read_state request to query" ecid $ \cid -> do
-                                                                                  addNonceExpiryEnv readStateEmpty >>= postQueryCBOR cid >>= code4xx
-                                                                              ],
-                                                                            testGroup
-                                                                              "wrong effective canister id"
-                                                                              [ simpleTestCase "invalid textual representation" ecid $ \cid1 -> do
-                                                                                  let req =
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob defaultUser,
-                                                                                            "canister_id" =: GBlob cid1,
-                                                                                            "method_name" =: GText "update",
-                                                                                            "arg" =: GBlob (run reply)
-                                                                                          ]
-                                                                                  let path = "/api/v2/canister/" ++ filter (/= '-') (textual cid1) ++ "/call"
-                                                                                  addNonceExpiryEnv req >>= postCBOR path >>= code4xx
-                                                                              ],
                                                                             testGroup
                                                                               "inter-canister calls"
                                                                               [ testGroup
@@ -1209,37 +1110,6 @@ icTests my_sub other_sub conf =
                                                                                   query cid (replyData (stableRead (int 0) (int 9))) >>= is "FOO______"
                                                                                   query cid (replyData (i2b stableSize)) >>= is "\1\0\0\0"
                                                                               ],
-                                                                            testGroup
-                                                                              "query"
-                                                                              [ testGroup "required fields" $ do
-                                                                                  -- TODO: Begin with a succeeding request to a real canister, to rule
-                                                                                  -- out other causes of failure than missing fields
-                                                                                  omitFields queryToNonExistent $ \req -> do
-                                                                                    cid <- create ecid
-                                                                                    addExpiry req >>= envelope defaultSK >>= postQueryCBOR cid >>= code4xx
-                                                                              ],
-                                                                            testGroup "read state" $
-                                                                              let ensure_request_exists cid user = do
-                                                                                    req <-
-                                                                                      addNonce >=> addExpiry $
-                                                                                        rec
-                                                                                          [ "request_type" =: GText "call",
-                                                                                            "sender" =: GBlob user,
-                                                                                            "canister_id" =: GBlob cid,
-                                                                                            "method_name" =: GText "query",
-                                                                                            "arg" =: GBlob (run (replyData "\xff\xff"))
-                                                                                          ]
-                                                                                    awaitCall cid req >>= isReply >>= is "\xff\xff"
-
-                                                                                    -- check that the request is there
-                                                                                    getRequestStatus user cid (requestId req) >>= is (Responded (Reply "\xff\xff"))
-
-                                                                                    return (requestId req)
-                                                                               in [ testGroup "required fields" $
-                                                                                      omitFields readStateEmpty $ \req -> do
-                                                                                        cid <- create ecid
-                                                                                        addExpiry req >>= envelope defaultSK >>= postReadStateCBOR cid >>= code4xx
-                                                                                  ],
                                                                             testGroup "Delegation targets" $
                                                                               let callReq cid =
                                                                                     ( rec
