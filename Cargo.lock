@@ -11975,6 +11975,9 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-nervous-system-proto",
+ "ic-protobuf",
+ "rewards-calculation",
+ "rust_decimal",
  "serde",
 ]
 

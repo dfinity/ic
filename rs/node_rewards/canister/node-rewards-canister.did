@@ -10,16 +10,16 @@ type DayUtc = record {
 
 type NodeMetricsDaily = record {
   subnet_assigned: opt principal;
-  subnet_assigned_fr_percent: opt Decimal;
+  subnet_assigned_fr: opt Decimal;
   num_blocks_proposed: opt nat64;
   num_blocks_failed: opt nat64;
-  original_fr_percent: opt Decimal;
-  relative_fr_percent: opt Decimal;
+  original_fr: opt Decimal;
+  relative_fr: opt Decimal;
 };
 
 type NodeStatus = variant {
   Assigned: record { node_metrics: opt NodeMetricsDaily };
-  Unassigned: record { extrapolated_fr_percent: opt Decimal };
+  Unassigned: record { extrapolated_fr: opt Decimal };
 };
 
 type NodeResults = record {
@@ -28,8 +28,8 @@ type NodeResults = record {
   region: opt text;
   dc_id: opt text;
   node_status: opt NodeStatus;
-  performance_multiplier_percent: opt Decimal;
-  rewards_reduction_percent: opt Decimal;
+  performance_multiplier: opt Decimal;
+  rewards_reduction: opt Decimal;
   base_rewards_xdr_permyriad: opt Decimal;
   adjusted_rewards_xdr_permyriad: opt Decimal;
 };
@@ -45,7 +45,7 @@ type BaseRewardsType3 = record {
   region: opt text;
   nodes_count: opt nat64;
   avg_rewards_xdr_permyriad: opt Decimal;
-  avg_coefficient_percent: opt Decimal;
+  avg_coefficient: opt Decimal;
   value_xdr_permyriad: opt Decimal;
 };
 
@@ -56,17 +56,15 @@ type NodeProviderRewards = record {
   nodes_results: vec NodeResults;
 };
 
-type NodeProviderRewardsDaily = record {
-    day_utc: opt DayUtc;
-    node_provider_rewards: opt NodeProviderRewards;
+type DailyResults = record {
+  subnets_fr: vec record { principal; Decimal };
+  provider_results: vec record { principal; NodeProviderRewards };
 };
 
-type GetNodeProviderRewardsCalculationResponse = variant { Ok: vec NodeProviderRewardsDaily; Err: text };
+type GetNodeProviderRewardsCalculationResponse = variant { Ok: DailyResults; Err: text };
 
 type GetNodeProviderRewardsCalculationRequest = record {
-  from_day_timestamp_nanos: nat64;
-  to_day_timestamp_nanos: nat64;
-  provider_id: principal;
+  day_timestamp_nanos: nat64;
 };
 
 // get_node_providers_rewards
