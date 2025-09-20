@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -18,6 +19,19 @@ rust_library(
     ],
 )
 
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "VERSION_TXT_PATH": "$(location //bazel:version.txt)",
+        "COMMIT_DATE_ISO_8601_TXT_PATH": "$(location //bazel:commit_date_iso_8601.txt)",
+    },
+    data = [
+        "//bazel:commit_date_iso_8601.txt",
+        "//bazel:version.txt",
+    ],
+)
+
 rust_binary(
     name = "ic-admin",
     testonly = True,
@@ -31,6 +45,7 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":admin",
+        ":build_script",
         "//rs/canister_client",
         "//rs/canister_client/sender",
         "//rs/crypto/internal/crypto_lib/types",
