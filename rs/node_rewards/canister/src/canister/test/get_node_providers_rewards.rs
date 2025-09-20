@@ -3,7 +3,6 @@ use crate::canister::test::test_utils::{CANISTER_TEST, VM, setup_thread_local_ca
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
 use futures_util::FutureExt;
-use ic_base_types::PrincipalId;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
@@ -15,6 +14,7 @@ use ic_registry_keys::{
     NODE_REWARDS_TABLE_KEY, make_data_center_record_key, make_node_operator_record_key,
     make_node_record_key,
 };
+use ic_types::PrincipalId;
 use maplit::btreemap;
 use rewards_calculation::performance_based_algorithm::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,

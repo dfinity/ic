@@ -2,7 +2,6 @@ use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_base_types::{RegistryVersion, Time};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -22,6 +21,7 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_rewards_v0};
+use ic_types::{RegistryVersion, Time};
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};

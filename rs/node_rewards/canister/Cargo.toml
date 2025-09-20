@@ -31,6 +31,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
 ic-stable-structures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
 mockall = { workspace = true }
 prost = { workspace = true }

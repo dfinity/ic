@@ -99,17 +99,6 @@ fn convert_decimal(api_decimal: &Decimal) -> RustDecimal {
     RustDecimal::from_str(human_readable).unwrap_or_default()
 }
 
-// Helper function to parse NodeRewardType from string
-fn parse_node_reward_type(s: &str) -> NodeRewardType {
-    match s {
-        "Type1" => NodeRewardType::Type1,
-        "Type2" => NodeRewardType::Type2,
-        "Type3" => NodeRewardType::Type3,
-        "Type3dot1" => NodeRewardType::Type3dot1,
-        _ => NodeRewardType::Type1, // Default fallback
-    }
-}
-
 // DayUtc conversions
 impl From<types::DayUtc> for DayUtc {
     fn from(day_utc: types::DayUtc) -> Self {
@@ -222,7 +211,7 @@ impl From<results::BaseRewards> for BaseRewards {
         Self {
             monthly_xdr_permyriad: Some(rewards.monthly.into()),
             daily_xdr_permyriad: Some(rewards.daily.into()),
-            node_reward_type: Some(rewards.node_reward_type.to_string()),
+            node_reward_type: Some(rewards.node_reward_type.into()),
             region: Some(rewards.region),
         }
     }
@@ -231,8 +220,8 @@ impl From<results::BaseRewards> for BaseRewards {
 impl From<BaseRewards> for results::BaseRewards {
     fn from(rewards: BaseRewards) -> Self {
         Self {
-            node_reward_type: parse_node_reward_type(&rewards.node_reward_type.unwrap_or_default()),
-            region: rewards.region.unwrap_or_default(),
+            node_reward_type: rewards.node_reward_type.unwrap().into(),
+            region: rewards.region.unwrap(),
             monthly: convert_decimal(&rewards.monthly_xdr_permyriad.unwrap_or_default()),
             daily: convert_decimal(&rewards.daily_xdr_permyriad.unwrap_or_default()),
         }

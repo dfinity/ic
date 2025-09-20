@@ -1,10 +1,10 @@
 use candid::{Decode, Encode};
-use ic_base_types::{PrincipalId, SubnetId};
 use ic_interfaces_registry::RegistryValue;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nns_test_utils::common::build_node_rewards_test_wasm;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_keys::make_subnet_record_key;
+use ic_types::{PrincipalId, SubnetId};
 use pocket_ic::PocketIcBuilder;
 use std::time::Duration;
 
