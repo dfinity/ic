@@ -16,6 +16,18 @@ pub struct DayUtc {
     value: UnixTsNanos,
 }
 
+impl DayUtc {
+    pub fn from_nanos(value: UnixTsNanos) -> Self {
+        let day_end = ((value / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1;
+        Self { value: day_end }
+    }
+
+    pub fn from_secs(value: u64) -> Self {
+        let nanos = value * 1_000_000_000;
+        Self::from_nanos(nanos)
+    }
+}
+
 impl Display for DayUtc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let dd_mm_yyyy =
