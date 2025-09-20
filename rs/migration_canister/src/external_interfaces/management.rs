@@ -52,7 +52,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
                         .contains("Only the controllers of the canister")
                     {
                         ProcessingResult::FatalFailure(format!(
-                            "Failed to set controller of canister {canister_id:?}"
+                            "Failed to set controller of canister {canister_id}"
                         ))
                     } else {
                         ProcessingResult::NoProgress
@@ -268,6 +268,46 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
                 "Call `list_canister_snapshots` for {} failed: {:?}",
                 canister_id, e
             );
+            ProcessingResult::NoProgress
+        }
+    }
+}
+
+// ========================================================================= //
+// `subnet_info`
+// TODO: we are handrolling this until the CDK exposes the new field
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct SubnetInfoArgs {
+    pub subnet_id: Principal,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct SubnetInfoResponse {
+    pub replica_version: String,
+    pub registry_version: u64,
+}
+
+pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64, Infallible> {
+    let args = SubnetInfoArgs { subnet_id };
+    match Call::bounded_wait(subnet_id, "subnet_info")
+        .with_arg(&args)
+        .await
+    {
+        Ok(response) => match response.candid::<SubnetInfoResponse>() {
+            Ok(SubnetInfoResponse {
+                registry_version, ..
+            }) => ProcessingResult::Success(registry_version),
+            Err(e) => {
+                println!(
+                    "Decoding `SubnetInfoResponse` for {} failed: {:?}",
+                    subnet_id, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
+        Err(e) => {
+            println!("Call `subnet_info` for {}, failed: {:?}", subnet_id, e);
             ProcessingResult::NoProgress
         }
     }
