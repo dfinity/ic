@@ -15,6 +15,7 @@ use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
 use ic_registry_canister_client::StableCanisterRegistryClient;
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
