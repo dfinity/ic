@@ -66,8 +66,8 @@ impl RecurringSyncTask for SnapshotVotingPowerTask {
             .with_borrow(|snapshots| snapshots.latest_snapshot_timestamp_seconds());
         match last_snapshot_timestamp_seconds {
             Some(last_snapshot_timestamp_seconds) => {
-                let next_snapshot_timestamp_seconds =
-                    last_snapshot_timestamp_seconds + VOTING_POWER_SNAPSHOT_INTERVAL.as_secs();
+                let next_snapshot_timestamp_seconds = last_snapshot_timestamp_seconds
+                    .saturating_add(VOTING_POWER_SNAPSHOT_INTERVAL.as_secs());
                 let delay_seconds = next_snapshot_timestamp_seconds.saturating_sub(now_seconds);
                 Duration::from_secs(delay_seconds)
             }
