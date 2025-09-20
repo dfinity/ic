@@ -11956,7 +11956,6 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
  "ic-stable-structures 0.6.8",
- "ic-types",
  "itertools 0.12.1",
  "maplit",
  "mockall",
@@ -11975,6 +11974,9 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-nervous-system-proto",
+ "ic-protobuf",
+ "rewards-calculation",
+ "rust_decimal",
  "serde",
 ]
 

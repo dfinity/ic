@@ -13,4 +13,7 @@ path = "src/lib.rs"
 candid = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-protobuf = { path = "../../../protobuf" }
+rewards-calculation = { path = "../../rewards_calculation" }
+rust_decimal = "1.37.1"
 serde = { workspace = true }

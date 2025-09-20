@@ -1,6 +1,7 @@
 use crate::canister::NodeRewardsCanister;
 use crate::canister::test::test_utils::{CANISTER_TEST, setup_thread_local_canister_for_test};
 use futures_util::FutureExt;
+use ic_base_types::PrincipalId;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -15,7 +16,6 @@ use ic_protobuf::registry::node_rewards::v2::{
 use ic_registry_keys::{
     NODE_REWARDS_TABLE_KEY, make_data_center_record_key, make_node_operator_record_key,
 };
-use ic_types::PrincipalId;
 use maplit::btreemap;
 use std::collections::BTreeMap;
 use std::str::FromStr;

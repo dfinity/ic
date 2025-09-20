@@ -1,4 +1,5 @@
 use candid::{Encode, Principal};
+use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::AgentFor;
 use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
@@ -7,7 +8,6 @@ use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRew
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
     GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
-use ic_types::PrincipalId;
 use pocket_ic::PocketIcBuilder;
 use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
 use pocket_ic::nonblocking::{PocketIc, query_candid, update_candid};
