@@ -1,5 +1,4 @@
 use crate::allowances::list_allowances;
-use crate::in_memory_ledger::{AllowancesRecentlyPurged, InMemoryLedger, verify_ledger_state};
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
@@ -17,6 +16,9 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
+use ic_ledger_suite_in_memory_ledger::{
+    AllowancesRecentlyPurged, InMemoryLedger, verify_ledger_state,
+};
 use ic_ledger_suite_state_machine_helpers::{
     AllowanceProvider, balance_of, fee, get_archive_blocks, get_archive_remaining_capacity,
     get_archive_transaction, get_archive_transactions, get_blocks, get_canister_info,
@@ -70,7 +72,6 @@ use std::{
 mod allowances;
 pub mod fee_collector;
 pub mod icrc_106;
-pub mod in_memory_ledger;
 pub mod metrics;
 
 pub const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
