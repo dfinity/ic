@@ -1669,6 +1669,7 @@ message KnownNeuronData {
   string name = 1;
   optional string description = 2;
   repeated string links = 3;
+  repeated Topic committed_topics = 4;
 }
 
 // Proposal action to deregister a known neuron by removing its name and description.
