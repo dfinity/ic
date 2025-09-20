@@ -217,7 +217,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
     );
     let dfinity_owned_node = if cfg.break_dfinity_owned_node {
-        faulty_nodes.first().unwrap()
+        faulty_nodes.last().unwrap()
     } else {
         // TODO(CON-1587): Consider breaking all nodes.
         healthy_nodes.first().unwrap()
