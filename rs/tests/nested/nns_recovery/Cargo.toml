@@ -30,5 +30,9 @@ name = "ic-systest-nested-nns-recovery-large"
 path = "nr_large.rs"
 
 [[bin]]
+name = "ic-systest-nested-nns-recovery-local"
+path = "nr_local.rs"
+
+[[bin]]
 name = "ic-systest-nested-nns-recovery-remote"
 path = "nr_remote.rs"
