@@ -1,4 +1,4 @@
-//! This module contains types and internal methods.  
+//! This module contains types and internal methods.
 //!
 //!
 use candid::{CandidType, Principal};
@@ -138,7 +138,7 @@ pub enum RequestState {
     ///     * Target has no snapshots.
     ///     * Target has sufficient cycles above the freezing threshold.
     ///     * Source canister version is not absurdly high.
-    /// * Called mgmt `canister_info` to determine the history length of source.  
+    /// * Called mgmt `canister_info` to determine the history length of source.
     ///
     /// Record the canister version and history length of source and the current time.
     #[strum(
@@ -231,7 +231,7 @@ pub enum Event {
 }
 
 impl Storable for Request {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("Request serialization failed"))
     }
 
@@ -247,7 +247,7 @@ impl Storable for Request {
 }
 
 impl Storable for RequestState {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("RequestState serialization failed"))
     }
 
@@ -263,7 +263,7 @@ impl Storable for RequestState {
 }
 
 impl Storable for Event {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("Event serialization failed"))
     }
 

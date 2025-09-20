@@ -74,10 +74,10 @@ pub fn ensure_file_exists(file: &Path) -> io::Result<()> {
 }
 
 pub fn ensure_file_extension(file: &Path, ext: &str) -> io::Result<()> {
-    if let Some(fext) = file.extension() {
-        if fext.to_str().eq(&Some(ext)) {
-            return Ok(());
-        }
+    if let Some(fext) = file.extension()
+        && fext.to_str().eq(&Some(ext))
+    {
+        return Ok(());
     }
     Err(io::Error::new(
         io::ErrorKind::InvalidInput,

@@ -495,14 +495,14 @@ pub fn build_icrc21_consent_info(
 }
 
 pub fn icrc21_check_fee(fee: &Option<Nat>, ledger_fee: &Nat) -> Result<(), Icrc21Error> {
-    if let Some(fee) = fee {
-        if fee != ledger_fee {
-            return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: format!(
-                    "The fee specified in the arguments ({fee}) is different than the ledger fee ({ledger_fee})"
-                ),
-            }));
-        }
+    if let Some(fee) = fee
+        && fee != ledger_fee
+    {
+        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: format!(
+                "The fee specified in the arguments ({fee}) is different than the ledger fee ({ledger_fee})"
+            ),
+        }));
     }
     Ok(())
 }

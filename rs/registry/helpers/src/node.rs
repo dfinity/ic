@@ -41,10 +41,10 @@ impl<T: RegistryClient + ?Sized> NodeRegistry for T {
     ) -> RegistryClientResult<SubnetId> {
         if let Some(subnet_ids) = self.get_subnet_ids(version)? {
             for subnet_id in subnet_ids {
-                if let Some(node_ids) = self.get_node_ids_on_subnet(subnet_id, version)? {
-                    if node_ids.contains(&node_id) {
-                        return Ok(Some(subnet_id));
-                    }
+                if let Some(node_ids) = self.get_node_ids_on_subnet(subnet_id, version)?
+                    && node_ids.contains(&node_id)
+                {
+                    return Ok(Some(subnet_id));
                 }
             }
         }

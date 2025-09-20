@@ -188,7 +188,7 @@ impl RewardsDistribution {
 }
 
 impl Storable for RewardsDistributionInProgress {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
     }
 

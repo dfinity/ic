@@ -98,24 +98,23 @@ impl Eq for Bucket {}
 
 impl Bucket {
     fn evaluate(&self, ctx: &Context) -> Option<Decision> {
-        if let Some(v) = self.rule.subnet_id {
-            if ctx.subnet_id != v {
-                return None;
-            }
+        if let Some(v) = self.rule.subnet_id
+            && ctx.subnet_id != v
+        {
+            return None;
         }
 
-        if let Some(v) = self.rule.canister_id {
-            if let Some(x) = ctx.canister_id {
-                if x != v {
-                    return None;
-                }
-            }
+        if let Some(v) = self.rule.canister_id
+            && let Some(x) = ctx.canister_id
+            && x != v
+        {
+            return None;
         }
 
-        if let Some(v) = &self.rule.request_types {
-            if !v.contains(&convert_request_type(ctx.request_type)) {
-                return None;
-            }
+        if let Some(v) = &self.rule.request_types
+            && !v.contains(&convert_request_type(ctx.request_type))
+        {
+            return None;
         }
 
         if let Some(rgx) = &self.rule.methods_regex {
@@ -128,10 +127,10 @@ impl Bucket {
             }
         }
 
-        if let Some(v) = self.rule.ip {
-            if !v.contains(&ctx.ip) {
-                return None;
-            }
+        if let Some(v) = self.rule.ip
+            && !v.contains(&ctx.ip)
+        {
+            return None;
         }
 
         if self.rule.limit == Action::Pass {
@@ -315,10 +314,10 @@ impl GenericLimiter {
 
                 // Check if the same rule exists in the same position.
                 // If yes, then copy over the old limiter to avoid resetting it.
-                if let Some(v) = old.get(idx) {
-                    if v.rule == rule {
-                        return v.clone();
-                    }
+                if let Some(v) = old.get(idx)
+                    && v.rule == rule
+                {
+                    return v.clone();
                 }
 
                 let limiter = if let Action::Limit(limit, duration) = &rule.limit {

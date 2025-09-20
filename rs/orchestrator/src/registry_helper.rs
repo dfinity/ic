@@ -66,10 +66,9 @@ impl RegistryHelper {
         if let Some((subnet_id, subnet_record)) = self
             .registry_client
             .get_listed_subnet_for_node_id(self.node_id, version)?
+            && !subnet_record.start_as_nns
         {
-            if !subnet_record.start_as_nns {
-                return Ok(subnet_id);
-            }
+            return Ok(subnet_id);
         }
 
         Err(OrchestratorError::NodeUnassignedError(

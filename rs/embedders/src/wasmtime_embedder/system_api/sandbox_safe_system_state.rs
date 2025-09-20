@@ -347,26 +347,26 @@ impl SystemStateModifications {
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
-        if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken {
-            if call_context_balance_taken != Cycles::zero() {
-                let own_canister_id = system_state.canister_id;
+        if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken
+            && call_context_balance_taken != Cycles::zero()
+        {
+            let own_canister_id = system_state.canister_id;
 
-                let call_context = system_state
-                    .withdraw_cycles(context_id, call_context_balance_taken)
-                    .map_err(Self::error)?;
-                if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                    match call_context.call_origin() {
-                        CallOrigin::CanisterUpdate(origin_canister_id, _, _)
-                        | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
-                            logger,
-                            "Canister {} accepted {} cycles from canister {}.",
-                            own_canister_id,
-                            call_context_balance_taken,
-                            origin_canister_id
-                        ),
-                        _ => (),
-                    };
-                }
+            let call_context = system_state
+                .withdraw_cycles(context_id, call_context_balance_taken)
+                .map_err(Self::error)?;
+            if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                match call_context.call_origin() {
+                    CallOrigin::CanisterUpdate(origin_canister_id, _, _)
+                    | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
+                        logger,
+                        "Canister {} accepted {} cycles from canister {}.",
+                        own_canister_id,
+                        call_context_balance_taken,
+                        origin_canister_id
+                    ),
+                    _ => (),
+                };
             }
         }
 
@@ -1337,14 +1337,14 @@ impl SandboxSafeSystemState {
                     self.cost_schedule,
                 );
 
-                if let Some(limit) = self.reserved_balance_limit {
-                    if self.reserved_balance() + cycles_to_reserve > limit {
-                        return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
-                            bytes: allocated_bytes,
-                            requested: self.reserved_balance() + cycles_to_reserve,
-                            limit,
-                        });
-                    }
+                if let Some(limit) = self.reserved_balance_limit
+                    && self.reserved_balance() + cycles_to_reserve > limit
+                {
+                    return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
+                        bytes: allocated_bytes,
+                        requested: self.reserved_balance() + cycles_to_reserve,
+                        limit,
+                    });
                 }
 
                 let old_balance = self.cycles_balance();

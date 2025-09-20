@@ -176,7 +176,7 @@ impl FromStr for Account {
 }
 
 impl Storable for Account {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("account encoding should always succeed");
         Cow::Owned(buf)

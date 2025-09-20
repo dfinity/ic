@@ -198,12 +198,10 @@ fn trace(name: String, child: Pid, allowed_syscalls: BTreeSet<Sysno>) {
                 }
             }
             WaitStatus::PtraceSyscall(_) => {
-                if is_syscall_entry {
-                    if let Ok(regs) = ptrace::getregs(child) {
-                        let sysno = Sysno::from(regs.orig_rax as u32);
-                        if !allowed_syscalls.contains(&sysno) {
-                            panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
-                        }
+                if is_syscall_entry && let Ok(regs) = ptrace::getregs(child) {
+                    let sysno = Sysno::from(regs.orig_rax as u32);
+                    if !allowed_syscalls.contains(&sysno) {
+                        panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
                     }
                 }
 
@@ -241,12 +239,12 @@ fn trace(name: String, child: Pid, allowed_syscalls: BTreeSet<Sysno>) {
 fn get_children(parent_pid: i32) -> BTreeSet<i32> {
     let mut pids = BTreeSet::new();
 
-    if let Ok(process) = Process::new(parent_pid) {
-        if let Ok(tasks) = process.tasks() {
-            for task in tasks.flatten() {
-                let child_pid = task.tid;
-                pids.insert(child_pid);
-            }
+    if let Ok(process) = Process::new(parent_pid)
+        && let Ok(tasks) = process.tasks()
+    {
+        for task in tasks.flatten() {
+            let child_pid = task.tid;
+            pids.insert(child_pid);
         }
     }
     pids.remove(&parent_pid);

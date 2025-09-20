@@ -444,14 +444,14 @@ impl MessageStoreImpl {
         MessageStoreImpl: MessageStore<T>,
         T: ToContext,
     {
-        if let Some(reference) = queue.peek() {
-            if self.is_stale(reference) {
-                return Err(format!(
-                    "Stale reference at the front of {:?} queue to/from {}",
-                    T::context(),
-                    canister_id
-                ));
-            }
+        if let Some(reference) = queue.peek()
+            && self.is_stale(reference)
+        {
+            return Err(format!(
+                "Stale reference at the front of {:?} queue to/from {}",
+                T::context(),
+                canister_id
+            ));
         }
 
         Ok(())
@@ -690,7 +690,7 @@ impl CanisterQueues {
     /// Returns an iterator that loops over output queues, popping one message
     /// at a time from each in a round robin fashion. The iterator consumes all
     /// popped messages.
-    pub(crate) fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+    pub(crate) fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator<'_> {
         CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.store)
     }
 

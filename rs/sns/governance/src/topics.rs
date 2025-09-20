@@ -442,10 +442,9 @@ impl pb::Topic {
                 }),
             ..
         }) = action
+            && let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash)
         {
-            if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
-                return Some(extension_spec.topic);
-            }
+            return Some(extension_spec.topic);
         }
 
         let action_code = u64::from(action);

@@ -320,10 +320,10 @@ async fn test_async(env: TestEnv) {
                 }
                 Err(error) => {
                     // We should observe 403 http error, as all requests are blocked
-                    if let AgentError::HttpError(ref payload) = error {
-                        if payload.status == 403 {
-                            return Ok(());
-                        }
+                    if let AgentError::HttpError(ref payload) = error
+                        && payload.status == 403
+                    {
+                        return Ok(());
                     }
                     bail!("update call failed with unexpected error: {error:?}");
                 }

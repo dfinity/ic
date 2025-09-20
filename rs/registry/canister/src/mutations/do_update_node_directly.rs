@@ -105,20 +105,20 @@ impl Registry {
 
         // 4. Disallow updating if the most recent key update on the subnet is not old enough.
         //    If the node has no timestamp, skip all checks.
-        if previous_timestamp_set {
-            if let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record) {
-                // The node is on a signing subnet, and has a timestamp
-                let key_rotation_period_on_subnet =
-                    (idkg_key_rotation_period_ms as f64 / subnet_size as f64 * DELAY_COMPENSATION)
-                        as u64;
-                let sum = last_key_update_timestamp
-                    .checked_add(key_rotation_period_on_subnet)
-                    .ok_or_else(|| {
-                        "Integer overflow when adding key rotation period on subnet.".to_string()
-                    })?;
-                if Duration::from_millis(sum) > duration_since_unix_epoch {
-                    return Err("the signing subnet had a key update recently".to_string());
-                }
+        if previous_timestamp_set
+            && let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record)
+        {
+            // The node is on a signing subnet, and has a timestamp
+            let key_rotation_period_on_subnet = (idkg_key_rotation_period_ms as f64
+                / subnet_size as f64
+                * DELAY_COMPENSATION) as u64;
+            let sum = last_key_update_timestamp
+                .checked_add(key_rotation_period_on_subnet)
+                .ok_or_else(|| {
+                    "Integer overflow when adding key rotation period on subnet.".to_string()
+                })?;
+            if Duration::from_millis(sum) > duration_since_unix_epoch {
+                return Err("the signing subnet had a key update recently".to_string());
             }
         }
 

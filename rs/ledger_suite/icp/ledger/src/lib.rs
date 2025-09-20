@@ -84,7 +84,7 @@ struct StorableAllowance {
 }
 
 impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
         Cow::Owned(buf)
@@ -612,10 +612,10 @@ pub fn get_allowances_list(
             if result.len() >= max_results as usize || from_account_id != from {
                 break;
             }
-            if let Some(expires_at) = storable_allowance.expires_at {
-                if expires_at.as_nanos_since_unix_epoch() <= now {
-                    continue;
-                }
+            if let Some(expires_at) = storable_allowance.expires_at
+                && expires_at.as_nanos_since_unix_epoch() <= now
+            {
+                continue;
             }
             result.push(Allowance103 {
                 from_account_id,

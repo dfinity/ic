@@ -104,13 +104,12 @@ impl Notary {
             }
             let height = notarized_height.increment();
             for proposal in find_lowest_ranked_non_disqualified_proposals(pool, height) {
-                if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank()) {
-                    if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
-                        if let Some(s) = self.notarize_block(pool, &proposal.content) {
-                            self.metrics.report_notarization(proposal.as_ref(), elapsed);
-                            notarization_shares.push(s);
-                        }
-                    }
+                if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank())
+                    && !self.is_proposal_already_notarized_by_me(pool, &proposal)
+                    && let Some(s) = self.notarize_block(pool, &proposal.content)
+                {
+                    self.metrics.report_notarization(proposal.as_ref(), elapsed);
+                    notarization_shares.push(s);
                 }
             }
         }

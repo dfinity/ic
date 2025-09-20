@@ -185,10 +185,10 @@ fn check_calls_conclude_with_migrating_canister_impl(
     if let Err(err) = induct_from_head_of_stream(&subnets.local_env, &subnets.remote_env, None) {
         return subnets.failed_with_reason(format!("{err}"));
     }
-    if let Some((header, _)) = stream_snapshot(&subnets.remote_env, &subnets.local_env) {
-        if header.reject_signals().is_empty() {
-            return subnets.failed_with_reason("no reject signals in the reverse stream");
-        }
+    if let Some((header, _)) = stream_snapshot(&subnets.remote_env, &subnets.local_env)
+        && header.reject_signals().is_empty()
+    {
+        return subnets.failed_with_reason("no reject signals in the reverse stream");
     }
 
     // Migrate the first local canister.

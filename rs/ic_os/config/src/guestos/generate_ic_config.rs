@@ -37,10 +37,9 @@ pub fn generate_ic_config(
         .guestos_settings
         .guestos_dev_settings
         .generate_ic_boundary_tls_cert
+        && !domain_name.is_empty()
     {
-        if !domain_name.is_empty() {
-            generate_tls_certificate(domain_name)?;
-        }
+        generate_tls_certificate(domain_name)?;
     }
 
     Ok(())

@@ -766,12 +766,12 @@ impl ExtendedSubnetConfigSet {
 
     pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
         let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
-            if let Some(config) = subnet {
-                if !matches!(config.state_config, SubnetStateConfig::New) {
-                    return Err(format!(
-                        "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
-                    ));
-                }
+            if let Some(config) = subnet
+                && !matches!(config.state_config, SubnetStateConfig::New)
+            {
+                return Err(format!(
+                    "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
+                ));
             }
             Ok(())
         };

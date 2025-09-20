@@ -532,13 +532,13 @@ fn reject_if_invalid(
     // We time out vetKD requests that take longer than one DKG interval.
     // Otherwise the required NiDKG transcript might disappear before we
     // can complete the request.
-    if let ThresholdArguments::VetKd(args) = &context.args {
-        if args.height < request_expiry.height {
-            if let Some(metrics) = metrics {
-                metrics.payload_errors_inc("expired_transcript", &key_id);
-            }
-            return Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut));
+    if let ThresholdArguments::VetKd(args) = &context.args
+        && args.height < request_expiry.height
+    {
+        if let Some(metrics) = metrics {
+            metrics.payload_errors_inc("expired_transcript", &key_id);
         }
+        return Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut));
     }
 
     None
@@ -674,23 +674,23 @@ mod tests {
             );
 
             // Enable the configured keys
-            if let Some(config) = config {
-                if keys_enabled {
-                    for key_id in config.key_ids() {
-                        registry_data_provider
-                            .add(
-                                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
-                                registry.get_latest_version().increment(),
-                                Some(
-                                    ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
-                                        subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
-                                    },
-                                ),
-                            )
-                            .expect("Could not add chain-key enabled subnet list");
-                    }
-                    registry.update_to_latest_version();
+            if let Some(config) = config
+                && keys_enabled
+            {
+                for key_id in config.key_ids() {
+                    registry_data_provider
+                        .add(
+                            &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
+                            registry.get_latest_version().increment(),
+                            Some(
+                                ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
+                                    subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
+                                },
+                            ),
+                        )
+                        .expect("Could not add chain-key enabled subnet list");
                 }
+                registry.update_to_latest_version();
             }
 
             // Setup the state manager expectation

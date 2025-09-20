@@ -39,6 +39,8 @@ pub struct MetricsHttpEndpoint {
     metrics: MetricsEndpointMetrics,
 }
 
+//TODO: is this needed?
+#[allow(dead_code)]
 #[derive(Debug, Error)]
 struct HttpError {
     response: Response<Body>,

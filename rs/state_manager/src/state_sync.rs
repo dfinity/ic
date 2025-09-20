@@ -154,16 +154,15 @@ impl StateSync {
                 }
             });
 
-        if let Some(state_sync_file_group) = file_group_to_populate {
-            if let Some(metadata) = self
+        if let Some(state_sync_file_group) = file_group_to_populate
+            && let Some(metadata) = self
                 .state_manager
                 .states
                 .write()
                 .states_metadata
                 .get_mut(&msg_id.height)
-            {
-                metadata.state_sync_file_group = Some(state_sync_file_group);
-            }
+        {
+            metadata.state_sync_file_group = Some(state_sync_file_group);
         }
         state_sync_message
     }

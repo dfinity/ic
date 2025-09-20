@@ -719,20 +719,20 @@ impl XNetPayloadBuilderImpl {
             }
 
             // Ensure the message limit (dictated e.g. by the backlog size) is respected.
-            if let Some(msg_limit) = get_msg_limit(subnet_id, state) {
-                if messages.len() > msg_limit {
-                    log!(
-                        self.log,
-                        log_level,
-                        "Stream from {}: slice length ({}) above limit ({})",
-                        subnet_id,
-                        messages.len(),
-                        msg_limit
-                    );
-                    return SliceValidationResult::Invalid(format!(
-                        "Stream from {subnet_id}: slice length above limit"
-                    ));
-                }
+            if let Some(msg_limit) = get_msg_limit(subnet_id, state)
+                && messages.len() > msg_limit
+            {
+                log!(
+                    self.log,
+                    log_level,
+                    "Stream from {}: slice length ({}) above limit ({})",
+                    subnet_id,
+                    messages.len(),
+                    msg_limit
+                );
+                return SliceValidationResult::Invalid(format!(
+                    "Stream from {subnet_id}: slice length above limit"
+                ));
             }
 
             // Ensure the signal limit is respected.

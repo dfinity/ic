@@ -501,12 +501,11 @@ impl CanisterHttpPayloadBuilderImpl {
                 replication: Replication::NonReplicated(_),
                 ..
             }) = http_contexts.get(callback_id)
+                && !non_replicated_ids.insert(callback_id)
             {
-                if !non_replicated_ids.insert(callback_id) {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
-                        *callback_id,
-                    ));
-                }
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                    *callback_id,
+                ));
             }
         }
 

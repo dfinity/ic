@@ -70,18 +70,18 @@ impl KnownNeuron {
         }
 
         // Validate description length
-        if let Some(description) = &known_neuron_data.description {
-            if description.len() > KNOWN_NEURON_DESCRIPTION_MAX_LEN {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "The maximum number of bytes for a neuron's description, which is {}, \
+        if let Some(description) = &known_neuron_data.description
+            && description.len() > KNOWN_NEURON_DESCRIPTION_MAX_LEN
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "The maximum number of bytes for a neuron's description, which is {}, \
                         has been exceeded. Current length: {}",
-                        KNOWN_NEURON_DESCRIPTION_MAX_LEN,
-                        description.len()
-                    ),
-                ));
-            }
+                    KNOWN_NEURON_DESCRIPTION_MAX_LEN,
+                    description.len()
+                ),
+            ));
         }
 
         // Validate links

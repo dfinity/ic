@@ -13,7 +13,10 @@ pub struct TestNeurons<'a> {
 }
 
 impl TestNeurons<'_> {
-    pub fn new(seed: u64, ledger_balances: &mut HashMap<AccountIdentifier, Tokens>) -> TestNeurons {
+    pub fn new(
+        seed: u64,
+        ledger_balances: &mut HashMap<AccountIdentifier, Tokens>,
+    ) -> TestNeurons<'_> {
         TestNeurons {
             neurons: BTreeMap::default(),
             seed: seed * 100_000,

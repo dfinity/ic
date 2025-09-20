@@ -168,16 +168,16 @@ fn main() -> Result<()> {
     let mut valid_args = CliArgs::parse().validate()?;
 
     // set replica update image if necessary
-    if let Some(ref replica_version_id) = valid_args.replica_version_id {
-        if !valid_args.allow_empty_update_image && valid_args.release_package_download_url.is_none()
-        {
-            let url = Url::parse(
-                &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", replica_version_id.as_ref()),
-            )?;
-            valid_args.release_package_download_url = Some(url);
-            valid_args.release_package_sha256_hex =
-                Some(fetch_replica_version_sha256(replica_version_id.clone())?);
-        }
+    if let Some(ref replica_version_id) = valid_args.replica_version_id
+        && !valid_args.allow_empty_update_image
+        && valid_args.release_package_download_url.is_none()
+    {
+        let url = Url::parse(
+            &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", replica_version_id.as_ref()),
+        )?;
+        valid_args.release_package_download_url = Some(url);
+        valid_args.release_package_sha256_hex =
+            Some(fetch_replica_version_sha256(replica_version_id.clone())?);
     }
 
     let replica_version = valid_args.replica_version_id.unwrap_or_default();

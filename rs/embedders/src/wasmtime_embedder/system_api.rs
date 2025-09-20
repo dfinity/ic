@@ -1083,14 +1083,14 @@ impl MemoryUsage {
             new_message_usage,
         )?;
 
-        if message_memory_usage.guaranteed_response.get() != 0 {
-            if let Err(_err) = self.subnet_available_memory.try_decrement(
+        if message_memory_usage.guaranteed_response.get() != 0
+            && let Err(_err) = self.subnet_available_memory.try_decrement(
                 NumBytes::new(0),
                 message_memory_usage.guaranteed_response,
                 NumBytes::new(0),
-            ) {
-                return Err(HypervisorError::OutOfMemory);
-            }
+            )
+        {
+            return Err(HypervisorError::OutOfMemory);
         }
 
         self.allocated_message_memory += message_memory_usage;

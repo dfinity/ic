@@ -25,7 +25,7 @@ impl From<NeuronId> for u64 {
 }
 
 impl Storable for NeuronId {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.id.to_bytes()
     }
 
@@ -59,7 +59,7 @@ impl ProposalId {
 }
 
 impl Storable for ProposalId {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.id.to_bytes()
     }
 

@@ -41,7 +41,7 @@ use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 /// Wraps `pocket_ic` into an agent to use when more authority is required (e.g., making proposals).
 ///
 /// Returns the agent and ID of a neuron controlled by this agent.
-fn nns_agent(pocket_ic: &PocketIc) -> (PocketIcAgent, NeuronId) {
+fn nns_agent(pocket_ic: &PocketIc) -> (PocketIcAgent<'_>, NeuronId) {
     let nns_neuron_id = NeuronId {
         id: TEST_NEURON_1_ID,
     };

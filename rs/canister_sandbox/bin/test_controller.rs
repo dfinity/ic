@@ -39,7 +39,7 @@ fn main() {
     let executable_path = process::build_sandbox_binary_relative_path("test_sandbox").unwrap();
     let (sbx, _, thread_handle) = process::spawn_canister_sandbox_process(
         &executable_path,
-        &[executable_path.clone()],
+        std::slice::from_ref(&executable_path),
         controller_service,
         safe_shutdown,
     )

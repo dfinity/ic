@@ -148,7 +148,7 @@ impl KnownNeuronName {
 }
 
 impl Storable for KnownNeuronName {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         self.0.to_bytes()
     }
 

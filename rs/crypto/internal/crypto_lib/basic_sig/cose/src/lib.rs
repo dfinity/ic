@@ -98,10 +98,10 @@ impl CosePublicKey {
     }
 
     fn verify_key_ops(fields: &CborMap) -> Result<(), CosePublicKeyParseError> {
-        if let Some(key_ops) = fields.get(&COSE_PARAM_KEY_OPS) {
-            if *key_ops != serde_cbor::Value::Text("verify".to_string()) {
-                return Err(CosePublicKeyParseError::AlgorithmNotSupported);
-            }
+        if let Some(key_ops) = fields.get(&COSE_PARAM_KEY_OPS)
+            && *key_ops != serde_cbor::Value::Text("verify".to_string())
+        {
+            return Err(CosePublicKeyParseError::AlgorithmNotSupported);
         }
 
         Ok(())

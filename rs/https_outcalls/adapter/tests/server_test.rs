@@ -838,6 +838,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
         use tonic::transport::server::Connected;
 
+        //TODO: is this needed?
+        #[allow(dead_code)]
         #[derive(Debug)]
         pub struct UnixStream(pub tokio::net::UnixStream);
 
