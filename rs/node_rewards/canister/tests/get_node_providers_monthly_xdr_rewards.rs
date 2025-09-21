@@ -1,4 +1,4 @@
-use candid::{Encode, Principal};
+use candid::Encode;
 use ic_nervous_system_agent::AgentFor;
 use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
