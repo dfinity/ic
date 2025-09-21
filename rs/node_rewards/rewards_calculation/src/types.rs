@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn test_valid_rewarding_period() {
         let from_day: DayUtc = DayUtc::from_nanos(ymdh_to_ts(2020, 1, 12, 0));
-        let to_day: DayUtc = DayUtc::from_nanos(ymdh_to_ts(2020, 1, 16, 0));
+        let to_day: DayUtc = DayUtc::from_nanos(ymdh_to_ts(2020, 1, 15, 0));
 
         let days = from_day.days_until(&to_day).unwrap().len();
 
