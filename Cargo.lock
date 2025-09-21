@@ -11976,6 +11976,7 @@ dependencies = [
  "ic-base-types",
  "ic-nervous-system-proto",
  "rewards-calculation",
+ "rust_decimal",
  "serde",
 ]
 
