@@ -1,22 +1,16 @@
+pub use crate::DayUtc;
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1::Decimal;
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProviderRewardsCalculationRequest {
-    pub from_day_timestamp_nanos: u64,
-    pub to_day_timestamp_nanos: u64,
+    pub from_day: DayUtc,
+    pub to_day: DayUtc,
     pub provider_id: Principal,
 }
 
 pub type GetNodeProviderRewardsCalculationResponse = Result<Vec<NodeProviderRewardsDaily>, String>;
-
-#[derive(
-    PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, Debug,
-)]
-pub struct DayUtc {
-    pub value: Option<u64>,
-}
 
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {

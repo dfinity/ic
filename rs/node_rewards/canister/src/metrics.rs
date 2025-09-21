@@ -187,13 +187,13 @@ where
         day_utc: &DayUtc,
     ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
         let mut metrics_by_subnet = BTreeMap::new();
-        let previous_day_ts = day_utc.previous_day().unix_ts_at_day_start_nanoseconds();
+        let previous_day_ts = day_utc.previous_day().first_ts_nanos();
         let first_key = SubnetMetricsKey {
             timestamp_nanos: previous_day_ts,
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
-            timestamp_nanos: day_utc.get(),
+            timestamp_nanos: day_utc.last_ts_nanos(),
             ..SubnetMetricsKey::max_key()
         };
 
@@ -201,7 +201,7 @@ where
             .subnets_metrics
             .borrow()
             .range(first_key..=last_key)
-            .into_group_map_by(|(k, _)| k.timestamp_nanos.into())
+            .into_group_map_by(|(k, _)| DayUtc::from_nanos(k.timestamp_nanos))
             .into_iter()
             .collect();
 
