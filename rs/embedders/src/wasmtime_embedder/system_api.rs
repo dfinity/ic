@@ -1189,6 +1189,9 @@ pub struct SystemApiImpl {
 
     /// How many times each tracked System API call was invoked.
     call_counters: SystemApiCallCounters,
+
+    interim_instruction_counter: i64,
+    pub heap_metrics: Option<std::sync::Arc<memory_tracker::MemoryTrackerMetrics>>,
 }
 
 impl SystemApiImpl {
@@ -1245,6 +1248,8 @@ impl SystemApiImpl {
             current_slice_instruction_limit: i64::try_from(slice_limit).unwrap_or(i64::MAX),
             instructions_executed_before_current_slice: 0,
             call_counters: SystemApiCallCounters::default(),
+            interim_instruction_counter: 0,
+            heap_metrics: None,
         }
     }
 
@@ -2006,6 +2011,10 @@ impl SystemApi for SystemApiImpl {
         // Note that `self.execution_parameters.instruction_limits.slice()` is
         // the instruction limit of the first slice, not the current one.
         NumInstructions::from(u64::try_from(self.current_slice_instruction_limit).unwrap_or(0))
+    }
+
+    fn interim_slice_instruction_limit(&self) -> NumInstructions {
+        NumInstructions::from(50_000)
     }
 
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions {
@@ -3263,6 +3272,44 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64> {
+        const ACCESSED_PAGE_OVERHEAD: i64 = 1_000;
+
+        let num_accessed_pages = if let Some(heap_metrics) = &self.heap_metrics {
+            heap_metrics
+                .num_accessed_pages
+                .swap(0, std::sync::atomic::Ordering::Relaxed)
+        } else {
+            0
+        };
+        let instruction_counter =
+            instruction_counter - num_accessed_pages as i64 * ACCESSED_PAGE_OVERHEAD;
+
+        // println!(
+        //     "XXX OOI accessed:{} instr:{} interim:{} limits interim:{} slice:{} message:{}",
+        //     num_accessed_pages,
+        //     instruction_counter,
+        //     self.interim_instruction_counter,
+        //     self.interim_slice_instruction_limit(),
+        //     self.slice_instruction_limit(),
+        //     self.message_instruction_limit(),
+        // );
+        let slice_instruction_limit = self.slice_instruction_limit().get() as i64;
+        let interim_slice_instruction_limit = self.interim_slice_instruction_limit().get() as i64;
+        let interim_slice_instruction_limit =
+            interim_slice_instruction_limit.min(slice_instruction_limit);
+
+        let executed_instructions = interim_slice_instruction_limit - instruction_counter;
+        self.interim_instruction_counter += executed_instructions;
+
+        let instructions_left =
+            self.current_slice_instruction_limit - self.interim_instruction_counter;
+        if instructions_left > 0 {
+            let new_limit = interim_slice_instruction_limit.min(instructions_left);
+            // println!("XXX OOI continue with new_limit:{new_limit}...");
+            return Ok(new_limit);
+        }
+        self.interim_instruction_counter = 0;
+
         let result = self
             .out_of_instructions_handler
             .out_of_instructions(instruction_counter);

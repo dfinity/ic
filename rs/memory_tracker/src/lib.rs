@@ -13,7 +13,10 @@ use nix::{
 use std::{
     cell::{Cell, RefCell},
     ops::Range,
-    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 
@@ -252,6 +255,7 @@ pub struct MemoryTrackerMetrics {
     mprotect_count: AtomicUsize,
     copy_page_count: AtomicUsize,
     sigsegv_handler_duration_nanos: AtomicU64,
+    pub num_accessed_pages: AtomicUsize,
 }
 
 pub struct SigsegvMemoryTracker {
@@ -266,7 +270,7 @@ pub struct SigsegvMemoryTracker {
     use_new_signal_handler: bool,
     #[cfg(feature = "sigsegv_handler_checksum")]
     checksum: RefCell<checksum::SigsegChecksum>,
-    pub metrics: MemoryTrackerMetrics,
+    pub metrics: Arc<MemoryTrackerMetrics>,
 }
 
 impl SigsegvMemoryTracker {
@@ -304,7 +308,7 @@ impl SigsegvMemoryTracker {
             use_new_signal_handler,
             #[cfg(feature = "sigsegv_handler_checksum")]
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
-            metrics: MemoryTrackerMetrics::default(),
+            metrics: Arc::new(MemoryTrackerMetrics::default()),
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
@@ -558,6 +562,10 @@ pub fn sigsegv_fault_handler_old(
             .unwrap()
         };
         tracker.accessed_bitmap.borrow_mut().mark(page_idx);
+        tracker
+            .metrics
+            .num_accessed_pages
+            .fetch_add(1, Ordering::Relaxed);
         tracker.accessed_pages.borrow_mut().push(page_idx);
     };
     true
@@ -654,6 +662,10 @@ pub fn sigsegv_fault_handler_new(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            tracker
+                .metrics
+                .num_accessed_pages
+                .fetch_add(1, Ordering::Relaxed);
             tracker.add_accessed_pages(&prefetch_range);
         }
         (AccessKind::Read, DirtyPageTracking::Track) => {
@@ -672,6 +684,10 @@ pub fn sigsegv_fault_handler_new(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            tracker
+                .metrics
+                .num_accessed_pages
+                .fetch_add(1, Ordering::Relaxed);
             tracker.add_accessed_pages(&prefetch_range);
         }
         (AccessKind::Write, DirtyPageTracking::Track) => {
@@ -732,6 +748,10 @@ pub fn sigsegv_fault_handler_new(
                     prefetch_range,
                 );
                 accessed_bitmap.mark_range(&prefetch_range);
+                tracker
+                    .metrics
+                    .num_accessed_pages
+                    .fetch_add(1, Ordering::Relaxed);
                 tracker.add_accessed_pages(&prefetch_range);
                 dirty_bitmap.mark_range(&prefetch_range);
                 tracker.add_dirty_pages(faulting_page, prefetch_range);

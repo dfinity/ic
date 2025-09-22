@@ -535,6 +535,16 @@ impl WasmtimeEmbedder {
         }
 
         let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
+        if let Some(heap) = memory_trackers.get(&CanisterMemoryType::Heap) {
+            let heap_metrics = Arc::clone(&heap.lock().unwrap().metrics);
+            if let Ok(system_api) = store.data_mut().system_api_mut() {
+                system_api.heap_metrics = Some(heap_metrics);
+            } else {
+                // println!("XXX new_instance no system_api tracking:{modification_tracking:?}");
+            }
+        } else {
+            // println!("XXX new_instance no heap memory tracking:{modification_tracking:?}");
+        }
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
