@@ -36,7 +36,6 @@ use crate::driver::{
 };
 use crate::k8s::config::TNET_DNS_SUFFIX;
 use crate::k8s::tnet::TNet;
-use crate::retry_with_msg;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -496,7 +495,7 @@ sudo systemctl start prometheus.service
             .expect("Failed to create tarball of prometheus data directory");
 
         // scp the tarball to the local test environment.
-        scp_recv_from(log, &session, tarball_full_path, &destination);
+        scp_recv_from(log, &session, &tarball_full_path, &destination);
     }
 }
 
