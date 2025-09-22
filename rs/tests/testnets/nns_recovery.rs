@@ -22,7 +22,13 @@
 // ```
 
 use anyhow::Result;
-use ic_nested_nns_recovery_common::{SetupConfig, replace_nns_with_unassigned_nodes, setup};
+use ic_nested_nns_recovery_common::{
+    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes, setup,
+};
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
+use ic_system_test_driver::driver::driver_setup::{
+    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
+};
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
@@ -32,7 +38,14 @@ use slog::info;
 use std::time::Duration;
 
 fn log_instructions(env: TestEnv) {
+    let ssh_priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let ssh_pub_key_path = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME);
+
     nested::registration(env.clone());
+    replace_nns_with_unassigned_nodes(&env);
+    grant_backup_access_to_all_nns_nodes(&env, &ssh_priv_key_path, &ssh_pub_key_path);
 
     let logger = env.logger();
 
@@ -40,7 +53,6 @@ fn log_instructions(env: TestEnv) {
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
 
-    replace_nns_with_unassigned_nodes(&env);
 
     info!(
         logger,
