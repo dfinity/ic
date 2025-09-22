@@ -195,7 +195,7 @@ mod tests {
         let guestos_config =
             generate_guestos_config(&hostos_config, GuestVMType::Default, None).unwrap();
 
-        assert_eq!(guestos_config.config_version, hostos_config.config_version);
+        assert_eq!(guestos_config.config_version, CONFIG_VERSION.to_string());
         assert_eq!(
             guestos_config.network_settings.domain_name,
             hostos_config.network_settings.domain_name
