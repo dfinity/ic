@@ -7,6 +7,7 @@ use crate::{
     Event, RequestState, ValidationError,
     canister_state::{
         MethodGuard,
+        events::insert_event,
         requests::{insert_request, list_by, remove_request},
     },
     external_interfaces::{
@@ -311,16 +312,6 @@ pub async fn process_source_deleted(
     ProcessingResult::Success(RequestState::RestoredControllers { request })
 }
 
-pub async fn process_restored_controllers(
-    request: RequestState,
-) -> ProcessingResult<Event, Infallible> {
-    let RequestState::RestoredControllers { request } = request else {
-        println!("Error: list_by RestoredControllers returned bad variant");
-        return ProcessingResult::NoProgress;
-    };
-    ProcessingResult::Success(Event::Succeeded { request })
-}
-
 // ----------------------------------------------------------------------------
 pub async fn process_all_failed() {
     let Ok(_guard) = MethodGuard::new("failed") else {
@@ -367,6 +358,20 @@ async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infall
     }
     // We successfully returned controllership.
     ProcessingResult::Success(Event::Failed { request, reason })
+}
+
+pub async fn process_all_succeeded() {
+    let Ok(_guard) = MethodGuard::new("succeeded") else {
+        return;
+    };
+    let requests = list_by(|r| matches!(r, RequestState::RestoredControllers { .. }));
+    for request in requests.into_iter() {
+        remove_request(&request);
+        if let RequestState::RestoredControllers { request } = request {
+            let event = Event::Succeeded { request };
+            insert_event(event);
+        }
+    }
 }
 
 #[must_use]
@@ -460,10 +465,10 @@ impl ProcessingResult<RequestState, RequestState> {
 impl ProcessingResult<Event, Infallible> {
     fn transition(self, old_state: RequestState) {
         match self {
-            ProcessingResult::Success(_event) => {
+            ProcessingResult::Success(event) => {
                 // Cleanup successful.
                 remove_request(&old_state);
-                // TODO: insert_event(event);
+                insert_event(event);
             }
             ProcessingResult::NoProgress => {}
             ProcessingResult::FatalFailure(_) => {}
