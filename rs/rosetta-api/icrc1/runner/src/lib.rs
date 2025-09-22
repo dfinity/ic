@@ -49,6 +49,8 @@ pub struct RosettaOptions {
     pub multi_tokens: Option<String>,
 
     pub multi_tokens_store_dir: Option<String>,
+
+    pub log_file: Option<String>,
 }
 
 impl Default for RosettaOptions {
@@ -64,6 +66,7 @@ impl Default for RosettaOptions {
             decimals: Some(DEFAULT_DECIMAL_PLACES.into()),
             multi_tokens: None,
             multi_tokens_store_dir: None,
+            log_file: None,
         }
     }
 }
@@ -117,6 +120,11 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
     if arguments.exit_on_sync {
         command.arg("--exit-on-sync");
     }
+
+    if let Some(log_file) = arguments.log_file {
+        command.arg("--log-file").arg(log_file);
+    }
+
 
     let mut child_process = command.spawn().unwrap_or_else(|e| {
         panic!(
