@@ -160,7 +160,7 @@ pub async fn start_synching_blocks(
         if !is_initial_sync {
             heartbeat();
         }
-        let mut all_operations_success = true;
+        let mut all_operations_succeeded = true;
         // Verify and fix gaps in the database.
         let result = verify_and_fix_gaps(
             agent.clone(),
@@ -172,7 +172,7 @@ pub async fn start_synching_blocks(
             Ok(_) => {}
             Err(e) => {
                 error!("Error while verifying and fixing gaps: {}", e);
-                all_operations_success = false;
+                all_operations_succeeded = false;
                 current_failure_streak += 1;
             }
         }
@@ -190,7 +190,7 @@ pub async fn start_synching_blocks(
             }
             Err(e) => {
                 error!("Error while syncing blocks: {}", e);
-                all_operations_success = false;
+                all_operations_succeeded = false;
                 current_failure_streak += 1;
             }
         }
@@ -201,12 +201,12 @@ pub async fn start_synching_blocks(
             Ok(_) => {}
             Err(e) => {
                 error!("Error while updating account balances: {}", e);
-                all_operations_success = false;
+                all_operations_succeeded = false;
                 current_failure_streak += 1;
             }
         }
 
-        if all_operations_success {
+        if all_operations_succeeded {
             current_failure_streak = 0;
         }
 
