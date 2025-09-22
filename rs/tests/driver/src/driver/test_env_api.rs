@@ -1032,7 +1032,7 @@ impl IcNodeSnapshot {
 pub trait HasTopologySnapshot {
     fn safe_topology_snapshot(&self) -> Result<TopologySnapshot>;
     fn safe_topology_snapshot_by_name(&self, name: &str) -> Result<TopologySnapshot>;
-    fn safe_create_topology_snapshot<S: ToString, P: AsRef<Path>>(
+    fn create_topology_snapshot<S: ToString, P: AsRef<Path>>(
         name: S,
         local_store_path: P,
         env: TestEnv,
@@ -1060,14 +1060,6 @@ pub trait HasTopologySnapshot {
                 panic!("Could not save topology snapshot by name {name} because {e:?}")
             })
     }
-    fn create_topology_snapshot<S: ToString, P: AsRef<Path>>(
-        name: S,
-        local_store_path: P,
-        env: TestEnv,
-    ) -> TopologySnapshot {
-        Self::safe_create_topology_snapshot(name, local_store_path, env)
-            .unwrap_or_else(|e| panic!("Could not create local registry because {e:?}"))
-    }
 }
 
 impl HasTopologySnapshot for TestEnv {
@@ -1076,11 +1068,7 @@ impl HasTopologySnapshot for TestEnv {
             .prep_dir("")
             .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
         let local_store_path = prep_dir.registry_local_store_path();
-        Ok(Self::create_topology_snapshot(
-            "",
-            local_store_path,
-            self.clone(),
-        ))
+        Self::create_topology_snapshot("", local_store_path, self.clone())
     }
 
     fn safe_topology_snapshot_by_name(&self, name: &str) -> Result<TopologySnapshot> {
@@ -1088,11 +1076,7 @@ impl HasTopologySnapshot for TestEnv {
             .prep_dir(name)
             .ok_or_else(|| anyhow!("No snapshot for internet computer: {name:?}"))?;
         let local_store_path = prep_dir.registry_local_store_path();
-        Ok(Self::create_topology_snapshot(
-            name,
-            local_store_path,
-            self.clone(),
-        ))
+        Self::create_topology_snapshot(name, local_store_path, self.clone())
     }
 }
 
