@@ -64,8 +64,8 @@
     "sha256": "da7dfd088371dc538c0bbde1a2f3e4e3795d2cb58dc16f6c7bf67247b9e51254"
   },
   "cycles_ledger": {
-    "sha256": "a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37",
-    "tag": "cycles-ledger-v1.0.5"
+    "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
+    "tag": "cycles-ledger-v1.0.6"
   },
   "cycles_ledger_index": {
     "rev": "83923a194d39835e8a7d9549f9f0831b962a60c2",
