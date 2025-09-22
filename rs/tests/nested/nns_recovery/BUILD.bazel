@@ -63,7 +63,7 @@ system_test_nns(
     env = ENV,
     flaky = True,
     tags = [
-        "system_test_large"
+        "system_test_large",
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
