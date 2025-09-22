@@ -18,8 +18,12 @@ use crate::{
         registry::migrate_canister,
     },
 };
+use candid::Principal;
 use futures::future::join_all;
-use ic_cdk::{api::time, println};
+use ic_cdk::{
+    api::{canister_self, time},
+    println,
+};
 use std::{convert::Infallible, future::Future, iter::zip};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
@@ -276,6 +280,45 @@ pub async fn process_routing_table(
         request,
         stopped_since,
     })
+}
+
+pub async fn process_source_deleted(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::SourceDeleted {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by SourceDeleted returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    if time() - stopped_since < 5 * 60 * 1_000_000_000 {
+        return ProcessingResult::NoProgress;
+    }
+    // restore controllers of target
+    let controllers = request
+        .source_original_controllers
+        .iter()
+        .filter(|x| **x != canister_self())
+        .cloned()
+        .collect::<Vec<Principal>>();
+    let ProcessingResult::Success(()) =
+        set_original_controllers(request.source, controllers, request.target_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    ProcessingResult::Success(RequestState::RestoredControllers { request })
+}
+
+pub async fn process_restored_controllers(
+    request: RequestState,
+) -> ProcessingResult<Event, Infallible> {
+    let RequestState::RestoredControllers { request } = request else {
+        println!("Error: list_by RestoredControllers returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    ProcessingResult::Success(Event::Succeeded { request })
 }
 
 // ----------------------------------------------------------------------------

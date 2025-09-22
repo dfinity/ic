@@ -14,8 +14,8 @@ use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed,
-        process_controllers_changed, process_renamed, process_routing_table, process_stopped,
-        process_updated,
+        process_controllers_changed, process_renamed, process_restored_controllers,
+        process_routing_table, process_source_deleted, process_stopped, process_updated,
     },
 };
 
@@ -327,6 +327,20 @@ pub fn start_timers() {
             process_routing_table,
         ))
     });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "source_deleted",
+            |r| matches!(r, RequestState::SourceDeleted { .. }),
+            process_source_deleted,
+        ))
+    });
+    // set_timer_interval(interval, || {
+    //     spawn(process_all_by_predicate(
+    //         "restored_controllers",
+    //         |r| matches!(r, RequestState::RestoredControllers { .. }),
+    //         process_restored_controllers,
+    //     ))
+    // });
 
     // This one has a different type from the generic ones above.
     set_timer_interval(interval, || spawn(process_all_failed()));
