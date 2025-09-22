@@ -174,10 +174,10 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
 #[query]
 fn icrc1_metadata() -> Vec<(String, MetadataValue)> {
     vec![
-        MetadataValue::entry("icrc1:decimals", 8u64),
-        MetadataValue::entry("icrc1:name", "test ledger"),
+        MetadataValue::entry("icrc1:decimals", 0u64),
+        MetadataValue::entry("icrc1:name", ""),
         MetadataValue::entry("icrc1:symbol", "XTST"),
-        MetadataValue::entry("icrc1:fee", 10000u64),
+        MetadataValue::entry("icrc1:fee", 0u64),
     ]
 }
 
