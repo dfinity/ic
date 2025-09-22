@@ -3635,7 +3635,7 @@ fn test_registry_canister_sync() {
     let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
     let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
 
-    // Create a temporary state directory from which the test can retrieve the registry.
+    // Create a temporary state directory from which the test can retrieve PocketIC registry.
     let state_dir = TempDir::new().unwrap();
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
