@@ -4,14 +4,9 @@ use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosett
 use crate::local_replica::create_and_install_custom_icrc_ledger;
 use candid::{Decode, Encode, Nat, Principal};
 use common::local_replica::get_custom_agent;
-use ic_agent::Identity;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
-use ic_base_types::CanisterId;
-use ic_base_types::CanisterId;
-use ic_base_types::PrincipalId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc_rosetta::common::constants::STATUS_COMPLETED;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::types::OperationType;
@@ -27,20 +22,13 @@ use ic_icrc_rosetta_runner::{
     DEFAULT_DECIMAL_PLACES, RosettaContext, RosettaOptions, start_rosetta,
 };
 use ic_icrc_rosetta_runner::{DEFAULT_TOKEN_SYMBOL, make_transaction_with_rosetta_client_binary};
-use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, Tokens};
-use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc1_test_utils::{
     ArgWithCaller, DEFAULT_TRANSFER_FEE, LedgerEndpointArg, minter_identity,
     valid_transactions_strategy,
 };
-use ic_icrc1_test_utils::{
-    ArgWithCaller, DEFAULT_TRANSFER_FEE, LedgerEndpointArg, minter_identity,
-    valid_transactions_strategy,
-};
-use ic_icrc1_tokens_u256::U256;
 use ic_icrc1_tokens_u256::U256;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_agent::CallMode;
