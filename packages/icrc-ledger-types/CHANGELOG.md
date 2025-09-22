@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 0.1.11
 
 ### Changed
-- Fix the generic ICRC-21 message returned by the ledgers to conform to https://github.com/dfinity/wg-identity-authentication/tree/main/topics/ICRC-21/examples, add FieldsDisplay and remove LineDisplay.
+- Fix the generic ICRC-21 message to conform to https://github.com/dfinity/wg-identity-authentication/tree/main/topics/ICRC-21/examples, add FieldsDisplay and remove LineDisplay.
 
 ## 0.1.10
 
