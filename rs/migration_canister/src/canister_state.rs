@@ -29,7 +29,7 @@ thread_local! {
     static REQUESTS: RefCell<BTreeMap<RequestState, (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))));
 
-    static HISTORY: RefCell<BTreeMap<Event, (), Memory>> =
+    static HISTORY: RefCell<BTreeMap<(u64, Event), (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))));
 
     // TODO: consider a fail counter for active requests.
@@ -86,6 +86,22 @@ pub mod requests {
     /// borrow REQUESTS mutably while iterating over the result.
     pub fn list_by(predicate: impl FnMut(&RequestState) -> bool) -> Vec<RequestState> {
         REQUESTS.with_borrow(|req| req.keys().filter(predicate).collect())
+    }
+}
+
+// ============================== Events API ============================== //
+pub mod events {
+    use crate::{Event, canister_state::HISTORY};
+    use ic_cdk::api::time;
+
+    pub fn insert_event(event: Event) {
+        let time = time();
+        HISTORY.with_borrow_mut(|h| h.insert((time, event), ()));
+    }
+
+    pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<(u64, Event)> {
+        // TODO: implement pagination
+        HISTORY.with_borrow_mut(|h| h.keys().collect())
     }
 }
 
