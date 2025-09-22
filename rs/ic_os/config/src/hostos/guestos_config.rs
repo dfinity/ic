@@ -1,8 +1,8 @@
 use anyhow::Context;
 use anyhow::{Result, bail, ensure};
 use config_types::{
-    DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType,
-    HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
+    CONFIG_VERSION, DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig,
+    GuestVMType, HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
@@ -86,7 +86,7 @@ pub fn generate_guestos_config(
     )?;
 
     let guestos_config = GuestOSConfig {
-        config_version: hostos_config.config_version.clone(),
+        config_version: CONFIG_VERSION.to_string(),
         network_settings: guestos_network_settings,
         icos_settings: hostos_config.icos_settings.clone(),
         guestos_settings: hostos_config.guestos_settings.clone(),
