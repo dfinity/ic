@@ -16,6 +16,8 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 #[cfg(not(windows))]
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+#[cfg(not(windows))]
+use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 #[cfg(not(windows))]
@@ -34,21 +36,20 @@ use pocket_ic::{
         InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
-    query_candid, start_server, update_candid,
+    query_candid, start_server, update_candid, update_candid_as,
 };
+#[cfg(not(windows))]
+use prost::Message;
+use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(not(windows))]
 use std::net::SocketAddr;
-use std::{
-    io::Read,
-    sync::OnceLock,
-    time::{Duration, SystemTime},
-};
 #[cfg(not(windows))]
 use std::{
+    collections::BTreeMap,
     io::Write,
     net::{TcpListener, TcpStream},
     sync::{
@@ -57,6 +58,11 @@ use std::{
     },
     thread::JoinHandle,
     time::Instant,
+};
+use std::{
+    io::Read,
+    sync::OnceLock,
+    time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
@@ -3621,4 +3627,87 @@ fn send_too_large_body(
     }
 
     Ok(())
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_registry_canister_sync() {
+    let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+    let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+
+    // Create a temporary state directory from which the test can retrieve the registry.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let pocket_ic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_icp_features(icp_features)
+        .build();
+
+    let latest_pocketic_registry_version = || {
+        let registry_proto_path = state_dir_path_buf.join("registry.proto");
+        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::load_from_file(
+            registry_proto_path,
+        ));
+        registry_data_provider.latest_version().get()
+    };
+
+    let latest_canister_registry_version = || {
+        let empty_vector_pbuf = vec![0x0a, 0x00];
+        let res = pocket_ic
+            .update_call(
+                registry_canister_id,
+                Principal::anonymous(),
+                "get_latest_version",
+                empty_vector_pbuf,
+            )
+            .unwrap();
+        RegistryGetLatestVersionResponse::decode(res.as_slice())
+            .unwrap()
+            .version
+    };
+
+    let pocketic_registry_version_before = latest_pocketic_registry_version();
+    let canister_registry_version_before = latest_canister_registry_version();
+    assert_eq!(
+        canister_registry_version_before,
+        pocketic_registry_version_before
+    );
+
+    // Create a new registry version by creating a new node operator in the registry.
+    let node_operator_principal_id = Principal::from_slice(&[42; 29]);
+    let node_provider_principal_id = Principal::from_slice(&[64; 29]);
+    let add_node_operator_payload = AddNodeOperatorPayload {
+        ipv6: None,
+        node_operator_principal_id: Some(PrincipalId(node_operator_principal_id)),
+        node_allowance: 42,
+        rewardable_nodes: BTreeMap::new(),
+        node_provider_principal_id: Some(PrincipalId(node_provider_principal_id)),
+        dc_id: "zh".to_string(),
+        max_rewardable_nodes: None,
+    };
+    update_candid_as::<_, ()>(
+        &pocket_ic,
+        registry_canister_id,
+        governance_canister_id,
+        "add_node_operator",
+        (add_node_operator_payload,),
+    )
+    .unwrap();
+
+    // The latest registry version in both PocketIC and registry canister should increase by one.
+    let pocketic_registry_version_after = latest_pocketic_registry_version();
+    assert_eq!(
+        pocketic_registry_version_after,
+        pocketic_registry_version_before + 1
+    );
+    let canister_registry_version_after = latest_canister_registry_version();
+    assert_eq!(
+        canister_registry_version_after,
+        canister_registry_version_before + 1
+    );
 }

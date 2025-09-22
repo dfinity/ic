@@ -41,6 +41,7 @@ LIB_DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",

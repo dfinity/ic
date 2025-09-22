@@ -7,6 +7,7 @@ use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
+use async_trait::async_trait;
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
@@ -74,12 +75,17 @@ use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
+use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, are_disjoint, is_subset_of,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::deserialize_atomic_mutate_response;
+use ic_registry_transport::pb::v1::RegistryMutation;
+use ic_registry_transport::{
+    GetChunk, dechunkify_delta, delete, deserialize_atomic_mutate_response,
+    deserialize_get_changes_since_response, serialize_get_changes_since_request, upsert,
+};
 use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
 use ic_sns_wasm::pb::v1::add_wasm_response::Result as AddWasmResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm};
@@ -887,18 +893,7 @@ impl PocketIcSubnets {
             self.registry_data_provider.clone(),
         );
 
-        // Update the registry file on disk.
-        if let Some(ref state_dir) = self.state_dir {
-            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
-            self.registry_data_provider
-                .write_to_file(registry_proto_path);
-        }
-
-        // Reload registry on every `StateMachine` in `self.subnets` to make sure
-        // they have a consistent view of the (latest) registry.
-        for subnet in self.subnets.get_all() {
-            subnet.state_machine.reload_registry();
-        }
+        self.persist_registry_changes();
 
         // All subnets must have the same time and time can only advance =>
         // set the time to the maximum time in the latest state across all subnets.
@@ -2077,6 +2072,98 @@ impl PocketIcSubnets {
             "Failed to complete execution of method {method} on canister {canister_id} after 100 rounds."
         );
     }
+
+    fn sync_registry_from_canister(&mut self) {
+        if let Some(icp_features) = &self.icp_features {
+            if icp_features.registry.is_some() {
+                let nns_subnet = self.nns_subnet.clone().expect("The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.").state_machine.clone();
+
+                loop {
+                    let get_changes_since_request =
+                        serialize_get_changes_since_request(self.synced_registry_version.get())
+                            .unwrap();
+                    let wasm_result = nns_subnet
+                        .query(
+                            REGISTRY_CANISTER_ID,
+                            "get_changes_since",
+                            get_changes_since_request,
+                        )
+                        .unwrap();
+                    let res = match wasm_result {
+                        WasmResult::Reply(bytes) => bytes,
+                        WasmResult::Reject(err) => {
+                            panic!("Unexpected reject from registry canister: {}", err)
+                        }
+                    };
+                    let (high_capacity_deltas, latest_version) =
+                        deserialize_get_changes_since_response(res).unwrap();
+                    let mut mutations: BTreeMap<u64, Vec<RegistryMutation>> = BTreeMap::new();
+                    for delta in high_capacity_deltas {
+                        let delta = self
+                            .runtime
+                            .block_on(dechunkify_delta(delta, self))
+                            .unwrap();
+                        for value in delta.values {
+                            let mutation = if value.deletion_marker {
+                                delete(delta.key.clone())
+                            } else {
+                                upsert(delta.key.clone(), value.value)
+                            };
+                            mutations.entry(value.version).or_default().push(mutation);
+                        }
+                    }
+                    for (version, mutations) in mutations {
+                        self.registry_data_provider
+                            .apply_mutations_as_version(mutations, version.into());
+                    }
+                    self.synced_registry_version = self.registry_data_provider.latest_version();
+                    if self.synced_registry_version == latest_version.into() {
+                        break;
+                    }
+                }
+                self.persist_registry_changes();
+            }
+        }
+    }
+
+    fn persist_registry_changes(&mut self) {
+        // Update the registry file on disk.
+        if let Some(ref state_dir) = self.state_dir {
+            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+            self.registry_data_provider
+                .write_to_file(registry_proto_path);
+        }
+
+        // Reload registry on every `StateMachine` in `self.subnets` to make sure
+        // they have a consistent view of the (latest) registry.
+        for subnet in self.subnets.get_all() {
+            subnet.state_machine.reload_registry();
+        }
+    }
+}
+
+#[async_trait]
+impl GetChunk for PocketIcSubnets {
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+        let nns_subnet = self.nns_subnet.clone().expect("The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.").state_machine.clone();
+
+        let get_chunk_request = GetChunkRequest {
+            content_sha256: Some(content_sha256.to_vec()),
+        };
+        let wasm_result = nns_subnet
+            .query(
+                REGISTRY_CANISTER_ID,
+                "get_chunk",
+                Encode!(&get_chunk_request).unwrap(),
+            )
+            .unwrap();
+        match wasm_result {
+            WasmResult::Reply(bytes) => Decode!(&bytes, Result<Vec<u8>, String>).unwrap(),
+            WasmResult::Reject(err) => {
+                panic!("Unexpected reject from registry canister: {}", err)
+            }
+        }
+    }
 }
 
 pub struct PocketIc {
@@ -2468,6 +2555,10 @@ impl PocketIc {
             subnets,
             default_effective_canister_id,
         })
+    }
+
+    pub(crate) fn sync_registry_from_canister(&mut self) {
+        self.subnets.sync_registry_from_canister();
     }
 
     pub(crate) fn bump_state_label(&mut self) {
