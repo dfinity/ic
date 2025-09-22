@@ -128,7 +128,7 @@ impl VectorVm {
 
         let log = env.logger();
         info!(log, "Syncing vector targets.");
-        let snapshot = env.topology_snapshot();
+        let snapshot = env.safe_topology_snapshot()?;
         let nodes = snapshot
             .subnets()
             .flat_map(|s| s.nodes())
