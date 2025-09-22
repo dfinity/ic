@@ -125,7 +125,6 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         command.arg("--log-file").arg(log_file);
     }
 
-
     let mut child_process = command.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-icrc-rosetta-bin (path = {}, exists? = {}): {}",
