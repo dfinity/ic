@@ -504,7 +504,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
+def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -523,9 +523,12 @@ def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
     However it's still useful to see if the HEAD replica works against the HEAD NNS which is why this macro
     introduces the <name>_head_nns variant which only runs daily if not overriden.
 
+    Alternatively, if the mainnet variant should be tagged with ["manual"], then enable_mainnet_nns_variant can be disabled.
+
     Args:
         name: the name of the system-tests.
         enable_head_nns_variant: whether to run the head_nns variant daily.
+        enable_mainnet_nns_variant: whether to run the mainnet variant.
         **kwargs: the arguments of the system-tests.
 
     Returns:
@@ -535,14 +538,21 @@ def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
     runtime_deps = kwargs.pop("runtime_deps", [])
     env = kwargs.pop("env", {})
 
+    original_tags = kwargs.pop("tags", [])
+
+    extra_mainnet_nns_tags = (
+        # Disable the mainnet variant if requested
+        ["manual"] if not enable_mainnet_nns_variant else
+        []
+    )
+
     mainnet_nns_systest = system_test(
         name,
         env = env | MAINNET_NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + MAINNET_NNS_CANISTER_RUNTIME_DEPS,
+        tags = [tag for tag in original_tags if tag not in extra_mainnet_nns_tags] + extra_mainnet_nns_tags,
         **kwargs
     )
-
-    original_tags = kwargs.pop("tags", [])
 
     extra_head_nns_tags = (
         # Disable the head_nns variant if requested

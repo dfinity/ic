@@ -3,11 +3,12 @@ use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use canister_test::Wasm;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_nns_constants::MIGRATION_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, IcNodeSnapshot,
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    IcNodeSnapshot, get_dependency_path,
 };
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
@@ -19,8 +20,6 @@ use ic_types::CanisterId;
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use slog::Logger;
-
-const CANISTER_ID_FILE: &str = "migration_canister_id";
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -46,30 +45,6 @@ fn setup(env: TestEnv) {
         })
     });
     install_nns_and_check_progress(env.topology_snapshot());
-
-    // TODO: Remove once the migration canister is installed as part of installing NNS canisters.
-    let migration_canister_id = block_on(install_migration_canister(&env));
-
-    env.write_json_object(CANISTER_ID_FILE, &migration_canister_id)
-        .expect("Could not write migration canister ID to TestEnv.");
-}
-
-async fn install_migration_canister(env: &TestEnv) -> CanisterId {
-    let nns_subnet = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 0);
-    let runtime = runtime_from_url(
-        nns_subnet.get_public_url(),
-        nns_subnet.effective_canister_id(),
-    );
-
-    let wasm = Wasm::from_file(get_dependency_path(
-        std::env::var("MIGRATION_CANISTER_WASM_PATH")
-            .expect("MIGRATION_CANISTER_WASM_PATH not set"),
-    ));
-    wasm.install(&runtime)
-        .bytes(vec![])
-        .await
-        .expect("Failed to install migration canister.")
-        .canister_id()
 }
 
 fn test(env: TestEnv) {
@@ -153,9 +128,7 @@ async fn add_controller(
 
 async fn test_async(env: TestEnv) {
     let logger = env.logger();
-    let migration_canister_id: Principal = env
-        .read_json_object(CANISTER_ID_FILE)
-        .expect("Failed to read migration canister id from TestEnv.");
+    let migration_canister_id: Principal = MIGRATION_CANISTER_ID.into();
     let nns_agent = env
         .get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 0)
         .build_default_agent_async()

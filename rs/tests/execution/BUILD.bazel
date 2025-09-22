@@ -149,16 +149,16 @@ system_test_nns(
     env = UNIVERSAL_CANISTER_ENV | {
         "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
     },
+    enable_mainnet_nns_variant = False,
     tags = [
         "k8s",
     ],
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
-        "//rs/migration_canister:migration-canister",
-    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
-        "//rs/tests/consensus/utils",
+        "//rs/nns/constants",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "//rs/universal_canister/lib",

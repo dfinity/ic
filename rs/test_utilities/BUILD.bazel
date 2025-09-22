@@ -53,6 +53,12 @@ rust_library(
     ],
 )
 
+genrule(
+    name = "empty-wasm",
+    outs = ["empty_wasm.wasm"],
+    cmd = "echo -ne '\\x00\\x61\\x73\\x6d\\x01\\x00\\x00\\x00' > $@",
+)
+
 rust_test(
     name = "test_utilities_test",
     crate = ":test_utilities",
