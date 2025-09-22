@@ -14,7 +14,8 @@ use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed,
-        process_controllers_changed, process_renamed, process_stopped, process_updated,
+        process_controllers_changed, process_renamed, process_routing_table, process_stopped,
+        process_updated,
     },
 };
 
@@ -317,6 +318,13 @@ pub fn start_timers() {
             "updated_routing_table",
             |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
             process_updated,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "routing_table_change_accepted",
+            |r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }),
+            process_routing_table,
         ))
     });
 
