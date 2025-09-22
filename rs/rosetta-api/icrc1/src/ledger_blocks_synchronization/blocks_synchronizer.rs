@@ -65,10 +65,10 @@ async fn verify_and_fix_gaps(
 ) -> anyhow::Result<()> {
     let sync_ranges = derive_synchronization_gaps(storage_client.clone())?;
     let tip = get_tip_block_hash_and_index(agent.clone()).await?;
-    if tip.is_none() {
-        return Ok(());
-    }
-    let (_tip_block_hash, tip_block_index) = tip.unwrap();
+    let (_tip_block_hash, tip_block_index) = match tip {
+        Some(tip) => tip,
+        None => return Ok(()),
+    };
 
     for sync_range in sync_ranges {
         sync_blocks_interval(
@@ -258,10 +258,10 @@ pub async fn sync_from_the_tip(
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     let tip = get_tip_block_hash_and_index(agent.clone()).await?;
-    if tip.is_none() {
-        return Ok(());
-    }
-    let (tip_block_hash, tip_block_index) = tip.unwrap();
+    let (tip_block_hash, tip_block_index) = match tip {
+        Some(tip) => tip,
+        None => return Ok(()),
+    };
 
     storage_client
         .get_metrics()
