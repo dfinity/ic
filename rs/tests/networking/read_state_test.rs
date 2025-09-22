@@ -51,7 +51,7 @@ use ic_agent::agent::{CallResponse, Envelope, EnvelopeContent};
 use ic_agent::agent_error::HttpErrorPayload;
 use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
-use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
+use ic_agent::{Agent, AgentError, Certificate, Identity, RequestId, lookup_value};
 use ic_certification::{verify_certificate, verify_certificate_for_subnet_read_state};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
@@ -62,11 +62,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env::HasIcPrepDir;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::util::{
-    block_on, get_identity, random_ed25519_identity, runtime_from_url, MessageCanister,
+    MessageCanister, block_on, get_identity, random_ed25519_identity, runtime_from_url,
 };
 use ic_system_test_driver::{
     driver::{
-        group::SystemTestGroup,
+        group::{SystemTestGroup, SystemTestSubGroup},
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot},
@@ -130,6 +130,7 @@ fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
+        .add_fast_single_node_subnet(SubnetType::Application)
         .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -151,10 +152,23 @@ fn get_first_app_node(env: &TestEnv) -> IcNodeSnapshot {
 }
 
 fn get_first_app_subnet(env: &TestEnv) -> SubnetSnapshot {
-    env.topology_snapshot()
+    get_both_app_subnets(env).0
+}
+
+fn get_both_app_subnets(env: &TestEnv) -> (SubnetSnapshot, SubnetSnapshot) {
+    let app_subnets: Vec<_> = env
+        .topology_snapshot()
         .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("There should be at least one subnet for every subnet type")
+        .filter(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .collect();
+
+    assert_eq!(
+        app_subnets.len(),
+        2,
+        "There should be exactly two Application subnets"
+    );
+
+    (app_subnets[0].clone(), app_subnets[1].clone())
 }
 
 /// Call "read_state" with the given paths and the basic identity on the first Application subnet
@@ -256,30 +270,26 @@ fn test_time_path_returns_time(env: TestEnv, endpoint: Endpoint) {
 fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
     let nns_subnet = env.topology_snapshot().root_subnet();
     let nns_subnet_id = nns_subnet.subnet_id;
-    let app_subnet = env
-        .topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_id != nns_subnet_id)
-        .unwrap();
+    let (app_subnet, other_app_subnet) = get_both_app_subnets(&env);
     let app_subnet_id = app_subnet.subnet_id;
 
     // Query the `/subnet` enpoint of the app subnet
     let path = vec!["subnet".into()];
     let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
 
-    // Should contain public key and canister ranges for all subnets
     for subnet_id in [nns_subnet_id, app_subnet_id] {
-        for path in ["public_key".as_bytes(), "canister_ranges".as_bytes()] {
-            let value = lookup_value(
-                &cert,
-                vec!["subnet".as_bytes(), subnet_id.get_ref().as_slice(), path],
-            )
-            .unwrap();
-            assert!(!value.is_empty());
-        }
+        let value = lookup_value(
+            &cert,
+            vec![
+                "subnet".as_bytes(),
+                subnet_id.get_ref().as_slice(),
+                "public_key".as_bytes(),
+            ],
+        )
+        .expect("Should contain public key for all subnets");
+        assert!(!value.is_empty());
     }
 
-    // Should not contain public keys of nodes on other subnets (the NNS)
     for node in nns_subnet.nodes() {
         let node_id = node.node_id;
         let value = lookup_value(
@@ -292,10 +302,32 @@ fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
                 "public_key".as_bytes(),
             ],
         );
-        assert_matches!(value, Err(AgentError::LookupPathAbsent(_)));
+        assert_matches!(
+            value,
+            Err(AgentError::LookupPathAbsent(_)),
+            "Should not contain public keys of nodes on other subnets (the NNS)"
+        );
     }
 
-    // Should contain public keys of nodes on the current subnet (the App subnet)
+    for node in other_app_subnet.nodes() {
+        let node_id = node.node_id;
+        let value = lookup_value(
+            &cert,
+            vec![
+                "subnet".as_bytes(),
+                other_app_subnet.subnet_id.get_ref().as_slice(),
+                "node".as_bytes(),
+                node_id.get_ref().as_slice(),
+                "public_key".as_bytes(),
+            ],
+        );
+        assert_matches!(
+            value,
+            Err(AgentError::LookupPathAbsent(_) | AgentError::LookupPathUnknown(_)),
+            "Should not contain public keys of nodes on other subnets (the App subnet)"
+        );
+    }
+
     for node in app_subnet.nodes() {
         let node_id = node.node_id;
         let value = lookup_value(
@@ -308,7 +340,7 @@ fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
                 "public_key".as_bytes(),
             ],
         )
-        .unwrap();
+        .expect("Should contain public keys of nodes on the current subnet (the App subnet)");
         assert!(!value.is_empty());
     }
 }
@@ -809,6 +841,118 @@ fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::
     validate_canister_ranges(&subnet, &path, &cert);
 }
 
+/// Checks that requesting the deprecated canister ranges path (/subnet/{subnet_id}/canister_ranges)
+/// doesn't work on the v3 endpoints, except when subnet_id == nns_subnet_id.
+fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint) {
+    let should_accept_deprecated_canister_ranges_path = match endpoint {
+        Endpoint::CanisterReadState(read_state::canister::Version::V2)
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => true,
+        Endpoint::CanisterReadState(read_state::canister::Version::V3)
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => false,
+    };
+
+    let app_subnet = get_first_app_subnet(&env);
+    let app_subnet_id_label = Label::<Vec<u8>>::from(app_subnet.subnet_id.get_ref().as_slice());
+    let deprecated_canister_ranges_for_app_subnet_path: Vec<Label<Vec<u8>>> = vec![
+        "subnet".into(),
+        app_subnet_id_label.clone(),
+        "canister_ranges".into(),
+    ];
+
+    let nns_subnet = env.topology_snapshot().root_subnet();
+    let nns_subnet_id_label = Label::<Vec<u8>>::from(nns_subnet.subnet_id.get_ref().as_slice());
+    let deprecated_canister_ranges_for_nns_path: Vec<Label<Vec<u8>>> = vec![
+        "subnet".into(),
+        nns_subnet_id_label.clone(),
+        "canister_ranges".into(),
+    ];
+
+    let response = read_state(
+        &env,
+        vec![deprecated_canister_ranges_for_app_subnet_path.clone()],
+        endpoint,
+    );
+
+    if should_accept_deprecated_canister_ranges_path {
+        let certificate = response.expect(
+            "The old endpoints should correctly handle the request with the deprecated paths",
+        );
+        assert!(
+            lookup_value(
+                &certificate,
+                deprecated_canister_ranges_for_app_subnet_path.clone()
+            )
+            .is_ok(),
+            "The certificate should contain the deprecated canister ranges"
+        );
+    } else {
+        let err = response.expect_err("The new endpoints should not accept the deprecated paths");
+        assert_matches!(err, AgentError::HttpError(payload) if payload.status == StatusCode::NOT_FOUND.as_u16());
+    }
+
+    let certificate = read_state(
+        &env,
+        vec![deprecated_canister_ranges_for_nns_path.clone()],
+        endpoint,
+    )
+    .expect("Requesting the deprecated canister ranges for the nns subnet is always allowed");
+    assert!(
+        lookup_value(
+            &certificate,
+            deprecated_canister_ranges_for_nns_path.clone()
+        )
+        .is_ok(),
+        "The certificate should contain the deprecated canister \
+        ranges because we are requesting the nns subnet"
+    );
+
+    for (path, check_app, check_nns) in [
+        (vec!["subnet".into()], true, true),
+        (vec!["subnet".into(), app_subnet_id_label], true, false),
+        (vec!["subnet".into(), nns_subnet_id_label], false, true),
+    ] {
+        let certificate = read_state(&env, vec![path.clone()], endpoint)
+            .expect("Requesting the {path:?} subtree is valid");
+
+        if check_app {
+            let deprecated_app_subnet_ranges = lookup_value(
+                &certificate,
+                deprecated_canister_ranges_for_app_subnet_path.clone(),
+            );
+            if should_accept_deprecated_canister_ranges_path {
+                assert!(
+                    deprecated_app_subnet_ranges.is_ok(),
+                    "The certificate should contain the deprecated canister ranges \
+                    for the app subnet"
+                );
+            } else {
+                let err = deprecated_app_subnet_ranges.expect_err(
+                    "The new endpoints should purge the deprecated paths \
+                    for the app subnet",
+                );
+                assert_matches!(
+                    err,
+                    AgentError::LookupPathUnknown(_),
+                    "The path {deprecated_canister_ranges_for_app_subnet_path:?} should have \
+                    been purged from the certificate"
+                );
+            }
+        }
+
+        if check_nns {
+            assert!(
+                lookup_value(
+                    &certificate,
+                    deprecated_canister_ranges_for_nns_path.clone()
+                )
+                .is_ok(),
+                "The certificate should contain the deprecated canister \
+                ranges because we are requesting the nns subnet"
+            );
+        }
+    }
+}
+
 fn validate_canister_ranges(
     subnet: &SubnetSnapshot,
     path: &Vec<Label<Vec<u8>>>,
@@ -953,8 +1097,7 @@ macro_rules! systest_all_variants {
 }
 
 fn main() -> Result<()> {
-    let mut group = SystemTestGroup::new()
-        .with_setup(setup)
+    let mut parallel_group = SystemTestSubGroup::new()
         .add_test(systest!(test_non_utf8_metadata))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V2))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
@@ -981,12 +1124,16 @@ fn main() -> Result<()> {
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
 
-    systest_all_variants!(group, test_empty_paths_return_time);
-    systest_all_variants!(group, test_time_path_returns_time);
-    systest_all_variants!(group, test_subnet_path);
-    systest_all_variants!(group, test_invalid_request_rejected);
-    systest_all_variants!(group, test_invalid_path_rejected);
+    systest_all_variants!(parallel_group, test_empty_paths_return_time);
+    systest_all_variants!(parallel_group, test_time_path_returns_time);
+    systest_all_variants!(parallel_group, test_subnet_path);
+    systest_all_variants!(parallel_group, test_invalid_request_rejected);
+    systest_all_variants!(parallel_group, test_invalid_path_rejected);
+    systest_all_variants!(parallel_group, test_deprecated_subnet_canister_ranges_paths);
 
-    group.execute_from_args()?;
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_parallel(parallel_group)
+        .execute_from_args()?;
     Ok(())
 }

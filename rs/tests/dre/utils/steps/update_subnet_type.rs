@@ -8,8 +8,8 @@ use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::{
     driver::test_env_api::{
-        get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-        IcNodeContainer, IcNodeSnapshot,
+        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        IcNodeSnapshot, get_guestos_img_version,
     },
     nns::{
         get_governance_canister, submit_update_api_boundary_node_version_proposal,
@@ -19,7 +19,7 @@ use ic_system_test_driver::{
 };
 use ic_types::ReplicaVersion;
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use tokio::runtime::Handle;
 
 use super::Step;

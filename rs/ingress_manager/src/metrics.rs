@@ -1,5 +1,5 @@
 use ic_interfaces::{ingress_pool::UnvalidatedIngressArtifact, time_source::TimeSource};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_types::CountBytes;
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 

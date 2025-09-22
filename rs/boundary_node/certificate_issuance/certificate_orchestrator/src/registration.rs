@@ -20,10 +20,10 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
+    LocalRef, REGISTRATION_EXPIRATION_TTL, StableMap, StorableId, WithMetrics,
     acl::{Authorize, AuthorizeError, WithAuthorize},
     ic_certification::{add_cert, remove_cert},
     id::Generate,
-    LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -772,7 +772,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Err(RemoveError::NotFound) => {}
-            other => panic!("expected RemoveError::NotFound but got {:?}", other),
+            other => panic!("expected RemoveError::NotFound but got {other:?}"),
         };
 
         Ok(())
@@ -835,7 +835,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
@@ -895,7 +895,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {

@@ -1,5 +1,3 @@
-use super::{get_all_ledger_and_archive_blocks, AllowanceProvider, BalanceProvider};
-use crate::metrics::parse_metric;
 use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
@@ -8,6 +6,9 @@ use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, BalanceProvider, get_all_ledger_and_archive_blocks, parse_metric,
+};
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
@@ -151,16 +152,14 @@ where
             other.balances.get(account_id).map_or_else(
                 || {
                     println!(
-                        "Mismatch in balance for account {:?}: {:?} vs None",
-                        account_id, balance
+                        "Mismatch in balance for account {account_id:?}: {balance:?} vs None"
                     );
                     false
                 },
                 |other_balance| {
                     if *balance != *other_balance {
                         println!(
-                            "Mismatch in balance for account {:?}: {:?} vs {:?}",
-                            account_id, balance, other_balance
+                            "Mismatch in balance for account {account_id:?}: {balance:?} vs {other_balance:?}"
                         );
                         false
                     } else {
@@ -175,16 +174,14 @@ where
             other.allowances.get(account_id_pair).map_or_else(
                 || {
                     println!(
-                        "Mismatch in allowance for account pair {:?}: {:?} vs None",
-                        account_id_pair, allowance
+                        "Mismatch in allowance for account pair {account_id_pair:?}: {allowance:?} vs None"
                     );
                     false
                 },
                 |other_allowance| {
                     if *allowance != *other_allowance {
                         println!(
-                            "Mismatch in allowance for account pair {:?}: {:?} vs {:?}",
-                            account_id_pair, allowance, other_allowance
+                            "Mismatch in allowance for account pair {account_id_pair:?}: {allowance:?} vs {other_allowance:?}"
                         );
                         false
                     } else {
@@ -393,10 +390,9 @@ where
             match self.allowances.get(&key) {
                 None => {
                     // No in-memory allowance, so the expected allowance should be zero
-                    assert!(expected_allowance.is_zero(),
-                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance (None, interpreted as 0)",
-                            expected_allowance,
-                            key
+                    assert!(
+                        expected_allowance.is_zero(),
+                        "Expected allowance of ({expected_allowance:?}) for key {key:?} does not match in-memory allowance (None, interpreted as 0)"
                     );
                 }
                 Some(in_memory_allowance) => {
@@ -415,10 +411,8 @@ where
                         }
                     };
                     assert_eq!(
-                        in_memory_allowance_amount,
-                        expected_allowance,
-                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance ({:?})",
-                        expected_allowance, key, in_memory_allowance_amount
+                        in_memory_allowance_amount, expected_allowance,
+                        "Expected allowance of ({expected_allowance:?}) for key {key:?} does not match in-memory allowance ({in_memory_allowance_amount:?})"
                     );
                 }
             }
@@ -719,10 +713,7 @@ where
             actual_num_balances,
             self.balances.len()
         );
-        println!(
-            "Checking {} balances and {} allowances",
-            actual_num_balances, actual_num_approvals
-        );
+        println!("Checking {actual_num_balances} balances and {actual_num_approvals} allowances");
         let mut balances_checked = 0;
         let now = Instant::now();
         for (account, balance) in self.balances.iter() {
@@ -731,10 +722,7 @@ where
             assert_eq!(
                 &Tokens::try_from(actual_balance.clone()).unwrap(),
                 balance,
-                "Mismatch in balance for account {:?} ({} vs {})",
-                account,
-                balance,
-                actual_balance
+                "Mismatch in balance for account {account:?} ({balance} vs {actual_balance})"
             );
             if balances_checked % 100000 == 0 && balances_checked > 0 {
                 println!(
@@ -840,8 +828,7 @@ where
             now.elapsed()
         );
         println!(
-            "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
-            no_expiration_count, expiration_in_future_count, expiration_in_past_count
+            "allowances with no expiration: {no_expiration_count}, expiration in future: {expiration_in_future_count}, expiration in past: {expiration_in_past_count}"
         );
         assert_eq!(
             self.transactions, num_ledger_blocks,
@@ -885,7 +872,7 @@ pub fn verify_ledger_state<Tokens>(
 ) where
     Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
 {
-    println!("verifying state of ledger {}", ledger_id);
+    println!("verifying state of ledger {ledger_id}");
     let blocks = get_all_ledger_and_archive_blocks::<Tokens>(env, ledger_id, None, None);
     println!("retrieved all ledger and archive blocks");
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);

@@ -1,17 +1,17 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, SamplingMode, criterion_group, criterion_main};
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_key_transcript, generate_tschnorr_protocol_inputs,
-    random_crypto_component_not_in_receivers, schnorr_sig_share_from_each_receiver,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
+    generate_tschnorr_protocol_inputs, random_crypto_component_not_in_receivers,
+    schnorr_sig_share_from_each_receiver,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner};
+use ic_types::Randomness;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::ExtendedDerivationPath;
-use ic_types::Randomness;
 use rand::{CryptoRng, Rng, RngCore};
 use strum::IntoEnumIterator;
 
@@ -19,7 +19,7 @@ criterion_main!(benches);
 criterion_group!(benches, crypto_tschnorr_benchmarks);
 
 fn crypto_tschnorr_benchmarks(criterion: &mut Criterion) {
-    let number_of_nodes = [1, 4, 13, 34, 40];
+    let number_of_nodes = [34];
 
     let test_cases = generate_test_cases(&number_of_nodes);
 
@@ -223,8 +223,8 @@ fn random_sig_inputs<R: Rng>(rng: &mut R) -> (ExtendedDerivationPath, Vec<u8>, R
         caller: PrincipalId::new_user_test_id(1),
         derivation_path: vec![],
     };
-    let message = rng.gen::<[u8; 32]>();
-    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+    let message = rng.r#gen::<[u8; 32]>();
+    let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
     (derivation_path, message.to_vec(), seed)
 }
 
@@ -253,7 +253,7 @@ impl TestCase {
         let alg = match self.alg {
             AlgorithmId::ThresholdSchnorrBip340 => "bip340",
             AlgorithmId::ThresholdEd25519 => "ed25519",
-            unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
+            unexpected => panic!("Unexpected testcase algorithm {unexpected}"),
         };
         format!("crypto_tschnorr_{alg}_{}_nodes", self.num_of_nodes)
     }

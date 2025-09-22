@@ -1,9 +1,9 @@
 use crate::crypt::{activate_crypt_device, destroy_key_slots_except, format_crypt_device};
-use crate::{activate_flags, DiskEncryption, Partition};
+use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
 use config_types::GuestVMType;
 use ic_sev::guest::firmware::SevGuestFirmware;
-use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
+use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::path::Path;
 
 pub const PREVIOUS_KEY_PATH: &str = "/var/alternative_store.keyfile";

@@ -1,5 +1,5 @@
 use crate::serialize_and_write_config;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use config_types::GuestOSConfig;
 use std::env;
 use std::fs::{self, File};
@@ -204,9 +204,11 @@ mod tests {
         let tmp_dir = tempfile::tempdir().unwrap();
         let out_file = tmp_dir.path().join("bootstrap.tar");
 
-        assert!(BootstrapOptions::default()
-            .build_bootstrap_config_image(&out_file)
-            .is_ok());
+        assert!(
+            BootstrapOptions::default()
+                .build_bootstrap_config_image(&out_file)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -259,6 +261,7 @@ mod tests {
                 peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1")?),
             },
             trusted_execution_environment_config: None,
+            recovery_config: Default::default(),
         };
 
         let nns_key_path = test_files_dir.join("nns.pem");

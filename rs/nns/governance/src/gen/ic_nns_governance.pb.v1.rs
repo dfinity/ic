@@ -2167,6 +2167,8 @@ pub struct KnownNeuronData {
     pub name: ::prost::alloc::string::String,
     #[prost(string, optional, tag = "2")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag = "3")]
+    pub links: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.
 #[derive(
@@ -4172,7 +4174,7 @@ pub enum Topic {
     SubnetManagement = 7,
     /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
     /// Management or Service Nervous System Management).
-    NetworkCanisterManagement = 8,
+    ApplicationCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
     /// form of neurons.
@@ -4229,7 +4231,7 @@ impl Topic {
             Self::NodeAdmin => "TOPIC_NODE_ADMIN",
             Self::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
             Self::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
-            Self::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
+            Self::ApplicationCanisterManagement => "TOPIC_APPLICATION_CANISTER_MANAGEMENT",
             Self::Kyc => "TOPIC_KYC",
             Self::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
             Self::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
@@ -4252,7 +4254,7 @@ impl Topic {
             "TOPIC_NODE_ADMIN" => Some(Self::NodeAdmin),
             "TOPIC_PARTICIPANT_MANAGEMENT" => Some(Self::ParticipantManagement),
             "TOPIC_SUBNET_MANAGEMENT" => Some(Self::SubnetManagement),
-            "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
+            "TOPIC_APPLICATION_CANISTER_MANAGEMENT" => Some(Self::ApplicationCanisterManagement),
             "TOPIC_KYC" => Some(Self::Kyc),
             "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
             "TOPIC_IC_OS_VERSION_DEPLOYMENT" => Some(Self::IcOsVersionDeployment),

@@ -73,13 +73,13 @@ impl fmt::Display for DisplayAmount {
                 f
             };
 
-            write!(fmt, "{}.", int)?;
+            write!(fmt, "{int}.")?;
             for _ in 0..(8 - frac_width) {
                 write!(fmt, "0")?;
             }
-            write!(fmt, "{}", frac_prefix)
+            write!(fmt, "{frac_prefix}")
         } else {
-            write!(fmt, "{}.0", int)
+            write!(fmt, "{int}.0")
         }
     }
 }

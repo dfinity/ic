@@ -1,5 +1,5 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -12,11 +12,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::BatchSummary,
     consensus::certification::Certification,
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         CryptoHash, CryptoHashOf,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
     messages::{Request, RequestOrResponse, Response},
     state_manager::{StateManagerError, StateManagerResult},
@@ -24,7 +25,6 @@ use ic_types::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
         StreamIndexedQueue, StreamSlice,
     },
-    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, VecDeque};
@@ -228,14 +228,13 @@ impl StateManager for FakeStateManager {
         // should have a matching commit_and_certify.(#4618)
         assert!(
             tip.is_none(),
-            "Attempt to submit a state not borrowed from this StateManager Height {}",
-            height
+            "Attempt to submit a state not borrowed from this StateManager Height {height}"
         );
         *tip = Some((height, state));
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
-        panic!("Diverged at height {}", height)
+        panic!("Diverged at height {height}")
     }
 }
 
@@ -293,9 +292,10 @@ impl StateReader for FakeStateManager {
             .ok_or(StateManagerError::StateRemoved(height))
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         _paths: &LabeledTree<()>,
+        _exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
         None
     }
@@ -737,11 +737,15 @@ impl StateReader for RefMockStateManager {
         self.mock.read().unwrap().get_state_at(height)
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
-        self.mock.read().unwrap().read_certified_state(paths)
+        self.mock
+            .read()
+            .unwrap()
+            .read_certified_state_with_exclusion(paths, exclusion)
     }
 
     fn get_certified_state_snapshot(

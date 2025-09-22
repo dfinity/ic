@@ -5,7 +5,7 @@ pub mod setupos;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::Path;
 
@@ -116,6 +116,7 @@ mod tests {
                 peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1").unwrap()),
             },
             trusted_execution_environment_config: None,
+            recovery_config: None,
         };
 
         fn serialize_and_deserialize<T>(config: &T)

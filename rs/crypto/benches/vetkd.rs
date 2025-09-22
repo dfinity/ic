@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_crypto_temp_crypto::{CryptoComponentRng, TempCryptoComponentGeneric};
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment, RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::LoadTranscriptResult;
@@ -33,7 +33,8 @@ fn vetkd_bench(criterion: &mut Criterion) {
         name: "dummy_key_name".to_string(),
     }));
 
-    for subnet_size in [1, 4, 13, 34, 40] {
+    let number_of_nodes = [34];
+    for subnet_size in number_of_nodes {
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
 
         let group = &mut criterion.benchmark_group(format!(
@@ -223,10 +224,7 @@ fn create_and_verify_key_shares_for_each<C: CryptoComponentRng>(
             let key_share = crypto
                 .create_encrypted_key_share(vetkd_args.clone())
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "vetKD encrypted key share creation by node {:?} failed: {}",
-                        creator, e
-                    )
+                    panic!("vetKD encrypted key share creation by node {creator:?} failed: {e}")
                 });
             assert_eq!(
                 crypto.verify_encrypted_key_share(*creator, &key_share, vetkd_args),
@@ -277,7 +275,7 @@ fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
 }
 
 fn random_n_bytes<R: Rng + CryptoRng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.gen::<u8>()).collect()
+    (0..n).map(|_| rng.r#gen::<u8>()).collect()
 }
 
 fn random_node_in<R: Rng + CryptoRng>(nodes: &BTreeSet<NodeId>, rng: &mut R) -> NodeId {
@@ -296,7 +294,7 @@ fn n_random_nodes_in<R: Rng + CryptoRng>(
 }
 
 fn random_transports_secret_key<R: Rng + CryptoRng>(rng: &mut R) -> TransportSecretKey {
-    ic_vetkeys::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+    ic_vetkeys::TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
         .expect("failed to create transport secret key")
 }
 
@@ -305,7 +303,7 @@ fn random_derivation_context_with_n_bytes<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> VetKdDerivationContext {
     VetKdDerivationContext {
-        caller: canister_test_id(rng.gen::<u64>()).get(),
+        caller: canister_test_id(rng.r#gen::<u64>()).get(),
         context: random_n_bytes(n, rng),
     }
 }

@@ -11,7 +11,7 @@ use crate::{
     driver::test_env_api::{HasPublicApiUrl, IcNodeContainer, IcNodeSnapshot, TopologySnapshot},
     util::{create_agent, runtime_from_url},
 };
-use candid::{CandidType, Deserialize, Principal};
+use candid::CandidType;
 use canister_test::{Canister, Runtime};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
@@ -24,10 +24,12 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
+    FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuron, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest, ProposalInfo,
+    ProposalStatus, Vote,
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-    manage_neuron_response, FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuron,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, Vote,
+    manage_neuron_response,
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_test_utils::governance::{
     get_proposal_info, submit_external_update_proposal,
@@ -53,7 +55,7 @@ use registry_canister::mutations::{
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
@@ -370,14 +372,11 @@ pub async fn vote_execute_proposal_assert_failed(
     assert_eq!(proposal_info.status, ProposalStatus::Failed as i32);
     let reason = proposal_info.failure_reason.unwrap_or_default();
     assert!(
-       reason
+        reason
             .error_message
             .to_lowercase()
             .contains(expected_message_substring.to_lowercase().as_str()),
-        "Rejection error for proposal {}, which is '{}', does not contain the expected substring '{}'",
-        proposal_id,
-        reason,
-        expected_message_substring
+        "Rejection error for proposal {proposal_id}, which is '{reason}', does not contain the expected substring '{expected_message_substring}'"
     );
 }
 
@@ -484,24 +483,10 @@ pub async fn execute_subnet_rental_request(
     topology_snapshot: &TopologySnapshot,
     user: PrincipalId,
 ) {
-    // TODO(NNS1-3965): Replace.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Hash)]
-    pub enum RentalConditionId {
-        App13CH,
-    }
-
-    #[derive(Clone, CandidType, Deserialize)]
-    pub struct SubnetRentalProposalPayload {
-        pub user: Principal,
-        pub rental_condition_id: RentalConditionId,
-    }
-
-    let user = Principal::from(user);
-
     execute_nns_function(
         topology_snapshot,
         NnsFunction::SubnetRentalRequest,
-        SubnetRentalProposalPayload {
+        SubnetRentalRequest {
             user,
             rental_condition_id: RentalConditionId::App13CH,
         },
@@ -581,20 +566,14 @@ pub async fn execute_fulfill_subnet_rental_request(
         .unwrap()
     {
         manage_neuron_response::Command::MakeProposal(ok) => ok,
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
     let proposal_id = ProposalId::from(response.proposal_id.unwrap());
-    println!(
-        "Submitted FulfillSubnetRentalRequest proposal {}.",
-        proposal_id
-    );
+    println!("Submitted FulfillSubnetRentalRequest proposal {proposal_id}.");
 
     // Vote the proposal in...
     vote_on_proposal(&governance, proposal_id).await;
-    println!(
-        "Voted on FulfillSubnetRentalRequest proposal {}.",
-        proposal_id
-    );
+    println!("Voted on FulfillSubnetRentalRequest proposal {proposal_id}.");
 
     let proposal_info = wait_for_final_state(&governance, proposal_id).await;
     println!(
@@ -831,7 +810,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
         DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: version.to_string(),
         },
-        format!("Update unassigned nodes version to: {}", version),
+        format!("Update unassigned nodes version to: {version}"),
         "".to_string(),
     )
     .await

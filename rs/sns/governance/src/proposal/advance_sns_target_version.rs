@@ -1,8 +1,8 @@
 use super::*;
 use crate::governance::{Governance, ValidGovernanceProto};
+use crate::pb::v1::Governance as GovernancePb;
 use crate::pb::v1::governance::Versions;
 use crate::pb::v1::governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Mode as ModePb};
-use crate::pb::v1::Governance as GovernancePb;
 use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
 use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
@@ -390,7 +390,7 @@ fn test_invalid_new_targets() {
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
                 new_target: Some(SnsVersion::from(next_version.clone())),
             }),
-            Err(format!("SNS target already set to {}.", next_version)),
+            Err(format!("SNS target already set to {next_version}.")),
         ),
         (
             "Scenario D: `new_target` is behind `current_target_version`.",
@@ -398,7 +398,7 @@ fn test_invalid_new_targets() {
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
                 new_target: Some(SnsVersion::from(next_version.clone())),
             }),
-            Err(format!("SNS target already set to {}.", next_next_version)),
+            Err(format!("SNS target already set to {next_next_version}.")),
         ),
         (
             "Scenario E: `new_target` is ahead of `current_target_version`.",

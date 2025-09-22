@@ -1,7 +1,7 @@
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{info, log, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, log};
 use reqwest::{Client, Response};
 use slog::Level;
 use std::error::Error;
@@ -224,7 +224,7 @@ impl FileDownloader {
         let response = self
             .client
             .get(url)
-            .header("range", format!("bytes={}-", offset))
+            .header("range", format!("bytes={offset}-"))
             .timeout(self.overall_timeout)
             .send()
             .await?;
@@ -389,55 +389,53 @@ pub enum FileDownloadError {
 
 impl FileDownloadError {
     pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to write to file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to write to file: {file_path:?}"), e)
     }
 
     pub(crate) fn file_open_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to open file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to open file: {file_path:?}"), e)
     }
 
     pub(crate) fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to remove file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to remove file: {file_path:?}"), e)
     }
 
     pub(crate) fn untar_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to unpack tar file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to unpack tar file: {file_path:?}"), e)
     }
 
     pub(crate) fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to hash of: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to hash of: {file_path:?}"), e)
     }
 }
 
 impl fmt::Display for FileDownloadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FileDownloadError::IoError(msg, e) => write!(
-                f,
-                "IO error, message: {}, error: {:?}",
-                msg, e
-            ),
-            FileDownloadError::ReqwestError(e) => write!(
-                f,
-                "Encountered error when making Http request: {}",
-                e
-            ),
+            FileDownloadError::IoError(msg, e) => {
+                write!(f, "IO error, message: {msg}, error: {e:?}")
+            }
+            FileDownloadError::ReqwestError(e) => {
+                write!(f, "Encountered error when making Http request: {e}")
+            }
             FileDownloadError::NonSuccessResponse(method, response) => write!(
                 f,
                 "Received non-success response from endpoint: method: {}, uri: {}, remote_addr: {:?}, status_code: {}, headers: {:?}",
-                method.as_str(), response.url(), response.remote_addr(), response.status(), response.headers()
+                method.as_str(),
+                response.url(),
+                response.remote_addr(),
+                response.status(),
+                response.headers()
             ),
-            FileDownloadError::FileHashMismatchError { computed_hash, expected_hash, file_path } =>
-                write!(
-                    f,
-                    "File failed hash validation: computed_hash: {}, expected_hash: {}, file: {:?}",
-                    computed_hash, expected_hash, file_path
-                ),
-            FileDownloadError::TimeoutError =>
-                write!(
-                    f,
-                    "File downloader timed out."
-                )
+            FileDownloadError::FileHashMismatchError {
+                computed_hash,
+                expected_hash,
+                file_path,
+            } => write!(
+                f,
+                "File failed hash validation: computed_hash: {computed_hash}, expected_hash: {expected_hash}, file: {file_path:?}"
+            ),
+            FileDownloadError::TimeoutError => write!(f, "File downloader timed out."),
         }
     }
 }
@@ -453,9 +451,9 @@ impl Error for FileDownloadError {}
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use flate2::write::GzEncoder;
     use flate2::Compression;
-    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use flate2::write::GzEncoder;
+    use ic_test_utilities_in_memory_logger::{InMemoryReplicaLogger, assertions::LogEntriesAssert};
     use mockito::{Mock, Request, ServerGuard};
     use slog::Level;
     use tar::Builder;
@@ -478,7 +476,7 @@ mod tests {
 
     fn extract_offset(request: &Request) -> usize {
         let header = request.header("range");
-        println!("Received request for headers: {:?}", header);
+        println!("Received request for headers: {header:?}");
         match header.first() {
             Some(h) => h
                 .to_str()
@@ -608,7 +606,7 @@ mod tests {
     async fn test_invalid_file_can_be_overwritten() {
         let body = String::from("Success");
         let hash = hash(&body);
-        let invalid_hash = format!("invalid_{}", hash);
+        let invalid_hash = format!("invalid_{hash}");
         let setup = Setup::new(&body).await.expect_routes(1, 0, 0, 0);
 
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
@@ -869,10 +867,7 @@ mod tests {
 
         match result {
             Err(FileDownloadError::IoError(message, _)) => {
-                assert_eq!(
-                    message,
-                    format!("Failed to unpack tar file: {:?}", tar_path)
-                );
+                assert_eq!(message, format!("Failed to unpack tar file: {tar_path:?}"));
             }
             _ => panic!("Expected FileDownloadError::IoError"),
         }

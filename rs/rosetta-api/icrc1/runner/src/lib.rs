@@ -5,7 +5,7 @@ use std::default::Default;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::str::FromStr;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
 pub const DEFAULT_TOKEN_SYMBOL: &str = "XTST";
@@ -146,11 +146,11 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                     break;
                 }
                 Err(e) => {
-                    println!("Expected port in port file, got {}: {}", port_str, e);
+                    println!("Expected port in port file, got {port_str}: {e}");
                 }
             }
         } else if let Some(exit_status) = child_process.try_wait().unwrap() {
-            println!("Rosetta exited with status: {}", exit_status);
+            println!("Rosetta exited with status: {exit_status}");
             break;
         }
         sleep(Duration::from_millis(100)).await;
@@ -162,7 +162,7 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                 .wait_with_output()
                 .expect("Failed to wait for child process");
 
-            panic!("Failed to start rosetta: {:?}", output);
+            panic!("Failed to start rosetta: {output:?}");
         }
         Some(port) => RosettaContext {
             _proc: KillOnDrop(child_process),

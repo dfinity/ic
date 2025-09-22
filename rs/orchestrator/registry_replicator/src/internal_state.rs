@@ -1,5 +1,5 @@
 use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
@@ -14,14 +14,14 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_keys::{
-    make_canister_ranges_key, make_subnet_list_record_key, make_subnet_record_key,
-    CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY,
+    CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY, make_canister_ranges_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, RegistryVersion, SubnetId,
+    CanisterId, NodeId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use prost::Message;
 use std::{
@@ -145,8 +145,7 @@ impl InternalState {
                 Err(e) => {
                     self.failed_poll_count += 1;
                     return Err(format!(
-                        "Error when trying to fetch updates from NNS: {:?}",
-                        e
+                        "Error when trying to fetch updates from NNS: {e:?}"
                     ));
                 }
             };
@@ -206,7 +205,7 @@ impl InternalState {
         };
 
         fn map_to_str<E: Debug>(msg: &str, v: RegistryVersion, e: E) -> String {
-            format!("{} at version {}: {:?}", msg, v, e)
+            format!("{msg} at version {v}: {e:?}")
         }
 
         let (subnet_id, subnet_record) = match self
@@ -219,7 +218,7 @@ impl InternalState {
                     "Error retrieving subnet records",
                     latest_version,
                     e,
-                ))
+                ));
             }
             _ => return Ok(()),
         };
@@ -301,13 +300,9 @@ impl InternalState {
     fn get_root_subnet_id(&self, version: RegistryVersion) -> Result<SubnetId, String> {
         match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(v)) => Ok(v),
-            Ok(_) => Err(format!(
-                "No NNS subnet id configured at version {}",
-                version
-            )),
+            Ok(_) => Err(format!("No NNS subnet id configured at version {version}")),
             Err(e) => Err(format!(
-                "Could not fetch nns subnet id at version {}: {:?}",
-                version, e
+                "Could not fetch nns subnet id at version {version}: {e:?}"
             )),
         }
     }
@@ -323,12 +318,10 @@ impl InternalState {
         {
             Ok(Some(v)) => Ok(v),
             Ok(None) => Err(format!(
-                "Public key for subnet {} not set at version {}",
-                subnet_id, version
+                "Public key for subnet {subnet_id} not set at version {version}"
             )),
             Err(e) => Err(format!(
-                "Error when retrieving public key for subnet {} at version {}: {:?}",
-                subnet_id, version, e
+                "Error when retrieving public key for subnet {subnet_id} at version {version}: {e:?}"
             )),
         }
     }
@@ -345,15 +338,13 @@ impl InternalState {
             Ok(Some(v)) => v,
             Ok(None) => {
                 return Err(format!(
-                    "Missing or incomplete transport infos for subnet {} at version {}.",
-                    subnet_id, version
-                ))
+                    "Missing or incomplete transport infos for subnet {subnet_id} at version {version}."
+                ));
             }
             Err(e) => {
                 return Err(format!(
-                    "Error retrieving transport infos for subnet {} at version {}: {:?}.",
-                    subnet_id, version, e
-                ))
+                    "Error retrieving transport infos for subnet {subnet_id} at version {version}: {e:?}."
+                ));
             }
         };
 
@@ -374,7 +365,7 @@ impl InternalState {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
-                    format!("[{}]", v)
+                    format!("[{v}]")
                 } else {
                     v.to_string()
                 }
@@ -505,8 +496,8 @@ mod test {
     use super::*;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
-        make_canister_ranges_key, make_subnet_list_record_key, make_subnet_record_key,
-        ROOT_SUBNET_ID_KEY,
+        ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_subnet_list_record_key,
+        make_subnet_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};

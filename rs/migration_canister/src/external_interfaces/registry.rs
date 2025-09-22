@@ -4,7 +4,7 @@ use candid::{CandidType, Principal};
 use ic_cdk::{call::Call, println};
 use serde::Deserialize;
 
-use crate::{processing::ProcessingResult, ValidationError};
+use crate::{ValidationError, processing::ProcessingResult};
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 
@@ -34,21 +34,28 @@ pub async fn get_subnet_for_canister(
     {
         Err(e) => {
             println!(
-                "Call `get_subnet_for_canister` for {:?} failed: {:?}",
+                "Call `get_subnet_for_canister` for {} failed: {:?}",
                 canister_id, e
             );
             ProcessingResult::NoProgress
         }
-        Ok(response) => match response.candid::<GetSubnetForCanisterResponse>() {
-            Ok(GetSubnetForCanisterResponse { subnet_id }) => match subnet_id {
+        Ok(response) => match response.candid::<Result<GetSubnetForCanisterResponse, String>>() {
+            Ok(Ok(GetSubnetForCanisterResponse { subnet_id })) => match subnet_id {
                 None => ProcessingResult::FatalFailure(ValidationError::CanisterNotFound {
                     canister: canister_id,
                 }),
                 Some(subnet_id) => ProcessingResult::Success(subnet_id),
             },
+            Ok(Err(e)) => {
+                println!(
+                    "Call `GetSubnetForCanisterResponse` for {} failed: {}",
+                    canister_id, e
+                );
+                ProcessingResult::NoProgress
+            }
             Err(e) => {
                 println!(
-                    "Decoding `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
+                    "Decoding `get_subnet_for_canister` for {} failed: {:?}",
                     canister_id, e
                 );
                 ProcessingResult::NoProgress
@@ -88,7 +95,7 @@ pub async fn migrate_canister(
     .await
     {
         Err(e) => {
-            println!("Call `migrate_canisters` for {:?} failed: {:?}", source, e);
+            println!("Call `migrate_canisters` for {} failed: {:?}", source, e);
             ProcessingResult::NoProgress
         }
         Ok(_) => ProcessingResult::Success(42 /* TODO */),

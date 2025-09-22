@@ -32,12 +32,50 @@ rust_library(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
-        "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:futures",
         "@crate_index//:rand",
         "@crate_index//:sha2",
         "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "nr_broken_dfinity_node",
+    env = ENV,
+    flaky = True,
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "nr_large",
+    enable_head_nns_variant = False,
+    env = ENV,
+    flaky = True,
+    tags = [
+        # TODO: This test is highly flaky (50%) so we disable running it nightly for now and mark it as manual:
+        # "system_test_large"
+        "manual",
+    ],
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
     ],
 )
 

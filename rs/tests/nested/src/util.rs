@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use canister_test::PrincipalId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -19,16 +19,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error as RegistryTransportError;
 use ic_system_test_driver::{
     driver::{
-        bootstrap::{setup_nested_vms, start_nested_vms},
-        farm::Farm,
         ic::{InternetComputer, Subnet},
-        ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
-        nested::{NestedNode, NestedVm, NestedVms},
-        resource::{allocate_resources, get_resource_request_for_nested_nodes},
-        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+        ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
+        nested::NestedVm,
+        test_env::TestEnv,
         test_env_api::*,
-        test_setup::GroupSetup,
-        vector_vm::HasVectorTargets,
     },
     nns::{
         get_governance_canister, submit_update_elected_hostos_versions_proposal,
@@ -37,10 +32,9 @@ use ic_system_test_driver::{
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     retry_with_msg_async_quiet,
-    util::runtime_from_url,
+    util::{block_on, runtime_from_url},
 };
-use ic_types::Height;
-use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
+use ic_types::{Height, NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
 use regex::Regex;
 use reqwest::Client;
@@ -48,19 +42,23 @@ use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
-pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
+pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast: bool) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
 
     // Setup "testnet"
-    let mut subnet = Subnet::fast_single_node(SubnetType::System);
+    let mut subnet = if is_fast {
+        Subnet::fast(SubnetType::System, 1)
+    } else {
+        Subnet::new(SubnetType::System).add_nodes(1)
+    };
     if let Some(dkg_interval) = dkg_interval {
         subnet = subnet.with_dkg_interval_length(Height::from(dkg_interval));
     }
@@ -78,24 +76,6 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(env)
         .expect("failed to setup ic-gateway");
-}
-
-/// Asserts that SetupOS and initial NNS GuestOS image versions match.
-/// Only checks if both functions return ReplicaVersion successfully.
-/// NOTE: If you want to create a new test with conflicting versions, add a
-/// field to override this check and, in your test, account for the fact that
-/// after registration, the deployed node will upgrade to the NNS GuestOS version.
-pub fn assert_version_compatibility() {
-    let setupos_version = get_setupos_img_version();
-    let guestos_version = get_guestos_img_version();
-
-    if setupos_version != guestos_version {
-        // TODO: Revert change after extending image version support
-
-        // panic!(
-        //     "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
-        // );
-    }
 }
 
 /// Use an SSH channel to check the version on the running HostOS.
@@ -280,135 +260,6 @@ pub(crate) async fn update_nodes_hostos_version(
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
-pub fn setup_nested_vm_group(env: TestEnv, names: &[&str]) {
-    let logger = env.logger();
-    info!(logger, "Setting up nested VM(s) ...");
-
-    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
-    let farm = Farm::new(farm_url, logger.clone());
-    let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.infra_group_name;
-
-    let nodes: Vec<NestedNode> = names
-        .iter()
-        .map(|name| NestedNode::new(name.to_string()))
-        .collect();
-
-    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
-        .expect("Failed to build resource request for nested test.");
-    let res_group = allocate_resources(&farm, &res_request, &env)
-        .expect("Failed to allocate resources for nested test.");
-
-    for (name, vm) in res_group.vms.iter() {
-        env.write_nested_vm(name, vm)
-            .expect("Unable to write nested VM.");
-    }
-
-    let ic_gateway = env
-        .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
-        .expect("No HTTP gateway found");
-    let ic_gateway_url = ic_gateway.get_public_url();
-
-    let nns_public_key =
-        std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
-
-    setup_nested_vms(
-        &nodes,
-        &env,
-        &farm,
-        &group_name,
-        &ic_gateway_url,
-        &nns_public_key,
-    )
-    .expect("Unable to setup nested VMs.");
-
-    info!(logger, "Nested VM(s) setup complete!");
-}
-
-/// Setup vector targets for a single VM
-pub fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
-    let vm = env
-        .get_nested_vm(vm_name)
-        .unwrap_or_else(|e| panic!("Expected nested vm {vm_name} to exist, but got error: {e:?}"));
-
-    let network = vm.get_nested_network().unwrap();
-
-    for (job, ip) in [
-        ("node_exporter", network.guest_ip),
-        ("host_node_exporter", network.host_ip),
-    ] {
-        env.add_custom_vector_target(
-            format!("{vm_name}-{job}"),
-            ip.into(),
-            Some(
-                [("job", job)]
-                    .into_iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect(),
-            ),
-        )
-        .unwrap();
-    }
-}
-
-/// Simplified nested VM setup that bypasses IC Gateway and NNS requirements.
-pub(crate) fn simple_setup_nested_vm_group(env: TestEnv, names: &[&str]) {
-    let logger = env.logger();
-    info!(
-        logger,
-        "Setting up minimal nested VM(s) without IC infrastructure..."
-    );
-
-    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
-    let farm = Farm::new(farm_url, logger.clone());
-    let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.infra_group_name;
-
-    let nodes: Vec<NestedNode> = names
-        .iter()
-        .map(|name| NestedNode::new(name.to_string()))
-        .collect();
-
-    // Allocate VM resources
-    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
-        .expect("Failed to build resource request for nested test.");
-    let res_group = allocate_resources(&farm, &res_request, &env)
-        .expect("Failed to allocate resources for nested test.");
-
-    for (name, vm) in res_group.vms.iter() {
-        env.write_nested_vm(name, vm)
-            .expect("Unable to write nested VM.");
-    }
-
-    // Use dummy values for IC Gateway URL and NNS public key
-    let dummy_ic_gateway_url = url::Url::parse("http://localhost:8080").unwrap();
-    let dummy_nns_public_key = "dummy_public_key_for_recovery_test";
-
-    setup_nested_vms(
-        &nodes,
-        &env,
-        &farm,
-        &group_name,
-        &dummy_ic_gateway_url,
-        dummy_nns_public_key,
-    )
-    .expect("Unable to setup nested VMs with minimal config.");
-
-    info!(logger, "Minimal nested VM(s) setup complete!");
-}
-
-pub fn start_nested_vm_group(env: TestEnv) {
-    let logger = env.logger();
-    info!(logger, "Setup nested VMs ...");
-
-    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
-    let farm = Farm::new(farm_url, logger.clone());
-    let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.infra_group_name;
-
-    start_nested_vms(&env, &farm, &group_name).expect("Unable to start nested VMs.");
-}
-
 /// Wait for the guest to return any available version (not "unavailable").
 /// Returns the version string when available.
 pub async fn wait_for_guest_version(
@@ -475,7 +326,13 @@ pub async fn wait_for_expected_guest_version(
 
 /// Get the current boot ID from a HostOS node.
 pub fn get_host_boot_id(node: &NestedVm) -> String {
-    node.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+    block_on(get_host_boot_id_async(node))
+}
+
+/// Get the current boot ID from a HostOS node. Asynchronous version
+pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
+    node.block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+        .await
         .expect("Failed to retrieve boot ID")
         .trim()
         .to_string()

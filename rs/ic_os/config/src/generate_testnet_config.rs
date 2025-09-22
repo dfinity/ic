@@ -45,6 +45,9 @@ pub struct GenerateTestnetConfigArgs {
     pub socks_proxy: Option<String>,
     pub hostname: Option<String>,
     pub generate_ic_boundary_tls_cert: Option<String>,
+
+    // GuestOSRecoveryConfig arguments
+    pub recovery_hash: Option<String>,
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -79,6 +82,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         inject_ic_crypto,
         inject_ic_state,
         inject_ic_registry_local_store,
+        recovery_hash,
         backup_retention_time_seconds,
         backup_purging_interval_seconds,
         malicious_behavior,
@@ -148,7 +152,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         }),
         (None, None, None) => None,
         _ => {
-            anyhow::bail!("Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration.");
+            anyhow::bail!(
+                "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration."
+            );
         }
     };
 
@@ -243,6 +249,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         guest_vm_type: GuestVMType::Default,
         upgrade_config: GuestOSUpgradeConfig::default(),
         trusted_execution_environment_config: None,
+        recovery_config: recovery_hash.map(|hash| RecoveryConfig {
+            recovery_hash: hash,
+        }),
     };
 
     Ok(guestos_config)
@@ -252,7 +261,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 /// Any required config fields that aren't specified will receive dummy values.
 pub fn generate_testnet_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let guestos_config = create_guestos_config(config)?;
-    println!("GuestOSConfig: {:?}", guestos_config);
+    println!("GuestOSConfig: {guestos_config:?}");
     Ok(guestos_config)
 }
 
@@ -364,8 +373,7 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("Failed to parse deterministic_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -419,8 +427,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse fixed_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -456,8 +463,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse ipv4_address"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -475,8 +481,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse ipv4_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 }

@@ -7,30 +7,30 @@ use std::{
 use bitcoin::p2p::ServiceFlags;
 
 use bitcoin::p2p::{
+    Address, Magic,
     message::{CommandString, NetworkMessage},
     message_network::VersionMessage,
-    Address, Magic,
 };
-use ic_logger::{error, info, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, trace, warn};
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
-    sync::mpsc::{channel, Sender},
-    sync::mpsc::{unbounded_channel, Receiver},
+    sync::mpsc::{Receiver, unbounded_channel},
+    sync::mpsc::{Sender, channel},
     task::JoinHandle,
 };
 
 use crate::{
+    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
+    ProcessNetworkMessageError,
     addressbook::{
-        validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
+        AddressBook, AddressBookError, AddressEntry, AddressTimestamp, validate_services,
     },
     common::{BlockHeight, BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
-    ProcessNetworkMessageError,
 };
 
 type StreamConfigOf<Network> =
@@ -71,6 +71,9 @@ pub enum ConnectionManagerError {
     /// This can happen from recycling the DNS seed queue addresses.
     #[error("Address {0} is already connected")]
     AlreadyConnected(SocketAddr),
+    /// async error thrown by tokio runtime
+    #[error("JoinError")]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 /// This type is a simple wrapper for results created by a connection manager.
@@ -165,14 +168,15 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
     /// This function contains the actions the must occur every time the connection
     /// manager must execute actions.
-    pub fn tick(
+    pub async fn tick(
         &mut self,
         current_height: BlockHeight,
         handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) {
         self.current_height = current_height;
 
-        if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle) {
+        if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle).await
+        {
             error!(self.logger, "{}", err);
         }
     }
@@ -188,7 +192,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     }
 
     /// This function will remove disconnects and establish new connections.
-    fn manage_connections(
+    async fn manage_connections(
         &mut self,
         handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
@@ -203,7 +207,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
             .known_peer_addresses
             .set(self.address_book.size() as i64);
         while self.connections.len() < self.get_max_number_of_connections() {
-            self.make_connection(handle)?;
+            self.make_connection(handle).await?;
         }
         Ok(())
     }
@@ -258,13 +262,12 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     fn flag_seed_addr_retrieval_timeouts(&mut self) {
         let now = SystemTime::now();
         for conn in self.connections.values_mut() {
-            if let AddressEntry::Seed(_) = *conn.address_entry() {
-                if let ConnectionState::AwaitingAddresses { timestamp } = *conn.state() {
-                    let expires_at =
-                        timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
-                    if expires_at <= now {
-                        conn.discard();
-                    }
+            if let AddressEntry::Seed(_) = *conn.address_entry()
+                && let ConnectionState::AwaitingAddresses { timestamp } = *conn.state()
+            {
+                let expires_at = timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+                if expires_at <= now {
+                    conn.discard();
                 }
             }
         }
@@ -295,13 +298,13 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     }
 
     /// This function creates a new connection with a stream to a BTC node.
-    fn make_connection(
+    async fn make_connection(
         &mut self,
         handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
-            self.address_book.pop_seed()
+            self.address_book.resolve_next_seed().await
         } else {
             self.address_book.pop()
         };
@@ -360,7 +363,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         // The node address that will be receiving this message.
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
-        let nonce: u64 = self.rng.gen();
+        let nonce: u64 = self.rng.r#gen();
         let user_agent = String::from(USER_AGENT);
         let message = <NetworkMessageOf<Network>>::Version(VersionMessage::new(
             self.p2p_protocol_version,
@@ -389,7 +392,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
     /// This function is used to send a `ping` message to a specified connection.
     fn send_ping(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        let nonce = self.rng.gen();
+        let nonce = self.rng.r#gen();
         let conn = self.get_connection(addr)?;
         conn.expect_pong(nonce);
         self.send_to(addr, NetworkMessage::Ping(nonce))
@@ -480,8 +483,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         trace!(
             self.logger,
-            "Completed the version handshake with {}",
-            address
+            "Completed the version handshake with {}", address
         );
         Ok(())
     }
@@ -549,10 +551,10 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
             return Err(ProcessNetworkMessageError::InvalidMessage);
         }
 
-        if let Ok(conn) = self.get_connection(address) {
-            if let AddressEntry::Seed(_) = conn.address_entry() {
-                conn.disconnect();
-            }
+        if let Ok(conn) = self.get_connection(address)
+            && let AddressEntry::Seed(_) = conn.address_entry()
+        {
+            conn.disconnect();
         }
 
         if self.address_book.has_enough_addresses() {
@@ -710,7 +712,7 @@ mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
     use bitcoin::p2p::ServiceFlags;
-    use bitcoin::{block::Header, Block, Network};
+    use bitcoin::{Block, Network, block::Header};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
@@ -914,7 +916,7 @@ mod test {
             manager.get_max_number_of_connections(),
             MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
         );
-        manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+        manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle).await;
         for i in 0..4u8 {
             tokio::select! {
                 event = manager
@@ -934,7 +936,7 @@ mod test {
                 // has been disconnected.
                 continue;
             }
-            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle).await;
         }
         assert_eq!(manager.current_height, 1);
         assert_eq!(

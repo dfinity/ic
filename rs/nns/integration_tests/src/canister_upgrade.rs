@@ -63,7 +63,7 @@ fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm) {
         assert_eq!(install_code.canister_id, Some(canister_id.get()));
         assert_eq!(install_code.skip_stopping_before_installing, None);
     } else {
-        panic!("Unexpected action: {:?}", action);
+        panic!("Unexpected action: {action:?}");
     }
 }
 

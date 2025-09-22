@@ -2073,6 +2073,7 @@ impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
         Self {
             name: item.name,
             description: item.description,
+            links: Some(item.links),
         }
     }
 }
@@ -2081,6 +2082,7 @@ impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
         Self {
             name: item.name,
             description: item.description,
+            links: item.links.unwrap_or_default(),
         }
     }
 }
@@ -3628,59 +3630,6 @@ impl From<pb_api::Account> for pb::Account {
         Self {
             owner: item.owner,
             subaccount: item.subaccount.map(|x| pb::Subaccount { subaccount: x }),
-        }
-    }
-}
-
-impl From<pb::Topic> for pb_api::Topic {
-    fn from(item: pb::Topic) -> Self {
-        match item {
-            pb::Topic::Unspecified => pb_api::Topic::Unspecified,
-            pb::Topic::NeuronManagement => pb_api::Topic::NeuronManagement,
-            pb::Topic::ExchangeRate => pb_api::Topic::ExchangeRate,
-            pb::Topic::NetworkEconomics => pb_api::Topic::NetworkEconomics,
-            pb::Topic::Governance => pb_api::Topic::Governance,
-            pb::Topic::NodeAdmin => pb_api::Topic::NodeAdmin,
-            pb::Topic::ParticipantManagement => pb_api::Topic::ParticipantManagement,
-            pb::Topic::SubnetManagement => pb_api::Topic::SubnetManagement,
-            pb::Topic::NetworkCanisterManagement => pb_api::Topic::NetworkCanisterManagement,
-            pb::Topic::Kyc => pb_api::Topic::Kyc,
-            pb::Topic::NodeProviderRewards => pb_api::Topic::NodeProviderRewards,
-            pb::Topic::IcOsVersionDeployment => pb_api::Topic::IcOsVersionDeployment,
-            pb::Topic::IcOsVersionElection => pb_api::Topic::IcOsVersionElection,
-            pb::Topic::SnsAndCommunityFund => pb_api::Topic::SnsAndCommunityFund,
-            pb::Topic::ApiBoundaryNodeManagement => pb_api::Topic::ApiBoundaryNodeManagement,
-            pb::Topic::SubnetRental => pb_api::Topic::SubnetRental,
-            pb::Topic::ProtocolCanisterManagement => pb_api::Topic::ProtocolCanisterManagement,
-            pb::Topic::ServiceNervousSystemManagement => {
-                pb_api::Topic::ServiceNervousSystemManagement
-            }
-        }
-    }
-}
-impl From<pb_api::Topic> for pb::Topic {
-    fn from(item: pb_api::Topic) -> Self {
-        match item {
-            pb_api::Topic::Unspecified => pb::Topic::Unspecified,
-            pb_api::Topic::NeuronManagement => pb::Topic::NeuronManagement,
-            pb_api::Topic::ExchangeRate => pb::Topic::ExchangeRate,
-            pb_api::Topic::NetworkEconomics => pb::Topic::NetworkEconomics,
-            pb_api::Topic::Governance => pb::Topic::Governance,
-            pb_api::Topic::NodeAdmin => pb::Topic::NodeAdmin,
-            pb_api::Topic::ParticipantManagement => pb::Topic::ParticipantManagement,
-            pb_api::Topic::SubnetManagement => pb::Topic::SubnetManagement,
-            pb_api::Topic::NetworkCanisterManagement => pb::Topic::NetworkCanisterManagement,
-            pb_api::Topic::Kyc => pb::Topic::Kyc,
-            pb_api::Topic::NodeProviderRewards => pb::Topic::NodeProviderRewards,
-            pb_api::Topic::IcOsVersionDeployment => pb::Topic::IcOsVersionDeployment,
-            pb_api::Topic::IcOsVersionElection => pb::Topic::IcOsVersionElection,
-            pb_api::Topic::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
-            pb_api::Topic::ApiBoundaryNodeManagement => pb::Topic::ApiBoundaryNodeManagement,
-            pb_api::Topic::SubnetRental => pb::Topic::SubnetRental,
-            pb_api::Topic::ProtocolCanisterManagement => pb::Topic::ProtocolCanisterManagement,
-            pb_api::Topic::ServiceNervousSystemManagement => {
-                pb::Topic::ServiceNervousSystemManagement
-            }
         }
     }
 }

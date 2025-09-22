@@ -1,7 +1,7 @@
 use crate::{
     are_fulfill_subnet_rental_request_proposals_enabled,
     governance::{Environment, LOG_PREFIX},
-    pb::v1::{governance_error::ErrorType, FulfillSubnetRentalRequest, GovernanceError},
+    pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
 };
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
@@ -71,8 +71,7 @@ impl FulfillSubnetRentalRequest {
 
         if !is_potential_full_git_commit_id(replica_version_id) {
             defects.push(format!(
-                "The `replica_version_id` is not a 40 character hexidecimal string (it was {:?})",
-                replica_version_id,
+                "The `replica_version_id` is not a 40 character hexidecimal string (it was {replica_version_id:?})",
             ));
         }
 
@@ -143,16 +142,19 @@ impl FulfillSubnetRentalRequest {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Unable to verify that user {} has a rental request, because \
+                        "Unable to verify that user {user} has a rental request, because \
                          unable call SubnetRentalCanister.list_rental_requests \
-                         (while executing a FulfillSubnetRentalRequest proposal): {:?}: {}",
-                        user, code, message,
+                         (while executing a FulfillSubnetRentalRequest proposal): {code:?}: {message}",
                     ),
                 )
             })?;
 
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code schrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct RentalRequest {
             user: Principal,
@@ -163,9 +165,8 @@ impl FulfillSubnetRentalRequest {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Unable to verify that user {} has a rental request, because \
-                     unable to decode SubnetRentalCanister.list_rental_requests response: {}",
-                    user, err,
+                    "Unable to verify that user {user} has a rental request, because \
+                     unable to decode SubnetRentalCanister.list_rental_requests response: {err}",
                 ),
             )
         })?;
@@ -178,11 +179,10 @@ impl FulfillSubnetRentalRequest {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "The user ({}) of this FulfillSubnetRentalRequest proposal \
+                    "The user ({user}) of this FulfillSubnetRentalRequest proposal \
                      is not the user of any existing rental request in the Subnet\
                      Rental canister. Thus, we cannot proceed with executing this \
                      FulfillSubnetRentalRequest proposal.",
-                    user,
                 ),
             ));
         }
@@ -274,10 +274,7 @@ impl FulfillSubnetRentalRequest {
             .map_err(|(code, message)| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!(
-                        "Unable to call the Registry.create_subnet: {:?}: {}",
-                        code, message,
-                    ),
+                    format!("Unable to call the Registry.create_subnet: {code:?}: {message}",),
                 )
             })?;
 
@@ -286,19 +283,13 @@ impl FulfillSubnetRentalRequest {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!(
-                        "Unable to decode the response from Registry.create_subnet: {}",
-                        err,
-                    ),
+                    format!("Unable to decode the response from Registry.create_subnet: {err}",),
                 )
             })?
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!(
-                        "create_subnet reply from the Registry canister was an Err: {}",
-                        err,
-                    ),
+                    format!("create_subnet reply from the Registry canister was an Err: {err}",),
                 )
             })?;
 
@@ -315,8 +306,7 @@ impl FulfillSubnetRentalRequest {
                 ErrorType::External,
                 format!(
                     "Was able to decode Registry.create_subnet response, but the new_subnet_id \
-                 value could not be converted into a SubnetId: {}",
-                    err,
+                 value could not be converted into a SubnetId: {err}",
                 ),
             )
         })
@@ -342,8 +332,12 @@ impl FulfillSubnetRentalRequest {
         let proposal_id = proposal_id.id;
 
         // Assemble the request.
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code shrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct CreateRentalAgreementPayload {
             user: Principal,
@@ -369,8 +363,7 @@ impl FulfillSubnetRentalRequest {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Unable to call SubnetRentalCanister.execute_create_rental_agreement: {:?}: {}",
-                    code, message,
+                    "Unable to call SubnetRentalCanister.execute_create_rental_agreement: {code:?}: {message}",
                 ),
             )
         })?;

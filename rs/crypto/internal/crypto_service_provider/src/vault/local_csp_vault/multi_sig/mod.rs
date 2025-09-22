@@ -84,10 +84,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 }
                 SecretKeyStoreInsertionError::SerializationError(serialization_error) => {
                     CspMultiSignatureKeygenError::InternalError {internal_error:
-                    format!("Error persisting secret key store during CSP multi-signature key generation: {}", serialization_error)}}
+                    format!("Error persisting secret key store during CSP multi-signature key generation: {serialization_error}")}}
                 SecretKeyStoreInsertionError::TransientError(io_error) => {
                     CspMultiSignatureKeygenError::TransientInternalError {internal_error:
-                    format!("Error persisting secret key store during CSP multi-signature key generation: {}", io_error)}
+                    format!("Error persisting secret key store during CSP multi-signature key generation: {io_error}")}
                 }
             })
             .and_then(|()| {
@@ -103,8 +103,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         PublicKeySetOnceError::Io(io_error) => {
                             CspMultiSignatureKeygenError::TransientInternalError {
                                 internal_error: format!(
-                                    "IO error persisting committee signing public key: {}",
-                                    io_error
+                                    "IO error persisting committee signing public key: {io_error}"
                                 ),
                             }
                         }
@@ -168,7 +167,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             _ => CspMultiSignatureKeygenError::MalformedPublicKey {
                 algorithm: AlgorithmId::MultiBls12_381,
                 key_bytes: Some(pk_bytes.0.to_vec()),
-                internal_error: format!("Unexpected error returned from create_pop: {}", e),
+                internal_error: format!("Unexpected error returned from create_pop: {e}"),
             },
         })?;
         let pop = CspPop::MultiBls12_381(pop_bytes);
@@ -182,7 +181,7 @@ fn validate_committee_signing_public_key(
 ) -> Result<ValidCommitteeSigningPublicKey, CspMultiSignatureKeygenError> {
     ValidCommitteeSigningPublicKey::try_from(committee_public_key_proto).map_err(|error| {
         CspMultiSignatureKeygenError::InternalError {
-            internal_error: format!("Committee signing public key validation error: {}", error),
+            internal_error: format!("Committee signing public key validation error: {error}"),
         }
     })
 }
