@@ -53,6 +53,16 @@ fn log_instructions(env: TestEnv) {
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
 
+    let upgrade_version = get_guestos_update_img_version();
+    let upgrade_image_url = get_guestos_update_img_url();
+    let upgrade_image_hash = get_guestos_update_img_sha256();
+    info!(
+        logger,
+        r#"Suggested GuestOS upgrade:
+    --upgrade-version {upgrade_version}
+    --upgrade-image-url {upgrade_image_url}
+    --upgrade-image-hash {upgrade_image_hash}"#
+    );
 
     info!(
         logger,
