@@ -27,6 +27,8 @@ use pocket_ic::common::rest::{
 };
 #[cfg(not(windows))]
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
+#[cfg(not(windows))]
+use pocket_ic::update_candid_as;
 use pocket_ic::{
     DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
     PocketIcState, RejectCode, StartServerParams, Time,
@@ -36,10 +38,11 @@ use pocket_ic::{
         InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
-    query_candid, start_server, update_candid, update_candid_as,
+    query_candid, start_server, update_candid,
 };
 #[cfg(not(windows))]
 use prost::Message;
+#[cfg(not(windows))]
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
