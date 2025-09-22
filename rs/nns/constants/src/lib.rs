@@ -171,7 +171,7 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
     &NODE_REWARDS_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 20] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -191,6 +191,7 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
     &BITCOIN_TESTNET_CANISTER_ID,
     &CYCLES_LEDGER_CANISTER_ID,
     &CYCLES_LEDGER_INDEX_CANISTER_ID,
+    &MIGRATION_CANISTER_ID,
 ];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.

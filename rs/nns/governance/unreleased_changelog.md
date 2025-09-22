@@ -20,6 +20,9 @@ on the process that this file is part of, see
 * Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
   proposal.
 
+* Add the migration canister (sbzkb-zqaaa-aaaaa-aaaiq-cai) into `PROTOCOL_CANISTER_IDS` so that its
+  upgrade proposals will be considered "Protocol Canister Management".
+
 ## Changed
 
 ## Deprecated
