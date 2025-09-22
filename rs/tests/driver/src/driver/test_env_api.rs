@@ -220,6 +220,7 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
@@ -2012,7 +2013,7 @@ where
 }
 
 pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
-    let tcp = TcpStream::connect((ip, 22))?;
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;
@@ -2494,6 +2495,12 @@ pub fn scp_send_to(
             let mut remote_file = session.scp_send(to_remote, mode, size, None)?;
             let mut from_file = std::fs::File::open(from_local)?;
             std::io::copy(&mut from_file, &mut remote_file)?;
+            remote_file.flush()?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
+
             info!(
                 log,
                 "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} ."
@@ -2523,6 +2530,11 @@ pub fn scp_recv_from(
             let size = scp_file_stat.size();
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
+
             info!(
                 log,
                 "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."

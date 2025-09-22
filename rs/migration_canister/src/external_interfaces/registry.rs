@@ -34,7 +34,7 @@ pub async fn get_subnet_for_canister(
     {
         Err(e) => {
             println!(
-                "Call `get_subnet_for_canister` for {:?} failed: {:?}",
+                "Call `get_subnet_for_canister` for {} failed: {:?}",
                 canister_id, e
             );
             ProcessingResult::NoProgress
@@ -46,10 +46,16 @@ pub async fn get_subnet_for_canister(
                 }),
                 Some(subnet_id) => ProcessingResult::Success(subnet_id),
             },
-            Ok(Err(_msg)) => ProcessingResult::NoProgress,
+            Ok(Err(e)) => {
+                println!(
+                    "Call `GetSubnetForCanisterResponse` for {} failed: {}",
+                    canister_id, e
+                );
+                ProcessingResult::NoProgress
+            }
             Err(e) => {
                 println!(
-                    "Decoding `get_subnet_for_canister` for {:?} failed: {:?}",
+                    "Decoding `get_subnet_for_canister` for {} failed: {:?}",
                     canister_id, e
                 );
                 ProcessingResult::NoProgress
@@ -89,7 +95,7 @@ pub async fn migrate_canister(
     .await
     {
         Err(e) => {
-            println!("Call `migrate_canisters` for {:?} failed: {:?}", source, e);
+            println!("Call `migrate_canisters` for {} failed: {:?}", source, e);
             ProcessingResult::NoProgress
         }
         Ok(_) => ProcessingResult::Success(42 /* TODO */),

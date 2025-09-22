@@ -5616,6 +5616,7 @@ async fn get_node_list_since(
     let result: IndexMap<PrincipalId, NodeDetails> = node_map
         .into_iter()
         .map(|(node_id, node_record): (PrincipalId, NodeRecord)| {
+            let node_reward_type = node_record.node_reward_type();
             let node_operator_id =
                 PrincipalId::try_from(node_record.node_operator_id).unwrap_or_default();
             let (node_provider_id, dc_id) = match node_operator_map.get(&node_operator_id) {
@@ -5643,6 +5644,7 @@ async fn get_node_list_since(
                     dc_id,
                     hostos_version_id: node_record.hostos_version_id,
                     domain: node_record.domain,
+                    node_reward_type,
                 },
             )
         })

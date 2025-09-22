@@ -63,7 +63,7 @@ prepare_guestos_upgrade() {
 
 download_and_verify_upgrade() {
     local version="$1"
-    local short_hash="$2"
+    local expected_hash="$2"
     local tmpdir="$3"
 
     local base_urls=(
@@ -76,7 +76,7 @@ download_and_verify_upgrade() {
         local url="${base_url}/ic/${version}/guest-os/update-img-recovery/update-img.tar.zst"
         echo "Attempting to download upgrade from $url..."
 
-        if curl -L --fail -o "$tmpdir/upgrade.tar.zst" "$url"; then
+        if curl --proto '=https' --location --proto-redir '=https' --tlsv1.2 --silent --show-error --fail -o "$tmpdir/upgrade.tar.zst" "$url"; then
             echo "Download from $base_url completed successfully"
             download_successful=true
             break
@@ -94,11 +94,10 @@ download_and_verify_upgrade() {
 
     echo "Verifying upgrade image hash..."
     local actual_hash=$(sha256sum "$tmpdir/upgrade.tar.zst" | cut -d' ' -f1)
-    local actual_short_hash=${actual_hash:0:6}
-    if [ "$actual_short_hash" != "$short_hash" ]; then
+    if [ "$actual_hash" != "$expected_hash" ]; then
         echo "ERROR: Hash verification failed"
-        echo "Expected short 6-character hash: $short_hash"
-        echo "Got short 6-character hash: $actual_short_hash"
+        echo "Expected hash: $expected_hash"
+        echo "Got hash: $actual_hash"
         echo "Full hash: $actual_hash"
         return 1
     fi
@@ -180,16 +179,16 @@ main() {
     echo "Starting GuestOS Recovery Upgrader"
 
     VERSION="$(get_cmdline_var version)"
-    SHORT_HASH="$(get_cmdline_var version-hash)"
+    VERSION_HASH="$(get_cmdline_var version-hash)"
 
-    if [ -z "$VERSION" ] || [ -z "$SHORT_HASH" ]; then
-        echo "ERROR: Both version and hash parameters are required"
-        echo "Usage: version=<commit-hash> hash=<first-6-chars-of-sha256>"
+    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
+        echo "ERROR: Both version and version-hash parameters are required"
+        echo "Usage: version=<commit-hash> version-hash=<sha256>"
         exit 1
     fi
 
     echo "Version: $VERSION"
-    echo "Short hash: $SHORT_HASH"
+    echo "Version hash: $VERSION_HASH"
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
@@ -202,7 +201,7 @@ main() {
     while [ $attempt -le $MAX_ATTEMPTS ]; do
         echo "=== Download attempt $attempt/$MAX_ATTEMPTS ==="
 
-        if download_and_verify_upgrade "$VERSION" "$SHORT_HASH" "$TMPDIR"; then
+        if download_and_verify_upgrade "$VERSION" "$VERSION_HASH" "$TMPDIR"; then
             echo "✓ Download and verification completed successfully on attempt $attempt"
             break
         else
