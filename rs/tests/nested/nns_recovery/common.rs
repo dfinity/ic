@@ -132,9 +132,9 @@ pub fn grant_backup_access_to_all_nns_nodes(
 
     info!(logger, "Update the registry with the backup key");
     let ssh_priv_key =
-        std::fs::read_to_string(&ssh_priv_key_path).expect("Failed to read SSH private key");
+        std::fs::read_to_string(ssh_priv_key_path).expect("Failed to read SSH private key");
     let ssh_pub_key =
-        std::fs::read_to_string(&ssh_pub_key_path).expect("Failed to read SSH public key");
+        std::fs::read_to_string(ssh_pub_key_path).expect("Failed to read SSH public key");
     let payload =
         get_updatesubnetpayload_with_keys(nns_subnet.subnet_id, None, Some(vec![ssh_pub_key]));
 
