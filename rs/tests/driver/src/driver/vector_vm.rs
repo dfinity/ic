@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    fs::File,
     hash::{DefaultHasher, Hash, Hasher},
     net::{IpAddr, SocketAddr},
     path::Path,
@@ -10,17 +9,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use slog::{Logger, debug, info, warn};
 
-use crate::{
-    driver::{
-        farm::HostFeature,
-        log_events::LogEvent,
-        prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
-        test_env::TestEnvAttribute,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
-        test_setup::GroupSetup,
-        universal_vm::UniversalVms,
-    },
-    retry_with_msg,
+use crate::driver::{
+    farm::HostFeature,
+    log_events::LogEvent,
+    nested::HasNestedVms,
+    test_env::TestEnvAttribute,
+    test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession, scp_send_to},
+    test_setup::GroupSetup,
+    universal_vm::UniversalVms,
 };
 
 use super::{
@@ -167,6 +163,29 @@ impl VectorVm {
             );
         }
 
+        for vm in env.get_all_nested_vms()? {
+            let vm_name = vm.vm_name();
+            let network = vm.get_nested_network().unwrap();
+
+            for (job, ip) in [
+                ("node_exporter", network.guest_ip),
+                ("host_node_exporter", network.host_ip),
+            ] {
+                add_vector_target(
+                    &mut sources,
+                    &mut transforms,
+                    format!("{vm_name}-{job}"),
+                    ip.into(),
+                    Some(
+                        [("job", job)]
+                            .into_iter()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
+                    ),
+                )
+            }
+        }
+
         // Extend with custom targets
         let custom_targets = env.get_custom_vector_targets();
         for (key, val) in custom_targets {
@@ -235,20 +254,7 @@ impl VectorVm {
 
             let from = file.path();
             let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
-            let size = std::fs::metadata(&from).unwrap().len();
-            retry_with_msg!(
-                format!("scp {from:?} to vector:{to:?}"),
-                env.logger(),
-                SCP_RETRY_TIMEOUT,
-                SCP_RETRY_BACKOFF,
-                || {
-                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-                    let mut from_file = File::open(&from)?;
-                    std::io::copy(&mut from_file, &mut remote_file)?;
-                    Ok(())
-                }
-            )
-            .unwrap_or_else(|e| panic!("Failed to scp {from:?} to vector:{to:?} because: {e:?}!",));
+            scp_send_to(env.logger(), &session, &from, &to, 0o644);
         }
 
         if !self.container_running {

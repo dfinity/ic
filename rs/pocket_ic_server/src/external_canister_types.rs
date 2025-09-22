@@ -1,4 +1,45 @@
-use candid::CandidType;
+use candid::{CandidType, Principal};
+
+/* NNS dapp */
+
+#[derive(CandidType)]
+pub struct NnsDappCanisterArguments {
+    pub args: Vec<(String, String)>,
+}
+
+/* SNS aggregator */
+
+#[derive(CandidType)]
+pub struct SnsAggregatorConfig {
+    pub update_interval_ms: u64,
+    pub fast_interval_ms: u64,
+}
+
+/* Cycles ledger */
+
+#[derive(CandidType)]
+pub struct CyclesLedgerConfig {
+    pub max_blocks_per_request: u64,
+    pub index_id: Option<Principal>,
+}
+
+#[derive(CandidType)]
+pub enum ChangeIndexId {
+    Unset,
+    SetTo(Principal),
+}
+
+#[derive(CandidType)]
+pub struct CyclesLedgerUpgradeArgs {
+    pub max_blocks_per_request: Option<u64>,
+    pub change_index_id: Option<ChangeIndexId>,
+}
+
+#[derive(CandidType)]
+pub enum CyclesLedgerArgs {
+    Init(CyclesLedgerConfig),
+    Upgrade(Option<CyclesLedgerUpgradeArgs>),
+}
 
 /* Internet Identity */
 

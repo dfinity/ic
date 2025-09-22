@@ -192,6 +192,7 @@ rust_ic_test_suite(
         "//rs/ledger_suite/icp/archive:ic-icp-archive",
         "//rs/ledger_suite/icp/index:ic-icp-index",
         "//rs/ledger_suite/icp/test_utils",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/nns/constants",
         "//rs/nns/test_utils/golden_nns_state",

@@ -333,7 +333,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let numerator = coefficients.interpolate_scalar(&numerator_samples)?;
         let denominator = coefficients.interpolate_scalar(&denominator_samples)?;
 
-        let denominator_inv = match denominator.invert() {
+        let denominator_inv = match denominator.invert_vartime() {
             Some(s) => s,
             None => return Err(CanisterThresholdError::InterpolationError),
         };
@@ -404,7 +404,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let public_key = tweak_g.add_points(&master_public_key)?;
 
         // This return shouldn't happen because we already checked that s != 0 above
-        let s_inv = match self.s.invert() {
+        let s_inv = match self.s.invert_vartime() {
             Some(si) => si,
             None => return Err(CanisterThresholdError::InvalidSignature),
         };

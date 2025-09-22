@@ -1847,7 +1847,7 @@ fn test_demux_delivers_certified_stream_slices() {
         fn induct_messages(
             &self,
             _: &mut ReplicatedState,
-            _: Vec<ic_types::messages::SignedIngressContent>,
+            _: Vec<ic_types::messages::SignedIngress>,
         ) {
             // do nothing
         }

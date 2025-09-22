@@ -280,6 +280,10 @@ impl SignedIngress {
         self.signed.content()
     }
 
+    pub fn take_content(self) -> SignedIngressContent {
+        self.signed.take_content()
+    }
+
     pub fn authentication(&self) -> &Authentication {
         self.signed.authentication()
     }

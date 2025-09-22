@@ -247,7 +247,7 @@ system_test(
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV | {
         # Keep sorted.
         "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-        "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+        "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
     },
     tags = [
         "k8s",
@@ -255,7 +255,7 @@ system_test(
     ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
         # Keep sorted.
-        "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+        "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
         "@subnet_rental_canister//file",
     ],
     deps = [

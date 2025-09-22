@@ -21,7 +21,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     batch::CanisterCyclesCostSchedule,
-    messages::{SignedIngressContent, extract_effective_canister_id},
+    messages::{SignedIngress, extract_effective_canister_id},
     nominal_cycles::NominalCycles,
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -367,68 +367,42 @@ fn verify_no_cycles_charged_for_message_execution_on_free_schedule() {
 
 #[test]
 fn ingress_induction_cost_valid_subnet_message() {
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let msg: SignedIngressContent = SignedIngressBuilder::new()
-        .sender(user_test_id(0))
-        .canister_id(IC_00)
-        .method_name("start_canister")
-        .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
-        .build()
-        .into();
-    let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let num_bytes = msg.arg().len() + msg.method_name().len();
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let msg: SignedIngress = SignedIngressBuilder::new()
+            .sender(user_test_id(0))
+            .canister_id(IC_00)
+            .method_name("start_canister")
+            .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
+            .build();
+        let signed_ingress_content = &msg.content();
+        let effective_canister_id = extract_effective_canister_id(signed_ingress_content).unwrap();
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let num_bytes = msg.binary().len();
 
-    assert_eq!(
-        cycles_account_manager.ingress_induction_cost(
-            &msg,
-            effective_canister_id,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            cost_schedule,
-        ),
-        IngressInductionCost::Fee {
-            payer: canister_test_id(0),
-            cost: cycles_account_manager
-                .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                + cycles_account_manager
-                    .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                    * num_bytes
+        let cost = cycles_account_manager
+            .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+            + cycles_account_manager
+                .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+                * num_bytes;
+        if let CanisterCyclesCostSchedule::Free = cost_schedule {
+            assert_eq!(cost, Cycles::new(0));
         }
-    );
-}
-
-#[test]
-fn ingress_induction_cost_valid_subnet_message_free_schedule() {
-    let cost_schedule = CanisterCyclesCostSchedule::Free;
-    let msg: SignedIngressContent = SignedIngressBuilder::new()
-        .sender(user_test_id(0))
-        .canister_id(IC_00)
-        .method_name("start_canister")
-        .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
-        .build()
-        .into();
-    let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let num_bytes = msg.arg().len() + msg.method_name().len();
-
-    let cost = cycles_account_manager
-        .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-        + cycles_account_manager
-            .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-            * num_bytes;
-    assert_eq!(cost, Cycles::new(0));
-    assert_eq!(
-        cycles_account_manager.ingress_induction_cost(
-            &msg,
-            effective_canister_id,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            cost_schedule,
-        ),
-        IngressInductionCost::Fee {
-            payer: canister_test_id(0),
-            cost
-        }
-    );
+        assert_eq!(
+            cycles_account_manager.ingress_induction_cost(
+                &msg,
+                effective_canister_id,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule,
+            ),
+            IngressInductionCost::Fee {
+                payer: canister_test_id(0),
+                cost
+            }
+        );
+    }
 }
 
 #[test]
