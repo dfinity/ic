@@ -91,7 +91,10 @@ pub async fn set_original_controllers(
                 {
                     ProcessingResult::Success(())
                 } else {
-                    println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
+                    println!(
+                        "Call `update_settings` for canister: {} subnet: {} failed: {:?}",
+                        canister_id, subnet_id, e
+                    );
                     ProcessingResult::NoProgress
                 }
             }
@@ -151,7 +154,7 @@ pub async fn canister_status(
             Ok(canister_status) => ProcessingResult::Success(canister_status),
             Err(e) => {
                 println!(
-                    "Decoding `CanisterStatusResponse` for {}, {} failed: {:?}",
+                    "Decoding `CanisterStatusResponse` for canister: {}, subnet: {} failed: {:?}",
                     canister_id, subnet_id, e
                 );
                 ProcessingResult::NoProgress
@@ -159,7 +162,7 @@ pub async fn canister_status(
         },
         Err(e) => {
             println!(
-                "Call `canister_status` for {}, {} failed: {:?}",
+                "Call `canister_status` for canister: {}, subnet: {} failed: {:?}",
                 canister_id, subnet_id, e
             );
             match e {
@@ -243,7 +246,10 @@ pub async fn rename_canister(
     {
         Ok(_) => ProcessingResult::Success(()),
         Err(e) => {
-            println!("Call `rename_canister` for {} failed: {:?}", target, e);
+            println!(
+                "Call `rename_canister` for canister`: {}, subnet: {} failed: {:?}",
+                target, target_subnet, e
+            );
             // All fatal error conditions have been checked upfront and should not be possible now.
             // CanisterAlreadyExists, RenameCanisterNotStopped, RenameCanisterHasSnapshot.
             ProcessingResult::NoProgress
@@ -300,14 +306,46 @@ pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64,
             }) => ProcessingResult::Success(registry_version),
             Err(e) => {
                 println!(
-                    "Decoding `SubnetInfoResponse` for {} failed: {:?}",
+                    "Decoding `SubnetInfoResponse` for subnet: {} failed: {:?}",
                     subnet_id, e
                 );
                 ProcessingResult::NoProgress
             }
         },
         Err(e) => {
-            println!("Call `subnet_info` for {}, failed: {:?}", subnet_id, e);
+            println!(
+                "Call `subnet_info` for subnet: {}, failed: {:?}",
+                subnet_id, e
+            );
+            ProcessingResult::NoProgress
+        }
+    }
+}
+
+// ========================================================================= //
+// `delete_canister`
+// We can't use the CDK's implementation because we need to call the correct subnet.
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct DeleteCanisterArgs {
+    pub canister_id: Principal,
+}
+
+pub async fn delete_canister(
+    canister_id: Principal,
+    subnet_id: Principal,
+) -> ProcessingResult<(), Infallible> {
+    let args = DeleteCanisterArgs { canister_id };
+    match Call::unbounded_wait(subnet_id, "delete_canister")
+        .with_arg(&args)
+        .await
+    {
+        Ok(_) => ProcessingResult::Success(()),
+        Err(e) => {
+            println!(
+                "Call `delete_canister` for canister: {}, subnet: {}, failed: {:?}",
+                canister_id, subnet_id, e
+            );
             ProcessingResult::NoProgress
         }
     }

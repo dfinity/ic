@@ -11,8 +11,8 @@ use crate::{
     },
     external_interfaces::{
         management::{
-            CanisterStatusType, assert_no_snapshots, canister_status, get_canister_info,
-            get_registry_version, rename_canister, set_exclusive_controller,
+            CanisterStatusType, assert_no_snapshots, canister_status, delete_canister,
+            get_canister_info, get_registry_version, rename_canister, set_exclusive_controller,
             set_original_controllers,
         },
         registry::migrate_canister,
@@ -251,6 +251,28 @@ pub async fn process_updated(
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
+        request,
+        stopped_since,
+    })
+}
+
+pub async fn process_routing_table(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::RoutingTableChangeAccepted {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by RoutingTableChangeAccepted returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    let ProcessingResult::Success(()) =
+        delete_canister(request.source, request.source_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    ProcessingResult::Success(RequestState::SourceDeleted {
         request,
         stopped_since,
     })
