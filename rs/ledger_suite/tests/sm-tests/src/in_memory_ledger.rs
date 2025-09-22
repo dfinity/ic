@@ -1,5 +1,3 @@
-use super::{AllowanceProvider, BalanceProvider, get_all_ledger_and_archive_blocks};
-use crate::metrics::parse_metric;
 use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
@@ -8,6 +6,9 @@ use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, BalanceProvider, get_all_ledger_and_archive_blocks, parse_metric,
+};
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;

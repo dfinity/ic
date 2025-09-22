@@ -67,7 +67,7 @@ fn setup(env: TestEnv) {
             )),
             ..VmResources::default()
         })
-        .with_required_host_features(vec![HostFeature::IoPerformance])
+        .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(99))
@@ -207,6 +207,7 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .with_timeout_per_test(Duration::from_secs(20 * 60))
         .add_test(systest!(test))
         .execute_from_args()?;
 
