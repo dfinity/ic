@@ -174,8 +174,8 @@ rust_test_suite_with_extra_srcs(
         "tests/*.json",
         "tests/*.ros",
     ]) + [
-        "@rosetta-cli//:rosetta-cli",
         "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz",
+        "@rosetta-cli//:rosetta-cli",
     ],
     env = LOCAL_REPLICA_ENV | {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/",
