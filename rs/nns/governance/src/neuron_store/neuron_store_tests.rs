@@ -3,6 +3,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
     storage::{with_stable_neuron_indexes, with_voting_history_store},
+    voting_history_store::ListNeuronVotesOrder,
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -1047,11 +1048,15 @@ fn test_record_neuron_vote() {
         }]
     );
 
-    let voting_history =
-        with_voting_history_store(|voting_history| voting_history.list_neuron_votes(neuron_id));
+    let voting_history = with_voting_history_store(|voting_history| {
+        voting_history.list_neuron_votes(neuron_id, ListNeuronVotesOrder::Ascending, None, 10)
+    });
     if cfg!(feature = "test") {
-        assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
+        assert_eq!(
+            voting_history,
+            (vec![(ProposalId { id: 1 }, Vote::Yes)], 1, 0)
+        );
     } else {
-        assert_eq!(voting_history, vec![]);
+        assert_eq!(voting_history, (vec![], 0, 0));
     }
 }

@@ -2,6 +2,7 @@ use super::*;
 use crate::storage::with_voting_history_store;
 use crate::temporarily_enable_known_neuron_voting_history;
 use crate::test_utils::MockRandomness;
+use crate::voting_history_store::ListNeuronVotesOrder;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
@@ -1840,16 +1841,50 @@ fn test_record_known_neuron_votes() {
 
     with_voting_history_store(|voting_history| {
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 1 }),
-            vec![(ProposalId { id: 1 }, Vote::Yes)]
+            voting_history.list_neuron_votes(
+                NeuronId { id: 1 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![(ProposalId { id: 1 }, Vote::Yes)], 1, 0)
         );
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 2 }),
-            vec![(ProposalId { id: 1 }, Vote::No)]
+            voting_history.list_neuron_votes(
+                NeuronId { id: 2 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![(ProposalId { id: 1 }, Vote::No)], 1, 0)
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 3 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+        assert_eq!(
+            voting_history.list_neuron_votes(
+                NeuronId { id: 3 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![], 0, 0)
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(
+                NeuronId { id: 4 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![], 0, 0)
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(
+                NeuronId { id: 5 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![], 0, 0)
+        );
     });
 
     record_known_neuron_votes(
@@ -1864,21 +1899,56 @@ fn test_record_known_neuron_votes() {
 
     with_voting_history_store(|voting_history| {
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 1 }),
-            vec![
-                (ProposalId { id: 1 }, Vote::Yes),
-                (ProposalId { id: 2 }, Vote::No)
-            ]
+            voting_history.list_neuron_votes(
+                NeuronId { id: 1 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (
+                vec![
+                    (ProposalId { id: 1 }, Vote::Yes),
+                    (ProposalId { id: 2 }, Vote::No)
+                ],
+                2,
+                0
+            )
         );
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 2 }),
-            vec![(ProposalId { id: 1 }, Vote::No)]
+            voting_history.list_neuron_votes(
+                NeuronId { id: 2 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![(ProposalId { id: 1 }, Vote::No)], 1, 0)
         );
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 3 }),
-            vec![(ProposalId { id: 2 }, Vote::Yes)]
+            voting_history.list_neuron_votes(
+                NeuronId { id: 3 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![(ProposalId { id: 2 }, Vote::Yes)], 1, 0)
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+        assert_eq!(
+            voting_history.list_neuron_votes(
+                NeuronId { id: 4 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![], 0, 0)
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(
+                NeuronId { id: 5 },
+                ListNeuronVotesOrder::Ascending,
+                None,
+                10
+            ),
+            (vec![], 0, 0)
+        );
     });
 }

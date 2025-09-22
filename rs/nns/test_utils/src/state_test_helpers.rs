@@ -2342,6 +2342,33 @@ pub fn nns_deregister_known_neuron(
     }
 }
 
+pub fn nns_list_neuron_votes(
+    state_machine: &StateMachine,
+    neuron_id: NeuronId,
+) -> Vec<(ProposalId, Vote)> {
+    let request = ic_nns_governance_api::ListNeuronVotesRequest {
+        neuron_id: Some(neuron_id),
+        order: None,
+        after_index: None,
+        limit: None,
+    };
+    let response = query(
+        state_machine,
+        GOVERNANCE_CANISTER_ID,
+        "list_neuron_votes",
+        Encode!(&request).unwrap(),
+    )
+    .expect("Error calling list_neuron_votes");
+    let response = Decode!(&response, ic_nns_governance_api::ListNeuronVotesResponse)
+        .expect("Error decoding ListNeuronVotesResponse");
+    response
+        .votes
+        .unwrap()
+        .into_iter()
+        .map(|vote| (vote.proposal_id.unwrap(), vote.vote.unwrap()))
+        .collect()
+}
+
 /// Helper function to list known neurons.
 pub fn list_known_neurons(
     state_machine: &StateMachine,

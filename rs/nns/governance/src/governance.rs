@@ -70,7 +70,8 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
-    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store_mut},
+    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
+    voting_history_store::ListNeuronVotesOrder,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -96,8 +97,9 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
+    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
+    ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, NeuronVote, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
@@ -2024,6 +2026,38 @@ impl Governance {
             .collect();
 
         ListKnownNeuronsResponse { known_neurons }
+    }
+
+    pub fn list_neuron_votes(&self, request: ListNeuronVotesRequest) -> ListNeuronVotesResponse {
+        let ListNeuronVotesRequest {
+            neuron_id,
+            order,
+            after_index,
+            limit,
+        } = request;
+        let neuron_id = neuron_id.unwrap_or_default();
+        let order = match order {
+            Some(api::ListNeuronVotesOrder::Ascending) => ListNeuronVotesOrder::Ascending,
+            Some(api::ListNeuronVotesOrder::Descending) => ListNeuronVotesOrder::Descending,
+            None => ListNeuronVotesOrder::Ascending,
+        };
+        let limit = limit.unwrap_or(500).min(500);
+
+        let (votes, next, remaining) = with_voting_history_store(|voting_history| {
+            voting_history.list_neuron_votes(neuron_id, order, after_index, limit)
+        });
+        let votes = votes
+            .into_iter()
+            .map(|(proposal_id, vote)| NeuronVote {
+                proposal_id: Some(proposal_id),
+                vote: Some(vote.into()),
+            })
+            .collect();
+        ListNeuronVotesResponse {
+            votes: Some(votes),
+            next: Some(next),
+            remaining_votes: Some(remaining),
+        }
     }
 
     /// Claim the neurons supplied by the GTC on behalf of `new_controller`

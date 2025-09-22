@@ -21,13 +21,14 @@ fn proposal_id(id: u64) -> ProposalId {
 fn test_record_and_retrieve_single_vote() {
     let mut store = create_test_store();
 
-    let empty_votes = store.list_neuron_votes(neuron_id(1));
-    assert_eq!(empty_votes, vec![]);
+    let empty_votes =
+        store.list_neuron_votes(neuron_id(1), ListNeuronVotesOrder::Ascending, None, 10);
+    assert_eq!(empty_votes, (vec![], 0, 0));
 
     store.record_vote(neuron_id(123), proposal_id(456), Vote::Yes);
 
-    let votes = store.list_neuron_votes(neuron_id(123));
-    assert_eq!(votes, vec![(proposal_id(456), Vote::Yes)]);
+    let votes = store.list_neuron_votes(neuron_id(123), ListNeuronVotesOrder::Ascending, None, 10);
+    assert_eq!(votes, (vec![(proposal_id(456), Vote::Yes)], 1, 0));
 }
 
 #[test]
@@ -41,13 +42,17 @@ fn test_record_multiple_votes_same_neuron() {
     store.record_vote(test_neuron_id, proposal_id(3), Vote::Yes);
 
     assert_eq!(
-        store.list_neuron_votes(test_neuron_id),
-        vec![
-            (proposal_id(1), Vote::No),
-            (proposal_id(2), Vote::Yes),
-            (proposal_id(3), Vote::Yes),
-            (proposal_id(4), Vote::Unspecified),
-        ]
+        store.list_neuron_votes(test_neuron_id, ListNeuronVotesOrder::Ascending, None, 10),
+        (
+            vec![
+                (proposal_id(2), Vote::Yes),
+                (proposal_id(1), Vote::No),
+                (proposal_id(4), Vote::Unspecified),
+                (proposal_id(3), Vote::Yes),
+            ],
+            4,
+            0
+        )
     );
 }
 
@@ -66,32 +71,22 @@ fn test_record_votes_different_neurons() {
     store.record_vote(neuron_id_2, proposal_id_2, Vote::Yes);
 
     assert_eq!(
-        store.list_neuron_votes(neuron_id_1),
-        vec![(proposal_id_1, Vote::Yes), (proposal_id_2, Vote::No)]
+        store.list_neuron_votes(neuron_id_1, ListNeuronVotesOrder::Ascending, None, 10),
+        (
+            vec![(proposal_id_1, Vote::Yes), (proposal_id_2, Vote::No)],
+            2,
+            0
+        )
     );
     assert_eq!(
-        store.list_neuron_votes(neuron_id_2),
-        vec![
-            (proposal_id_1, Vote::Unspecified),
-            (proposal_id_2, Vote::Yes)
-        ]
+        store.list_neuron_votes(neuron_id_2, ListNeuronVotesOrder::Ascending, None, 10),
+        (
+            vec![
+                (proposal_id_1, Vote::Unspecified),
+                (proposal_id_2, Vote::Yes)
+            ],
+            2,
+            0
+        )
     );
-}
-
-#[test]
-fn test_overwrite_existing_vote() {
-    let mut store = create_test_store();
-
-    let test_neuron_id = neuron_id(123);
-    let test_proposal_id = proposal_id(456);
-
-    store.record_vote(test_neuron_id, test_proposal_id, Vote::Unspecified);
-
-    let votes = store.list_neuron_votes(test_neuron_id);
-    assert_eq!(votes, vec![(test_proposal_id, Vote::Unspecified)]);
-
-    store.record_vote(test_neuron_id, test_proposal_id, Vote::No);
-
-    let votes = store.list_neuron_votes(test_neuron_id);
-    assert_eq!(votes, vec![(test_proposal_id, Vote::No)]);
 }

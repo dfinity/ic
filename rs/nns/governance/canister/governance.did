@@ -1333,6 +1333,35 @@ type MaturityDisbursement = record {
   account_identifier_to_disburse_to : opt AccountIdentifier;
 };
 
+type ListNeuronVotesRequest = record {
+  neuron_id : opt NeuronId;
+  order : opt ListNeuronVotesOrder;
+  after_index : opt nat64;
+  limit : opt nat64;
+};
+
+type ListNeuronVotesOrder = variant {
+  Ascending;
+  Descending;
+};
+
+type ListNeuronVotesResponse = record {
+  votes : opt vec NeuronVote;
+  next : opt nat64;
+  remaining_votes : opt nat64;
+};
+
+type NeuronVote = record {
+  proposal_id : opt ProposalId;
+  vote : opt Vote;
+};
+
+type Vote = variant {
+  Unspecified;
+  Yes;
+  No;
+};
+
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
@@ -1369,6 +1398,7 @@ service : (Governance) -> {
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
+  list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
