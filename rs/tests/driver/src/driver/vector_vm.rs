@@ -15,9 +15,8 @@ use crate::{
         farm::HostFeature,
         log_events::LogEvent,
         nested::HasNestedVms,
-        prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
         test_env::TestEnvAttribute,
-        test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession},
+        test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession, scp_send_to},
         test_setup::GroupSetup,
         universal_vm::UniversalVms,
     },
@@ -260,19 +259,7 @@ impl VectorVm {
             let from = file.path();
             let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
             let size = std::fs::metadata(&from).unwrap().len();
-            retry_with_msg!(
-                format!("scp {from:?} to vector:{to:?}"),
-                env.logger(),
-                SCP_RETRY_TIMEOUT,
-                SCP_RETRY_BACKOFF,
-                || {
-                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-                    let mut from_file = File::open(&from)?;
-                    std::io::copy(&mut from_file, &mut remote_file)?;
-                    Ok(())
-                }
-            )
-            .unwrap_or_else(|e| panic!("Failed to scp {from:?} to vector:{to:?} because: {e:?}!",));
+            scp_send_to(env.logger(), &session, &from, &to, 0o644);
         }
 
         if !self.container_running {
