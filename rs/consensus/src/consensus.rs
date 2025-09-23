@@ -6,6 +6,7 @@ pub(crate) mod block_maker;
 pub mod bounds;
 mod catchup_package_maker;
 mod finalizer;
+#[cfg(feature = "malicious_code")]
 pub mod malicious_consensus;
 pub(crate) mod metrics;
 mod notary;
@@ -114,14 +115,11 @@ pub(crate) fn check_protocol_version(
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
 /// Consensus trait by calling each subcomponent in round-robin manner.
 pub struct ConsensusImpl {
-    /// Notary
-    pub notary: Notary,
-    /// Finalizer
-    pub finalizer: Finalizer,
+    notary: Notary,
+    finalizer: Finalizer,
     random_beacon_maker: RandomBeaconMaker,
     random_tape_maker: RandomTapeMaker,
-    /// Blockmaker
-    pub block_maker: BlockMaker,
+    block_maker: BlockMaker,
     catch_up_package_maker: CatchUpPackageMaker,
     validator: Validator,
     aggregator: ShareAggregator,
@@ -136,8 +134,7 @@ pub struct ConsensusImpl {
     replica_config: ReplicaConfig,
     #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
     malicious_flags: MaliciousFlags,
-    /// Logger
-    pub log: ReplicaLogger,
+    log: ReplicaLogger,
 }
 
 impl ConsensusImpl {
@@ -547,14 +544,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
 
         #[cfg(feature = "malicious_code")]
         if self.malicious_flags.is_consensus_malicious() {
-            crate::consensus::malicious_consensus::maliciously_alter_changeset(
+            self.maliciously_alter_changeset(
                 &pool_reader,
                 changeset,
                 &self.malicious_flags,
-                &self.block_maker,
-                &self.finalizer,
-                &self.notary,
-                &self.log,
                 self.time_source.get_relative_time(),
             )
         } else {

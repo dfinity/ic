@@ -37,43 +37,20 @@ use std::{
     time::Duration,
 };
 
-pub(crate) fn subnet_records_for_registry_version(
-    block_maker: &BlockMaker,
-    membership_record: RegistryVersion,
-    context_record: RegistryVersion,
-) -> Option<SubnetRecords> {
-    Some(SubnetRecords {
-        membership_version: get_subnet_record(
-            block_maker.registry_client.as_ref(),
-            block_maker.replica_config.subnet_id,
-            membership_record,
-            &block_maker.log,
-        )
-        .ok()?,
-        context_version: get_subnet_record(
-            block_maker.registry_client.as_ref(),
-            block_maker.replica_config.subnet_id,
-            context_record,
-            &block_maker.log,
-        )
-        .ok()?,
-    })
-}
-
 /// A consensus subcomponent that is responsible for creating block proposals.
-pub struct BlockMaker {
+pub(crate) struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
-    pub(crate) replica_config: ReplicaConfig,
+    replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     pub(crate) membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.
@@ -81,9 +58,8 @@ pub struct BlockMaker {
 }
 
 impl BlockMaker {
-    /// Construct a [BlockMaker] from its dependencies.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    /// Construct a [`BlockMaker`] from its dependencies.
+    pub(crate) fn new(
         time_source: Arc<dyn TimeSource>,
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
@@ -115,7 +91,7 @@ impl BlockMaker {
     }
 
     /// If a block should be proposed, propose it.
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Option<BlockProposal> {
+    pub(crate) fn on_state_change(&self, pool: &PoolReader<'_>) -> Option<BlockProposal> {
         trace!(self.log, "on_state_change");
         let my_node_id = self.replica_config.node_id;
         let (beacon, parent) = get_dependencies(pool)?;
@@ -204,7 +180,7 @@ impl BlockMaker {
         let stable_registry_version = self.get_stable_registry_version(parent.as_ref())?;
         // Get the subnet records that are relevant to making a block
         let subnet_records =
-            subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
+            self.subnet_records_for_registry_version(registry_version, stable_registry_version)?;
 
         // The monotonic_block_increment is used as the minimum timestamp increment over
         // the parent for block proposals. Technically we only need this delta to be 1ns
@@ -478,6 +454,29 @@ impl BlockMaker {
             return Some(parents_version);
         }
         None
+    }
+
+    pub(crate) fn subnet_records_for_registry_version(
+        &self,
+        membership_record: RegistryVersion,
+        context_record: RegistryVersion,
+    ) -> Option<SubnetRecords> {
+        Some(SubnetRecords {
+            membership_version: get_subnet_record(
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                membership_record,
+                &self.log,
+            )
+            .ok()?,
+            context_version: get_subnet_record(
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                context_record,
+                &self.log,
+            )
+            .ok()?,
+        })
     }
 }
 
