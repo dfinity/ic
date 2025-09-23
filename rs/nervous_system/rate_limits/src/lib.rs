@@ -1,11 +1,11 @@
 //! Rate limits library for nervous system components.
 //!
 //! This crate provides utilities for implementing rate limiting in nervous system canisters.
-use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::BTreeMap,
     fmt::Debug,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    sync::{Arc, Mutex, Weak},
+    time::{Duration, SystemTime},
 };
 
 // type TimeWindow = u32;
@@ -79,7 +79,13 @@ use std::{
 // setting it per key.
 pub struct RateLimiter<K> {
     config: RateLimiterConfig,
-    reservations: BTreeMap<(K, u64), Reservation<K>>,
+    reservations: Arc<Mutex<BTreeMap<(K, u64), ReservationData>>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct ReservationData {
+    now: SystemTime,
+    capacity: u64,
 }
 
 pub struct RateLimiterConfig {
@@ -97,68 +103,69 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
     pub fn new(config: RateLimiterConfig) -> Self {
         Self {
             config,
-            reservations: BTreeMap::new(),
+            reservations: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
     pub fn try_reserve(
-        &mut self,
+        &self,
         now: SystemTime,
         key: K,
         capacity: u64,
     ) -> Result<Reservation<K>, RateLimiterError> {
-        println!("reservations all: {:?}", self.reservations);
-        // TODO add the currently used capacity count to this
-        let reservations: Vec<&Reservation<K>> = self
-            .reservations
+        let mut reservations = self.reservations.lock().unwrap();
+
+        // Get all reservations for this key to calculate next index and current usage
+        let key_reservations: Vec<(u64, &ReservationData)> = reservations
             .range((key.clone(), 0)..(key.clone(), u64::MAX))
-            .map(|(keys, reservation)| reservation)
+            .map(|((_, index), data)| (*index, data))
             .collect();
 
-        println!("reservations filtered: {reservations:?}");
-
-        let next_index = reservations
+        let next_index = key_reservations
             .iter()
-            .last()
-            .map_or(0, |reservation| reservation.index + 1);
+            .map(|(index, _)| *index)
+            .max()
+            .map_or(0, |max_index| max_index + 1);
 
-        let reserved_capacity: u64 = reservations
+        let reserved_capacity: u64 = key_reservations
             .into_iter()
-            .filter(|reservation| reservation.now > now - self.config.max_age)
-            .map(|r| r.capacity)
+            .filter(|(_, data)| data.now > now - self.config.max_age)
+            .map(|(_, data)| data.capacity)
             .sum();
 
         if reserved_capacity + capacity <= self.config.max_capacity {
+            let reservation_data = ReservationData { now, capacity };
+            reservations.insert((key.clone(), next_index), reservation_data);
+
             let reservation = Reservation {
                 key: key.clone(),
-                capacity,
-                now,
                 index: next_index,
+                reservations_map: Arc::downgrade(&self.reservations),
             };
-            self.reservations
-                .insert((key, next_index), reservation.clone());
+
             Ok(reservation)
         } else {
             Err(RateLimiterError::NotEnoughCapacity)
         }
     }
 
-    pub fn commit(&self, reservation: Reservation<K>) {}
+    pub fn commit(&self, _reservation: Reservation<K>) {}
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct Reservation<'a, K> {
+#[derive(Clone, Debug)]
+pub struct Reservation<K: Clone + Ord> {
     key: K,
     index: u64,
-    now: SystemTime,
-    capacity: u64,
-    rate_limiter: &'a RateLimiter<K>,
+    reservations_map: Weak<Mutex<BTreeMap<(K, u64), ReservationData>>>,
 }
 
-impl<K> Drop for Reservation<K> {
+impl<K: Clone + Ord> Drop for Reservation<K> {
     fn drop(&mut self) {
-        // TODO - how do we drop the reservation from the RateLimiter?  What kind of data structure
-        // and references are possible here that are easy to understand?
+        if let Some(reservations_arc) = self.reservations_map.upgrade() {
+            if let Ok(mut reservations) = reservations_arc.lock() {
+                reservations.remove(&(self.key.clone(), self.index));
+            }
+        }
     }
 }
 
@@ -168,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_rate_limiter_just_reservations() {
-        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
+        let rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
             resolution: Duration::from_millis(100),
             max_age: Duration::from_secs(60),
             max_capacity: 10,
@@ -177,53 +184,41 @@ mod tests {
         let now = SystemTime::now();
 
         let too_much = rate_limiter.try_reserve(now, "Foo".to_string(), 11);
-        assert_eq!(too_much, Err(RateLimiterError::NotEnoughCapacity));
+        assert!(matches!(too_much, Err(RateLimiterError::NotEnoughCapacity)));
 
         let one = rate_limiter.try_reserve(now, "Foo".to_string(), 5);
-        assert_eq!(
-            one,
-            Ok(Reservation {
-                index: 0,
-                key: "Foo".to_string(),
-                now,
-                capacity: 5
-            })
-        );
+        assert!(one.is_ok());
+        let one = one.unwrap();
+        assert_eq!(one.index, 0);
+        assert_eq!(one.key, "Foo".to_string());
 
         let two = rate_limiter.try_reserve(now, "Foo".to_string(), 5);
-        assert_eq!(
-            two,
-            Ok(Reservation {
-                key: "Foo".to_string(),
-                index: 1,
-                now,
-                capacity: 5
-            })
-        );
+        assert!(two.is_ok());
+        let two = two.unwrap();
+        assert_eq!(two.key, "Foo".to_string());
+        assert_eq!(two.index, 1);
 
         let three_is_over = rate_limiter.try_reserve(SystemTime::now(), "Foo".to_string(), 1);
-        assert_eq!(three_is_over, Err(RateLimiterError::NotEnoughCapacity));
+        assert!(matches!(
+            three_is_over,
+            Err(RateLimiterError::NotEnoughCapacity)
+        ));
 
         let next_now = now + Duration::from_secs(61);
 
         let three_after_time = rate_limiter.try_reserve(next_now, "Foo".to_string(), 1);
-        assert_eq!(
-            three_after_time,
-            Ok(Reservation {
-                key: "Foo".to_string(),
-                index: 2,
-                now: next_now,
-                capacity: 1
-            })
-        );
+        assert!(three_after_time.is_ok());
+        let three_after_time = three_after_time.unwrap();
+        assert_eq!(three_after_time.key, "Foo".to_string());
+        assert_eq!(three_after_time.index, 2);
 
         // Now we test the Drop logic on Reservations
-        assert_eq!(rate_limiter.reservations.len(), 3);
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 3);
         drop(one);
-        assert_eq!(rate_limiter.reservations.len(), 2);
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 2);
         drop(three_after_time);
-        assert_eq!(rate_limiter.reservations.len(), 1);
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
         drop(two);
-        assert_eq!(rate_limiter.reservations.len(), 0);
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 0);
     }
 }
