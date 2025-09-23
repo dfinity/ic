@@ -767,13 +767,16 @@ impl StreamHandlerImpl {
                 (RequestOrResponse::Response(rep), LABEL_VALUE_TYPE_RESPONSE)
             }
             StreamMessage::Refund(refund) => {
-                return self.induct_refund(&*refund, state, stream);
+                return self.induct_refund(&refund, state, stream);
             }
         };
+
         match (
             self.validate_sender_subnet(&msg, remote_subnet_id, state),
             &msg,
         ) {
+            // Induct messages with a matching sender; and responses from any subnet
+            // on a canister's migration path.
             (SenderSubnet::Valid, _)
             | (SenderSubnet::CanisterMigrated, RequestOrResponse::Response(_)) => {
                 match self.induct_message_impl(
@@ -804,11 +807,18 @@ impl StreamHandlerImpl {
                     }
                 }
             }
+
+            // Reject requests from migrating senders, if they do not originate
+            // from the sender's known host subnet. This is to ensure request
+            // ordering guarantees.
             (SenderSubnet::CanisterMigrated, RequestOrResponse::Request(_)) => {
                 self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_MIGRATED);
                 stream.push_reject_signal(RejectReason::CanisterMigrating);
                 Cycles::zero()
             }
+
+            // Reject requests not originating from their sender's known host
+            // subnet. Their senders are likely manually migrated canisters.
             (SenderSubnet::Mismatch, RequestOrResponse::Request(_)) => {
                 self.observe_inducted_message_status(
                     msg_type,
@@ -817,10 +827,11 @@ impl StreamHandlerImpl {
                 stream.push_reject_signal(RejectReason::CanisterMigrating);
                 Cycles::zero()
             }
+
+            // Responses that fail the routing check indicate a critical error.
+            //
+            // Do not push a reject signal as remote subnet is likely malicious.
             (SenderSubnet::Mismatch, RequestOrResponse::Response(rep)) => {
-                // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
-                //
-                // Do not push a reject signal as remote subnet is likely malicious.
                 error!(
                     self.log,
                     "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
@@ -973,7 +984,7 @@ impl StreamHandlerImpl {
             // Guaranteed response to receiver not hosted by this subnet. Should never
             // happen, whether due to subnet splits (there would be a matching
             // `canister_migrations` entry) or due to a manual canister migration (the
-            // canister would be stopped).
+            // canister would have been stopped).
             host_subnet => {
                 error!(
                     self.log,
@@ -1120,7 +1131,7 @@ impl StreamHandlerImpl {
             state.metadata.network_topology.route(canister.get())
         );
 
-        // Reroute if `msg.receiver()` is being migrated from `self.subnet_id` to
+        // Reroute if `msg.receiver()` is being migrated between `self.subnet_id` and
         // `actual_receiver_subnet_id` (possibly with extra steps).
         migration_trace(state, canister).is_some_and(|trace| {
             trace.contains(&known_host_subnet_id) && trace.contains(&self.subnet_id)
