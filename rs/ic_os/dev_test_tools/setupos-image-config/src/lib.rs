@@ -128,9 +128,12 @@ pub fn create_setupos_config(
     deployment_json.write_all(output.as_bytes())?;
 
     // Write NNS key
-    if let Some(public_key) = deployment.nns_public_key {
+    if let Some(nns_public_key_override) = deployment.nns_public_key_override {
+        let mut nns_key = fs::File::create(data_dir.join("nns_public_key_override.pem"))?;
+        nns_key.write_all(nns_public_key_override.as_bytes())?;
+        // NODE-1653: Remove once rolled out to all nodes. Exists to pass "latest_release" nested tests.
         let mut nns_key = fs::File::create(data_dir.join("nns_public_key.pem"))?;
-        nns_key.write_all(public_key.as_bytes())?;
+        nns_key.write_all(nns_public_key_override.as_bytes())?;
     }
 
     Ok(())
