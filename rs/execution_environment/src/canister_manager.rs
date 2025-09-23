@@ -2303,6 +2303,14 @@ impl CanisterManager {
             validated_cycles_and_memory_usage,
         );
 
+        // The canister ID from which the snapshot was loaded in case
+        // it is different from the target canister ID.
+        let from_canister_id = if snapshot.canister_id() == canister_id {
+            None
+        } else {
+            Some(snapshot.canister_id())
+        };
+
         // Increment canister version.
         new_canister.system_state.canister_version += 1;
         new_canister.system_state.add_canister_change(
@@ -2313,6 +2321,7 @@ impl CanisterManager {
                 snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
                 snapshot.source(),
+                from_canister_id,
             ),
         );
         state

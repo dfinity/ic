@@ -1674,6 +1674,7 @@ fn load_canister_snapshot_succeeds() {
             snapshot_id,
             snapshot_taken_at_timestamp,
             SnapshotSource::TakenFromCanister(Reserved),
+            None,
         )
     );
     let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
