@@ -246,13 +246,13 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         ROOT_CANISTER_ID                 => "root",
         SNS_WASM_CANISTER_ID             => "sns-wasm",
         SUBNET_RENTAL_CANISTER_ID        => "subnet-rental",
-        MIGRATION_CANISTER_ID            => "migration-canister"
+        MIGRATION_CANISTER_ID            => "migration"
     };
     debug_assert_eq!(
         id_to_name.len(),
         // Because 0 through 14 accounts for the first 15 canister +
         // 1 for exchange rate canister.
-        18,
+        19,
         "{id_to_name:#?}"
     );
 
