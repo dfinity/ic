@@ -3206,6 +3206,257 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
 }
 
 #[test]
+fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
+    use ic_state_layout::RwPolicy;
+    use std::os::unix::fs::MetadataExt;
+
+    fn assert_files_are_hardlinked_and_readonly(path1: &Path, path2: &Path) {
+        let metadata1 = std::fs::metadata(path1).unwrap();
+        let metadata2 = std::fs::metadata(path2).unwrap();
+        assert!(metadata1.permissions().readonly());
+        assert!(metadata2.permissions().readonly());
+        assert_eq!(metadata1.dev(), metadata2.dev());
+        assert_eq!(metadata1.ino(), metadata2.ino());
+    }
+
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(200));
+        let canister_state = state.canister_state_mut(&canister_test_id(200)).unwrap();
+        canister_state.system_state.add_canister_change(
+            Time::from_nanos_since_unix_epoch(42),
+            CanisterChangeOrigin::from_user(user_test_id(42).get()),
+            CanisterChangeDetails::canister_creation(vec![user_test_id(42).get()], None),
+        );
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .stable_memory
+            .page_map
+            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+
+        let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
+        let id_2 = StateSyncArtifactId {
+            height: height(2),
+            hash: hash_2.get(),
+        };
+        let msg_2 = src_state_sync
+            .get(&id_2)
+            .expect("failed to get state sync message");
+
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+        let hash_3 = wait_for_checkpoint(&*src_state_manager, height(3));
+        let id_3 = StateSyncArtifactId {
+            height: height(3),
+            hash: hash_3.get(),
+        };
+        let msg_3 = src_state_sync
+            .get(&id_3)
+            .expect("failed to get state sync message");
+        let src_state = src_state_manager.get_latest_state().take();
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            let (_height, mut state) = dst_state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_test_id(100));
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+
+            wait_for_checkpoint(&*dst_state_manager, height(1));
+
+            // Case 1: Hardlink from readonly file in checkpoint,
+            // for example, wasm file of the first canister.
+            {
+                let mut chunkable = set_fetch_state_and_start_start_sync(
+                    &dst_state_manager,
+                    &dst_state_sync,
+                    &id_2,
+                );
+
+                let wasm_file_in_checkpoint = dst_state_manager
+                    .state_layout()
+                    .checkpoint_verified(height(1))
+                    .unwrap()
+                    .canister(&canister_test_id(100))
+                    .unwrap()
+                    .wasm()
+                    .raw_path()
+                    .to_path_buf();
+                assert!(
+                    wasm_file_in_checkpoint
+                        .metadata()
+                        .unwrap()
+                        .permissions()
+                        .readonly()
+                );
+
+                let result = pipe_meta_manifest(&msg_2, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+                let result = pipe_manifest(&msg_2, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+
+                let state_sync_root = dst_state_manager
+                    .state_layout()
+                    .state_sync_scratchpad(height(2))
+                    .expect("failed to create directory for state sync scratchpad");
+
+                let scratchpad_layout =
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_root, height(2))
+                        .expect("failed to create checkpoint layout");
+
+                let wasm_file_in_scratchpad = scratchpad_layout
+                    .canister(&canister_test_id(100))
+                    .unwrap()
+                    .wasm()
+                    .raw_path()
+                    .to_path_buf();
+
+                assert_files_are_hardlinked_and_readonly(
+                    &wasm_file_in_checkpoint,
+                    &wasm_file_in_scratchpad,
+                );
+
+                // Download some chunks but intentionally do not complete the state sync.
+                // Skip the `system_metadata.pbuf` chunk, as it is always non-empty, rarely identical to other chunks, and changes between checkpoints.
+                // Given the current state layout, the chunk for `system_metadata.pbuf` is the last one in the chunk table.
+                let chunk_table_idx_to_omit = msg_2.manifest.chunk_table.len() - 1;
+                let chunk_id_to_omit = ChunkId::new(chunk_table_idx_to_omit as u32 + 1);
+                let file_table_idx_to_omit =
+                    msg_2.manifest.chunk_table[chunk_table_idx_to_omit].file_index as usize;
+                let file_path = &msg_2.manifest.file_table[file_table_idx_to_omit].relative_path;
+                // Make sure the chunk to omit is from file `system_metadata.pbuf`.
+                assert!(file_path.ends_with(SYSTEM_METADATA_FILE));
+
+                let omit = maplit::hashset! {chunk_id_to_omit};
+                let completion = pipe_partial_state_sync(&msg_2, &mut *chunkable, &omit, false);
+                assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
+            }
+            assert_no_remaining_chunks(dst_metrics);
+
+            {
+                let mut chunkable = set_fetch_state_and_start_start_sync(
+                    &dst_state_manager,
+                    &dst_state_sync,
+                    &id_3,
+                );
+
+                let cache_root = dst_state_manager
+                    .state_layout()
+                    .state_sync_cache(height(2))
+                    .expect("failed to get directory for state sync cache");
+
+                let cache_layout =
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(cache_root, height(2))
+                        .expect("failed to create cache layout");
+
+                let wasm_file_in_cache = cache_layout
+                    .canister(&canister_test_id(100))
+                    .unwrap()
+                    .wasm()
+                    .raw_path()
+                    .to_path_buf();
+                // assert the wasm file is readonly
+                assert!(
+                    wasm_file_in_cache
+                        .metadata()
+                        .unwrap()
+                        .permissions()
+                        .readonly()
+                );
+
+                let stable_memory_overlay_file_in_cache = cache_layout
+                    .canister(&canister_test_id(200))
+                    .unwrap()
+                    .stable_memory()
+                    .existing_overlays()
+                    .unwrap()
+                    .remove(0);
+                // assert the stable memory overlay file is writable as it was downloaded in the previous state sync
+                assert!(
+                    !stable_memory_overlay_file_in_cache
+                        .metadata()
+                        .unwrap()
+                        .permissions()
+                        .readonly()
+                );
+
+                let result = pipe_meta_manifest(&msg_3, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+                let result = pipe_manifest(&msg_3, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+
+                // Case 2(a): Hardlink from readonly file in cache,
+                // for example, wasm file of the first canister.
+                let scratchpad_root = dst_state_manager
+                    .state_layout()
+                    .state_sync_scratchpad(height(3))
+                    .expect("failed to get directory for state sync scratchpad");
+
+                let scratchpad_layout =
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(scratchpad_root, height(3))
+                        .expect("failed to create scratchpad layout");
+
+                let wasm_file_in_scratchpad = scratchpad_layout
+                    .canister(&canister_test_id(100))
+                    .unwrap()
+                    .wasm()
+                    .raw_path()
+                    .to_path_buf();
+
+                assert_files_are_hardlinked_and_readonly(
+                    &wasm_file_in_cache,
+                    &wasm_file_in_scratchpad,
+                );
+
+                // Case 2(b): Hardlink from writable file in cache,
+                // for example, stable memory overlay file of the second canister.
+                let stable_memory_overlay_file_in_scratchpad = scratchpad_layout
+                    .canister(&canister_test_id(200))
+                    .unwrap()
+                    .stable_memory()
+                    .existing_overlays()
+                    .unwrap()
+                    .remove(0);
+
+                assert_files_are_hardlinked_and_readonly(
+                    &stable_memory_overlay_file_in_cache,
+                    &stable_memory_overlay_file_in_scratchpad,
+                );
+
+                pipe_state_sync(msg_3, chunkable);
+
+                let recovered_state = dst_state_manager
+                    .get_state_at(height(3))
+                    .expect("Destination state manager didn't receive the state")
+                    .take();
+
+                assert_eq!(height(3), dst_state_manager.latest_state_height());
+                assert_eq!(src_state, recovered_state);
+                assert_eq!(
+                    *src_state.as_ref(),
+                    *dst_state_manager.get_latest_state().take()
+                );
+                assert_eq!(
+                    vec![height(1), height(3)],
+                    heights_to_certify(&*dst_state_manager)
+                );
+            }
+            assert_no_remaining_chunks(dst_metrics);
+        })
+    })
+}
+
+#[test]
 fn can_state_sync_after_aborting_in_prep_phase() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
