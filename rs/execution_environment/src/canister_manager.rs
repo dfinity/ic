@@ -1032,7 +1032,7 @@ impl CanisterManager {
     pub(crate) fn get_canister_status(
         &self,
         sender: PrincipalId,
-        canister: &mut CanisterState,
+        canister: &CanisterState,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         ready_for_migration: bool,

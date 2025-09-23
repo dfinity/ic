@@ -121,7 +121,7 @@ impl Drop for IncompleteState {
                 manifest: _,
                 state_sync_file_group,
                 fetch_chunks,
-                copied_chunks_from_file_group: _,
+                copied_chunks_from_file_group,
             } => {
                 self.metrics
                     .state_sync_metrics
@@ -129,18 +129,32 @@ impl Drop for IncompleteState {
                     .with_label_values(&["aborted"])
                     .observe(elapsed.as_secs_f64());
 
-                let dropped_chunks: usize = fetch_chunks
+                let remaining_file_group_chunks: HashSet<usize> = fetch_chunks
+                    .iter()
+                    .filter(|ix| (**ix as u32) >= FILE_GROUP_CHUNK_ID_OFFSET)
+                    .copied()
+                    .collect();
+
+                let mut dropped_chunks = fetch_chunks.len() - remaining_file_group_chunks.len();
+
+                let file_group_dropped_chunks = remaining_file_group_chunks
                     .iter()
                     .map(|ix| {
-                        if (*ix as u32) < FILE_GROUP_CHUNK_ID_OFFSET {
-                            1
-                        } else {
-                            state_sync_file_group
-                                .get(&(*ix as u32))
-                                .map_or(0, |vec| vec.len())
-                        }
+                        state_sync_file_group.get(&(*ix as u32)).map_or(0, |vec| {
+                            if copied_chunks_from_file_group.is_empty() {
+                                vec.len()
+                            } else {
+                                // Rare case where copied chunks from file group are not empty.
+                                vec.iter()
+                                    .filter(|chunk| !copied_chunks_from_file_group.contains(chunk))
+                                    .count()
+                            }
+                        })
                     })
-                    .sum();
+                    .sum::<usize>();
+
+                dropped_chunks += file_group_dropped_chunks;
+
                 self.metrics
                     .state_sync_metrics
                     .remaining
