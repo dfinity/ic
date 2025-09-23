@@ -241,7 +241,8 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
 
     group.bench_function(BenchmarkId::new("add_headers", "in_memory"), |bench| {
         bench.iter(|| {
-            let mut blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+            let mut blockchain_state =
+                BlockchainState::new(network, None, &MetricsRegistry::default(), no_op_logger());
             add_headers(&mut blockchain_state, headers, &rt);
         })
     });
@@ -249,9 +250,9 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
     group.bench_function(BenchmarkId::new("add_headers", "lmdb"), |bench| {
         bench.iter(|| {
             let dir = tempdir().unwrap();
-            let mut blockchain_state = BlockchainState::new_with_cache_dir(
+            let mut blockchain_state = BlockchainState::new(
                 network,
-                dir.path().to_path_buf(),
+                Some(dir.path().to_path_buf()),
                 &MetricsRegistry::default(),
                 no_op_logger(),
             );
