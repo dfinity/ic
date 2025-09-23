@@ -327,6 +327,7 @@ def download_and_hash_file(url: str):
 
 
 def download_and_read_file(url: str):
+    return "unimplemented"
     with tempfile.NamedTemporaryFile() as tmp_file:
         urllib.request.urlretrieve(url, tmp_file.name)
         with open(tmp_file.name, "rb") as f:
