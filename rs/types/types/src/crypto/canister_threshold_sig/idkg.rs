@@ -722,6 +722,12 @@ pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
     pub registry_version: RegistryVersion,
+    /// Serializing and deserializing the `Arc` around the `verified_dealings` is safe because it
+    /// is just an implementation detail we apply to benefit from cheap clones, so we only care
+    /// about serializing the inner data. In particular, we do not rely on multiple `Arc`s pointing
+    /// to the same allocation being shared again after deserialization.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub verified_dealings: Arc<BTreeMap<NodeIndex, BatchSignedIDkgDealing>>,
     pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
