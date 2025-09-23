@@ -1497,12 +1497,10 @@ mod verify_transcript {
                 .nodes
                 .support_dealing_from_all_receivers(dealing_resigned, &params);
 
-            assert!(
-                transcript
-                    .verified_dealings
-                    .insert(dealer1_idx, dealing)
-                    .is_some()
-            );
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("No other refs to verified_dealings");
+
+            assert!(verified_dealings.insert(dealer1_idx, dealing).is_some());
 
             let r = env
                 .nodes
@@ -1711,8 +1709,9 @@ mod verify_transcript {
             let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let verification_threshold = params.verification_threshold().get() as usize;
-            let random_batchsigneddealing_signature_batch = &mut transcript
-                .verified_dealings
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("No other refs to verified_dealings");
+            let random_batchsigneddealing_signature_batch = &mut verified_dealings
                 .values_mut()
                 .choose(rng)
                 .expect("empty verified dealings")
@@ -1746,8 +1745,9 @@ mod verify_transcript {
         for alg in all_canister_threshold_algorithms() {
             let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
-            let some_sig_in_some_dealing = transcript
-                .verified_dealings
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("No other refs to verified_dealings");
+            let some_sig_in_some_dealing = verified_dealings
                 .values_mut()
                 .choose(rng)
                 .expect("empty verified dealings")
@@ -3235,11 +3235,12 @@ mod open_transcript {
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             // Remove the corrupted dealing from the transcript.
-            transcript.verified_dealings.remove(
-                &transcript
-                    .index_for_dealer_id(complaint.dealer_id)
-                    .expect("Missing dealer of corrupted dealing"),
-            );
+            let corrupted_dealer_index = transcript
+                .index_for_dealer_id(complaint.dealer_id)
+                .expect("Missing dealer of corrupted dealing");
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("No other refs to verified_dealings");
+            verified_dealings.remove(&corrupted_dealer_index);
 
             let opener = env.nodes.random_filtered_by_receivers_excluding(
                 complainer,
@@ -3504,14 +3505,17 @@ mod verify_opening {
             let verifier = env
                 .nodes
                 .random_filtered_by_receivers(&transcript.receivers, rng);
-            let dealings = transcript.verified_dealings.clone();
-            let (dealer_index, _signed_dealing) = dealings
+
+            let dealer_index = transcript
+                .verified_dealings
                 .iter()
-                .find(|(_index, batch_signed_dealing)| {
-                    batch_signed_dealing.dealer_id() == complaint.dealer_id
+                .find_map(|(index, batch_signed_dealing)| {
+                    (batch_signed_dealing.dealer_id() == complaint.dealer_id).then_some(*index)
                 })
                 .expect("Inconsistent transcript");
-            transcript.verified_dealings.remove(dealer_index);
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("No other refs to verified_dealings");
+            verified_dealings.remove(&dealer_index);
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_matches!(
                 result,
@@ -3542,23 +3546,17 @@ mod reshare_key_transcript {
             let (source_dealers, source_receivers) = source_subnet_nodes
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
             let source_key_transcript = {
-                let masked_key_params = IDkgTranscriptParams::new(
+                let unmasked_key_params = IDkgTranscriptParams::new(
                     random_transcript_id(rng),
                     source_dealers.get().clone(),
                     source_receivers.get().clone(),
                     env.newest_registry_version,
                     alg,
-                    IDkgTranscriptOperation::Random,
+                    IDkgTranscriptOperation::RandomUnmasked,
                 )
                 .expect("failed to create random IDkgTranscriptParams");
-                let masked_key_transcript = source_subnet_nodes
-                    .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
-                let unmasked_params = build_params_from_previous(
-                    masked_key_params,
-                    IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
-                    rng,
-                );
-                source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+                source_subnet_nodes
+                    .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
             };
             let source_tecdsa_master_public_key =
                 get_master_public_key_from_transcript(&source_key_transcript)
@@ -3634,23 +3632,17 @@ mod reshare_key_transcript {
             let (source_dealers, source_receivers) = source_subnet_nodes
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
             let source_key_transcript = {
-                let masked_key_params = IDkgTranscriptParams::new(
+                let unmasked_key_params = IDkgTranscriptParams::new(
                     random_transcript_id(rng),
                     source_dealers.get().clone(),
                     source_receivers.get().clone(),
                     env.newest_registry_version,
                     alg,
-                    IDkgTranscriptOperation::Random,
+                    IDkgTranscriptOperation::RandomUnmasked,
                 )
                 .expect("failed to create random IDkgTranscriptParams");
-                let masked_key_transcript = source_subnet_nodes
-                    .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
-                let unmasked_params = build_params_from_previous(
-                    masked_key_params,
-                    IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
-                    rng,
-                );
-                source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+                source_subnet_nodes
+                    .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
             };
             let source_tecdsa_master_public_key =
                 get_master_public_key_from_transcript(&source_key_transcript)

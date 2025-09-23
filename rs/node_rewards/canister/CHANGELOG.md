@@ -2,6 +2,15 @@
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-09-06: Proposal 138378
+
+https://dashboard.internetcomputer.org/proposal/138378
+
+* Add Node Provider filtering on get_rewardable_nodes_per_provider to reduce number of instruction on query calls.
+* Discard historical rewards storage and API endpoints as historical rewards will be stored in Governance canister.
+* Disable replicated execution of query calls.
+
 # 2025-08-30: Proposal 138288
 
 http://dashboard.internetcomputer.org/proposal/138288
@@ -19,6 +28,7 @@ http://dashboard.internetcomputer.org/proposal/138288
   assigned nodes on a given day.
 * Replicated execution of the query endpoints `get_node_provider_rewards_calculation` and `get_historical_reward_periods`
   is disabled.
+
 
 # 2025-08-15: Proposal 137910
 
