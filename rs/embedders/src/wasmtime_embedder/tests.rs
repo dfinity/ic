@@ -114,7 +114,6 @@ fn test_wasmtime_system_api() {
             system_api: Some(system_api),
             num_instructions_global: None,
             log: no_op_logger(),
-            num_stable_dirty_pages_from_non_native_writes: ic_types::NumOsPages::from(0),
             limits: StoreLimits::default(),
             canister_backtrace: config.feature_flags.canister_backtrace,
         },

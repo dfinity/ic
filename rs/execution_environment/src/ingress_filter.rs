@@ -5,7 +5,7 @@ use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
-use ic_types::messages::SignedIngressContent;
+use ic_types::messages::SignedIngress;
 use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
@@ -38,7 +38,7 @@ impl IngressFilterServiceImpl {
     }
 }
 
-impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilterServiceImpl {
+impl Service<(ProvisionalWhitelist, SignedIngress)> for IngressFilterServiceImpl {
     type Response = Result<(), UserError>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -50,13 +50,13 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilterServ
 
     fn call(
         &mut self,
-        (provisional_whitelist, ingress): (ProvisionalWhitelist, SignedIngressContent),
+        (provisional_whitelist, raw_ingress): (ProvisionalWhitelist, SignedIngress),
     ) -> Self::Future {
         let exec_env = Arc::clone(&self.exec_env);
         let metrics = Arc::clone(&self.metrics);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
-        let canister_id = ingress.canister_id();
+        let canister_id = raw_ingress.content().canister_id();
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
@@ -64,7 +64,7 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilterServ
                 let v = exec_env.should_accept_ingress_message(
                     state,
                     &provisional_whitelist,
-                    &ingress,
+                    &raw_ingress,
                     ExecutionMode::NonReplicated,
                     &metrics,
                 );

@@ -16,7 +16,6 @@ mod update_balance {
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, storage};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
-    use ic_cdk::api::call::RejectionCode;
     use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
@@ -637,9 +636,12 @@ mod update_balance {
 
             let mock_result = match result {
                 MetricsResult::Ok => Ok(vec![]),
-                MetricsResult::Err => Err(CallError::from_cdk_error(
-                    "sign_with_ecdsa",
-                    (RejectionCode::Unknown, "mock error".to_string()),
+                MetricsResult::Err => Err(CallError::from_sign_error(
+                    ic_cdk::management_canister::SignCallError::CallFailed(
+                        ic_cdk::call::CallFailed::CallPerformFailed(
+                            ic_cdk::call::CallPerformFailed {},
+                        ),
+                    ),
                 )),
             };
             runtime.expect_sign_with_ecdsa().return_const(mock_result);
