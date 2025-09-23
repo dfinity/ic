@@ -132,7 +132,7 @@ impl VectorVm {
         match env.safe_topology_snapshot() {
             Err(e) => warn!(
                 log,
-                "Could not fetch topology snapshot because: {e:?}. Skipping adding IC nodes as vector targets for now."
+                "Skipping adding IC nodes as vector targets for now because could not fetch topology snapshot because: {e:?}"
             ),
             Ok(snapshot) => {
                 let nodes = snapshot
