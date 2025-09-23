@@ -88,7 +88,8 @@ struct ReservationData {
 }
 
 pub struct RateLimiterConfig {
-    pub max_age: Duration,
+    pub add_capacity_amount: u64,
+    pub add_capacity_interval: Duration,
     pub max_capacity: u64,
 }
 
@@ -110,7 +111,7 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         &mut self,
         now: SystemTime,
         key: K,
-        capacity: u64,
+        requested_capacity: u64,
     ) -> Result<Reservation<K>, RateLimiterError> {
         let mut reservations = self.reservations.lock().unwrap();
 
@@ -135,12 +136,11 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         let committed_capacity = self
             .used_capacity
             .get(&key)
-            .filter(|usage| usage.last_updated > now - self.config.max_age)
             .map(|usage| usage.capacity_used)
             .unwrap_or(0);
 
-        if reserved_capacity + committed_capacity + capacity <= self.config.max_capacity {
-            let reservation_data = ReservationData { now, capacity };
+        if reserved_capacity + committed_capacity + requested_capacity <= self.config.max_capacity {
+            let reservation_data = ReservationData { now, capacity: requested_capacity };
             reservations.insert((key.clone(), next_index), reservation_data);
 
             let reservation = Reservation {
@@ -164,6 +164,8 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
                 capacity_used: 0,
             });
 
+        update_capacity(usage, self.config.add_capacity_amount, self.config.add_capacity_interval)
+
         // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
         // How do we handle that?
         if let Ok(mut reservations) = self.reservations.lock() {
@@ -175,6 +177,10 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
             }
         }
     }
+}
+
+fn update_capacity(usage_record: &mut UsageRecord, now: SystemTime, amount_to_add: u64, add_frequency: Duration) {
+
 }
 
 #[derive(Clone, Debug)]
