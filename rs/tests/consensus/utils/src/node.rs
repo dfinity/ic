@@ -191,7 +191,8 @@ pub fn await_subnet_earliest_topology_version(
                     "Target registry version not yet reached, current: {:?}, target: {}",
                     earliest_registry_versions,
                     target_version
-                )
+                );
+                Ok(())
             }
             Err(err) => {
                 bail!("Could not connect to metrics yet {:?}", err);
