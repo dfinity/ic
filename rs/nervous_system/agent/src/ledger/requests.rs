@@ -1,5 +1,4 @@
 use crate::Request;
-use candid::Nat;
 use icp_ledger::{
     BinaryAccountBalanceArgs, Tokens, TransferArgs, TransferError as ICPTransferError,
 };
@@ -51,24 +50,4 @@ impl Request for BinaryAccountBalanceArgs {
     }
 
     type Response = Tokens;
-}
-
-//TODO: is this needed?
-#[allow(dead_code)]
-pub(crate) struct Icrc1TotalSupplyRequest {}
-
-impl Request for Icrc1TotalSupplyRequest {
-    fn method(&self) -> &'static str {
-        "icrc1_total_supply"
-    }
-
-    fn update(&self) -> bool {
-        false
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        Ok(vec![])
-    }
-
-    type Response = Nat;
 }
