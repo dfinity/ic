@@ -3,6 +3,28 @@ This module defines Bazel targets for the mainnet versions of ICOS images
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
+
+MAINNET_LATEST_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["latest_release"]["version"]
+MAINNET_LATEST_GUESTOS_HASH = mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash"]
+MAINNET_LATEST_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash_dev"]
+MAINNET_LATEST_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["latest_release"]["launch_measurements"]
+MAINNET_LATEST_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["latest_release"]["launch_measurements_dev"]
+MAINNET_NNS_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["version"]
+MAINNET_NNS_GUESTOS_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash"]
+MAINNET_NNS_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash_dev"]
+MAINNET_NNS_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["launch_measurements"]
+MAINNET_NNS_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["launch_measurements_dev"]
+MAINNET_APP_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["version"]
+MAINNET_APP_GUESTOS_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash"]
+MAINNET_APP_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash_dev"]
+MAINNET_APP_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["launch_measurements"]
+MAINNET_APP_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["launch_measurements_dev"]
+MAINNET_LATEST_HOSTOS_REVISION = mainnet_icos_versions["hostos"]["latest_release"]["version"]
+MAINNET_LATEST_HOSTOS_HASH = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
+MAINNET_LATEST_HOSTOS_DEV_HASH = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash_dev"]
+MAINNET_LATEST_HOSTOS_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["hostos"]["latest_release"]["launch_measurements"]
+MAINNET_LATEST_HOSTOS_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["hostos"]["latest_release"]["launch_measurements_dev"]
 
 def icos_image_download_url(git_commit_id, variant, update):
     return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}/{component}.tar.zst".format(

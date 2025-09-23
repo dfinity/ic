@@ -7,8 +7,8 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_image_download_url")
-load("//rs/tests:common.bzl", "MAINNET_APP_GUESTOS_DEV_HASH", "MAINNET_APP_GUESTOS_HASH", "MAINNET_APP_GUESTOS_REVISION", "MAINNET_LATEST_GUESTOS_DEV_HASH", "MAINNET_LATEST_GUESTOS_HASH", "MAINNET_LATEST_GUESTOS_REVISION", "MAINNET_LATEST_HOSTOS_DEV_HASH", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_GUESTOS_DEV_HASH", "MAINNET_NNS_GUESTOS_HASH", "MAINNET_NNS_GUESTOS_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP_GUESTOS_DEV_HASH", "MAINNET_APP_GUESTOS_HASH", "MAINNET_APP_GUESTOS_REVISION", "MAINNET_LATEST_GUESTOS_DEV_HASH", "MAINNET_LATEST_GUESTOS_HASH", "MAINNET_LATEST_GUESTOS_REVISION", "MAINNET_LATEST_HOSTOS_DEV_HASH", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_GUESTOS_DEV_HASH", "MAINNET_NNS_GUESTOS_HASH", "MAINNET_NNS_GUESTOS_REVISION", "icos_dev_image_download_url", "icos_image_download_url")
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
