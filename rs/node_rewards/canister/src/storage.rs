@@ -1,4 +1,5 @@
 use crate::metrics::{ICCanisterClient, MetricsManager};
+use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
@@ -11,6 +12,7 @@ const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBNETS_METRICS_MEMORY_ID: MemoryId = MemoryId::new(1);
 const LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID: MemoryId = MemoryId::new(2);
 const SUBNETS_TO_RETRY_MEMORY_ID: MemoryId = MemoryId::new(3);
+const REWARDABLE_NODES_CACHE_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -27,7 +29,7 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
-    pub static METRICS_MANAGER: Rc<MetricsManager<VM>> = {
+    pub static METRICS_MANAGER: Rc<MetricsManager> = {
         let metrics_manager = MetricsManager {
             client: Box::new(ICCanisterClient),
             subnets_to_retry: RefCell::new(stable_btreemap_init(SUBNETS_TO_RETRY_MEMORY_ID)),
@@ -41,6 +43,11 @@ thread_local! {
     static REGISTRY_DATA_STORE_BTREE_MAP: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>>
         = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
             StableBTreeMap::init(mm.get(REGISTRY_STORE_MEMORY_ID))
+        ));
+
+    pub static REWARDABLE_NODES_CACHE: RefCell<StableBTreeMap<RewardableNodesKey, RewardableNodesValue, VM>>
+        = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
+            StableBTreeMap::init(mm.get(REWARDABLE_NODES_CACHE_MEMORY_ID))
         ));
 }
 
