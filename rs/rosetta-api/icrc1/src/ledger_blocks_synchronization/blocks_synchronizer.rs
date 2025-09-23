@@ -64,7 +64,11 @@ async fn verify_and_fix_gaps(
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     let sync_ranges = derive_synchronization_gaps(storage_client.clone())?;
-    let (_tip_block_hash, tip_block_index) = get_tip_block_hash_and_index(agent.clone()).await?;
+    let tip = get_tip_block_hash_and_index(agent.clone()).await?;
+    let (_tip_block_hash, tip_block_index) = match tip {
+        Some(tip) => tip,
+        None => return Ok(()),
+    };
 
     for sync_range in sync_ranges {
         sync_blocks_interval(
@@ -156,6 +160,7 @@ pub async fn start_synching_blocks(
         if !is_initial_sync {
             heartbeat();
         }
+        let mut sync_failed = false;
         // Verify and fix gaps in the database.
         let result = verify_and_fix_gaps(
             agent.clone(),
@@ -164,43 +169,46 @@ pub async fn start_synching_blocks(
         )
         .await;
         match result {
-            Ok(_) => {
-                current_failure_streak = 0;
-            }
+            Ok(_) => {}
             Err(e) => {
                 error!("Error while verifying and fixing gaps: {}", e);
-                current_failure_streak += 1;
+                sync_failed = true;
             }
         }
 
-        match sync_from_the_tip(
-            agent.clone(),
-            storage_client.clone(),
-            maximum_blocks_per_request,
-            archive_canister_ids.clone(),
-        )
-        .await
-        {
-            Ok(_) => {
-                current_failure_streak = 0;
-                is_initial_sync = false;
-            }
-            Err(e) => {
-                error!("Error while syncing blocks: {}", e);
-                current_failure_streak += 1;
+        if !sync_failed {
+            match sync_from_the_tip(
+                agent.clone(),
+                storage_client.clone(),
+                maximum_blocks_per_request,
+                archive_canister_ids.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    is_initial_sync = false;
+                }
+                Err(e) => {
+                    error!("Error while syncing blocks: {}", e);
+                    sync_failed = true;
+                }
             }
         }
 
         // Update the account balances. When queried for its status, the ledger will return the
         // highest block index for which the account balances have been processed.
         match storage_client.update_account_balances() {
-            Ok(_) => {
-                current_failure_streak = 0;
-            }
+            Ok(_) => {}
             Err(e) => {
                 error!("Error while updating account balances: {}", e);
-                current_failure_streak += 1;
+                sync_failed = true;
             }
+        }
+
+        if sync_failed {
+            current_failure_streak += 1;
+        } else {
+            current_failure_streak = 0;
         }
 
         match recurrency_mode {
@@ -210,6 +218,9 @@ pub async fn start_synching_blocks(
                     .min_recurrency_wait
                     .saturating_mul(config.backoff_factor.saturating_pow(current_failure_streak));
                 wait_time = cmp::min(wait_time, config.max_recurrency_wait);
+                if wait_time > config.min_recurrency_wait {
+                    error!("Error encountered, waiting {:?} before retrying", wait_time);
+                }
                 tokio::time::sleep(wait_time).await;
             }
         }
@@ -219,7 +230,7 @@ pub async fn start_synching_blocks(
 
 pub async fn get_tip_block_hash_and_index(
     agent: Arc<Icrc1Agent>,
-) -> anyhow::Result<([u8; 32], u64)> {
+) -> anyhow::Result<Option<([u8; 32], u64)>> {
     let (tip_block_hash, tip_block_index) = match agent
         .get_certified_chain_tip()
         .await
@@ -228,7 +239,7 @@ pub async fn get_tip_block_hash_and_index(
         Some(tip) => tip,
         None => {
             info!("The ledger is empty, exiting sync!");
-            return Ok(([0; 32], 0));
+            return Ok(None);
         }
     };
 
@@ -237,7 +248,7 @@ pub async fn get_tip_block_hash_and_index(
         None => bail!("could not convert last_block_index {tip_block_index} to u64"),
     };
 
-    Ok((tip_block_hash, tip_block_index))
+    Ok(Some((tip_block_hash, tip_block_index)))
 }
 
 /// This function will do a synchronization of the interval (Highest_Stored_Block,Ledger_Tip].
@@ -247,7 +258,11 @@ pub async fn sync_from_the_tip(
     maximum_blocks_per_request: u64,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
-    let (tip_block_hash, tip_block_index) = get_tip_block_hash_and_index(agent.clone()).await?;
+    let tip = get_tip_block_hash_and_index(agent.clone()).await?;
+    let (tip_block_hash, tip_block_index) = match tip {
+        Some(tip) => tip,
+        None => return Ok(()),
+    };
 
     storage_client
         .get_metrics()

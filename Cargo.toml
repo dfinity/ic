@@ -219,6 +219,8 @@ members = [
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",
     "rs/ledger_suite/tests/sm-tests/constants",
+    "rs/ledger_suite/test_utils/in_memory_ledger",
+    "rs/ledger_suite/test_utils/state_machine_helpers",
     "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",

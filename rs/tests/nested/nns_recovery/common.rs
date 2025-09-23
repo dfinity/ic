@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::bail;
@@ -17,6 +18,7 @@ use ic_consensus_system_test_utils::{
 use ic_recovery::{
     RecoveryArgs, get_node_metrics,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
+    steps::CreateNNSRecoveryTarStep,
     util::DataLocation,
 };
 use ic_system_test_driver::{
@@ -53,6 +55,10 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
+const ADMIN_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
+const BACKUP_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/backup_key";
+const OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/ic/data/recovery/output";
+
 pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
@@ -61,6 +67,7 @@ pub struct SetupConfig {
 
 #[derive(Debug)]
 pub struct TestConfig {
+    pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
 }
 
@@ -217,7 +224,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
     );
     let dfinity_owned_node = if cfg.break_dfinity_owned_node {
-        faulty_nodes.first().unwrap()
+        faulty_nodes.last().unwrap()
     } else {
         // TODO(CON-1587): Consider breaking all nodes.
         healthy_nodes.first().unwrap()
@@ -304,25 +311,24 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
-        download_state_node: Some(dfinity_owned_node.get_ip_addr()),
+        download_state_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
+        skip: None,
     };
 
     let subnet_recovery_tool =
         NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
-    info!(logger, "Starting recovery tool",);
-
-    // go over all steps of the NNS recovery
-    for (step_type, step) in subnet_recovery_tool {
-        info!(logger, "Next step: {:?}", step_type);
-
-        info!(logger, "{}", step.descr());
-        step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
+    if cfg.local_recovery {
+        info!(logger, "Performing a local recovery");
+        local_recovery(dfinity_owned_node, subnet_recovery_tool, &logger);
+    } else {
+        info!(logger, "Performing a remote recovery");
+        remote_recovery(subnet_recovery_tool, &logger);
     }
     info!(
         logger,
@@ -330,11 +336,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     info!(logger, "Setup UVM to serve recovery artifacts");
-    let artifacts_path = output_dir.join("recovery.tar.zst");
-    let artifacts_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
-        .unwrap()
-        .trim()
-        .to_string();
+    let artifacts_path = output_dir.join(CreateNNSRecoveryTarStep::get_tar_name());
+    let artifacts_hash =
+        std::fs::read_to_string(output_dir.join(CreateNNSRecoveryTarStep::get_sha_name()))
+            .unwrap()
+            .trim()
+            .to_string();
     impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
         .expect("Failed to serve recovery artifacts from UVM");
 
@@ -375,7 +382,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     &env,
                     &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
-                    &recovery_img_hash[..6],
+                    &recovery_img_hash,
                     &artifacts_hash,
                 )
                 .await
@@ -445,7 +452,7 @@ async fn simulate_node_provider_action(
     env: &TestEnv,
     host: &NestedVm,
     img_version: &str,
-    img_short_hash: &str,
+    img_version_hash: &str,
     artifacts_hash: &str,
 ) {
     let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
@@ -458,7 +465,7 @@ async fn simulate_node_provider_action(
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_short_hash, &artifacts_hash
+        &img_version, &img_version_hash, &artifacts_hash
     );
     host.block_on_bash_script_async(&boot_args_command)
         .await
@@ -512,4 +519,161 @@ async fn simulate_node_provider_action(
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
         .expect("Failed to spoof GuestOS DNS");
+}
+
+fn remote_recovery(subnet_recovery_tool: NNSRecoverySameNodes, logger: &Logger) {
+    for (step_type, step) in subnet_recovery_tool {
+        info!(logger, "Next step: {:?}", step_type);
+
+        info!(logger, "{}", step.descr());
+        step.exec()
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
+    }
+}
+
+fn local_recovery(
+    node: &IcNodeSnapshot,
+    subnet_recovery_tool: NNSRecoverySameNodes,
+    logger: &Logger,
+) {
+    let session = &node.block_on_ssh_session().unwrap();
+    let node_id = node.node_id;
+    let node_ip = node.get_ip_addr();
+
+    let maybe_admin_key_file =
+        if let Some(admin_key_file) = &subnet_recovery_tool.recovery_args.key_file {
+            info!(
+                logger,
+                "Copying the admin key file to node {node_id} with IP {node_ip} ..."
+            );
+            scp_send_to(
+                logger.clone(),
+                session,
+                admin_key_file,
+                Path::new(ADMIN_KEY_FILE_REMOTE_PATH),
+                0o400,
+            );
+
+            format!("--key-file {ADMIN_KEY_FILE_REMOTE_PATH} ")
+        } else {
+            String::default()
+        };
+
+    let maybe_backup_key_file =
+        if let Some(backup_key_file) = &subnet_recovery_tool.params.backup_key_file {
+            info!(
+                logger,
+                "Copying the backup key file to node {node_id} with IP {node_ip} ..."
+            );
+            scp_send_to(
+                logger.clone(),
+                session,
+                backup_key_file,
+                Path::new(BACKUP_KEY_FILE_REMOTE_PATH),
+                0o400,
+            );
+
+            format!("--backup-key-file {BACKUP_KEY_FILE_REMOTE_PATH} ")
+        } else {
+            String::default()
+        };
+
+    let nns_url = subnet_recovery_tool.recovery_args.nns_url;
+    let subnet_id = subnet_recovery_tool.params.subnet_id;
+    let maybe_upgrade_version = subnet_recovery_tool
+        .params
+        .upgrade_version
+        .map(|v| format!("--upgrade-version {v} "))
+        .unwrap_or_default();
+    let maybe_replay_until_height = subnet_recovery_tool
+        .params
+        .replay_until_height
+        .map(|h| format!("--replay-until-height {h} "))
+        .unwrap_or_default();
+    let maybe_upgrade_image_url = subnet_recovery_tool
+        .params
+        .upgrade_image_url
+        .map(|u| format!("--upgrade-image-url {u} "))
+        .unwrap_or_default();
+    let maybe_upgrade_image_hash = subnet_recovery_tool
+        .params
+        .upgrade_image_hash
+        .map(|h| format!("--upgrade-image-hash {h} "))
+        .unwrap_or_default();
+    let maybe_download_pool_node = subnet_recovery_tool
+        .params
+        .download_pool_node
+        .map(|n| format!("--download-pool-node {n} "))
+        .unwrap_or_default();
+    let maybe_skips = subnet_recovery_tool
+        .params
+        .skip
+        .as_ref()
+        .map(|skips| {
+            skips
+                .iter()
+                .map(|s| format!("--skip {s:?} "))
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+
+    let command = format!(
+        r#"/opt/ic/bin/ic-recovery \
+        --nns-url {nns_url} \
+        {maybe_admin_key_file}\
+        --test --skip-prompts --use-local-binaries \
+        nns-recovery-same-nodes \
+        --subnet-id {subnet_id} \
+        {maybe_upgrade_version}\
+        {maybe_replay_until_height}\
+        {maybe_upgrade_image_url}\
+        {maybe_upgrade_image_hash}\
+        {maybe_download_pool_node}\
+        --download-state-method local \
+        --upload-method local \
+        --wait-for-cup-node {node_ip} \
+        {maybe_backup_key_file}\
+        --output-dir {OUTPUT_DIR_REMOTE_PATH} \
+        {maybe_skips}\
+        --skip Cleanup \
+        "#
+    );
+
+    // The command is expected to reboot the node as part of the recovery, so if it returns
+    // successfully, it means something went wrong.
+    info!(logger, "Executing local recovery command: \n{command}");
+    node.block_on_bash_script_from_session(session, &command)
+        .expect_err("Local recovery command completed without rebooting");
+
+    info!(logger, "Node rebooted as part of the recovery");
+
+    // Resume the recovery by re-executing the command starting from WaitForCUP. The command should
+    // succeed this time.
+    let session = &node.block_on_ssh_session().unwrap(); // New session after reboot
+    let command = command + r#"--resume WaitForCUP \"#;
+    info!(logger, "Resuming local recovery command: \n{command}");
+    node.block_on_bash_script_from_session(session, &command)
+        .expect("Local recovery failed to complete");
+
+    info!(logger, "Local recovery completed successfully");
+
+    if let Some(local_output_dir) = &subnet_recovery_tool.params.output_dir {
+        info!(
+            logger,
+            "Copying output directory from node {node_id} with IP {node_ip} ..."
+        );
+        std::fs::create_dir_all(local_output_dir).unwrap();
+        scp_recv_from(
+            logger.clone(),
+            session,
+            &Path::new(OUTPUT_DIR_REMOTE_PATH).join(CreateNNSRecoveryTarStep::get_tar_name()),
+            &local_output_dir.join(CreateNNSRecoveryTarStep::get_tar_name()),
+        );
+        scp_recv_from(
+            logger.clone(),
+            session,
+            &Path::new(OUTPUT_DIR_REMOTE_PATH).join(CreateNNSRecoveryTarStep::get_sha_name()),
+            &local_output_dir.join(CreateNNSRecoveryTarStep::get_sha_name()),
+        );
+    }
 }

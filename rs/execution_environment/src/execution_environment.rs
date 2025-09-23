@@ -898,7 +898,7 @@ impl ExecutionEnvironment {
                     self.get_canister_status(
                         *msg.sender(),
                         args.get_canister_id(),
-                        &mut state,
+                        &state,
                         registry_settings.subnet_size,
                         ready_for_migration,
                     )
@@ -2271,12 +2271,12 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
-        state: &mut ReplicatedState,
+        state: &ReplicatedState,
         subnet_size: usize,
         ready_for_migration: bool,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(canister_id, state)?;
+        let canister = get_canister(canister_id, state)?;
         self.canister_manager
             .get_canister_status(
                 sender,
