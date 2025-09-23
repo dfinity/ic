@@ -178,7 +178,8 @@ fn induct_loopback_stream_reject_response() {
                 generate_reject_response_for(
                     RejectReason::CanisterNotFound,
                     request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
-                ),
+                )
+                .into(),
             );
 
             // Expecting an empty loopback stream with begin advanced.
@@ -255,7 +256,8 @@ fn induct_loopback_stream_reroute_response() {
                     &generate_reject_response_for(
                         RejectReason::CanisterMigrating,
                         request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
-                    ),
+                    )
+                    .into(),
                 ],
             );
 
@@ -473,7 +475,8 @@ fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
                     &generate_reject_response_for(
                         RejectReason::OutOfMemory,
                         request_in_stream(state.get_stream(&LOCAL_SUBNET), 22),
-                    ),
+                    )
+                    .into(),
                 ],
             );
 
@@ -1181,7 +1184,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_success() {
                 RejectReason::QueueFull,
                 request_in_stream(state.get_stream(&REMOTE_SUBNET), 21),
             );
-            push_input(&mut expected_state, reject_response);
+            push_input(&mut expected_state, reject_response.into());
             // The expected outgoing stream is empty with `begin` avanced.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 22,
@@ -1308,7 +1311,7 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
                 RejectReason::CanisterStopping,
                 request_in_stream(state.get_stream(&REMOTE_SUBNET), 21),
             );
-            push_input(&mut expected_state, reject_response);
+            push_input(&mut expected_state, reject_response.into());
             // The expected outgoing stream is empty with `begin` avanced.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 22,
@@ -1381,10 +1384,13 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
             // The stream to the migration subnet is new and has 1 reject response in it
             // due to the other reject signal.
             let migration_stream = stream_from_config(StreamConfig {
-                messages: vec![generate_reject_response_for(
-                    RejectReason::OutOfMemory,
-                    request_in_stream(state.get_stream(&REMOTE_SUBNET), 21),
-                )],
+                messages: vec![
+                    generate_reject_response_for(
+                        RejectReason::OutOfMemory,
+                        request_in_stream(state.get_stream(&REMOTE_SUBNET), 21),
+                    )
+                    .into(),
+                ],
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![
@@ -1808,11 +1814,12 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
             let mut callback_id = 2;
             while state
                 .push_input(
-                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER).build_with(
-                        CallbackId::new(callback_id),
-                        0,
-                        Cycles::new(1),
-                    ),
+                    RequestBuilder::new()
+                        .sender(*LOCAL_CANISTER)
+                        .receiver(*LOCAL_CANISTER)
+                        .sender_reply_callback(CallbackId::new(callback_id))
+                        .build()
+                        .into(),
                     &mut (i64::MAX / 2),
                 )
                 .is_ok()
@@ -2854,7 +2861,8 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 generate_reject_response_for(
                     RejectReason::CanisterMigrating,
                     request_in_stream(state.get_stream(&LOCAL_SUBNET), 26),
-                ),
+                )
+                .into(),
             );
 
             // The expected loopback stream has all initial messages gc'ed...
@@ -2892,7 +2900,8 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                     generate_reject_response_for(
                         RejectReason::CanisterMigrating,
                         request_in_stream(state.get_stream(&LOCAL_SUBNET), 24),
-                    ),
+                    )
+                    .into(),
                     // ...the response @27 rerouted...
                     message_in_stream(state.get_stream(&LOCAL_SUBNET), 27).clone(),
                     // ...and the response @33 rerouted.
@@ -3100,7 +3109,7 @@ fn with_test_setup_and_config(
         // simulates callback IDs generated in a different canister.
         let mut other_callback_id = 0_u64;
         let mut cycles = Cycles::new(1);
-        let mut messages_from_builders = |builders: Vec<MessageBuilder>| -> Vec<RequestOrResponse> {
+        let mut messages_from_builders = |builders: Vec<MessageBuilder>| -> Vec<StreamMessage> {
             builders
                 .into_iter()
                 .enumerate()
@@ -3114,6 +3123,7 @@ fn with_test_setup_and_config(
                         RejectResponse(respondent, originator, _) => {
                             (respondent, originator, NO_DEADLINE)
                         }
+                        Refund(recipient) => (recipient, *REMOTE_CANISTER, NO_DEADLINE),
                     };
                     // Attach a unique (bit mask-like) number of cycles to each message (assuming
                     // that there are fewer than 127 messages).
@@ -3164,7 +3174,7 @@ fn with_test_setup_and_config(
         // Generate streams.
         let mut streams = StreamMap::new();
         for (subnet_id, stream_config) in stream_configs.into_iter() {
-            // Convert from `StreamConfig<MessageBuilder>` to `StreamConfig<RequestOrResponse>`
+            // Convert from `StreamConfig<MessageBuilder>` to `StreamConfig<StreamMessage>`
             // then use `stream_from_config()` to generate the `Stream`.
             let stream = stream_from_config(StreamConfig {
                 begin: stream_config.begin,
@@ -3179,7 +3189,7 @@ fn with_test_setup_and_config(
         // Generate stream slices.
         let mut slices = BTreeMap::<SubnetId, StreamSlice>::new();
         for (subnet_id, slice_config) in slice_configs.into_iter() {
-            // Convert from `StreamSliceConfig<MessageBuilder>` to `StreamSliceConfig<RequestOrResponse>`
+            // Convert from `StreamSliceConfig<MessageBuilder>` to `StreamSliceConfig<StreamMessage>`
             // then use `stream_slice_from_config()` to generate the `StreamSlice`.
             let slice = stream_slice_from_config(StreamSliceConfig {
                 header_begin: slice_config.header_begin,
@@ -3243,7 +3253,7 @@ fn with_local_test_setup_and_config(
 
 /// A config used to generate a `Stream`.
 ///
-/// The generic parameter `C` is either `Vec<MessageBuilder>` or `Vec<RequestOrResponse>`.
+/// The generic parameter `C` is either `Vec<MessageBuilder>` or `Vec<StreamMessage>`.
 /// The whole container is used rather than the type inside the vector because Rust insists
 /// `T` must implement `Default` to use an empty `Vec<T>::new()` as the default.
 #[derive(Default)]
@@ -3255,9 +3265,9 @@ struct StreamConfig<C: IntoIterator + Default> {
     flags: StreamFlags,
 }
 
-/// Generates a `Stream` from a `StreamConfig<RequestOrResponse>`
-fn stream_from_config(config: StreamConfig<Vec<RequestOrResponse>>) -> Stream {
-    let mut queue = StreamIndexedQueue::<RequestOrResponse>::with_begin(config.begin.into());
+/// Generates a `Stream` from a `StreamConfig<StreamMessage>`
+fn stream_from_config(config: StreamConfig<Vec<StreamMessage>>) -> Stream {
+    let mut queue = StreamIndexedQueue::<StreamMessage>::with_begin(config.begin.into());
     for msg in config.messages {
         queue.push(msg.clone());
     }
@@ -3272,7 +3282,7 @@ fn stream_from_config(config: StreamConfig<Vec<RequestOrResponse>>) -> Stream {
 
 /// A config to generate a `StreamSlice`.
 ///
-/// The generic parameter `C` is either `Vec<MessageBuilder>` or `Vec<RequestOrResponse>`.
+/// The generic parameter `C` is either `Vec<MessageBuilder>` or `Vec<StreamMessage>`.
 /// The whole container is used rather than the type inside the vector because Rust insists
 /// `T` must implement `Default` to use an empty `Vec<T>::new()` as the default.
 ///
@@ -3291,7 +3301,7 @@ struct StreamSliceConfig<C: IntoIterator + Default> {
 }
 
 /// Generates a `StreamSlice` from a `StreamSliceConfig`.
-fn stream_slice_from_config(config: StreamSliceConfig<Vec<RequestOrResponse>>) -> StreamSlice {
+fn stream_slice_from_config(config: StreamSliceConfig<Vec<StreamMessage>>) -> StreamSlice {
     let header_begin = match config.header_begin {
         Some(header_begin) => header_begin,
         None => config.messages_begin,
@@ -3308,8 +3318,7 @@ fn stream_slice_from_config(config: StreamSliceConfig<Vec<RequestOrResponse>>) -
         .reject_signals(config.reject_signals.into())
         .flags(config.flags)
         .build();
-    let mut queue =
-        StreamIndexedQueue::<RequestOrResponse>::with_begin(config.messages_begin.into());
+    let mut queue = StreamIndexedQueue::<StreamMessage>::with_begin(config.messages_begin.into());
     for msg in config.messages.into_iter() {
         queue.push(msg);
     }
@@ -3325,7 +3334,7 @@ fn request_in_stream(
     stream_index: u64,
 ) -> &ic_types::messages::Request {
     match opt_stream.and_then(|stream| stream.messages().get(stream_index.into())) {
-        Some(RequestOrResponse::Request(request)) => request,
+        Some(StreamMessage::Request(request)) => request,
         _ => unreachable!(),
     }
 }
@@ -3342,7 +3351,7 @@ fn response_in_slice(
             .messages()
             .and_then(|msgs| msgs.get(stream_index.into()))
     }) {
-        Some(RequestOrResponse::Response(response)) => response,
+        Some(StreamMessage::Response(response)) => response,
         _ => unreachable!(),
     }
 }
@@ -3350,7 +3359,7 @@ fn response_in_slice(
 /// Returns a reference to the message at `stream_index` in the stream.
 ///
 /// Panics if no such message exists.
-fn message_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &RequestOrResponse {
+fn message_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &StreamMessage {
     opt_stream
         .and_then(|stream| stream.messages().get(stream_index.into()))
         .unwrap()
@@ -3359,7 +3368,7 @@ fn message_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Request
 /// Returns a reference to the message at `stream_index` in the stream slice.
 ///
 /// Panics if no such message exists.
-fn message_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &RequestOrResponse {
+fn message_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &StreamMessage {
     opt_slice
         .and_then(|slice| {
             slice
@@ -3369,18 +3378,13 @@ fn message_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &Requ
         .unwrap()
 }
 
-/// Pushes a message into the `state` using an infinite memory pool.
-fn push_input(state: &mut ReplicatedState, msg: RequestOrResponse) {
-    state.push_input(msg, &mut (i64::MAX / 2)).unwrap();
-}
-
 /// Returns an iterator over messages in a stream over the `stream_index_range`.
 ///
 /// Panics if any of the messages in `stream_index_range` does not exist.
 fn messages_in_stream(
     opt_stream: Option<&Stream>,
     stream_index_range: std::ops::RangeInclusive<u64>,
-) -> impl Iterator<Item = &RequestOrResponse> {
+) -> impl Iterator<Item = &StreamMessage> {
     match opt_stream {
         // Not the `unwrap()`s here ensure that the code panics when the whole range was not
         // available rather than just silently terminating the iterator prematurely. This behaviour
@@ -3397,7 +3401,7 @@ fn messages_in_stream(
 fn messages_in_slice(
     opt_slice: Option<&StreamSlice>,
     stream_index_range: std::ops::RangeInclusive<u64>,
-) -> impl Iterator<Item = &RequestOrResponse> {
+) -> impl Iterator<Item = &StreamMessage> {
     match opt_slice {
         // Not the `unwrap()`s here ensure that the code panics when the whole range was not
         // available rather than just silently terminating the iterator prematurely. This behaviour
@@ -3408,13 +3412,29 @@ fn messages_in_slice(
     }
 }
 
+/// Pushes a message into the `state` using an infinite memory pool.
+fn push_input(state: &mut ReplicatedState, msg: StreamMessage) {
+    match msg {
+        StreamMessage::Request(request) => {
+            state
+                .push_input(RequestOrResponse::Request(request), &mut (i64::MAX / 2))
+                .unwrap();
+        }
+        StreamMessage::Response(response) => {
+            state
+                .push_input(RequestOrResponse::Response(response), &mut (i64::MAX / 2))
+                .unwrap();
+        }
+        StreamMessage::Refund(refund) => {
+            assert!(state.credit_refund(&refund));
+        }
+    }
+}
+
 /// Pushes the messages yielded by `iter` into the `state`.
-fn push_inputs<'a>(
-    state: &mut ReplicatedState,
-    iter: impl IntoIterator<Item = &'a RequestOrResponse>,
-) {
+fn push_inputs<'a>(state: &mut ReplicatedState, iter: impl IntoIterator<Item = &'a StreamMessage>) {
     for msg in iter {
-        state.push_input(msg.clone(), &mut (i64::MAX / 2)).unwrap();
+        push_input(state, msg.clone());
     }
 }
 
@@ -3430,6 +3450,8 @@ enum MessageBuilder {
     BestEffortResponse(CanisterId, CanisterId, CoarseTime),
     // `(respondent, originator, reason)`
     RejectResponse(CanisterId, CanisterId, RejectReason),
+    // `(recipient)`.
+    Refund(CanisterId),
 }
 
 impl MessageBuilder {
@@ -3438,7 +3460,7 @@ impl MessageBuilder {
         callback_id: CallbackId,
         payload_size_bytes: usize,
         cycles: Cycles,
-    ) -> RequestOrResponse {
+    ) -> StreamMessage {
         match self {
             Self::Request(sender, receiver) => RequestBuilder::new()
                 .sender(sender)
@@ -3473,7 +3495,11 @@ impl MessageBuilder {
                     .sender_reply_callback(callback_id)
                     .payment(cycles)
                     .build(),
-            ),
+            )
+            .into(),
+            Self::Refund(recipient) => {
+                ic_types::messages::Refund::anonymous(recipient, cycles).into()
+            }
         }
     }
 }

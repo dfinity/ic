@@ -924,7 +924,8 @@ prop_compose! {
     )(
         msg_start in msg_start_range,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response_with_config(true),
+            // FIXME
+            arbitrary::stream_message_with_config(false),
             size_range,
         ),
         (signals_end, reject_signals) in arb_stream_signals(

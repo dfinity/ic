@@ -32,8 +32,8 @@ pub use ingress_messages::{
     Ingress, ParseIngressError, SignedIngress, SignedIngressContent, extract_effective_canister_id,
 };
 pub use inter_canister::{
-    CallContextId, CallbackId, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload, RejectContext,
-    Request, RequestMetadata, RequestOrResponse, Response,
+    CallContextId, CallbackId, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload, Refund,
+    RejectContext, Request, RequestMetadata, RequestOrResponse, Response, StreamMessage,
 };
 pub use message_id::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, MessageIdError};
 use phantom_newtype::Id;
