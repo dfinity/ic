@@ -1,3 +1,4 @@
+use candid::Reserved;
 use canister_test::WasmResult;
 use ic_base_types::SnapshotId;
 use ic_config::execution_environment::Config as ExecutionConfig;
@@ -6,7 +7,7 @@ use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, Global,
     GlobalTimer, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
     TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadChunkArgs,
 };
@@ -925,10 +926,18 @@ fn load_canister_snapshot_works_on_another_canister() {
     )
     .unwrap();
 
-    let snapshot_id_1 = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_1, None))
+    let canister_version_at_snapshot = env
+        .get_latest_state()
+        .canister_state(&canister_id_1)
         .unwrap()
-        .snapshot_id();
+        .system_state
+        .canister_version;
+
+    let snapshot_1 = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_1, None))
+        .unwrap();
+    let snapshot_id_1 = snapshot_1.snapshot_id();
+    let snapshot_taken_at_timestamp = snapshot_1.taken_at_timestamp();
 
     // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` should
     // fail if there is non-empty page delta in the shared page map.
@@ -980,10 +989,14 @@ fn load_canister_snapshot_works_on_another_canister() {
     // that the snapshot belongs to.
     let history = env.get_canister_history(canister_id_2);
     let latest_change_details = history.get_changes(1).next().unwrap().details();
-    match latest_change_details {
-        CanisterChangeDetails::CanisterLoadSnapshot(load_snapshot_record) => {
-            assert_eq!(load_snapshot_record.from_canister_id(), Some(canister_id_1));
-        }
-        _ => panic!("Unexpected history change {:?}", latest_change_details),
-    }
+    assert_eq!(
+        latest_change_details,
+        &CanisterChangeDetails::load_snapshot(
+            canister_version_at_snapshot,
+            snapshot_id_1,
+            snapshot_taken_at_timestamp,
+            SnapshotSource::TakenFromCanister(Reserved),
+            Some(canister_id_1),
+        ),
+    );
 }
