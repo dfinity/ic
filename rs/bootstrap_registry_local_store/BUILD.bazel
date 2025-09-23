@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/protobuf",
+    "//rs/registry/local_store",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:prost",
+]
+
+rust_binary(
+    name = "bootstrap-registry-local-store",
+    srcs = glob(["src/**"]),
+    deps = DEPENDENCIES,
+)
