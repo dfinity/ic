@@ -3,7 +3,10 @@ use crate::{
     metrics::{CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING, IDkgPayloadMetrics},
     pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl},
     signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
-    utils::{InvalidChainCacheError, block_chain_reader, get_idkg_chain_key_config_if_enabled},
+    utils::{
+        InvalidChainCacheError, MAX_PARALLELISM, block_chain_reader,
+        get_idkg_chain_key_config_if_enabled,
+    },
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
@@ -26,9 +29,10 @@ use ic_types::{
             MasterKeyTranscript, STORE_PRE_SIGNATURES_IN_STATE, TranscriptAttributes,
         },
     },
-    crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
+    crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings},
     messages::CallbackId,
 };
+use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
@@ -711,6 +715,20 @@ pub(crate) fn create_data_payload_helper_2(
         store_pre_signatures_in_state,
     );
 
+    let inputs = idkg_payload
+        .iter_pre_sig_transcript_configs_in_creation()
+        .collect::<Vec<_>>();
+    let chunk_size = (inputs.len().max(1) + MAX_PARALLELISM - 1) / MAX_PARALLELISM;
+    let transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript> = inputs
+        .par_chunks(chunk_size)
+        .flat_map_iter(|chunk| {
+            chunk
+                .iter()
+                .flat_map(|params_ref| transcript_builder.get_completed_transcript(*params_ref))
+                .map(|t| (t.transcript_id, t))
+        })
+        .collect();
+
     if !store_pre_signatures_in_state {
         // If pre-signatures are stored on the blockchain, then we may only purge pre-signatures
         // for rotated key transcripts once we are sure that they haven't been paired with ongoing
@@ -749,12 +767,7 @@ pub(crate) fn create_data_payload_helper_2(
     }
 
     let new_transcripts = [
-        pre_signatures::update_pre_signatures_in_creation(
-            idkg_payload,
-            transcript_builder,
-            height,
-            log,
-        )?,
+        pre_signatures::update_pre_signatures_in_creation(idkg_payload, transcripts, height, log)?,
         key_transcript::update_next_key_transcripts(
             receivers,
             next_interval_registry_version,
@@ -1341,7 +1354,7 @@ mod tests {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
-            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let mut transcripts = BTreeMap::new();
             let mut add_expected_transcripts = |trancript_refs: Vec<idkg::TranscriptRef>| {
                 for transcript_ref in trancript_refs {
                     expected_transcripts.insert(transcript_ref.transcript_id);
@@ -1451,14 +1464,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
+            transcripts.insert(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                &transcript_builder,
+                transcripts,
                 parent_block_height,
                 &no_op_logger(),
             )
@@ -1600,7 +1613,7 @@ mod tests {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let mut transcripts = BTreeMap::new();
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
             let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -1710,14 +1723,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
+            transcripts.insert(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                &transcript_builder,
+                transcripts,
                 parent_block_height,
                 &no_op_logger(),
             )

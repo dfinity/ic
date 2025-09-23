@@ -92,10 +92,10 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 25;
+const NODES_COUNT: usize = 34;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
+const TESTING_PERIOD: Duration = Duration::from_secs(600); // testing time under load
 const COOLDOWN_PERIOD: Duration = Duration::from_secs(300); // sleep time before downloading p8s data
 const DKG_INTERVAL: u64 = 499;
 const MAX_RUNTIME_THREADS: usize = 64;
@@ -109,8 +109,8 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 30;
-const MAX_QUEUE_SIZE: u32 = 10;
+const PRE_SIGNATURES_TO_CREATE: u32 = 10;
+const MAX_QUEUE_SIZE: u32 = 40;
 const CANISTER_COUNT: usize = 4;
 const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
 
