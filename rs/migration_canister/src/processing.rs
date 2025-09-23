@@ -319,13 +319,25 @@ pub async fn process_all_failed() {
     };
     let mut tasks = vec![];
     let requests = list_by(|r| matches!(r, RequestState::Failed { .. }));
+    if requests.is_empty() {
+        return;
+    }
+    println!("Entering `failed` with {} pending requests", requests.len());
     for request in requests.iter() {
         tasks.push(process_failed(request.clone()));
     }
     let results = join_all(tasks).await;
+    let mut success_counter = 0;
     for (req, res) in zip(requests, results) {
+        if res.is_success() {
+            success_counter += 1;
+        }
         res.transition(req);
     }
+    println!(
+        "Exiting `failed` with {} successful transitions.",
+        success_counter
+    );
 }
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
