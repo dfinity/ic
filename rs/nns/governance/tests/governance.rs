@@ -11061,30 +11061,7 @@ lazy_static! {
     };
 }
 
-//TODO: this is displayed as unused even though it is used in
-// `lazy_static!`
-#[allow(dead_code)]
-const BASKET_COUNT: u64 = 3;
-
 lazy_static! {
-    static ref SWAP_PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
-        sns_token_e8s: 70_000 * E8,
-        min_icp_e8s: 2 * E8,
-        max_icp_e8s: 42_000 * E8,
-        min_direct_participation_icp_e8s: Some(2 * E8),
-        max_direct_participation_icp_e8s: Some(42_000 * E8),
-        min_participant_icp_e8s: BASKET_COUNT * 2 * E8,
-        max_participant_icp_e8s: 42_000 * E8,
-        min_participants: 1,
-        swap_due_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS + 2 * ONE_DAY_SECONDS,
-        neuron_basket_construction_parameters: Some(
-            sns_swap_pb::NeuronBasketConstructionParameters {
-                count: BASKET_COUNT,
-                dissolve_delay_interval_seconds: 7890000, // 3 months
-            },
-        ),
-        sale_delay_seconds: None,
-    };
 
     // Collectively, the Neurons' Fund neurons have 100e-8 ICP in maturity.
     // Neurons 1 and 2 belong to principal(1); neuron 3 belongs to principal(2).
