@@ -315,6 +315,8 @@ async fn validation_succeeds() {
         "Entering `stopped` with 1 pending",
         "Exiting `stopped` with 1 successful",
         "Entering `renamed_target` with 1 pending",
+        "Exiting `renamed_target` with 1 successful",
+        "Entering `updated_routing_table` with 1 pending",
     ]));
 }
 

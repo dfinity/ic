@@ -24,6 +24,8 @@ mod external_interfaces;
 mod migration_canister;
 mod privileged;
 mod processing;
+#[cfg(test)]
+mod tests;
 mod validation;
 
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
@@ -72,6 +74,25 @@ pub struct Request {
 }
 
 impl Request {
+    pub fn new(
+        source: Principal,
+        source_subnet: Principal,
+        source_original_controllers: Vec<Principal>,
+        target: Principal,
+        target_subnet: Principal,
+        target_original_controllers: Vec<Principal>,
+        caller: Principal,
+    ) -> Self {
+        Self {
+            source,
+            source_subnet,
+            source_original_controllers,
+            target,
+            target_subnet,
+            target_original_controllers,
+            caller,
+        }
+    }
     fn affects_canister(&self, src_id: Principal, tgt_id: Principal) -> Option<Principal> {
         if self.source == src_id || self.target == src_id {
             return Some(src_id);
