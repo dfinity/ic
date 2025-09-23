@@ -290,7 +290,7 @@ system_test_nns(
 system_test_nns(
     name = "src_testing",
     env = SNS_CANISTER_ENV | {
-        "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+        "XRC_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
@@ -301,7 +301,7 @@ system_test_nns(
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
-        "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+        "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -311,7 +311,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
-        "//rs/rosetta-api/tvl/xrc_mock",
+        "//rs/rust_canisters/xrc_mock",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",

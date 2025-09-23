@@ -130,6 +130,10 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub generate_ic_boundary_tls_cert: Option<String>,
 
+    // GuestOSRecoveryConfig arguments
+    #[arg(long)]
+    pub recovery_hash: Option<String>,
+
     // Output path
     #[arg(long)]
     pub guestos_config_json_path: PathBuf,
@@ -319,6 +323,7 @@ pub fn main() -> Result<()> {
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,
                 inject_ic_registry_local_store: clap_args.inject_ic_registry_local_store,
+                recovery_hash: clap_args.recovery_hash,
                 backup_retention_time_seconds: clap_args.backup_retention_time_seconds,
                 backup_purging_interval_seconds: clap_args.backup_purging_interval_seconds,
                 malicious_behavior: clap_args.malicious_behavior,

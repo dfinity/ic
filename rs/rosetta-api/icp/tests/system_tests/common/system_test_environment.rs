@@ -16,13 +16,12 @@ use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_tokens_u256::U256;
-use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_constants::LIFELINE_CANISTER_ID;
-use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_rosetta_test_utils::path_from_env;
