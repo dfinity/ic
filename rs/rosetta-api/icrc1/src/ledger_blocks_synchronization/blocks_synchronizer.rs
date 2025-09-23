@@ -198,7 +198,18 @@ pub async fn start_synching_blocks(
         // Update the account balances. When queried for its status, the ledger will return the
         // highest block index for which the account balances have been processed.
         match storage_client.update_account_balances() {
-            Ok(_) => {}
+            Ok(_) => {
+                // We will only end up here if there are no gaps, the blockchain is synced to the
+                // tip, and the account balances have been updated.
+                let highest_block_index = storage_client
+                    .get_block_with_highest_block_idx()
+                    .unwrap_or(None)
+                    .map(|rosetta_block| rosetta_block.index)
+                    .unwrap_or(0u64);
+                storage_client
+                    .get_metrics()
+                    .set_synced_height(highest_block_index);
+            }
             Err(e) => {
                 error!("Error while updating account balances: {}", e);
                 sync_failed = true;
