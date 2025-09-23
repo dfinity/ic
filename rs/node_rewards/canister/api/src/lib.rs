@@ -1,5 +1,4 @@
-use rewards_calculation::types;
-use rewards_calculation::types::UnixTsNanos;
+use rewards_calculation::{types as self, UnixTsNanos};
 
 pub mod monthly_rewards;
 pub mod provider_rewards_calculation;
