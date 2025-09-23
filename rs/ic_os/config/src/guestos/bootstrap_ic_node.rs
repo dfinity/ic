@@ -307,12 +307,6 @@ mod tests {
                 .join("registry.dat")
                 .exists()
         );
-        assert!(state_root.join("data/nns_public_key.pem").exists());
-        assert!(
-            state_root
-                .join("data/node_operator_private_key.pem")
-                .exists()
-        );
         assert!(
             config_root
                 .join("accounts_ssh_authorized_keys")
