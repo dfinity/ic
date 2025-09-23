@@ -15,6 +15,9 @@ env:
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
+permissions:
+  contents: write
+
 anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
@@ -63,6 +66,27 @@ jobs:
         with:
           run: bazel test --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  test-workflow:
+    name: Test Workflow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Create Empty Commit
+        run: |
+          set -euo pipefail
+          git config --global user.name "IDX GitHub Automation"
+          git config --global user.email "<>"
+          git add .
+          git commit --allow-empty -m "IDX GitHub Automation"
+          git push
 
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
