@@ -18,9 +18,9 @@ use ic_sns_testing::utils::{
     validate_network, validate_target_canister,
 };
 use icp_ledger::Tokens;
-use pocket_ic::PocketIcBuilder;
 use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig, InstanceHttpGatewayConfig};
 use pocket_ic::nonblocking::PocketIc;
+use pocket_ic::{PocketIcBuilder, Time};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
@@ -78,7 +78,7 @@ async fn prepare_network_for_test(
     let pocket_ic = PocketIcBuilder::new()
         .with_state_dir(state_dir)
         .with_icp_features(all_icp_features)
-        .with_initial_timestamp(current_time)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(current_time))
         .with_http_gateway(http_gateway_config)
         .with_nns_subnet()
         .with_sns_subnet()

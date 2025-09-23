@@ -261,6 +261,7 @@ mod tests {
                 peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1")?),
             },
             trusted_execution_environment_config: None,
+            recovery_config: Default::default(),
         };
 
         let nns_key_path = test_files_dir.join("nns.pem");
