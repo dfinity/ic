@@ -687,33 +687,37 @@ impl PocketXNetImpl {
             refill_stream_slice_indices(self.pool.clone(), self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
-            let sm = self.subnets.get(subnet_id).unwrap();
-            match sm.generate_certified_stream_slice(
-                self.own_subnet_id,
-                Some(indices.witness_begin),
-                Some(indices.msg_begin),
-                None,
-                Some(indices.byte_limit),
-            ) {
-                Ok(slice) => {
-                    if indices.witness_begin != indices.msg_begin {
-                        // Pulled a stream suffix, append to pooled slice.
-                        self.pool
-                            .lock()
-                            .unwrap()
-                            .append(subnet_id, slice, registry_version, log.clone())
-                            .unwrap();
-                    } else {
-                        // Pulled a complete stream, replace pooled slice (if any).
-                        self.pool
-                            .lock()
-                            .unwrap()
-                            .put(subnet_id, slice, registry_version, log.clone())
-                            .unwrap();
+            // When restoring a PocketIC instance from its state,
+            // subnets are created sequentially and thus it is expected
+            // that some subnets might not exist yet.
+            if let Some(sm) = self.subnets.get(subnet_id) {
+                match sm.generate_certified_stream_slice(
+                    self.own_subnet_id,
+                    Some(indices.witness_begin),
+                    Some(indices.msg_begin),
+                    None,
+                    Some(indices.byte_limit),
+                ) {
+                    Ok(slice) => {
+                        if indices.witness_begin != indices.msg_begin {
+                            // Pulled a stream suffix, append to pooled slice.
+                            self.pool
+                                .lock()
+                                .unwrap()
+                                .append(subnet_id, slice, registry_version, log.clone())
+                                .unwrap();
+                        } else {
+                            // Pulled a complete stream, replace pooled slice (if any).
+                            self.pool
+                                .lock()
+                                .unwrap()
+                                .put(subnet_id, slice, registry_version, log.clone())
+                                .unwrap();
+                        }
                     }
+                    Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
+                    Err(err) => panic!("Unexpected XNetClient error: {err}"),
                 }
-                Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
-                Err(err) => panic!("Unexpected XNetClient error: {err}"),
             }
         }
     }
