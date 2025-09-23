@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Record votes by known neurons before clearing ballots.
+
 ## Changed
 
 ## Deprecated
