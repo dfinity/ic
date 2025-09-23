@@ -163,6 +163,11 @@ impl VectorVm {
                     Some(labels),
                 );
             }
+        } else {
+            warn!(
+                log,
+                "Could not get topology snapshot. Skipping adding IC nodes as vector targets for now."
+            );
         }
 
         for vm in env.get_all_nested_vms()? {
