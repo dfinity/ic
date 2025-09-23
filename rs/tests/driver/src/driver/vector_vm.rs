@@ -129,45 +129,46 @@ impl VectorVm {
         let log = env.logger();
         info!(log, "Syncing vector targets.");
 
-        if let Ok(snapshot) = env.safe_topology_snapshot() {
-            let nodes = snapshot
-                .subnets()
-                .flat_map(|s| s.nodes())
-                .chain(snapshot.unassigned_nodes())
-                .chain(snapshot.api_boundary_nodes());
-
-            for node in nodes {
-                let node_id = node.node_id.get();
-                let ip = node.get_ip_addr();
-
-                let labels = [
-                    // We don't have host os in these tests so this is the only job.
-                    // It is here to keep consistency between mainnet and testnet logs.
-                    (JOB, "node_exporter".to_string()),
-                    (IS_API_BN, node.is_api_boundary_node().to_string()),
-                    (IS_MALICIOUS, node.is_malicious().to_string()),
-                ]
-                .into_iter()
-                .chain(match node.subnet_id() {
-                    None => vec![],
-                    Some(s) => vec![(IC_SUBNET, s.get().to_string())],
-                })
-                .map(|(key, val)| (key.to_string(), val))
-                .collect();
-
-                add_vector_target(
-                    &mut sources,
-                    &mut transforms,
-                    node_id.to_string(),
-                    ip,
-                    Some(labels),
-                );
-            }
-        } else {
-            warn!(
+        match env.safe_topology_snapshot() {
+            Err(e) => warn!(
                 log,
-                "Could not get topology snapshot. Skipping adding IC nodes as vector targets for now."
-            );
+                "Could not fetch topology snapshot because: {e:?}. Skipping adding IC nodes as vector targets for now."
+            ),
+            Ok(snapshot) => {
+                let nodes = snapshot
+                    .subnets()
+                    .flat_map(|s| s.nodes())
+                    .chain(snapshot.unassigned_nodes())
+                    .chain(snapshot.api_boundary_nodes());
+
+                for node in nodes {
+                    let node_id = node.node_id.get();
+                    let ip = node.get_ip_addr();
+
+                    let labels = [
+                        // We don't have host os in these tests so this is the only job.
+                        // It is here to keep consistency between mainnet and testnet logs.
+                        (JOB, "node_exporter".to_string()),
+                        (IS_API_BN, node.is_api_boundary_node().to_string()),
+                        (IS_MALICIOUS, node.is_malicious().to_string()),
+                    ]
+                    .into_iter()
+                    .chain(match node.subnet_id() {
+                        None => vec![],
+                        Some(s) => vec![(IC_SUBNET, s.get().to_string())],
+                    })
+                    .map(|(key, val)| (key.to_string(), val))
+                    .collect();
+
+                    add_vector_target(
+                        &mut sources,
+                        &mut transforms,
+                        node_id.to_string(),
+                        ip,
+                        Some(labels),
+                    );
+                }
+            }
         }
 
         for vm in env.get_all_nested_vms()? {
