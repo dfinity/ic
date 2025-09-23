@@ -112,7 +112,6 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         let reservations: Vec<&Reservation<K>> = self
             .reservations
             .range((key.clone(), 0)..(key.clone(), u64::MAX))
-            .filter(|(keys, reservation)| reservation.now > now - self.config.max_age)
             .map(|(keys, reservation)| reservation)
             .collect();
 
@@ -123,7 +122,11 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
             .last()
             .map_or(0, |reservation| reservation.index + 1);
 
-        let reserved_capacity: u64 = reservations.into_iter().map(|r| r.capacity).sum();
+        let reserved_capacity: u64 = reservations
+            .into_iter()
+            .filter(|reservation| reservation.now > now - self.config.max_age)
+            .map(|r| r.capacity)
+            .sum();
 
         if reserved_capacity + capacity <= self.config.max_capacity {
             let reservation = Reservation {
@@ -156,7 +159,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rate_limiter_basic() {
+    fn test_rate_limiter_just_reservations() {
         let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
             resolution: Duration::from_millis(100),
             max_age: Duration::from_secs(60),
@@ -192,5 +195,18 @@ mod tests {
 
         let three_is_over = rate_limiter.try_reserve(SystemTime::now(), "Foo".to_string(), 1);
         assert_eq!(three_is_over, Err(RateLimiterError::NotEnoughCapacity));
+
+        let next_now = now + Duration::from_secs(61);
+
+        let three_after_time = rate_limiter.try_reserve(next_now, "Foo".to_string(), 1);
+        assert_eq!(
+            three_after_time,
+            Ok(Reservation {
+                key: "Foo".to_string(),
+                index: 2,
+                now: next_now,
+                capacity: 1
+            })
+        );
     }
 }
