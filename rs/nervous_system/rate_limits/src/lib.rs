@@ -147,11 +147,19 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct Reservation<K> {
+struct Reservation<'a, K> {
     key: K,
     index: u64,
     now: SystemTime,
     capacity: u64,
+    rate_limiter: &'a RateLimiter<K>,
+}
+
+impl<K> Drop for Reservation<K> {
+    fn drop(&mut self) {
+        // TODO - how do we drop the reservation from the RateLimiter?  What kind of data structure
+        // and references are possible here that are easy to understand?
+    }
 }
 
 #[cfg(test)]
@@ -208,5 +216,14 @@ mod tests {
                 capacity: 1
             })
         );
+
+        // Now we test the Drop logic on Reservations
+        assert_eq!(rate_limiter.reservations.len(), 3);
+        drop(one);
+        assert_eq!(rate_limiter.reservations.len(), 2);
+        drop(three_after_time);
+        assert_eq!(rate_limiter.reservations.len(), 1);
+        drop(two);
+        assert_eq!(rate_limiter.reservations.len(), 0);
     }
 }
