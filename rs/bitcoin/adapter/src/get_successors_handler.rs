@@ -86,18 +86,19 @@ pub struct GetSuccessorsResponse<Header> {
 /// Contains the functionality to respond to GetSuccessorsRequests via the RPC
 /// server.
 pub struct GetSuccessorsHandler<Network: BlockchainNetwork> {
-    state: Arc<Mutex<BlockchainState<Network>>>,
+    state: Arc<BlockchainState<Network>>,
     blockchain_manager_tx: Sender<BlockchainManagerRequest>,
     network: Network,
     metrics: GetSuccessorMetrics,
+    pruning_task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
-impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
+impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
     /// Creates a GetSuccessorsHandler to be used to access the blockchain state
     /// inside of the adapter when a `GetSuccessorsRequest` is received.
     pub fn new(
         network: Network,
-        state: Arc<Mutex<BlockchainState<Network>>>,
+        state: Arc<BlockchainState<Network>>,
         blockchain_manager_tx: Sender<BlockchainManagerRequest>,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
@@ -106,6 +107,7 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             blockchain_manager_tx,
             network,
             metrics: GetSuccessorMetrics::new(metrics_registry),
+            pruning_task_handle: Mutex::new(None),
         }
     }
 
@@ -123,22 +125,37 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
+        // Spawn persist-to-disk task without waiting for it to finish, and make sure there
+        // is only one task running at a time.
+        let cache = self.state.header_cache.clone();
+        let mut handle = self.pruning_task_handle.lock().unwrap();
+        let is_finished = handle
+            .as_ref()
+            .map(|handle| handle.is_finished())
+            .unwrap_or(true);
+        if is_finished {
+            *handle = Some(tokio::task::spawn_blocking(move || {
+                // Error is ignored, since it is a background task
+                let _ = cache.persist_and_prune_headers_below_anchor(request.anchor);
+            }));
+        }
+
         let (blocks, next, obsolete_blocks) = {
-            let state = self.state.lock().unwrap();
-            let anchor_height = state
+            let anchor_height = self
+                .state
                 .get_cached_header(&request.anchor)
                 .map_or(0, |cached| cached.data.height);
 
             let allow_multiple_blocks = self.network.are_multiple_blocks_allowed(anchor_height);
             let blocks = get_successor_blocks(
-                &state,
+                &self.state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 allow_multiple_blocks,
                 &self.network,
             );
             let next = get_next_headers(
-                &state,
+                &self.state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
@@ -151,8 +168,8 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             // There is also a chance that they are reachable from the anchor, just not through the cache.
             // Meaning that we still need to download some other blocks first. (hence we need to free the cache).
             let mut obsolete_blocks = request.processed_block_hashes;
-            if blocks.is_empty() && state.is_block_cache_full() {
-                obsolete_blocks.extend(state.get_cached_blocks())
+            if blocks.is_empty() && self.state.is_block_cache_full() {
+                obsolete_blocks.extend(self.state.get_cached_blocks())
             }
             (blocks, next, obsolete_blocks)
         };
@@ -311,9 +328,8 @@ fn get_next_headers<Network: BlockchainNetwork>(
 mod test {
     use super::*;
 
-    use std::sync::{Arc, Mutex};
-
     use bitcoin::{Block, consensus::Decodable};
+    use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 
@@ -325,18 +341,24 @@ mod test {
         Block::consensus_decode(&mut (*serialized_block).as_slice()).unwrap()
     }
 
+    fn new_blockchain_state<Network: BlockchainNetwork>(
+        network: Network,
+    ) -> BlockchainState<Network> {
+        BlockchainState::new(network, None, &MetricsRegistry::default(), no_op_logger())
+    }
+
     /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks
     /// with the next headers of many forks and enqueue missing block hashes.
     #[tokio::test]
     async fn test_get_successors() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -379,16 +401,20 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
-            blockchain.add_headers(&side_chain);
-            blockchain.add_headers(&side_chain_2);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
+            blockchain.add_headers(&side_chain).await;
+            blockchain.add_headers(&side_chain_2).await;
 
             // Add main block 2
-            blockchain.add_block(main_block_2).expect("invalid block");
+            blockchain
+                .add_block(main_block_2)
+                .await
+                .expect("invalid block");
             // Add side block 1
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
 
@@ -438,13 +464,13 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_wait_header_sync_regtest() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -461,13 +487,15 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
             blockchain
                 .add_block(main_block_1.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(main_block_2.clone())
+                .await
                 .expect("invalid block");
         }
         let request = GetSuccessorsRequest {
@@ -486,13 +514,13 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_multiple_blocks() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -521,17 +549,20 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
-            blockchain.add_headers(&side_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
+            blockchain.add_headers(&side_chain).await;
             blockchain
                 .add_block(main_block_1.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(main_block_2.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
         //             |-> 1'
@@ -557,26 +588,26 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_max_num_blocks() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
         let main_chain = generate_headers(genesis_hash, genesis.time, 120, &[]);
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
             for header in main_chain {
                 let block = Block {
                     header,
                     txdata: vec![],
                 };
-                blockchain.add_block(block).expect("invalid block");
+                blockchain.add_block(block).await.expect("invalid block");
             }
         }
 
@@ -593,13 +624,13 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_multiple_blocks_out_of_order() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -624,22 +655,26 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (_, maybe_err) = blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            let (_, maybe_err) = blockchain.add_headers(&main_chain).await;
             assert!(
                 maybe_err.is_none(),
                 "Error was found in main chain: {maybe_err:#?}"
             );
 
-            let (_, maybe_err) = blockchain.add_headers(&side_chain);
+            let (_, maybe_err) = blockchain.add_headers(&side_chain).await;
             assert!(
                 maybe_err.is_none(),
                 "Error was found in side chain: {maybe_err:#?}"
             );
-            blockchain.add_block(main_block_2).expect("invalid block");
+            blockchain
+                .add_block(main_block_2)
+                .await
+                .expect("invalid block");
 
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
 
@@ -683,13 +718,13 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_large_block() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -712,16 +747,20 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (added_headers, _) = blockchain.add_headers(&headers);
+            let blockchain = &handler.state;
+            let (added_headers, _) = blockchain.add_headers(&headers).await;
             assert_eq!(added_headers.len(), 1);
-            let (added_headers, _) = blockchain.add_headers(&additional_headers);
+            let (added_headers, _) = blockchain.add_headers(&additional_headers).await;
             assert_eq!(added_headers.len(), 1);
 
             blockchain
                 .add_block(large_block.clone())
+                .await
                 .expect("invalid block");
-            blockchain.add_block(small_block).expect("invalid block");
+            blockchain
+                .add_block(small_block)
+                .await
+                .expect("invalid block");
         };
 
         let request = GetSuccessorsRequest {
@@ -745,13 +784,13 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_many_blocks_until_size_cap_is_met() {
         let network = bitcoin::Network::Regtest;
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state = new_blockchain_state(network);
         let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
             network,
-            Arc::new(Mutex::new(blockchain_state)),
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -761,8 +800,8 @@ mod test {
             generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (added_headers, _) = blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            let (added_headers, _) = blockchain.add_headers(&main_chain).await;
             assert_eq!(added_headers.len(), 5);
             let main_blocks = main_chain
                 .iter()
@@ -772,11 +811,11 @@ mod test {
                 })
                 .collect::<Vec<_>>();
             for block in main_blocks {
-                blockchain.add_block(block).unwrap();
+                blockchain.add_block(block).await.unwrap();
             }
 
             for block in &large_blocks {
-                blockchain.add_block(block.clone()).unwrap();
+                blockchain.add_block(block.clone()).await.unwrap();
             }
         };
 

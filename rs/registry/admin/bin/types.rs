@@ -7,7 +7,7 @@ use ic_canister_client::{Agent, Sender};
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance_api::ProposalActionRequest;
 use ic_protobuf::registry::{
-    node::v1::IPv4InterfaceConfig,
+    node::v1::{IPv4InterfaceConfig, NodeRewardType},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     subnet::v1::SubnetRecord as SubnetRecordProto,
 };
@@ -150,6 +150,7 @@ pub(crate) struct NodeDetails {
     pub dc_id: String,
     pub hostos_version_id: Option<String>,
     pub domain: Option<String>,
+    pub node_reward_type: NodeRewardType,
 }
 
 impl From<IPv4InterfaceConfig> for IPv4Interface {
