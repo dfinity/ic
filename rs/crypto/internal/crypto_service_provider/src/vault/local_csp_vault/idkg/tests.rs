@@ -888,25 +888,13 @@ mod idkg_create_dealing {
     use crate::vault::api::{IDkgCreateDealingVaultError, IDkgDealingInternalBytes};
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-        CombinedCommitment, EccCurveType, IDkgTranscriptInternal, PolynomialCommitmentType,
+        EccCurveType, IDkgTranscriptOperationInternal, PolynomialCommitmentType,
     };
     use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::random_polynomial_commitment;
     use ic_crypto_internal_types::NodeIndex;
-    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_protobuf::registry::crypto::v1::PublicKey;
-    use ic_types::{
-        NumberOfNodes, RegistryVersion,
-        crypto::{
-            AlgorithmId,
-            canister_threshold_sig::idkg::{
-                IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation,
-                IDkgTranscriptType,
-            },
-        },
-    };
-    use ic_types_test_utils::ids::node_test_id;
-    use rand::{CryptoRng, Rng};
+    use ic_types::{NumberOfNodes, crypto::AlgorithmId};
 
     #[test]
     fn should_work() {
@@ -946,23 +934,16 @@ mod idkg_create_dealing {
     }
 
     #[test]
-    fn should_fail_on_invalid_serialization_of_transcript_operation() {
-        let mut test = IDkgCreateDealingTest::new_with_valid_params();
-        test.transcript_operation =
-            IDkgTranscriptOperation::ReshareOfMasked(transcript_with_invalid_encoding());
-        assert_matches!(
-            test.run(),
-            Err(IDkgCreateDealingVaultError::SerializationError(e))
-            if e.contains("CanisterThresholdSerializationError")
-        );
-    }
-
-    #[test]
     fn should_fail_if_required_opening_not_in_sks() {
         let rng = &mut reproducible_rng();
         let mut test = IDkgCreateDealingTest::new_with_valid_params();
         test.transcript_operation =
-            IDkgTranscriptOperation::ReshareOfMasked(transcript_with_random_ecc_point(rng));
+            IDkgTranscriptOperationInternal::ReshareOfMasked(random_polynomial_commitment(
+                1,
+                PolynomialCommitmentType::Simple,
+                EccCurveType::K256,
+                rng,
+            ));
         assert_matches!(
             test.run(),
             Err(IDkgCreateDealingVaultError::SecretSharesNotFound { .. })
@@ -997,7 +978,7 @@ mod idkg_create_dealing {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_key_modifier_fn: ReceiverKeyModifierFn,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternal,
     }
 
     type ReceiverKeyModifierFn = Box<dyn FnOnce(AlgorithmId, Vec<u8>) -> (AlgorithmId, Vec<u8>)>;
@@ -1012,7 +993,7 @@ mod idkg_create_dealing {
                 receiver_key_modifier_fn: Box::new(|algorithm_id, key_value| {
                     (algorithm_id, key_value)
                 }),
-                transcript_operation: IDkgTranscriptOperation::Random,
+                transcript_operation: IDkgTranscriptOperationInternal::Random,
             }
         }
 
@@ -1045,46 +1026,6 @@ mod idkg_create_dealing {
             )
         }
     }
-
-    fn transcript_with_invalid_encoding() -> IDkgTranscript {
-        let invalid_internal_transcript_raw = vec![0xFF, 100];
-        IDkgTranscript {
-            transcript_id: dummy_idkg_transcript_id_for_tests(123),
-            receivers: dummy_receivers(),
-            registry_version: RegistryVersion::from(1),
-            verified_dealings: Default::default(),
-            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-            algorithm_id: AlgorithmId::Placeholder,
-            internal_transcript_raw: invalid_internal_transcript_raw,
-        }
-    }
-
-    fn transcript_with_random_ecc_point<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscript {
-        let transcript_internal = IDkgTranscriptInternal {
-            combined_commitment: CombinedCommitment::BySummation(random_polynomial_commitment(
-                1,
-                PolynomialCommitmentType::Simple,
-                EccCurveType::K256,
-                rng,
-            )),
-        };
-        let internal_transcript_raw = serde_cbor::to_vec(&transcript_internal)
-            .expect("failed to serialize internal transcript operation");
-        IDkgTranscript {
-            transcript_id: dummy_idkg_transcript_id_for_tests(123),
-            receivers: dummy_receivers(),
-            registry_version: RegistryVersion::from(1),
-            verified_dealings: Default::default(),
-            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-            algorithm_id: AlgorithmId::Placeholder,
-            internal_transcript_raw,
-        }
-    }
-
-    fn dummy_receivers() -> IDkgReceivers {
-        IDkgReceivers::new([node_test_id(456)].into_iter().collect())
-            .expect("should not fail to create IDkgReceivers with constant inputs")
-    }
 }
 
 mod idkg_load_transcript {
@@ -1111,7 +1052,6 @@ mod idkg_load_transcript {
     use ic_types::NumberOfNodes;
     use ic_types::crypto::AlgorithmId;
     use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
     use rand::{CryptoRng, Rng};
     use std::collections::BTreeMap;
 
@@ -1313,7 +1253,7 @@ mod idkg_load_transcript {
         algorithm_id: AlgorithmId,
         context_data: Vec<u8>,
         reconstruction_threshold: NumberOfNodes,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternal,
         key_id: Option<KeyId>,
         // perform `load_transcript` twice in a row
         load_twice: bool,
@@ -1340,7 +1280,7 @@ mod idkg_load_transcript {
                 algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
                 context_data: vec![49; 10],
                 reconstruction_threshold: NumberOfNodes::from(1),
-                transcript_operation: IDkgTranscriptOperation::Random,
+                transcript_operation: IDkgTranscriptOperationInternal::Random,
                 load_twice: false,
                 key_id: None,
                 custom_vault_for_load_transcript_fn: None,
@@ -1512,7 +1452,6 @@ mod idkg_load_transcript_with_openings {
     use ic_types::NumberOfNodes;
     use ic_types::crypto::AlgorithmId;
     use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
     use rand::{CryptoRng, Rng};
     use std::collections::BTreeMap;
 
@@ -1702,7 +1641,7 @@ mod idkg_load_transcript_with_openings {
         /// An eventually different threshold to trigger the
         /// `InsufficientOpenings` error
         reconstruction_threshold_in_transcript: Option<NumberOfNodes>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternal,
         key_id: Option<KeyId>,
         /// Perform `load_transcript_with_openings` twice in a row
         load_twice: bool,
@@ -1731,7 +1670,7 @@ mod idkg_load_transcript_with_openings {
                 context_data: vec![49; 10],
                 reconstruction_threshold: NumberOfNodes::from(1),
                 reconstruction_threshold_in_transcript: None,
-                transcript_operation: IDkgTranscriptOperation::Random,
+                transcript_operation: IDkgTranscriptOperationInternal::Random,
                 load_twice: false,
                 use_empty_openings: false,
                 key_id: None,
@@ -1927,16 +1866,11 @@ mod idkg_open_dealing {
     use super::*;
     use crate::{types::CspSecretKey, vault::api::IDkgDealingInternalBytes};
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-        CommitmentOpening, MEGaPublicKeyK256Bytes,
+        CommitmentOpening, IDkgTranscriptOperationInternal, MEGaPublicKeyK256Bytes,
     };
     use ic_types::{
         NumberOfNodes,
-        crypto::{
-            AlgorithmId,
-            canister_threshold_sig::{
-                error::IDkgOpenTranscriptError, idkg::IDkgTranscriptOperation,
-            },
-        },
+        crypto::{AlgorithmId, canister_threshold_sig::error::IDkgOpenTranscriptError},
     };
 
     /// Dealer/receiver/opener index.
@@ -2134,7 +2068,7 @@ mod idkg_open_dealing {
                     NODE_INDEX,
                     reconstruction_threshold_in_transcript,
                     receiver_keys,
-                    IDkgTranscriptOperation::Random,
+                    IDkgTranscriptOperationInternal::Random,
                 )
                 .expect("failed to generate dealing")
         }

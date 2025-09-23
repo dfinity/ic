@@ -35,9 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::{NodeIndex, NumberOfNodes};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
@@ -57,7 +55,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
         let start_time = self.metrics.now();
@@ -85,16 +83,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 })
             })
             .collect::<Result<Vec<_>, IDkgCreateDealingVaultError>>()?;
-        let transcript_operation_internal =
-            IDkgTranscriptOperationInternal::try_from(&transcript_operation)
-                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(format!("{e:?}")))?;
         let result = self.idkg_create_dealing_internal(
             algorithm_id,
             &context_data,
             dealer_index,
             reconstruction_threshold,
             &receiver_keys_typed[..],
-            &transcript_operation_internal,
+            &transcript_operation,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
