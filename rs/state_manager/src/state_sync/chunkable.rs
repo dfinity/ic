@@ -289,7 +289,8 @@ impl IncompleteState {
         dst: &Path,
     ) -> std::io::Result<()> {
         let src_metadata = src.metadata()?;
-        if !src_metadata.permissions().readonly() {
+        let mut permissions = src_metadata.permissions();
+        if !permissions.readonly() {
             #[cfg(target_os = "linux")]
             {
                 use std::os::unix::ffi::OsStrExt;
@@ -314,9 +315,17 @@ impl IncompleteState {
             }
 
             // Make the source file readonly to prevent accidental modifications
-            let mut permissions = src_metadata.permissions();
             permissions.set_readonly(true);
-            std::fs::set_permissions(src, permissions)?;
+            std::fs::set_permissions(src, permissions).map_err(|e| {
+                std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to set readonly permissions for file {}: {}",
+                        src.display(),
+                        e
+                    ),
+                )
+            })?;
         }
 
         // hard_link() requires the destination to not exist.
