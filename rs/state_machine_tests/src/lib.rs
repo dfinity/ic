@@ -4645,48 +4645,46 @@ fn multi_subnet_setup(
         .build_with_subnets(subnets)
 }
 
-/// Sets up two `StateMachine` that can communicate with each other.
-pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+/// Sets up N `StateMachine` that can communicate with each other.
+pub fn subnets_simple<const N: usize>() -> [Arc<StateMachine>; N] {
     // Set up registry data provider.
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
-    // Set up the two state machines for the two (app) subnets.
+    // Set up the N state machines for the N (app) subnets.
     let subnets = Arc::new(SubnetsImpl::new());
-    let env1 = multi_subnet_setup(
-        subnets.clone(),
-        1,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
-    let env2 = multi_subnet_setup(
-        subnets.clone(),
-        2,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
 
-    // Set up routing table with two subnets.
-    let subnet_id1 = env1.get_subnet_id();
-    let subnet_id2 = env2.get_subnet_id();
-    let range1 = CanisterIdRange {
-        start: CanisterId::from_u64(0),
-        end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
-    };
-    let range2 = CanisterIdRange {
-        start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
-        end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
-    };
+    let envs = (1..=N)
+        .into_iter()
+        .map(|seed| {
+            multi_subnet_setup(
+                subnets.clone(),
+                seed as u8,
+                SubnetType::Application,
+                registry_data_provider.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    // Set up routing table with N subnets.
     let mut routing_table = RoutingTable::new();
-    routing_table.insert(range1, subnet_id1).unwrap();
-    routing_table.insert(range2, subnet_id2).unwrap();
+    for (i, env) in envs.iter().enumerate() {
+        let range = CanisterIdRange {
+            start: CanisterId::from_u64(i as u64 * CANISTER_IDS_PER_SUBNET),
+            end: CanisterId::from_u64((i as u64 + 1) * CANISTER_IDS_PER_SUBNET - 1),
+        };
+        routing_table.insert(range, env.get_subnet_id()).unwrap();
+    }
 
     // Set up subnet list for registry.
-    let subnet_list = vec![subnet_id1, subnet_id2];
+    let subnet_list = envs
+        .iter()
+        .map(|env| env.get_subnet_id())
+        .collect::<Vec<_>>();
 
     // Add initial and global registry records.
     add_initial_registry_records(registry_data_provider.clone());
     add_global_registry_records(
-        subnet_id1,
+        subnet_list[0],
         routing_table,
         subnet_list,
         BTreeMap::new(),
@@ -4695,10 +4693,16 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
 
     // Reload registry on the two state machines to make sure that
     // both the state machines have a consistent view of the registry.
-    env1.reload_registry();
-    env2.reload_registry();
+    for env in envs.iter() {
+        env.reload_registry();
+    }
 
-    (env1, env2)
+    envs.try_into().unwrap()
+}
+
+/// Sets up two `StateMachine` that can communicate with each other.
+pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+    subnets_simple::<2>().into()
 }
 
 // This test should panic on a critical error due to non-monotone timestamps.
