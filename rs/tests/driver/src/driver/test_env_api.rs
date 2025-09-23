@@ -1030,42 +1030,52 @@ impl IcNodeSnapshot {
 }
 
 pub trait HasTopologySnapshot {
-    fn topology_snapshot(&self) -> TopologySnapshot;
-    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot;
-
+    fn safe_topology_snapshot(&self) -> Result<TopologySnapshot>;
+    fn safe_topology_snapshot_by_name(&self, name: &str) -> Result<TopologySnapshot>;
     fn create_topology_snapshot<S: ToString, P: AsRef<Path>>(
         name: S,
         local_store_path: P,
         env: TestEnv,
-    ) -> TopologySnapshot {
-        let local_registry = Arc::new(
-            LocalRegistry::new(local_store_path, REGISTRY_QUERY_TIMEOUT)
-                .expect("Could not create local registry"),
-        );
+    ) -> Result<TopologySnapshot> {
+        let local_registry = Arc::new(LocalRegistry::new(
+            local_store_path,
+            REGISTRY_QUERY_TIMEOUT,
+        )?);
         let registry_version = local_registry.get_latest_version();
-        TopologySnapshot {
+        Ok(TopologySnapshot {
             local_registry,
             registry_version,
             ic_name: name.to_string(),
             env,
-        }
+        })
+    }
+
+    fn topology_snapshot(&self) -> TopologySnapshot {
+        self.safe_topology_snapshot()
+            .unwrap_or_else(|e| panic!("Could not save topology snapshot because {e:?}"))
+    }
+    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
+        self.safe_topology_snapshot_by_name(name)
+            .unwrap_or_else(|e| {
+                panic!("Could not save topology snapshot by name {name} because {e:?}")
+            })
     }
 }
 
 impl HasTopologySnapshot for TestEnv {
-    fn topology_snapshot(&self) -> TopologySnapshot {
-        let local_store_path = self
+    fn safe_topology_snapshot(&self) -> Result<TopologySnapshot> {
+        let prep_dir = self
             .prep_dir("")
-            .expect("No no-name Internet Computer")
-            .registry_local_store_path();
+            .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
+        let local_store_path = prep_dir.registry_local_store_path();
         Self::create_topology_snapshot("", local_store_path, self.clone())
     }
 
-    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
-        let local_store_path = self
+    fn safe_topology_snapshot_by_name(&self, name: &str) -> Result<TopologySnapshot> {
+        let prep_dir = self
             .prep_dir(name)
-            .unwrap_or_else(|| panic!("No snapshot for internet computer: {name:?}"))
-            .registry_local_store_path();
+            .ok_or_else(|| anyhow!("No snapshot for internet computer: {name:?}"))?;
+        let local_store_path = prep_dir.registry_local_store_path();
         Self::create_topology_snapshot(name, local_store_path, self.clone())
     }
 }
@@ -2495,6 +2505,12 @@ pub fn scp_send_to(
             let mut remote_file = session.scp_send(to_remote, mode, size, None)?;
             let mut from_file = std::fs::File::open(from_local)?;
             std::io::copy(&mut from_file, &mut remote_file)?;
+            remote_file.flush()?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
+
             info!(
                 log,
                 "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} ."
@@ -2524,6 +2540,11 @@ pub fn scp_recv_from(
             let size = scp_file_stat.size();
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
+
             info!(
                 log,
                 "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."
