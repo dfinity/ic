@@ -592,6 +592,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                         } else {
                             SshUser::Admin
                         },
+                        self.recovery.key_file.clone(),
                         self.params.keep_downloaded_state == Some(true),
                         /*additional_excludes=*/
                         vec![

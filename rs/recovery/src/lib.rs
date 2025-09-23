@@ -349,6 +349,7 @@ impl Recovery {
         &self,
         node_ip: IpAddr,
         ssh_user: SshUser,
+        key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
         additional_excludes: Vec<&str>,
     ) -> impl Step + use<> {
@@ -360,7 +361,7 @@ impl Recovery {
             keep_downloaded_state,
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file,
             additional_excludes: additional_excludes
                 .iter()
                 .map(std::string::ToString::to_string)

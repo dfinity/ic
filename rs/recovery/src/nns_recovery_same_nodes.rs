@@ -274,6 +274,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
                         SshUser::Backup,
+                        self.params.backup_key_file.clone(),
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/
                         vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
@@ -293,7 +294,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     Some(DataLocation::Remote(node_ip)) => {
                         Ok(Box::new(self.recovery.get_download_state_step(
                             node_ip,
-                            /*try_readonly=*/ SshUser::Admin,
+                            SshUser::Admin,
+                            self.recovery.key_file.clone(),
                             /*keep_downloaded_state=*/ false,
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))
