@@ -464,7 +464,7 @@ impl Neuron {
                 .saturating_sub(
                     voting_power_economics.get_start_reducing_voting_power_after_seconds(),
                 )
-                .saturating_add(voting_power_economics.get_clear_following_after_seconds());
+                .saturating_sub(voting_power_economics.get_clear_following_after_seconds());
         if is_fresh {
             return 0;
         }
