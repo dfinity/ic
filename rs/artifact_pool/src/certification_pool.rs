@@ -173,14 +173,15 @@ impl CertificationPoolImpl {
     }
 
     fn insert_validated_certification(&self, certification: Certification) {
-        if self
+        if let Some(existing_certification) = self
             .validated
             .certifications()
             .get_by_height(certification.height)
             .next()
-            .is_some_and(|existing_certification| certification != existing_certification)
         {
-            panic!("Certifications are not expected to be added more than once per height.");
+            if certification != existing_certification {
+                panic!("Certifications are not expected to be added more than once per height.");
+            }
         } else {
             self.validated
                 .insert(CertificationMessage::Certification(certification));
@@ -568,6 +569,47 @@ mod tests {
             peer_id: node_test_id(0),
             timestamp: UNIX_EPOCH,
         }
+    }
+
+    #[test]
+    fn test_certifications_should_be_added_only_once() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut pool = CertificationPoolImpl::new(
+                node_test_id(0),
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+            let cert_msg = fake_cert(1);
+            let result = pool.apply(vec![ChangeAction::AddToValidated(cert_msg.clone())]);
+            assert!(
+                matches!(&result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact == cert_msg)
+            );
+            assert_eq!(result.transmits.len(), 1);
+            assert_eq!(pool.validated_certifications().count(), 1);
+            let cert_from_pool = pool
+                .validated
+                .certifications()
+                .get_by_height(Height::from(1))
+                .next()
+                .unwrap();
+            assert_eq!(cert_from_pool, msg_to_cert(cert_msg.clone()));
+
+            let cert_msg_2 = cert_msg.clone();
+            let result = pool.apply(vec![ChangeAction::AddToValidated(cert_msg.clone())]);
+            assert!(
+                matches!(&result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact == cert_msg_2)
+            );
+            assert_eq!(result.transmits.len(), 1);
+            assert_eq!(pool.validated_certifications().count(), 1);
+            let cert_from_pool = pool
+                .validated
+                .certifications()
+                .get_by_height(Height::from(1))
+                .next()
+                .unwrap();
+            assert_eq!(cert_from_pool, msg_to_cert(cert_msg.clone()));
+        })
     }
 
     #[test]

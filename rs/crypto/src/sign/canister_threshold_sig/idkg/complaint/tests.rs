@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
 use crate::sign::canister_threshold_sig::test_utils::batch_signed_dealing_with;
@@ -37,7 +39,7 @@ fn should_fail_on_transcript_id_mismatch() {
             transcript_id: transcript_id_1,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings: BTreeMap::new(),
+            verified_dealings: Arc::new(BTreeMap::new()),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -64,7 +66,7 @@ fn should_fail_if_dealing_missing_in_transcript() {
     let rng = &mut reproducible_rng();
 
     for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-        let verified_dealings_missing_complaint_dealer_id = BTreeMap::new();
+        let verified_dealings_missing_complaint_dealer_id = Arc::new(BTreeMap::new());
 
         let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
         let transcript = IDkgTranscript {
@@ -114,7 +116,7 @@ fn should_fail_if_complainer_missing_in_transcript() {
             transcript_id,
             receivers: receivers_missing_complainer_id,
             registry_version: REG_V1,
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -150,7 +152,7 @@ fn should_fail_if_deserializing_complaint_fails() {
             transcript_id,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -185,7 +187,7 @@ fn should_fail_if_deserializing_dealing_fails() {
             transcript_id,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -220,7 +222,7 @@ fn should_fail_if_complainer_mega_pubkey_not_in_registry() {
             transcript_id,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -260,7 +262,7 @@ fn should_fail_if_complainer_mega_pubkey_is_malformed() {
             transcript_id,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -301,7 +303,7 @@ fn should_fail_if_complainer_mega_pubkey_algorithm_is_unsupported() {
             transcript_id,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -340,7 +342,7 @@ fn should_fail_if_registry_client_returns_error() {
             transcript_id,
             receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
             registry_version: REG_V1,
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: alg,
             internal_transcript_raw: vec![],

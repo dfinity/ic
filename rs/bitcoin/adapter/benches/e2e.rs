@@ -177,7 +177,7 @@ fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
     header
 }
 
-fn add_block_headers(criterion: &mut Criterion) {
+fn add_800k_block_headers(criterion: &mut Criterion) {
     add_block_headers_for(
         criterion,
         bitcoin::Network::Bitcoin,
@@ -285,7 +285,7 @@ fn decompress<P: AsRef<Path>>(location: P) -> Vec<u8> {
     decompressed
 }
 
-criterion_group!(benches, e2e, hash_block_header, add_block_headers);
+criterion_group!(benches, e2e, hash_block_header, add_800k_block_headers);
 
 // The benchmark can be run using:
 // bazel run //rs/bitcoin/adapter:e2e_bench
