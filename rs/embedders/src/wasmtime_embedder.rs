@@ -26,7 +26,7 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions, NumOsPages,
+    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
@@ -424,7 +424,6 @@ impl WasmtimeEmbedder {
                 system_api,
                 num_instructions_global: None,
                 log: self.log.clone(),
-                num_stable_dirty_pages_from_non_native_writes: NumOsPages::from(0),
                 limits: StoreLimitsBuilder::new()
                     .memory_size(MAX_STABLE_MEMORY_IN_BYTES as usize)
                     .tables(MAX_STORE_TABLES)
@@ -751,8 +750,6 @@ pub struct StoreData {
     pub system_api: Option<SystemApiImpl>,
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
-    /// Tracks the number of dirty pages in stable memory in non-native stable mode
-    pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
     pub canister_backtrace: FlagStatus,
 }

@@ -116,6 +116,7 @@ mod tests {
                 peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1").unwrap()),
             },
             trusted_execution_environment_config: None,
+            recovery_config: None,
         };
 
         fn serialize_and_deserialize<T>(config: &T)

@@ -62,6 +62,7 @@ pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
+pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
 pub const IC_STATE_EXCLUDES: &[&str] = &[
@@ -347,13 +348,13 @@ impl Recovery {
     pub fn get_download_state_step(
         &self,
         node_ip: IpAddr,
-        try_readonly: bool,
+        ssh_user: SshUser,
         keep_downloaded_state: bool,
         additional_excludes: Vec<&str>,
     ) -> impl Step + use<> {
         DownloadIcStateStep {
             logger: self.logger.clone(),
-            try_readonly,
+            ssh_user,
             node_ip,
             target: self.data_dir.display().to_string(),
             keep_downloaded_state,
@@ -886,9 +887,7 @@ impl Recovery {
         CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
             work_dir: self.work_dir.clone(),
-            // If no output directory is specified, save the files in a directory that will
-            // not be deleted by the cleanup step (i.e., not `self.work_dir`).
-            output_dir: output_dir.unwrap_or(PathBuf::from("/tmp/recovery_artifacts")),
+            output_dir: output_dir.unwrap_or(self.recovery_dir.join("output")),
         }
     }
 

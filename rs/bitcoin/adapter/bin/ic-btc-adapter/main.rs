@@ -44,11 +44,6 @@ pub async fn main() {
         start_metrics_grpc(metrics_registry.clone(), log.clone(), stream);
     }
 
-    start_server(
-        &log,
-        &metrics_registry,
-        &tokio::runtime::Handle::current(),
-        config,
-    );
-    shutdown_signal(log.clone()).await;
+    start_server(log.clone(), metrics_registry, config).await;
+    shutdown_signal(log).await;
 }

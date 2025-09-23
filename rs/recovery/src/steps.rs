@@ -257,7 +257,7 @@ impl Step for MergeCertificationPoolsStep {
 
 pub struct DownloadIcStateStep {
     pub logger: Logger,
-    pub try_readonly: bool,
+    pub ssh_user: SshUser,
     pub node_ip: IpAddr,
     pub target: String,
     pub working_dir: String,
@@ -285,14 +285,9 @@ impl Step for DownloadIcStateStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let account = if self.try_readonly {
-            SshUser::Readonly.to_string()
-        } else {
-            SshUser::Admin.to_string()
-        };
         let mut ssh_helper = SshHelper::new(
             self.logger.clone(),
-            account,
+            self.ssh_user.to_string(),
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -339,6 +334,15 @@ impl Step for DownloadIcStateStep {
             info!(self.logger, "Excluding certifications from download");
             excludes.push("certification");
             excludes.push("certifications");
+        }
+
+        // If we already have the consensus pool, we do not download it again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/consensus")
+            .exists()
+        {
+            info!(self.logger, "Excluding consensus pool from download");
+            excludes.push("ic_consensus_pool/consensus");
         }
 
         let target = if self.keep_downloaded_state {
@@ -406,9 +410,17 @@ impl Step for CopyLocalIcStateStep {
             .join("data/ic_consensus_pool/certification")
             .exists()
         {
-            info!(self.logger, "Excluding certifications from download");
+            info!(self.logger, "Excluding certifications from copy");
             excludes.push("certification");
             excludes.push("certifications");
+        }
+        // If we already have the consensus pool, we do not copy it again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/consensus")
+            .exists()
+        {
+            info!(self.logger, "Excluding consensus pool from copy");
+            excludes.push("ic_consensus_pool/consensus");
         }
 
         rsync(
@@ -1045,12 +1057,12 @@ pub struct CreateNNSRecoveryTarStep {
 }
 
 impl CreateNNSRecoveryTarStep {
-    fn get_tar_name(&self) -> String {
+    pub fn get_tar_name() -> String {
         "recovery.tar.zst".to_string()
     }
 
-    fn get_sha_name(&self) -> String {
-        self.get_tar_name() + ".sha256"
+    pub fn get_sha_name() -> String {
+        Self::get_tar_name() + ".sha256"
     }
 
     fn get_create_commands(&self) -> String {
@@ -1064,8 +1076,8 @@ artifacts_hash="$(sha256sum {tar_file:?} | cut -d ' ' -f1)"
 echo "$artifacts_hash" > {sha_file:?}
             "#,
             output_dir = self.output_dir,
-            tar_file = self.output_dir.join(self.get_tar_name()),
-            sha_file = self.output_dir.join(self.get_sha_name()),
+            tar_file = self.output_dir.join(Self::get_tar_name()),
+            sha_file = self.output_dir.join(Self::get_sha_name()),
             work_dir = self.work_dir,
         )
     }
@@ -1074,19 +1086,17 @@ echo "$artifacts_hash" > {sha_file:?}
         // We use debug formatting because it escapes the paths in case they contain spaces.
         format!(
             r#"
-Recovery artifacts with checksum {artifacts_hash} were successfully created in {output_dir:?}.
+Recovery artifacts with hash {artifacts_hash} were successfully created in {output_dir:?}.
 Now please:
   - Upload {tar_file:?} to:
     - https://download.dfinity.systems/recovery/{artifacts_hash}/{tar_name}
     - https://download.dfinity.network/recovery/{artifacts_hash}/{tar_name}
-  - Run the following command and commit + push to a branch of dfinity/ic:
-    echo {artifacts_hash} > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash
-  - Build a recovery image from that branch.
-  - Provide other Node Providers with the commit hash as version and the image hash. Ask them to reboot and follow the recovery instructions.
+    - TODO: Update directions after recovery runbook complete
+  - Provide other Node Providers with the commit hash as version, the image hash, and the artifacts hash. Ask them to reboot and follow the recovery instructions.
             "#,
             output_dir = self.output_dir,
-            tar_file = self.output_dir.join(self.get_tar_name()),
-            tar_name = self.get_tar_name(),
+            tar_file = self.output_dir.join(Self::get_tar_name()),
+            tar_name = Self::get_tar_name(),
         )
     }
 }
@@ -1109,12 +1119,12 @@ impl Step for CreateNNSRecoveryTarStep {
         }
 
         let Some(sha256) =
-            exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))?
+            exec_cmd(Command::new("cat").arg(self.output_dir.join(Self::get_sha_name())))?
         else {
             return Err(RecoveryError::invalid_output_error(format!(
                 "Could not read {}/{}",
                 self.output_dir.display(),
-                self.get_sha_name()
+                Self::get_sha_name()
             )));
         };
         info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
