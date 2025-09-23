@@ -412,7 +412,6 @@ def system_test(
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
-        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
     if uses_setupos_mainnet_latest_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
@@ -420,7 +419,6 @@ def system_test(
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
-        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
     if uses_hostos_update:
         info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
