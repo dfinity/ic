@@ -421,10 +421,10 @@ impl Neuron {
                     }
                 }
             }
-            if 2.saturating_mul(yes) > followees.len() {
+            if 2_usize.saturating_mul(yes) > followees.len() {
                 return Vote::Yes;
             }
-            if 2.saturating_mul(no) >= followees.len() {
+            if 2_usize.saturating_mul(no) >= followees.len() {
                 return Vote::No;
             }
         }
