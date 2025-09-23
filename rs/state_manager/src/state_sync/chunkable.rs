@@ -864,7 +864,7 @@ impl IncompleteState {
     /// Preallocates the files listed in the manifest and copies the chunks
     /// that we have locally.
     /// Returns a set of chunks that still need to be fetched
-    fn initialize_state_on_disk(&mut self, manifest_new: &Manifest) -> HashSet<usize> {
+    fn initialize_state_on_disk(&self, manifest_new: &Manifest) -> HashSet<usize> {
         Self::preallocate_layout(&self.log, &self.root, manifest_new);
 
         let state_sync_size_fetch = self

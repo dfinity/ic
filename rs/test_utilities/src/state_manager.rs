@@ -1,5 +1,5 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -292,9 +292,10 @@ impl StateReader for FakeStateManager {
             .ok_or(StateManagerError::StateRemoved(height))
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         _paths: &LabeledTree<()>,
+        _exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
         None
     }
@@ -736,11 +737,15 @@ impl StateReader for RefMockStateManager {
         self.mock.read().unwrap().get_state_at(height)
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
-        self.mock.read().unwrap().read_certified_state(paths)
+        self.mock
+            .read()
+            .unwrap()
+            .read_certified_state_with_exclusion(paths, exclusion)
     }
 
     fn get_certified_state_snapshot(

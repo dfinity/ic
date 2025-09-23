@@ -15,10 +15,9 @@ use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_f
 use ic_logger::{ReplicaLogger, debug};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::mpsc;
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 use tonic::{Request, Response, Status, transport::Server};
 
 struct BtcServiceImpl<Network: BlockchainNetwork> {
@@ -133,11 +132,12 @@ pub fn start_grpc_server<Network>(
     incoming_source: IncomingSource,
     logger: ReplicaLogger,
     last_received_tx: watch::Sender<Option<Instant>>,
-    blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
+    blockchain_state: Arc<BlockchainState<Network>>,
     blockchain_manager_tx: mpsc::Sender<BlockchainManagerRequest>,
     transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
-) where
+) -> tokio::task::JoinHandle<()>
+where
     Network: BlockchainNetwork + Sync + Send + 'static,
     Network::Header: Send,
 {
@@ -166,7 +166,7 @@ pub fn start_grpc_server<Network>(
                 .serve_with_incoming(incoming);
             tokio::spawn(async move {
                 server_fut.await.expect("gRPC server crashed");
-            });
+            })
         }
         IncomingSource::Systemd => {
             let incoming = unsafe { incoming_from_nth_systemd_socket(1) };
@@ -179,7 +179,7 @@ pub fn start_grpc_server<Network>(
                 .serve_with_incoming(incoming);
             tokio::spawn(async move {
                 server_fut.await.expect("gRPC server crashed");
-            });
+            })
         }
-    };
+    }
 }

@@ -11,7 +11,7 @@ use crate::{
     driver::test_env_api::{HasPublicApiUrl, IcNodeContainer, IcNodeSnapshot, TopologySnapshot},
     util::{create_agent, runtime_from_url},
 };
-use candid::{CandidType, Deserialize, Principal};
+use candid::CandidType;
 use canister_test::{Canister, Runtime};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
@@ -29,6 +29,7 @@ use ic_nns_governance_api::{
     ProposalStatus, Vote,
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     manage_neuron_response,
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_test_utils::governance::{
     get_proposal_info, submit_external_update_proposal,
@@ -482,24 +483,10 @@ pub async fn execute_subnet_rental_request(
     topology_snapshot: &TopologySnapshot,
     user: PrincipalId,
 ) {
-    // TODO(NNS1-3965): Replace.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Hash)]
-    pub enum RentalConditionId {
-        App13CH,
-    }
-
-    #[derive(Clone, CandidType, Deserialize)]
-    pub struct SubnetRentalProposalPayload {
-        pub user: Principal,
-        pub rental_condition_id: RentalConditionId,
-    }
-
-    let user = Principal::from(user);
-
     execute_nns_function(
         topology_snapshot,
         NnsFunction::SubnetRentalRequest,
-        SubnetRentalProposalPayload {
+        SubnetRentalRequest {
             user,
             rental_condition_id: RentalConditionId::App13CH,
         },

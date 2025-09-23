@@ -6,9 +6,9 @@ use super::get_btc_address::init_ecdsa_public_key;
 
 /// Deterministically computes a ckBTC Ledger account ID based on the ckBTC Minter’s principal ID and the caller’s principal ID.
 pub async fn get_withdrawal_account() -> Account {
-    let caller = PrincipalId(ic_cdk::caller());
+    let caller = PrincipalId(ic_cdk::api::msg_caller());
     init_ecdsa_public_key().await;
-    let ck_btc_principal = ic_cdk::id();
+    let ck_btc_principal = ic_cdk::api::canister_self();
     let caller_subaccount: Subaccount = compute_subaccount(caller, 0);
     // Check that the computed subaccount doesn't collide with minting account.
     if &caller_subaccount == DEFAULT_SUBACCOUNT {

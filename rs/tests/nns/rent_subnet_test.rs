@@ -185,6 +185,7 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
+    let logger = env.logger();
     let topology_snapshot = env.topology_snapshot();
 
     block_on(async move {
@@ -209,14 +210,21 @@ pub fn test(env: TestEnv) {
         // This is just extra defensive, and probably not necessary.
         assert!(!original_subnets.is_empty(), "registry contains no subnets");
 
+        info!(
+            logger,
+            "subnet_user_sends_icp_to_the_subnet_rental_canister ..."
+        );
         subnet_user_sends_icp_to_the_subnet_rental_canister(&topology_snapshot).await;
 
+        info!(logger, "execute_subnet_rental_request ...");
         execute_subnet_rental_request(&topology_snapshot, *SUBNET_USER_PRINCIPAL_ID).await;
 
+        info!(logger, "execute_fulfill_subnet_rental_request ...");
         let topology_snapshot =
             execute_fulfill_subnet_rental_request(&topology_snapshot, &env.logger()).await;
         let new_subnet_id = assert_new_subnet(&topology_snapshot, &original_subnets).await;
 
+        info!(logger, "assert_rented_subnet_works ...");
         assert_rented_subnet_works(new_subnet_id, &topology_snapshot).await;
     });
 }
@@ -549,6 +557,13 @@ fn install_nns_canisters(env: &TestEnv) {
     let root_subnet = topology_snapshot.root_subnet();
 
     let nns_node = root_subnet.nodes().next().expect("there is no NNS node");
+
+    info!(
+        &env.logger(),
+        "Installing NNS canisters on subnet {} on node {} ...",
+        root_subnet.subnet_id,
+        nns_node.node_id
+    );
 
     let mut installer = NnsInstallationBuilder::new()
         .with_subnet_rental_canister()
