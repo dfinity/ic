@@ -371,6 +371,10 @@ impl CanisterLoadSnapshotRecord {
     pub fn source(&self) -> SnapshotSource {
         self.source
     }
+
+    pub fn from_canister_id(&self) -> Option<CanisterId> {
+        self.from_canister_id
+    }
 }
 
 /// `CandidType` for `CanisterSettingsChangeRecord`

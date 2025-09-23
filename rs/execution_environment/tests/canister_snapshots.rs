@@ -4,10 +4,11 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, Global, GlobalTimer,
-    LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterChangeDetails, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, Global,
+    GlobalTimer, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -973,4 +974,16 @@ fn load_canister_snapshot_works_on_another_canister() {
         canister_id_2,
         snapshot_id_2,
     );
+
+    // Verify that the latest canister history change is a `load_snapshot` with
+    // with the expected `from_canister_id` set appropriately to the canister
+    // that the snapshot belongs to.
+    let history = env.get_canister_history(canister_id_2);
+    let latest_change_details = history.get_changes(1).next().unwrap().details();
+    match latest_change_details {
+        CanisterChangeDetails::CanisterLoadSnapshot(load_snapshot_record) => {
+            assert_eq!(load_snapshot_record.from_canister_id(), Some(canister_id_1));
+        }
+        _ => panic!("Unexpected history change {:?}", latest_change_details),
+    }
 }
