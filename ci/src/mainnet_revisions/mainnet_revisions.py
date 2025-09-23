@@ -107,7 +107,7 @@ def commit_and_create_pr(
             subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
 
-def get_subnet_replica_version_info(subnet_id: str) -> (str, str, str, str):
+def get_subnet_replica_version_info(subnet_id: str) -> (str, str, str, str, str):
     """Use the dashboard to pull the latest version info for the given subnet."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnets/{subnet_id}", headers={"user-agent": "python"}
@@ -123,7 +123,7 @@ def get_subnet_replica_version_info(subnet_id: str) -> (str, str, str, str):
     return get_replica_version_info(latest_replica_version)
 
 
-def get_replica_version_info(replica_version: str) -> (str, str, str, str):
+def get_replica_version_info(replica_version: str) -> (str, str, str, str, str):
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnet-replica-versions/{replica_version}",
         headers={"user-agent": "python"},
@@ -147,10 +147,14 @@ def get_replica_version_info(replica_version: str) -> (str, str, str, str):
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
     )
 
-    return (version, hash, dev_hash, launch_measurements)
+    dev_measurements = download_and_read_file(
+        f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
+    )
+
+    return (version, hash, dev_hash, launch_measurements, dev_measurements)
 
 
-def get_latest_replica_version_info() -> (str, str, str, str):
+def get_latest_replica_version_info() -> (str, str, str, str, str):
     """Use the dashboard to pull the version info for the most recent GuestOS version."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedGuestosVersions",
@@ -173,10 +177,14 @@ def get_latest_replica_version_info() -> (str, str, str, str):
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
     )
 
-    return (version, hash, dev_hash, launch_measurements)
+    dev_measurements = download_and_read_file(
+        f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
+    )
+
+    return (version, hash, dev_hash, launch_measurements, dev_measurements)
 
 
-def get_latest_hostos_version_info() -> (str, str, str, str):
+def get_latest_hostos_version_info() -> (str, str, str, str, str):
     """Use the dashboard to pull the version info for the most recent HostOS version."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedHostosVersions",
@@ -200,14 +208,14 @@ def get_latest_hostos_version_info() -> (str, str, str, str):
 
     # NOTE: This may not work if HostOS is ever released without GuestOS
     # Pull the measurements of the GuestOS version from the proposal
-    (_version, _hash, _dev_hash, launch_measurements) = get_replica_version_info(version)
+    (_version, _hash, _dev_hash, launch_measurements, dev_measurements) = get_replica_version_info(version)
 
-    return (version, hash, dev_hash, launch_measurements)
+    return (version, hash, dev_hash, launch_measurements, dev_measurements)
 
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
     """Fetch and update the saved subnet version and hash."""
-    (version, hash, dev_hash, launch_measurements) = get_subnet_replica_version_info(subnet)
+    (version, hash, dev_hash, launch_measurements, dev_measurements) = get_subnet_replica_version_info(subnet)
     logger.info("Current subnet (%s) revision: %s hash: %s", subnet, version, hash)
 
     full_path = repo_root / file_path
@@ -225,6 +233,7 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
         "update_img_hash": hash,
         "update_img_hash_dev": dev_hash,
         "launch_measurements": launch_measurements,
+        "launch_measurements_dev": dev_measurements,
     }
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -234,7 +243,7 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
 
 def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     """Fetch and update the latest replica version and hash."""
-    (version, hash, dev_hash, launch_measurements) = get_latest_replica_version_info()
+    (version, hash, dev_hash, launch_measurements, dev_measurements) = get_latest_replica_version_info()
     logger.info("Latest revision: %s hash: %s", version, hash)
 
     full_path = repo_root / file_path
@@ -252,6 +261,7 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
         "update_img_hash": hash,
         "update_img_hash_dev": dev_hash,
         "launch_measurements": launch_measurements,
+        "launch_measurements_dev": dev_measurements,
     }
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -261,7 +271,7 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
 
 def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     """Fetch and update the saved HostOS version and hash."""
-    (version, hash, dev_hash, launch_measurements) = get_latest_hostos_version_info()
+    (version, hash, dev_hash, launch_measurements, dev_measurements) = get_latest_hostos_version_info()
     logger.info("Latest HostOS revision: %s hash: %s", version, hash)
 
     full_path = repo_root / file_path
@@ -280,6 +290,7 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
             "update_img_hash": hash,
             "update_img_hash_dev": dev_hash,
             "launch_measurements": launch_measurements,
+            "launch_measurements_dev": dev_measurements,
         }
     }
 
@@ -313,6 +324,13 @@ def download_and_hash_file(url: str):
         urllib.request.urlretrieve(url, tmp_file.name)
         with open(tmp_file.name, "rb") as f:
             return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def download_and_read_file(url: str):
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        urllib.request.urlretrieve(url, tmp_file.name)
+        with open(tmp_file.name, "rb") as f:
+            return f.read()
 
 
 def get_logger(level) -> logging.Logger:

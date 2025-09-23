@@ -20,11 +20,24 @@ def icos_dev_image_download_url(git_commit_id, variant, update):
     )
 
 def get_mainnet_setupos_images(versions):
-    for (name, version) in versions:
+    """
+    Pull the requested SetupOS mainnet images, and their measurements.
+
+    Args:
+      versions: A list of name, version, measurements to pull.
+    """
+
+    for (name, version, measurements, dev_measurements) in versions:
         http_file(
             name = name,
             downloaded_file_path = "disk-img.tar.zst",
             url = icos_image_download_url(version, "setup-os", False, False),
+        )
+
+        # TODO: This could live in the same repo as above
+        _mainnet_measurements(
+            name = name + "_launch_measurements",
+            measurements = json.encode(measurements),
         )
 
         http_file(
@@ -33,8 +46,14 @@ def get_mainnet_setupos_images(versions):
             url = icos_dev_image_download_url(version, "setup-os", False),
         )
 
+        # TODO: This could live in the same repo as above
+        _mainnet_measurements(
+            name = name + "_dev_launch_measurements",
+            measurements = json.encode(dev_measurements),
+        )
+
 def get_mainnet_guestos_images(versions, extract_guestos):
-    for (name, version, measurements) in versions:
+    for (name, version, measurements, dev_measurements) in versions:
         _get_mainnet_guestos_image(
             name = name,
             setupos_url = icos_image_download_url(version, "setup-os", False, False),
@@ -46,7 +65,7 @@ def get_mainnet_guestos_images(versions, extract_guestos):
             name = name + "_dev",
             setupos_url = icos_dev_image_download_url(version, "setup-os", False),
             extract_guestos = extract_guestos,
-            measurements = json.encode(measurements),
+            measurements = json.encode(dev_measurements),
         )
 
 _DEFS_CONTENTS = '''\
@@ -117,4 +136,24 @@ def _get_mainnet_guestos_image_impl(repository_ctx):
 _get_mainnet_guestos_image = repository_rule(
     implementation = _get_mainnet_guestos_image_impl,
     attrs = _attrs,
+)
+
+def _mainnet_measurements_impl(repository_ctx):
+    repository_ctx.file("BUILD.bazel", content = """\
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+
+package(default_visibility = ["//visibility:public"])
+
+write_file(
+    name = "{name}",
+    out = "launch-measurements.json",
+    content = ['''{measurements}'''],
+)
+""".format(name = repository_ctx.name, measurements = repository_ctx.attr.measurements))
+
+_mainnet_measurements = repository_rule(
+    implementation = _mainnet_measurements_impl,
+    attrs = {
+        "measurements": attr.string(mandatory = True, doc = "Launch measurements to expose as file."),
+    },
 )
