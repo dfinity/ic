@@ -29,7 +29,7 @@ use ic_types::{
     PrincipalId, SubnetId,
     batch::CanisterCyclesCostSchedule,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngressContent},
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngress},
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -664,11 +664,13 @@ impl CyclesAccountManager {
     ///  - The cost of inducting the message.
     pub fn ingress_induction_cost(
         &self,
-        ingress: &SignedIngressContent,
+        ingress: &SignedIngress,
         effective_canister_id: Option<CanisterId>,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> IngressInductionCost {
+        let raw_bytes = NumBytes::from(ingress.binary().len() as u64);
+        let ingress = ingress.content();
         let paying_canister = match ingress.is_addressed_to_subnet() {
             // If a subnet message, get effective canister id who will pay for the message.
             true => {
@@ -691,14 +693,8 @@ impl CyclesAccountManager {
 
         match paying_canister {
             Some(paying_canister) => {
-                let bytes_to_charge = ingress.arg().len()
-                    + ingress.method_name().len()
-                    + ingress.nonce().map(|n| n.len()).unwrap_or(0);
-                let cost = self.ingress_induction_cost_from_bytes(
-                    NumBytes::from(bytes_to_charge as u64),
-                    subnet_size,
-                    cost_schedule,
-                );
+                let cost =
+                    self.ingress_induction_cost_from_bytes(raw_bytes, subnet_size, cost_schedule);
                 IngressInductionCost::Fee {
                     payer: paying_canister,
                     cost,
