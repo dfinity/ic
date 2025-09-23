@@ -4,12 +4,11 @@ This module defines Bazel targets for the mainnet versions of ICOS images
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
-def icos_image_download_url(git_commit_id, variant, update, test):
-    return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test}/{component}.tar.zst".format(
+def icos_image_download_url(git_commit_id, variant, update):
+    return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}/{component}.tar.zst".format(
         git_commit_id = git_commit_id,
         variant = variant,
         component = "update-img" if update else "disk-img",
-        test = "-test" if test else "",
     )
 
 def icos_dev_image_download_url(git_commit_id, variant, update):
@@ -31,7 +30,7 @@ def get_mainnet_setupos_images(versions):
         http_file(
             name = name,
             downloaded_file_path = "disk-img.tar.zst",
-            url = icos_image_download_url(version, "setup-os", False, False),
+            url = icos_image_download_url(version, "setup-os", False),
         )
 
         # TODO: This could live in the same repo as above
@@ -56,7 +55,7 @@ def get_mainnet_guestos_images(versions, extract_guestos):
     for (name, version, measurements, dev_measurements) in versions:
         _get_mainnet_guestos_image(
             name = name,
-            setupos_url = icos_image_download_url(version, "setup-os", False, False),
+            setupos_url = icos_image_download_url(version, "setup-os", False),
             extract_guestos = extract_guestos,
             measurements = json.encode(measurements),
         )
