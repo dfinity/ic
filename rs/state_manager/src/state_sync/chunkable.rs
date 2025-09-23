@@ -1,8 +1,8 @@
 use crate::{
-    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
+    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_FETCH,
     LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics, StateSyncMetrics,
-    StateSyncRefs,
+    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
+    StateSyncMetrics, StateSyncRefs,
     manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
     state_sync::StateSync,
     state_sync::types::{
@@ -327,9 +327,9 @@ impl IncompleteState {
         std::fs::hard_link(src, dst)
     }
 
-    /// Copy reusable files from previous checkpoint according to diff script.
+    /// Hardlink unchanged files from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn copy_files(
+    pub(crate) fn hardlink_files(
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -343,12 +343,12 @@ impl IncompleteState {
     ) {
         let _timer = metrics
             .step_duration
-            .with_label_values(&[LABEL_COPY_FILES])
+            .with_label_values(&[LABEL_HARDLINK_FILES])
             .start_timer();
 
         info!(
             log,
-            "state sync: copy_files for {} files {} validation",
+            "state sync: hardlink_files for {} files {} validation",
             diff_script.copy_files.len(),
             if validate_data || ALWAYS_VALIDATE {
                 "with"
@@ -441,7 +441,7 @@ impl IncompleteState {
                                     );
                                     metrics.corrupted_chunks_critical.inc();
                                 }
-                                metrics.corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
+                                metrics.corrupted_chunks.with_label_values(&[LABEL_HARDLINK_FILES]).inc();
                                 continue;
                             }
 
@@ -473,7 +473,7 @@ impl IncompleteState {
                                     );
                                     metrics.corrupted_chunks_critical.inc();
                                 }
-                                metrics.corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
+                                metrics.corrupted_chunks.with_label_values(&[LABEL_HARDLINK_FILES]).inc();
                             }
                         }
 
@@ -916,11 +916,11 @@ impl IncompleteState {
             .state_sync_metrics
             .size
             .with_label_values(&[LABEL_FETCH]);
-        let state_sync_size_copy_files = self
+        let state_sync_size_hardlink_files = self
             .metrics
             .state_sync_metrics
             .size
-            .with_label_values(&[LABEL_COPY_FILES]);
+            .with_label_values(&[LABEL_HARDLINK_FILES]);
         let state_sync_size_copy_chunks = self
             .metrics
             .state_sync_metrics
@@ -1055,18 +1055,18 @@ impl IncompleteState {
             let preallocate_bytes: u64 =
                 (diff_script.zeros_chunks * crate::state_sync::types::DEFAULT_CHUNK_SIZE) as u64;
 
-            let copy_files_bytes: u64 = diff_script
+            let hardlink_files_bytes: u64 = diff_script
                 .copy_files
                 .keys()
                 .map(|i| manifest_new.file_table[*i].size_bytes)
                 .sum();
 
             let copy_chunks_bytes: u64 =
-                total_bytes - diff_bytes - preallocate_bytes - copy_files_bytes;
+                total_bytes - diff_bytes - preallocate_bytes - hardlink_files_bytes;
 
             state_sync_size_fetch.inc_by(diff_bytes);
             state_sync_size_preallocate.inc_by(preallocate_bytes);
-            state_sync_size_copy_files.inc_by(copy_files_bytes);
+            state_sync_size_hardlink_files.inc_by(hardlink_files_bytes);
             state_sync_size_copy_chunks.inc_by(copy_chunks_bytes);
 
             self.metrics
@@ -1075,7 +1075,7 @@ impl IncompleteState {
                 .sub(diff_script.zeros_chunks as i64);
 
             let mut thread_pool = self.thread_pool.lock().unwrap();
-            Self::copy_files(
+            Self::hardlink_files(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
