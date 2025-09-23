@@ -132,15 +132,24 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
             .map(|(_, data)| data.capacity)
             .sum();
 
-        // Also check committed usage that hasn't expired
-        let committed_capacity = self
-            .used_capacity
-            .get(&key)
-            .map(|usage| usage.capacity_used)
-            .unwrap_or(0);
+        // Update token bucket capacity and get current committed usage
+        let committed_capacity = if let Some(usage) = self.used_capacity.get_mut(&key) {
+            update_capacity(
+                usage,
+                now,
+                self.config.add_capacity_amount,
+                self.config.add_capacity_interval,
+            );
+            usage.capacity_used
+        } else {
+            0
+        };
 
         if reserved_capacity + committed_capacity + requested_capacity <= self.config.max_capacity {
-            let reservation_data = ReservationData { now, capacity: requested_capacity };
+            let reservation_data = ReservationData {
+                now,
+                capacity: requested_capacity,
+            };
             reservations.insert((key.clone(), next_index), reservation_data);
 
             let reservation = Reservation {
@@ -164,11 +173,17 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
                 capacity_used: 0,
             });
 
-        update_capacity(usage, self.config.add_capacity_amount, self.config.add_capacity_interval)
+        update_capacity(
+            usage,
+            SystemTime::now(),
+            self.config.add_capacity_amount,
+            self.config.add_capacity_interval,
+        );
 
         // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
         // How do we handle that?
         if let Ok(mut reservations) = self.reservations.lock() {
+            println!("We are doing the reservation thing!");
             if let Some(reservation) =
                 reservations.remove(&(reservation.key.clone(), reservation.index))
             {
@@ -179,8 +194,31 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
     }
 }
 
-fn update_capacity(usage_record: &mut UsageRecord, now: SystemTime, amount_to_add: u64, add_frequency: Duration) {
+fn update_capacity(
+    usage_record: &mut UsageRecord,
+    now: SystemTime,
+    amount_to_add: u64,
+    add_frequency: Duration,
+) {
+    // Calculate time elapsed since last update
+    let elapsed = now
+        .duration_since(usage_record.last_updated)
+        .unwrap_or(Duration::ZERO);
 
+    // Calculate how many complete intervals have passed
+    let complete_intervals = elapsed.as_secs() / add_frequency.as_secs();
+
+    // Calculate new last_updated so that the rate remains constant regardless of when this is checked.
+    let last_updated = usage_record.last_updated
+        + Duration::from_secs(complete_intervals.saturating_mul(add_frequency.as_secs()));
+
+    // Add capacity for complete intervals (saturating subtract from used capacity)
+    let capacity_to_add = complete_intervals * amount_to_add;
+    usage_record.capacity_used = usage_record.capacity_used.saturating_sub(capacity_to_add);
+
+    // Set last_updated to account for the remaining partial interval
+    // This keeps the partial interval progress for the next call
+    usage_record.last_updated = last_updated;
 }
 
 #[derive(Clone, Debug)]
@@ -207,7 +245,8 @@ mod tests {
     #[test]
     fn test_rate_limiter_just_reservations() {
         let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
-            max_age: Duration::from_secs(60),
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(10),
             max_capacity: 10,
         });
 
@@ -258,28 +297,54 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_limiter_commits_and_new_reservations() {
+    fn test_token_bucket_replenishment() {
         let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
-            max_age: Duration::from_secs(60),
+            add_capacity_amount: 2, // Add 2 capacity every 10 seconds
+            add_capacity_interval: Duration::from_secs(10),
             max_capacity: 10,
         });
 
         let now = SystemTime::now();
-        let one = rate_limiter.try_reserve(now, "Foo".to_string(), 5);
-        assert!(one.is_ok());
-        let one = one.unwrap();
-        assert_eq!(one.index, 0);
-        assert_eq!(one.key, "Foo".to_string());
 
-        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
-        // Now commit
-        rate_limiter.commit(one);
-        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 0);
+        // Use up 8 capacity
+        let reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 8).unwrap();
+        rate_limiter.commit(reservation1);
 
-        let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 6);
+        // Should only have 2 capacity left
+        let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 3);
         assert!(matches!(
             over_limit,
             Err(RateLimiterError::NotEnoughCapacity)
         ));
+
+        // Can still reserve 2
+        let reservation2 = rate_limiter.try_reserve(now, "Foo".to_string(), 2).unwrap();
+        rate_limiter.commit(reservation2);
+
+        // Now we're at full capacity (10/10 used), nothing more should work
+        let fully_used = rate_limiter.try_reserve(now, "Foo".to_string(), 1);
+        assert!(matches!(
+            fully_used,
+            Err(RateLimiterError::NotEnoughCapacity)
+        ));
+
+        // Fast forward 12 seconds - 1 interval
+        let later = now + Duration::from_secs(12);
+
+        // Should be able to reserve 2 (one interval's worth) but not more
+        let later_ok = rate_limiter.try_reserve(later, "Foo".to_string(), 2);
+        assert!(later_ok.is_ok());
+        drop(later_ok);
+
+        let after_time_too_much = rate_limiter.try_reserve(later, "Foo".to_string(), 3);
+        assert!(matches!(
+            after_time_too_much,
+            Err(RateLimiterError::NotEnoughCapacity)
+        ));
+
+        // We add 9 instead of 9 because there are some irritating minor time difference in SystemTime/Duration
+        let even_later = later + Duration::from_secs(9);
+        let even_later_okay = rate_limiter.try_reserve(even_later, "Foo".to_string(), 4);
+        assert!(even_later_okay.is_ok());
     }
 }
