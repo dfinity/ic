@@ -142,7 +142,7 @@ jobs:
               --config=stamped \
               --config=flaky_retry \
               --test_tag_filters= \
-              //rs/tests/dre:guest_os_qualification_colocate \
+              //rs/tests/dre:guest_os_qualification \
               --test_env=OLD_VERSION=${{ matrix.version }} \
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
