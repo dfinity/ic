@@ -2532,6 +2532,7 @@ impl ExecutionTestBuilder {
             self.log.clone(),
             hypervisor,
             self.subnet_type,
+            self.own_subnet_id,
             config.clone(),
             &metrics_registry,
             self.instruction_limit_without_dts,

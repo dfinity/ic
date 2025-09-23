@@ -15,8 +15,8 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
-use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
+use ic_config::{execution_environment::Config, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE};
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -33,7 +33,7 @@ use ic_types::QueryStatsEpoch;
 use ic_types::batch::QueryStats;
 use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
-    CanisterId, NumInstructions,
+    CanisterId, NumInstructions, SubnetId,
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
 };
@@ -52,7 +52,9 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_management_canister_types_private::{FetchCanisterLogsRequest, Payload, QueryMethod};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, FetchCanisterLogsRequest, Payload, QueryMethod,
+};
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -101,6 +103,7 @@ pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     own_subnet_type: SubnetType,
+    own_subnet_id: SubnetId,
     config: Config,
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
@@ -114,6 +117,7 @@ impl InternalHttpQueryHandler {
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         own_subnet_type: SubnetType,
+        own_subnet_id: SubnetId,
         config: Config,
         metrics_registry: &MetricsRegistry,
         max_instructions_per_query: NumInstructions,
@@ -127,6 +131,7 @@ impl InternalHttpQueryHandler {
             log,
             hypervisor,
             own_subnet_type,
+            own_subnet_id,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
@@ -184,6 +189,42 @@ impl InternalHttpQueryHandler {
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
+                }
+                Ok(QueryMethod::CanisterStatus) => {
+                    let args = CanisterIdRecord::decode(&query.method_payload)?;
+                    let canister_id = args.get_canister_id();
+                    let ready_for_migration = state.get_ref().ready_for_migration(&canister_id);
+                    let canister =
+                        state
+                            .get_ref()
+                            .canister_state(&canister_id)
+                            .ok_or_else(|| {
+                                UserError::new(
+                                    ErrorCode::CanisterNotFound,
+                                    format!("Canister {canister_id} not found"),
+                                )
+                            })?;
+                    let since = Instant::now(); // Start logging execution time.
+                    let response = crate::canister_manager::get_canister_status(
+                        Arc::clone(&self.cycles_account_manager),
+                        query.source(),
+                        canister,
+                        state
+                            .get_ref()
+                            .metadata
+                            .network_topology
+                            .get_subnet_size(&self.own_subnet_id)
+                            .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
+                        state.get_ref().get_own_cost_schedule(),
+                        ready_for_migration,
+                    )?;
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::CanisterStatus,
                         since.elapsed().as_secs_f64(),
                         &result,
                     );
