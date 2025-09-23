@@ -1,3 +1,5 @@
+use crate::driver::ic_gateway_vm::HasIcGatewayVm;
+use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
@@ -9,24 +11,25 @@ use crate::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{AttachImageSpec, Farm, FarmResult, FileId},
         ic::{InternetComputer, Node},
-        nested::{NestedNode, NestedVms, NESTED_CONFIG_IMAGE_PATH},
+        nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
         node_software_version::NodeSoftwareVersion,
         port_allocator::AddrType,
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_build_setupos_config_image_tool, get_create_setupos_config_tool,
-            get_guestos_img_version, get_guestos_initial_update_img_sha256,
-            get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
             HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
+            get_build_setupos_config_image_tool, get_guestos_img_version,
+            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
+            get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
+            try_get_guestos_img_version,
         },
         test_setup::InfraProvider,
     },
     k8s::job::wait_for_job_completion,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
 };
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
@@ -40,7 +43,8 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use slog::{info, warn, Logger};
+use setupos_image_config::{ConfigIni, DeploymentConfig};
+use slog::{Logger, info, warn};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -51,7 +55,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::Command,
-    thread::{self, JoinHandle, ScopedJoinHandle},
+    thread::{self, JoinHandle},
 };
 use url::Url;
 use zstd::stream::write::Encoder;
@@ -66,7 +70,7 @@ const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.zst", CONF_IMG_FNAME)
+    format!("{CONF_IMG_FNAME}.zst")
 }
 
 pub fn init_ic(
@@ -208,6 +212,10 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
+    if let Some(UnassignedRecordConfig::Skip) = ic.unassigned_record_config {
+        ic_config.skip_unassigned_record();
+    }
+
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
@@ -250,6 +258,7 @@ pub fn setup_and_start_vms(
         let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
+        let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behavior.clone());
         let tnet_node = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => tnet
@@ -268,6 +277,7 @@ pub fn setup_and_start_vms(
                 query_stats_epoch_length,
                 ipv4_config,
                 domain,
+                recovery_hash,
                 &t_env,
             )?;
 
@@ -337,6 +347,116 @@ pub fn setup_and_start_vms(
     result
 }
 
+// Setup and start nested VMs. NOTE: This is different from
+// `setup_and_start_vms` in that we need to configure and push SetupOS config
+// for each node.
+pub fn setup_and_start_nested_vms(
+    env: &TestEnv,
+    farm: &Farm,
+    group_name: &str,
+) -> anyhow::Result<()> {
+    // Check that versions are in line, or configured properly
+    validate_version_config(env);
+
+    let logger = env.logger();
+    info!(logger, "Setting up nested VM(s) ...");
+
+    let ic_gateway_url = env
+        .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
+        .map(|v| v.get_public_url())
+        .unwrap_or_else(|_| {
+            info!(logger, "No gateway found, using dummy URL");
+            url::Url::parse("http://localhost:8080").unwrap()
+        });
+    let nns_public_key = env
+        .prep_dir("")
+        .and_then(|v| std::fs::read_to_string(v.root_public_key_path()).ok())
+        .unwrap_or_else(|| {
+            info!(logger, "No NNS public key found, using dummy key");
+            "dummy_public_key_for_recovery_test".to_string()
+        });
+
+    let setupos_url = get_setupos_img_url();
+    let setupos_hash = get_setupos_img_sha256();
+    let setupos_image_spec = AttachImageSpec::via_url(setupos_url, setupos_hash);
+
+    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    for node in env.get_all_nested_vms()? {
+        let t_env = env.clone();
+        let t_farm = farm.clone();
+        let t_group_name = group_name.to_string();
+        let t_ic_gateway_url = ic_gateway_url.clone();
+        let t_nns_public_key = nns_public_key.clone();
+        let t_setupos_image_spec = setupos_image_spec.clone();
+        join_handles.push(thread::spawn(move || {
+            let vm_name = node.vm_name();
+
+            let config_image = create_setupos_config_image(
+                &t_env,
+                &vm_name,
+                &t_ic_gateway_url,
+                &t_nns_public_key,
+            )?;
+            let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
+                &t_group_name,
+                config_image,
+                NESTED_CONFIG_IMAGE_PATH,
+            )?);
+
+            t_farm.attach_disk_images(
+                &t_group_name,
+                &vm_name,
+                "usb-storage",
+                vec![t_setupos_image_spec, config_image_spec],
+            )?;
+            t_farm.start_vm(&t_group_name, &vm_name)?;
+
+            Ok(())
+        }));
+    }
+
+    // Wait for all threads to finish and return an error if any of them fails.
+    info!(
+        farm.logger,
+        "Waiting for {} VM setup threads to complete",
+        join_handles.len()
+    );
+
+    let mut result = Ok(());
+    for jh in join_handles {
+        if let Err(e) = jh.join().expect("Waiting for a thread failed") {
+            warn!(farm.logger, "Setting up VM failed with: {:?}", e);
+            result = Err(anyhow::anyhow!("Failed to set up a VM pool"));
+        }
+    }
+
+    info!(logger, "Nested VM(s) setup complete!");
+
+    result
+}
+
+fn validate_version_config(env: &TestEnv) {
+    // When a GuestOS image is also in use...
+    if let Ok(guestos_version) = try_get_guestos_img_version() {
+        // ...and the versions do not match...
+        if guestos_version != get_setupos_img_version() {
+            // ...panic, unless an appropriate UnassignedRecordConfig is set.
+            if let Ok(config) = UnassignedRecordConfig::try_read_attribute(env) {
+                info!(
+                    env.logger(),
+                    "Version mismatch allowed by UnassignedRecordConfig: '{config:?}'"
+                );
+            } else {
+                panic!(
+                    "Initial GuestOS and SetupOS versions do not match! \
+                    If this is intended, set `without_unassigned_config` (avoid) \
+                    or `with_unassigned_config` (ignore) on your IC."
+                );
+            }
+        }
+    }
+}
+
 pub fn upload_config_disk_image(
     group_name: &str,
     node: &InitializedNode,
@@ -358,6 +478,7 @@ fn create_config_disk_image(
     query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
+    recovery_hash: Option<String>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
@@ -380,6 +501,7 @@ fn create_config_disk_image(
         enable_trusted_execution_environment: None,
         use_node_operator_private_key: Some(true),
         use_ssh_authorized_keys: Some(true),
+        recovery_hash,
         inject_ic_crypto: Some(false),
         inject_ic_state: Some(false),
         inject_ic_registry_local_store: Some(false),
@@ -541,76 +663,6 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     }
 }
 
-// Setup nested VMs. NOTE: This is different from `setup_and_start_vms` in that
-// we need to configure and push a SetupOS image for each node.
-pub fn setup_nested_vms(
-    nodes: &[NestedNode],
-    env: &TestEnv,
-    farm: &Farm,
-    group_name: &str,
-    nns_url: &Url,
-    nns_public_key: &str,
-) -> anyhow::Result<()> {
-    let mut result = Ok(());
-
-    info!(
-        farm.logger,
-        "Starting setup_nested_vms for {} node(s)",
-        nodes.len()
-    );
-
-    thread::scope(|s| {
-        let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
-        for node in nodes {
-            join_handles.push(s.spawn(|| {
-                let vm_name = &node.name;
-                let url = get_setupos_img_url();
-                let hash = get_setupos_img_sha256();
-                let setupos_image_spec = AttachImageSpec::via_url(url, hash);
-
-                let config_image =
-                    create_setupos_config_image(env, vm_name, nns_url, nns_public_key)?;
-                let config_image_spec = AttachImageSpec::new(farm.upload_file(
-                    group_name,
-                    config_image,
-                    NESTED_CONFIG_IMAGE_PATH,
-                )?);
-
-                farm.attach_disk_images(
-                    group_name,
-                    vm_name,
-                    "usb-storage",
-                    vec![setupos_image_spec, config_image_spec],
-                )
-                .map_err(|e| e.into())
-            }));
-        }
-
-        // Wait for all threads to finish and return an error if any of them fails.
-        info!(
-            farm.logger,
-            "Waiting for {} VM setup threads to complete",
-            join_handles.len()
-        );
-        for jh in join_handles {
-            if let Err(e) = jh.join().expect("Waiting for a thread failed") {
-                warn!(farm.logger, "Setting up VM failed with: {:?}", e);
-                result = Err(anyhow::anyhow!("Failed to set up a VM pool"));
-            }
-        }
-    });
-
-    result
-}
-
-pub fn start_nested_vms(env: &TestEnv, farm: &Farm, group_name: &str) -> anyhow::Result<()> {
-    for node in env.get_all_nested_vms()? {
-        farm.start_vm(group_name, &node.vm_name())?;
-    }
-
-    Ok(())
-}
-
 fn create_setupos_config_image(
     env: &TestEnv,
     name: &str,
@@ -623,11 +675,10 @@ fn create_setupos_config_image(
     );
 
     // Create a unique temporary directory for this thread to avoid conflicts
-    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
+    let tmp_dir = env.get_path(format!("setupos_config_{name}"));
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_build_setupos_config_image_tool();
-    let create_setupos_config = get_create_setupos_config_tool();
 
     let nested_vm = env.get_nested_vm(name)?;
 
@@ -658,44 +709,33 @@ fn create_setupos_config_image(
     let data_dir = tmp_dir.join("data");
     std::fs::create_dir_all(&data_dir)?;
 
-    // Prep config contents
-    let mut cmd = Command::new(create_setupos_config);
-    cmd.arg("--config-dir")
-        .arg(&config_dir)
-        .arg("--data-dir")
-        .arg(&data_dir)
-        .arg("--deployment-environment")
-        .arg("testnet")
-        .arg("--mgmt-mac")
-        .arg(&mac)
-        .arg("--ipv6-prefix")
-        .arg(&prefix)
-        .arg("--ipv6-gateway")
-        .arg(&gateway)
-        .arg("--memory-gb")
-        .arg((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).to_string())
-        .arg("--cpu")
-        .arg(cpu)
-        .arg("--nr-of-vcpus")
-        .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
-        .arg("--nns-urls")
-        .arg(nns_url.to_string())
-        .arg("--nns-public-key")
-        .arg(nns_public_key)
-        .arg("--node-reward-type")
-        .arg("type3.1")
-        .arg("--admin-keys")
-        .arg(ssh_authorized_pub_keys_dir.join("admin"));
+    let node_operator_private_key = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from);
 
-    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
-        if !node_key.trim().is_empty() {
-            cmd.arg("--node-operator-private-key").arg(node_key);
-        }
-    }
-
-    if !cmd.status()?.success() {
-        bail!("Could not create SetupOS config");
-    }
+    setupos_image_config::create_setupos_config(
+        &config_dir,
+        &data_dir,
+        ConfigIni {
+            node_reward_type: Some("type3.1".to_string()),
+            ipv6_prefix: Some(prefix),
+            ipv6_gateway: Some(gateway.parse().context("Failed to parse ipv6 gateway")?),
+            ..ConfigIni::default()
+        },
+        node_operator_private_key.as_deref(),
+        Some(&ssh_authorized_pub_keys_dir.join("admin")),
+        DeploymentConfig {
+            nns_urls: Some(nns_url.clone()),
+            nns_public_key: Some(nns_public_key.to_string()),
+            memory_gb: Some((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).get() as u32),
+            cpu: Some(cpu.to_string()),
+            nr_of_vcpus: Some((HOSTOS_VCPUS_PER_VM / 2).get() as u32),
+            mgmt_mac: Some(mac.to_string()),
+            deployment_environment: Some(DeploymentEnvironment::Testnet),
+        },
+    )
+    .context("Could not create SetupOS config")?;
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;

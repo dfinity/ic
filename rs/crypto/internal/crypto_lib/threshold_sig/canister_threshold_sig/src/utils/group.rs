@@ -127,7 +127,7 @@ impl fmt::Display for EccCurveType {
             Self::Ed25519 => "ed25519",
         };
 
-        write!(f, "{}", curve_name)
+        write!(f, "{curve_name}")
     }
 }
 
@@ -196,6 +196,20 @@ impl EccScalar {
             Self::K256(s) => s.invert().map(Self::K256),
             Self::P256(s) => s.invert().map(Self::P256),
             Self::Ed25519(s) => s.invert().map(Self::Ed25519),
+        }
+    }
+
+    /// Compute the modular inverse of Self
+    ///
+    /// This function may leak the value of self to side channels, and should only
+    /// be used for public inputs
+    ///
+    /// Returns None if self is equal to zero
+    pub fn invert_vartime(&self) -> Option<Self> {
+        match self {
+            Self::K256(s) => s.invert_vartime().map(Self::K256),
+            Self::P256(s) => s.invert_vartime().map(Self::P256),
+            Self::Ed25519(s) => s.invert_vartime().map(Self::Ed25519),
         }
     }
 
@@ -455,7 +469,7 @@ impl<'de> Deserialize<'de> for EccScalar {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccScalarSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccScalar::deserialize_tagged(&helper.0)
-            .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))
     }
 }
 
@@ -497,17 +511,17 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
         match scalar.curve_type() {
             EccCurveType::K256 => {
                 Ok(Self::K256(scalar.serialize().try_into().map_err(|e| {
-                    CanisterThresholdSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{e:?}"))
                 })?))
             }
             EccCurveType::P256 => {
                 Ok(Self::P256(scalar.serialize().try_into().map_err(|e| {
-                    CanisterThresholdSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{e:?}"))
                 })?))
             }
             EccCurveType::Ed25519 => {
                 Ok(Self::Ed25519(scalar.serialize().try_into().map_err(
-                    |e| CanisterThresholdSerializationError(format!("{:?}", e)),
+                    |e| CanisterThresholdSerializationError(format!("{e:?}")),
                 )?))
             }
         }
@@ -1289,7 +1303,7 @@ impl<'de> Deserialize<'de> for EccPoint {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccPointSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccPoint::deserialize_tagged(&helper.0)
-            .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))
     }
 }
 

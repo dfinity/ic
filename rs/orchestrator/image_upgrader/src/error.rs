@@ -30,7 +30,7 @@ impl UpgradeError {
     }
 
     pub(crate) fn file_command_error(e: io::Error, cmd: &Command) -> Self {
-        UpgradeError::IoError(format!("Failed to executing command: {:?}", cmd), e)
+        UpgradeError::IoError(format!("Failed to executing command: {cmd:?}"), e)
     }
 }
 
@@ -38,13 +38,13 @@ impl fmt::Display for UpgradeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UpgradeError::IoError(msg, e) => {
-                write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
+                write!(f, "IO error, message: {msg:?}, error: {e:?}")
             }
-            UpgradeError::FileDownloadError(e) => write!(f, "File download error: {}", e),
+            UpgradeError::FileDownloadError(e) => write!(f, "File download error: {e}"),
             UpgradeError::RebootTimeError(msg) => {
-                write!(f, "Failed to read or write reboot time: {}", msg)
+                write!(f, "Failed to read or write reboot time: {msg}")
             }
-            UpgradeError::GenericError(msg) => write!(f, "Failed to upgrade: {}", msg),
+            UpgradeError::GenericError(msg) => write!(f, "Failed to upgrade: {msg}"),
         }
     }
 }

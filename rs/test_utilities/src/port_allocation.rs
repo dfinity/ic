@@ -52,8 +52,8 @@ fn bind_tcp_socket_with_reuse(addr: SocketAddr) -> Result<Socket, Box<dyn Error>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nix::sys::wait::{waitpid, WaitStatus};
-    use nix::unistd::{fork, ForkResult};
+    use nix::sys::wait::{WaitStatus, waitpid};
+    use nix::unistd::{ForkResult, fork};
     use rusty_fork::rusty_fork_test;
     use std::process;
 

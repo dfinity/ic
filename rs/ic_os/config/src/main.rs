@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
 };
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
-use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use macaddr::MacAddr6;
@@ -130,6 +130,10 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub generate_ic_boundary_tls_cert: Option<String>,
 
+    // GuestOSRecoveryConfig arguments
+    #[arg(long)]
+    pub recovery_hash: Option<String>,
+
     // Output path
     #[arg(long)]
     pub guestos_config_json_path: PathBuf,
@@ -173,7 +177,9 @@ pub fn main() -> Result<()> {
                 }),
                 (None, None, None) => None,
                 _ => {
-                    println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
+                    println!(
+                        "Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration."
+                    );
                     None
                 }
             };
@@ -193,9 +199,9 @@ pub fn main() -> Result<()> {
                 let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
                 if !node_reward_type_pattern.is_match(node_reward_type) {
                     anyhow::bail!(
-                            "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
-                            node_reward_type
-                        );
+                        "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                        node_reward_type
+                    );
                 }
             } else {
                 println!("Node reward type is not set. Skipping validation.");
@@ -235,7 +241,7 @@ pub fn main() -> Result<()> {
                 guestos_settings,
             };
             // SetupOSConfig is safe to log; it does not contain any secret material
-            println!("SetupOSConfig: {:?}", setupos_config);
+            println!("SetupOSConfig: {setupos_config:?}");
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
@@ -317,6 +323,7 @@ pub fn main() -> Result<()> {
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,
                 inject_ic_registry_local_store: clap_args.inject_ic_registry_local_store,
+                recovery_hash: clap_args.recovery_hash,
                 backup_retention_time_seconds: clap_args.backup_retention_time_seconds,
                 backup_purging_interval_seconds: clap_args.backup_purging_interval_seconds,
                 malicious_behavior: clap_args.malicious_behavior,

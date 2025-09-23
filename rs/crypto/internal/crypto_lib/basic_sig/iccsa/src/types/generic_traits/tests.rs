@@ -9,7 +9,7 @@ fn signature_bytes_should_have_a_nice_debug_representation() {
         "SignatureBytes(\"AQIDBA==\")",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }
 
@@ -23,7 +23,7 @@ fn signatures_should_have_a_nice_debug_representation() {
         "Signature { certificate: Blob{4 bytes;03010402}, tree: Empty }",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }
 
@@ -34,7 +34,7 @@ fn public_key_bytes_should_have_a_nice_debug_representation() {
         "PublicKeyBytes(\"AQIDBA==\")",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }
 
@@ -48,6 +48,6 @@ fn public_keys_should_have_a_nice_debug_representation() {
         "PublicKey{ signing_canister_id: CanisterId(xbgkv-fyaaa-aaaaa-aaava-cai), seed: AQIDBA== }",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }

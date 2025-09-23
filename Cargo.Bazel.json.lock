@@ -1,5 +1,5 @@
 {
-  "checksum": "554966de4c5bcda440a8e0c7a3ec534c4c45faba9cc2102c8d84e4e2d3638c30",
+  "checksum": "4205d77f306af6cdd08fc713c9bf5f9418d2cd94957dba1378151826506709d5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8147,15 +8147,15 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoin 0.32.99": {
+    "bitcoin 0.32.5-doge.0": {
       "name": "bitcoin",
-      "version": "0.32.99",
+      "version": "0.32.5-doge.0",
       "package_url": "https://github.com/rust-dogecoin/rust-dogecoin/",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity/rust-dogecoin",
           "commitish": {
-            "Rev": "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db"
+            "Rev": "cda2b5ec270017c82abd6ef2e71b7fe583a133fd"
           },
           "strip_prefix": "bitcoin"
         }
@@ -8214,7 +8214,7 @@
               "target": "bech32"
             },
             {
-              "id": "bitcoin 0.32.99",
+              "id": "bitcoin 0.32.5-doge.0",
               "target": "build_script_build"
             },
             {
@@ -8288,7 +8288,7 @@
             ]
           }
         },
-        "version": "0.32.99"
+        "version": "0.32.5-doge.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -20644,7 +20644,7 @@
               "alias": "bitcoin_0_28"
             },
             {
-              "id": "bitcoin 0.32.99",
+              "id": "bitcoin 0.32.5-doge.0",
               "target": "bitcoin"
             },
             {
@@ -21549,6 +21549,10 @@
             {
               "id": "scraper 0.17.1",
               "target": "scraper"
+            },
+            {
+              "id": "scrypt 0.11.0",
+              "target": "scrypt"
             },
             {
               "id": "secp256k1 0.22.2",
@@ -94866,7 +94870,7 @@
     "bip32 0.5.1",
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
-    "bitcoin 0.32.99",
+    "bitcoin 0.32.5-doge.0",
     "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",
@@ -95101,6 +95105,7 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
+    "scrypt 0.11.0",
     "secp256k1 0.22.2",
     "semver 1.0.26",
     "serde 1.0.219",

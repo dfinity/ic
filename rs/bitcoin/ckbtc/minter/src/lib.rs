@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
@@ -10,11 +9,12 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin;
+use ic_cdk::bitcoin_canister;
+use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::{ScopeGuard, guard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::cmp::max;
@@ -131,7 +131,7 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-pub type GetUtxosRequest = bitcoin::GetUtxosRequest;
+pub type GetUtxosRequest = bitcoin_canister::GetUtxosRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
@@ -140,8 +140,8 @@ pub struct GetUtxosResponse {
     pub next_page: Option<Page>,
 }
 
-impl From<bitcoin::GetUtxosResponse> for GetUtxosResponse {
-    fn from(response: bitcoin::GetUtxosResponse) -> Self {
+impl From<bitcoin_canister::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: bitcoin_canister::GetUtxosResponse) -> Self {
         Self {
             utxos: response
                 .utxos
@@ -174,12 +174,12 @@ pub enum Network {
     Regtest,
 }
 
-impl From<Network> for bitcoin::BitcoinNetwork {
+impl From<Network> for bitcoin_canister::Network {
     fn from(network: Network) -> Self {
         match network {
-            Network::Mainnet => bitcoin::BitcoinNetwork::Mainnet,
-            Network::Testnet => bitcoin::BitcoinNetwork::Testnet,
-            Network::Regtest => bitcoin::BitcoinNetwork::Regtest,
+            Network::Mainnet => bitcoin_canister::Network::Mainnet,
+            Network::Testnet => bitcoin_canister::Network::Testnet,
+            Network::Regtest => bitcoin_canister::Network::Regtest,
         }
     }
 }
@@ -367,7 +367,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     }
 
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
 
@@ -432,10 +432,15 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
                     tx::DisplayAmount(batch.iter().map(|req| req.amount).sum::<u64>()),
-                    batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
+                    batch
+                        .iter()
+                        .map(|req| req.address.display(s.btc_network))
+                        .collect::<Vec<_>>()
+                        .join(",")
                 );
 
                 // There is no point in retrying the request because the
@@ -451,9 +456,11 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::DustOutput { address, amount }) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
-                     tx::DisplayAmount(amount), address.display(s.btc_network)
+                    tx::DisplayAmount(amount),
+                    address.display(s.btc_network)
                 );
 
                 let mut requests_to_put_back = BTreeSet::new();
@@ -478,9 +485,14 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::NotEnoughFunds) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: not enough funds to unsigned transaction for requests at block indexes [{}]",
-                    batch.iter().map(|req| req.block_index.to_string()).collect::<Vec<_>>().join(",")
+                    batch
+                        .iter()
+                        .map(|req| req.block_index.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
                 );
 
                 s.push_from_in_flight_to_pending_requests(batch);
@@ -669,7 +681,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     }
 
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
 
@@ -899,14 +911,16 @@ pub async fn resubmit_transactions<
                     // replacement transactions with each resubmission. However, since replacing a
                     // transaction with itself is not allowed, we still handle the transaction
                     // equality in case the fee computation rules change in the future.
-                    log!(P0,
+                    log!(
+                        P0,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
                         &new_txid,
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
-                log!(P0,
+                log!(
+                    P0,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
                     &new_txid,
                     &old_txid,
@@ -924,7 +938,9 @@ pub async fn resubmit_transactions<
                 replace_transaction(old_txid, new_tx, replaced_reason);
             }
             Err(err) => {
-                log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
+                log!(
+                    P0,
+                    "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new())),
                     &old_txid,
                     err,
@@ -1030,7 +1046,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
         let outpoint = &input.previous_output;
 
         let account = lookup_outpoint_account(outpoint)
-            .unwrap_or_else(|| panic!("bug: no account for outpoint {:?}", outpoint));
+            .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
 
         let path = derivation_path(&account);
         let pubkey = ByteBuf::from(derive_public_key(ecdsa_public_key, &account).public_key);
@@ -1325,7 +1341,10 @@ pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
     use tasks::{pop_if_ready, run_task};
 
     if let Some(task) = pop_if_ready(&runtime) {
-        ic_cdk::spawn(run_task(task, runtime));
+        // Remark: spawn_017_compat is not needed since there is no code after `spawn` in the timer.
+        // See https://github.com/dfinity/cdk-rs/blob/0.18.3/ic-cdk/V18_GUIDE.md#futures-ordering-changes
+        #[allow(clippy::disallowed_methods)]
+        ic_cdk::futures::spawn(run_task(task, runtime));
     }
 }
 
@@ -1408,7 +1427,7 @@ pub trait CanisterRuntime {
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
-        request: GetUtxosRequest,
+        request: &GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
@@ -1445,11 +1464,11 @@ pub struct IcCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
     fn caller(&self) -> Principal {
-        ic_cdk::caller()
+        ic_cdk::api::msg_caller()
     }
 
     fn id(&self) -> Principal {
-        ic_cdk::id()
+        ic_cdk::api::canister_self()
     }
 
     fn time(&self) -> u64 {
@@ -1457,12 +1476,12 @@ impl CanisterRuntime for IcCanisterRuntime {
     }
 
     fn global_timer_set(&self, timestamp: u64) {
-        ic_cdk::api::set_global_timer(timestamp);
+        ic_cdk::api::global_timer_set(timestamp);
     }
 
     async fn bitcoin_get_utxos(
         &self,
-        request: GetUtxosRequest,
+        request: &GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }
@@ -1491,21 +1510,17 @@ impl CanisterRuntime for IcCanisterRuntime {
         derivation_path: DerivationPath,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        use ic_cdk::api::management_canister::ecdsa::{
-            EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
-        };
-
-        ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
+        ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
             message_hash: message_hash.to_vec(),
             derivation_path: derivation_path.into_inner(),
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
+            key_id: ic_cdk::management_canister::EcdsaKeyId {
+                curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
                 name: key_name.clone(),
             },
         })
         .await
-        .map(|(result,)| result.signature)
-        .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
+        .map(|result| result.signature)
+        .map_err(CallError::from_sign_error)
     }
 
     async fn send_transaction(
@@ -1673,4 +1688,4 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
     }
 }
 
-pub type GetUtxosCache = CacheWithExpiration<bitcoin::GetUtxosRequest, GetUtxosResponse>;
+pub type GetUtxosCache = CacheWithExpiration<bitcoin_canister::GetUtxosRequest, GetUtxosResponse>;

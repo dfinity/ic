@@ -284,6 +284,19 @@ def check_hostos_version_metrics(metrics_output: str) -> bool:
     return True
 
 
+def check_hostos_hw_generation_metrics(metrics_output: str) -> bool:
+    try:
+        expected_line = 'node_hardware_generation{gen="Gen2"} 1'
+        version_metric_line = next(
+            line for line in metrics_output.splitlines() if not line.startswith("#") and line == expected_line
+        )
+        log.info(f"node_hardware_generation metric: {version_metric_line}")
+        return True
+    except StopIteration:
+        log.warning("node_hardware_generation metric in HostOS metrics not found or invalid")
+        return False
+
+
 def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
     # Ping target with count of 1, STRICT timeout of `timeout_secs`.
     # This will break if latency is > `timeout_secs`.
@@ -604,9 +617,13 @@ def check_node_hostos_metrics(bmc_info: BMCInfo):
     metrics_output = get_url_content(metrics_endpoint, 5)
     if not metrics_output:
         log.warning(f"Request to {metrics_endpoint} failed.")
-        return False
+        return OperationResult(bmc_info, success=False)
 
-    result = check_hostos_power_metrics(metrics_output) and check_hostos_version_metrics(metrics_output)
+    result = (
+        check_hostos_power_metrics(metrics_output)
+        and check_hostos_version_metrics(metrics_output)
+        and check_hostos_hw_generation_metrics(metrics_output)
+    )
 
     return OperationResult(bmc_info, success=result)
 

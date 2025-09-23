@@ -2,7 +2,7 @@
 
 use crate::node::{Node, Nodes};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{
-    corrupt_dealing, ComplaintCorrupter,
+    ComplaintCorrupter, corrupt_dealing,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
@@ -89,7 +89,7 @@ pub fn mock_transcript<R: RngCore + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: alg,
         internal_transcript_raw: vec![],
@@ -141,15 +141,11 @@ pub fn swap_two_dealings_in_transcript(
         .support_dealing_from_all_receivers(dealing_ba, params);
 
     let mut transcript = transcript;
+    let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+        .expect("No other refs to verified_dealings");
 
-    assert!(transcript
-        .verified_dealings
-        .insert(a_idx, dealing_ba_signed)
-        .is_some());
-    assert!(transcript
-        .verified_dealings
-        .insert(b_idx, dealing_ab_signed)
-        .is_some());
+    assert!(verified_dealings.insert(a_idx, dealing_ba_signed).is_some());
+    assert!(verified_dealings.insert(b_idx, dealing_ab_signed).is_some());
 
     transcript
 }
@@ -185,11 +181,14 @@ pub fn copy_dealing_in_transcript(
         .support_dealing_from_all_receivers(dealing_to, params);
 
     let mut transcript = transcript;
+    let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+        .expect("No other refs to verified_dealings");
 
-    assert!(transcript
-        .verified_dealings
-        .insert(to_idx, dealing_to_signed)
-        .is_some());
+    assert!(
+        verified_dealings
+            .insert(to_idx, dealing_to_signed)
+            .is_some()
+    );
 
     transcript
 }
@@ -201,18 +200,7 @@ pub fn generate_key_transcript<R: RngCore + CryptoRng>(
     alg: AlgorithmId,
     rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
-
-    let masked_key_transcript = env
-        .nodes
-        .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
-
-    let unmasked_key_params = build_params_from_previous(
-        masked_key_params,
-        IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
-        rng,
-    );
-
+    let unmasked_key_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
     env.nodes
         .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
 }
@@ -270,7 +258,7 @@ pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
         kappa_times_lambda_transcript,
         key_times_lambda_transcript,
     )
-    .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {:?}", error))
+    .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {error:?}"))
 }
 
 /// Creates a new `IDkgTranscriptParams` with all information copied from a
@@ -395,7 +383,7 @@ pub mod node {
 
         pub fn create_dealing_or_panic(&self, params: &IDkgTranscriptParams) -> SignedIDkgDealing {
             self.create_dealing(params).unwrap_or_else(|error| {
-                panic!("failed to create IDkg dealing for {:?}: {:?}", self, error)
+                panic!("failed to create IDkg dealing for {self:?}: {error:?}")
             })
         }
 
@@ -403,7 +391,7 @@ pub mod node {
             self.crypto_component
                 .load_transcript(transcript)
                 .unwrap_or_else(|error| {
-                    panic!("failed to load transcript for {:?}: {:?}", self, error)
+                    panic!("failed to load transcript for {self:?}: {error:?}")
                 });
         }
 
@@ -427,7 +415,7 @@ pub mod node {
         ) -> IDkgTranscript {
             self.create_transcript(params, dealings)
                 .unwrap_or_else(|error| {
-                    panic!("failed to create transcript for {:?}: {:?}", self, error)
+                    panic!("failed to create transcript for {self:?}: {error:?}")
                 })
         }
 
@@ -709,7 +697,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build()
     }
 
@@ -732,7 +720,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .with_remote_vault()
             .build()
     }
@@ -1032,10 +1020,11 @@ pub mod node {
             let transcript_creator = self.filter_by_receivers(params).next().unwrap();
             let transcript =
                 transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
-            assert!(self
-                .random_filtered_by_receivers(params.receivers(), rng)
-                .verify_transcript(params, &transcript)
-                .is_ok());
+            assert!(
+                self.random_filtered_by_receivers(params.receivers(), rng)
+                    .verify_transcript(params, &transcript)
+                    .is_ok()
+            );
             transcript
         }
 
@@ -1324,7 +1313,7 @@ impl CanisterThresholdSigTestEnvironment {
             .crypto()
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
-        assert!(self.nodes.insert(node), "failed adding node {:?}", node_id);
+        assert!(self.nodes.insert(node), "failed adding node {node_id:?}");
         self.registry_data
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
@@ -1380,7 +1369,7 @@ pub fn random_node_ids_excluding<R: RngCore + CryptoRng>(
 ) -> BTreeSet<NodeId> {
     let mut node_ids = BTreeSet::new();
     while node_ids.len() < n {
-        let candidate = node_id(rng.gen());
+        let candidate = node_id(rng.r#gen());
         if !exclusions.contains(&candidate) {
             node_ids.insert(candidate);
         }
@@ -1410,9 +1399,9 @@ fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersi
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.gen::<u64>();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    let height = Height::from(rng.gen::<u64>());
+    let id = rng.r#gen::<u64>();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+    let height = Height::from(rng.r#gen::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }
@@ -1426,7 +1415,7 @@ pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTree
 }
 
 fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
-    node_id(rng.gen())
+    node_id(rng.r#gen())
 }
 
 pub fn random_receiver_id_excluding<R: RngCore + CryptoRng>(
@@ -1509,7 +1498,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(node_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build()
 }
 
@@ -1756,7 +1745,7 @@ pub fn setup_reshare_of_unmasked_params<R: Rng + CryptoRng>(
     receivers: &IDkgReceivers,
     rng: &mut R,
 ) -> IDkgTranscriptParams {
-    let unmasked_params = setup_reshare_of_masked_params(env, alg, dealers, receivers, rng);
+    let unmasked_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
     let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
     let reshare_params = build_params_from_previous(
         unmasked_params,
@@ -1940,7 +1929,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         ThresholdEcdsaSigVerifier::verify_sig_share(
@@ -1955,7 +1944,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     ThresholdEcdsaSigVerifier::combine_sig_shares(
         &combiner_crypto_component,
@@ -2008,7 +1997,7 @@ pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         ThresholdSchnorrSigVerifier::verify_sig_share(
@@ -2023,7 +2012,7 @@ pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     ThresholdSchnorrSigVerifier::combine_sig_shares(
         &combiner_crypto_component,
@@ -2553,7 +2542,7 @@ impl IDkgTranscriptBuilder {
             transcript_id: self.transcript_id,
             receivers: self.receivers,
             registry_version: self.registry_version,
-            verified_dealings: self.verified_dealings,
+            verified_dealings: Arc::new(self.verified_dealings),
             transcript_type: self.transcript_type,
             algorithm_id: self.algorithm_id,
             internal_transcript_raw: self.internal_transcript_raw,
@@ -2631,7 +2620,7 @@ impl IDkgTranscriptBuilder {
 
     pub fn corrupt_internal_transcript_raw<R: CryptoRng + RngCore>(mut self, rng: &mut R) -> Self {
         let raw_len = self.internal_transcript_raw.len();
-        let corrupted_idx = rng.gen::<usize>() % raw_len;
+        let corrupted_idx = rng.r#gen::<usize>() % raw_len;
         self.internal_transcript_raw[corrupted_idx] ^= 1;
         self
     }
@@ -2645,7 +2634,7 @@ impl IntoBuilder for IDkgTranscript {
             transcript_id: self.transcript_id,
             receivers: self.receivers,
             registry_version: self.registry_version,
-            verified_dealings: self.verified_dealings,
+            verified_dealings: self.verified_dealings.as_ref().clone(),
             transcript_type: self.transcript_type,
             algorithm_id: self.algorithm_id,
             internal_transcript_raw: self.internal_transcript_raw,
@@ -2752,13 +2741,14 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
 
     let complainer_index = params
         .receiver_index(complainer.id())
-        .unwrap_or_else(|| panic!("Missing receiver {:?}", complainer));
+        .unwrap_or_else(|| panic!("Missing receiver {complainer:?}"));
     dealing_indices_to_corrupt
         .iter()
         .for_each(|index_to_corrupt| {
             corrupt_signed_dealing_for_one_receiver(
                 *index_to_corrupt,
-                &mut transcript.verified_dealings,
+                Arc::get_mut(&mut transcript.verified_dealings)
+                    .expect("No other refs to verified_dealings"),
                 complainer_index,
                 rng,
             )
@@ -2824,7 +2814,7 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
 ) {
     let signed_dealing = dealings
         .get_mut(&dealing_index_to_corrupt)
-        .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
+        .unwrap_or_else(|| panic!("Missing dealing at index {dealing_index_to_corrupt:?}"));
     let invalidated_internal_dealing_raw = {
         let internal_dealing =
             IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
@@ -2907,14 +2897,14 @@ pub fn generate_initial_dealings<R: RngCore + CryptoRng>(
 
 pub mod ecdsa {
     use super::{
-        generate_key_transcript, generate_tecdsa_protocol_inputs,
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
+        generate_tecdsa_protocol_inputs,
     };
-    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
-    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
+    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use rand::distributions::uniform::SampleRange;
     use rand::prelude::*;
 
@@ -2940,8 +2930,8 @@ pub mod ecdsa {
             caller: PrincipalId::new_user_test_id(1),
             derivation_path: vec![],
         };
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
-        let message = rng.gen::<[u8; 32]>();
+        let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
+        let message = rng.r#gen::<[u8; 32]>();
 
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let inputs = generate_tecdsa_protocol_inputs(
@@ -2961,14 +2951,14 @@ pub mod ecdsa {
 
 pub mod schnorr {
     use super::{
-        generate_key_transcript, generate_tschnorr_protocol_inputs,
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
+        generate_tschnorr_protocol_inputs,
     };
-    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrSigInputs;
-    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
+    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrSigInputs;
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use rand::distributions::uniform::SampleRange;
     use rand::prelude::*;
 
@@ -2998,17 +2988,17 @@ pub mod schnorr {
         let message_length = rng.gen_range(0..2_000_000);
         let mut message = vec![0; message_length];
         rng.fill_bytes(&mut message);
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
         let taproot_tree_root = {
             if alg == AlgorithmId::ThresholdSchnorrBip340 {
-                let choose = rng.gen::<u8>();
+                let choose = rng.r#gen::<u8>();
                 if choose <= 128 {
                     None
                 } else if choose <= 192 {
                     Some(vec![])
                 } else {
-                    Some(rng.gen::<[u8; 32]>().to_vec())
+                    Some(rng.r#gen::<[u8; 32]>().to_vec())
                 }
             } else {
                 None

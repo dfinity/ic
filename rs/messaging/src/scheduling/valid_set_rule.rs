@@ -11,19 +11,19 @@ use ic_interfaces::{
     },
 };
 use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, trace};
 use ic_management_canister_types_private::CanisterStatusType;
-use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets, buckets::linear_buckets};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Time,
     ingress::{IngressState, IngressStatus},
     messages::{
-        extract_effective_canister_id, HttpRequestContent, Ingress, ParseIngressError,
-        SignedIngressContent,
+        HttpRequestContent, Ingress, ParseIngressError, SignedIngress,
+        extract_effective_canister_id,
     },
     time::expiry_time_from_now,
-    Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;
@@ -104,7 +104,7 @@ impl VsrMetrics {
 
 pub(crate) trait ValidSetRule: Send {
     /// Inducts the provided messages into the ReplicatedState.
-    fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>);
+    fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngress>);
 }
 
 pub(crate) struct ValidSetRuleImpl<
@@ -138,19 +138,15 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
     /// Tries to induct a single ingress message and sets the message status in
     /// `state` accordingly (to `Received` if successful; or to `Failed` with
     /// the relevant error code on failure).
-    fn induct_message(
-        &self,
-        state: &mut ReplicatedState,
-        msg: SignedIngressContent,
-        subnet_size: usize,
-    ) {
+    fn induct_message(&self, state: &mut ReplicatedState, msg: SignedIngress, subnet_size: usize) {
         trace!(self.log, "induct_message");
-        let message_id = msg.id();
-        let source = msg.sender();
-        let receiver = msg.canister_id();
-        let payload_bytes = msg.arg().len();
+        let ingress_content = msg.content();
+        let message_id = ingress_content.id();
+        let source = ingress_content.sender();
+        let receiver = ingress_content.canister_id();
+        let payload_bytes = ingress_content.arg().len();
         let time = state.time();
-        let ingress_expiry = msg.ingress_expiry();
+        let ingress_expiry = ingress_content.ingress_expiry();
 
         let status = match self.enqueue(state, msg, subnet_size) {
             Ok(()) => {
@@ -195,8 +191,8 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
     }
 
     /// Checks whether the given message has already been inducted.
-    fn is_duplicate(&self, state: &ReplicatedState, msg: &SignedIngressContent) -> bool {
-        state.get_ingress_status(&msg.id()) != &IngressStatus::Unknown
+    fn is_duplicate(&self, state: &ReplicatedState, msg: &SignedIngress) -> bool {
+        state.get_ingress_status(&msg.content().id()) != &IngressStatus::Unknown
     }
 
     /// Records the result of inducting an ingress message.
@@ -237,7 +233,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
     fn enqueue(
         &self,
         state: &mut ReplicatedState,
-        msg: SignedIngressContent,
+        signed_ingress: SignedIngress,
         subnet_size: usize,
     ) -> Result<(), IngressInductionError> {
         if state.metadata.own_subnet_type != SubnetType::System
@@ -248,33 +244,35 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
             });
         }
 
-        let effective_canister_id = match extract_effective_canister_id(&msg) {
+        let msg = signed_ingress.content();
+
+        let effective_canister_id = match extract_effective_canister_id(msg) {
             Ok(effective_canister_id) => effective_canister_id,
             Err(ParseIngressError::UnknownSubnetMethod) => {
                 return Err(IngressInductionError::CanisterMethodNotFound(
                     msg.method_name().to_string(),
-                ))
+                ));
             }
             Err(ParseIngressError::SubnetMethodNotAllowed) => {
                 return Err(IngressInductionError::SubnetMethodNotAllowed(
                     msg.method_name().to_string(),
-                ))
+                ));
             }
             Err(ParseIngressError::InvalidSubnetPayload(_)) => {
-                return Err(IngressInductionError::InvalidManagementPayload)
+                return Err(IngressInductionError::InvalidManagementPayload);
             }
         };
 
         // Compute the cost of induction.
         let cost_schedule = state.get_own_cost_schedule();
         let induction_cost = self.cycles_account_manager.ingress_induction_cost(
-            &msg,
+            &signed_ingress,
             effective_canister_id,
             subnet_size,
             cost_schedule,
         );
 
-        let ingress = Ingress::from((msg, effective_canister_id));
+        let ingress = Ingress::from((signed_ingress.take_content(), effective_canister_id));
         match induction_cost {
             IngressInductionCost::Free => {
                 // Only subnet methods can be free. These are enqueued directly.
@@ -314,12 +312,12 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                         CanisterStatusType::Stopping => {
                             return Err(IngressInductionError::CanisterStopping(
                                 canister.canister_id(),
-                            ))
+                            ));
                         }
                         CanisterStatusType::Stopped => {
                             return Err(IngressInductionError::CanisterStopped(
                                 canister.canister_id(),
-                            ))
+                            ));
                         }
                     }
                 }
@@ -333,14 +331,14 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
 impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> ValidSetRule
     for ValidSetRuleImpl<IngressHistoryWriter_>
 {
-    fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>) {
+    fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngress>) {
         let subnet_size = state
             .metadata
             .network_topology
             .get_subnet_size(&state.metadata.own_subnet_id)
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         for msg in msgs {
-            let message_id = msg.id();
+            let message_id = msg.content().id();
             if !self.is_duplicate(state, &msg) {
                 self.induct_message(state, msg, subnet_size);
             } else {
