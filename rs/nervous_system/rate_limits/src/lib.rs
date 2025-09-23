@@ -70,16 +70,15 @@ use std::{
 //     fn keys(&self) -> Vec<K>;
 // }
 
-// Notes: So far, this design can work if you assume you know the limit in the RateLimiter.
+struct UsageRecord {
+    last_updated: SystemTime,
+    capacity_used: u64,
+}
 
-// But what if the limits are different for different kinds of things?  You need to somehow have
-// The limit passed in with the key.  This is kind of an odd design choice, when you think about it.
-
-// How would you be able to know, from the key, what the limit was?  You'd have to have a way of
-// setting it per key.
 pub struct RateLimiter<K> {
     config: RateLimiterConfig,
     reservations: Arc<Mutex<BTreeMap<(K, u64), ReservationData>>>,
+    used_capacity: BTreeMap<K, UsageRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -89,7 +88,6 @@ struct ReservationData {
 }
 
 pub struct RateLimiterConfig {
-    pub resolution: Duration,
     pub max_age: Duration,
     pub max_capacity: u64,
 }
@@ -149,7 +147,26 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         }
     }
 
-    pub fn commit(&self, _reservation: Reservation<K>) {}
+    pub fn commit(&mut self, reservation: Reservation<K>) {
+        let usage = self
+            .used_capacity
+            .entry(reservation.key.clone())
+            .or_insert_with(|| UsageRecord {
+                last_updated: SystemTime::now(),
+                capacity_used: 0,
+            });
+
+        // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
+        // How do we handle that?
+        if let Ok(mut reservations) = self.reservations.lock() {
+            if let Some(reservation) =
+                reservations.remove(&(reservation.key.clone(), reservation.index))
+            {
+                usage.last_updated = SystemTime::now();
+                usage.capacity_used = usage.capacity_used.saturating_add(reservation.capacity);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -220,5 +237,29 @@ mod tests {
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
         drop(two);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_rate_limiter_commits_and_new_reservations() {
+        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
+            resolution: Duration::from_millis(100),
+            max_age: Duration::from_secs(60),
+            max_capacity: 10,
+        });
+
+        let now = SystemTime::now();
+        let one = rate_limiter.try_reserve(now, "Foo".to_string(), 5);
+        assert!(one.is_ok());
+        let one = one.unwrap();
+        assert_eq!(one.index, 0);
+        assert_eq!(one.key, "Foo".to_string());
+
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
+        // Now commit
+        rate_limiter.commit(one);
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 0);
+
+        let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 6);
+        assert_eq!(over_limit, Err(RateLimiterError::NotEnoughCapacity));
     }
 }
