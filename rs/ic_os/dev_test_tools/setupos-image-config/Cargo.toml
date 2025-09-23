@@ -15,9 +15,5 @@ config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 
 [[bin]]
-name = "setupos-create-config"
-path = "src/bin/create.rs"
-
-[[bin]]
 name = "setupos-inject-config"
 path = "src/bin/inject.rs"

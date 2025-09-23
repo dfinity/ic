@@ -7,7 +7,7 @@ use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::{arb_account, minter_identity};
-use ic_ledger_suite_state_machine_tests::send_transfer;
+use ic_ledger_suite_state_machine_helpers::send_transfer;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
 use ic_types::{Cycles, Time};

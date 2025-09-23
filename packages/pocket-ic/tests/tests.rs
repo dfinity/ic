@@ -398,7 +398,7 @@ fn test_initial_timestamp() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 
     // Initial time is bumped by 1ns during instance creation to ensure strict monotonicity.
@@ -415,7 +415,7 @@ fn test_initial_timestamp() {
 fn test_invalid_initial_timestamp() {
     let _pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_initial_timestamp(0)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(0))
         .build();
 }
 
@@ -430,7 +430,7 @@ fn test_initial_timestamp_with_cycles_minting() {
         .with_nns_subnet()
         .with_application_subnet()
         .with_icp_features(icp_features)
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 
     // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
@@ -454,7 +454,7 @@ fn test_invalid_initial_timestamp_with_cycles_minting() {
         .with_nns_subnet()
         .with_application_subnet()
         .with_icp_features(icp_features)
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 }
 
@@ -3225,6 +3225,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3283,6 +3284,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3326,6 +3328,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3391,6 +3394,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 

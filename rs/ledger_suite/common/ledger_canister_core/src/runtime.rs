@@ -41,7 +41,7 @@ pub struct CdkRuntime;
 #[async_trait]
 impl Runtime for CdkRuntime {
     fn id() -> CanisterId {
-        CanisterId::try_from(PrincipalId::from(ic_cdk::api::id())).unwrap()
+        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::id()))
     }
 
     fn print(msg: impl AsRef<str>) {
