@@ -14,10 +14,12 @@ use std::{
     collections::{HashMap, VecDeque},
     time::Duration,
 };
-use tempfile::TempDir;
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(99);
+
+// TODO:
+// - test all conditions of validation after the MC is unique controller and fail there.
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct MigrateCanisterArgs {
@@ -78,15 +80,11 @@ async fn setup(
         enough_cycles,
     }: Settings,
 ) -> Setup {
-    let state_dir = TempDir::new().unwrap();
-    let state_dir = state_dir.path().to_path_buf();
-
     let pic = PocketIcBuilder::new()
         .with_icp_features(IcpFeatures {
             registry: Some(IcpFeaturesConfig::DefaultConfig),
             ..Default::default()
         })
-        .with_state_dir(state_dir.clone())
         .with_application_subnet()
         .with_application_subnet()
         .build_async()
@@ -296,7 +294,8 @@ async fn validation_succeeds() {
         logs.add(log);
     }
 
-    // Low prio test that the state machine transitions in expected order
+    // TODO: this should be a separate test disconnected from validation
+    // Test that the state machine transitions in expected order
     assert!(logs.contains_in_order(vec![
         "Entering `accepted` with 1 pending",
         "Exiting `accepted` with 1 successful",
@@ -469,5 +468,33 @@ async fn validation_fails_disabled() {
     assert!(matches!(
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
         Err(ValidationError::MigrationsDisabled)
+    ));
+}
+
+#[tokio::test]
+async fn validation_fails_snapshot() {
+    let Setup {
+        pic,
+        source,
+        target,
+        target_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = target_controllers[0];
+    // install a minimal Wasm module
+    pic.install_canister(
+        target,
+        b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
+        vec![],
+        Some(sender),
+    )
+    .await;
+    let _ = pic
+        .take_canister_snapshot(target, Some(sender), None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        Err(ValidationError::TargetHasSnapshots)
     ));
 }
