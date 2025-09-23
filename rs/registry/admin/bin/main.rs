@@ -3717,7 +3717,8 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
-    let cmd = Opts::command().version(option_env!("VERSION").unwrap_or(env!("CARGO_PKG_VERSION")));
+    let cmd = Opts::command()
+        .version(option_env!("VERSION").unwrap_or("VERSION rustc-env var not defined!"));
     let matches = cmd.get_matches();
     let opts = Opts::from_arg_matches(&matches).unwrap();
 
