@@ -4654,7 +4654,6 @@ pub fn subnets_simple<const N: usize>() -> [Arc<StateMachine>; N] {
     let subnets = Arc::new(SubnetsImpl::new());
 
     let envs = (1..=N)
-        .into_iter()
         .map(|seed| {
             multi_subnet_setup(
                 subnets.clone(),
