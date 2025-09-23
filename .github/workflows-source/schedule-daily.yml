@@ -6,6 +6,10 @@ on:
     # and the Release Testing workflow triggered by the Schedule RC workflow.
     - cron: "0 0 * * *"
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI Generate CI"]
+    types:
+      - completed
 
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}

@@ -6,6 +6,10 @@ on:
       - "hotfix-*"
       - "rc--*"
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI Generate CI"]
+    types:
+      - completed
 
 # new commits interrupt any running workflow on the same branch
 concurrency:

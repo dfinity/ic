@@ -5,6 +5,10 @@ on:
   merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: ["CI Generate CI"]
+    types:
+      - completed
 
 concurrency:
   # only triggered on PR, so head_ref will always be set
