@@ -370,7 +370,11 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 // `PROTOCOL_CANISTER_IDS`.
 fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
     let canister_ids = state_machine.get_canister_ids();
-    let non_protocol_canister_ids_in_nns_subnet = [NNS_UI_CANISTER_ID, SNS_WASM_CANISTER_ID];
+    let non_protocol_canister_ids_in_nns_subnet = [
+        NNS_UI_CANISTER_ID,
+        SNS_WASM_CANISTER_ID,
+        MIGRATION_CANISTER_ID, /* TODO: temporary fix until this canister has real state */
+    ];
 
     for canister_id in canister_ids {
         if non_protocol_canister_ids_in_nns_subnet.contains(&canister_id) {
