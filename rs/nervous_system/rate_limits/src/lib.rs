@@ -102,11 +102,12 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         Self {
             config,
             reservations: Arc::new(Mutex::new(BTreeMap::new())),
+            used_capacity: BTreeMap::new(),
         }
     }
 
     pub fn try_reserve(
-        &self,
+        &mut self,
         now: SystemTime,
         key: K,
         capacity: u64,
@@ -127,11 +128,18 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
 
         let reserved_capacity: u64 = key_reservations
             .into_iter()
-            .filter(|(_, data)| data.now > now - self.config.max_age)
             .map(|(_, data)| data.capacity)
             .sum();
 
-        if reserved_capacity + capacity <= self.config.max_capacity {
+        // Also check committed usage that hasn't expired
+        let committed_capacity = self
+            .used_capacity
+            .get(&key)
+            .filter(|usage| usage.last_updated > now - self.config.max_age)
+            .map(|usage| usage.capacity_used)
+            .unwrap_or(0);
+
+        if reserved_capacity + committed_capacity + capacity <= self.config.max_capacity {
             let reservation_data = ReservationData { now, capacity };
             reservations.insert((key.clone(), next_index), reservation_data);
 
@@ -192,8 +200,7 @@ mod tests {
 
     #[test]
     fn test_rate_limiter_just_reservations() {
-        let rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
-            resolution: Duration::from_millis(100),
+        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
             max_age: Duration::from_secs(60),
             max_capacity: 10,
         });
@@ -221,20 +228,25 @@ mod tests {
             Err(RateLimiterError::NotEnoughCapacity)
         ));
 
-        let next_now = now + Duration::from_secs(61);
-
-        let three_after_time = rate_limiter.try_reserve(next_now, "Foo".to_string(), 1);
-        assert!(three_after_time.is_ok());
-        let three_after_time = three_after_time.unwrap();
-        assert_eq!(three_after_time.key, "Foo".to_string());
-        assert_eq!(three_after_time.index, 2);
-
         // Now we test the Drop logic on Reservations
-        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 3);
-        drop(one);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 2);
-        drop(three_after_time);
+        drop(one);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
+
+        let one = rate_limiter.try_reserve(now, "Foo".to_string(), 5);
+        assert!(one.is_ok());
+        let one = one.unwrap();
+        // Still gets next highest index, b/c two is still there.
+        assert_eq!(one.index, 2);
+        assert_eq!(one.key, "Foo".to_string());
+
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 2);
+        let three_is_over = rate_limiter.try_reserve(SystemTime::now(), "Foo".to_string(), 1);
+        assert!(matches!(
+            three_is_over,
+            Err(RateLimiterError::NotEnoughCapacity)
+        ));
+        drop(one);
         drop(two);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 0);
     }
@@ -242,7 +254,6 @@ mod tests {
     #[test]
     fn test_rate_limiter_commits_and_new_reservations() {
         let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
-            resolution: Duration::from_millis(100),
             max_age: Duration::from_secs(60),
             max_capacity: 10,
         });
@@ -260,6 +271,9 @@ mod tests {
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 0);
 
         let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 6);
-        assert_eq!(over_limit, Err(RateLimiterError::NotEnoughCapacity));
+        assert!(matches!(
+            over_limit,
+            Err(RateLimiterError::NotEnoughCapacity)
+        ));
     }
 }
