@@ -3336,6 +3336,67 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
                     &wasm_file_in_checkpoint,
                     &wasm_file_in_scratchpad,
                 );
+            }
+            assert_no_remaining_chunks(dst_metrics);
+
+            // Case 2: Hardlink from readonly file in cache at the same height as the scratchpad,
+            // for example, wasm file of the first canister.
+            {
+                let mut chunkable = set_fetch_state_and_start_start_sync(
+                    &dst_state_manager,
+                    &dst_state_sync,
+                    &id_2,
+                );
+
+                let cache_root = dst_state_manager
+                    .state_layout()
+                    .state_sync_cache(height(2))
+                    .expect("failed to get directory for state sync cache");
+
+                let cache_layout =
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(cache_root, height(2))
+                        .expect("failed to create cache layout");
+
+                let wasm_file_in_cache = cache_layout
+                    .canister(&canister_test_id(100))
+                    .unwrap()
+                    .wasm()
+                    .raw_path()
+                    .to_path_buf();
+                // assert the wasm file is readonly
+                assert!(
+                    wasm_file_in_cache
+                        .metadata()
+                        .unwrap()
+                        .permissions()
+                        .readonly()
+                );
+
+                let result = pipe_meta_manifest(&msg_2, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+                let result = pipe_manifest(&msg_2, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+
+                let scratchpad_root = dst_state_manager
+                    .state_layout()
+                    .state_sync_scratchpad(height(2))
+                    .expect("failed to get directory for state sync scratchpad");
+
+                let scratchpad_layout =
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(scratchpad_root, height(2))
+                        .expect("failed to create scratchpad layout");
+
+                let wasm_file_in_scratchpad = scratchpad_layout
+                    .canister(&canister_test_id(100))
+                    .unwrap()
+                    .wasm()
+                    .raw_path()
+                    .to_path_buf();
+
+                assert_files_are_hardlinked_and_readonly(
+                    &wasm_file_in_cache,
+                    &wasm_file_in_scratchpad,
+                );
 
                 // Download some chunks but intentionally do not complete the state sync.
                 // Skip the `system_metadata.pbuf` chunk, as it is always non-empty, rarely identical to other chunks, and changes between checkpoints.
@@ -3406,7 +3467,7 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
                 let result = pipe_manifest(&msg_3, &mut *chunkable, false);
                 assert_matches!(result, Ok(false));
 
-                // Case 2(a): Hardlink from readonly file in cache,
+                // Case 3(a): Hardlink from readonly file in cache at previous height,
                 // for example, wasm file of the first canister.
                 let scratchpad_root = dst_state_manager
                     .state_layout()
@@ -3429,7 +3490,7 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
                     &wasm_file_in_scratchpad,
                 );
 
-                // Case 2(b): Hardlink from writable file in cache,
+                // Case 3(b): Hardlink from writable file in cache at previous height,,
                 // for example, stable memory overlay file of the second canister.
                 let stable_memory_overlay_file_in_scratchpad = scratchpad_layout
                     .canister(&canister_test_id(200))
