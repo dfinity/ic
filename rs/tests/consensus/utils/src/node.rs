@@ -176,7 +176,7 @@ pub fn await_subnet_earliest_topology_version(
                 let earliest_registry_versions = &val[EARLIEST_TOPOLOGY_VERSION];
                 ensure!(
                     earliest_registry_versions.len() == subnet.nodes().count(),
-                    "Metrics not available for all nodes yet. Metrics {}, nodes {}",
+                    "Metrics not available for all nodes yet. {} metrics, {} nodes",
                     earliest_registry_versions.len(),
                     subnet.nodes().count()
                 );
