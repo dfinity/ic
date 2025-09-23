@@ -5,6 +5,10 @@ on:
   merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: ["CI PR Only"]
+    types:
+      - completed
 
 concurrency:
   # only triggered on PR, so head_ref will always be set
@@ -85,7 +89,7 @@ jobs:
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
-          git commit --allow-empty -m "IDX GitHub Automation"
+          git commit --allow-empty -m "empty commit"
           git push
 
   bazel-build-fuzzers-archives:
