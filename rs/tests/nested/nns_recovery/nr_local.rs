@@ -18,7 +18,7 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery assuming the DFINITY-owned node is broken/lagging behind.
+. This test variant performs the recovery locally, i.e. SSHs into the DFINITY-owned node and runs the recovery tool there.
 
 end::catalog[] */
 
@@ -42,8 +42,8 @@ fn main() -> Result<()> {
             )
         })
         .add_test(systest!(test; TestConfig {
-            local_recovery: false,
-            break_dfinity_owned_node: true,
+            local_recovery: true,
+            break_dfinity_owned_node: false,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(40 * 60))
