@@ -160,7 +160,7 @@ pub async fn start_synching_blocks(
         if !is_initial_sync {
             heartbeat();
         }
-        let mut all_operations_succeeded = true;
+        let mut sync_failed = false;
         // Verify and fix gaps in the database.
         let result = verify_and_fix_gaps(
             agent.clone(),
@@ -172,26 +172,26 @@ pub async fn start_synching_blocks(
             Ok(_) => {}
             Err(e) => {
                 error!("Error while verifying and fixing gaps: {}", e);
-                all_operations_succeeded = false;
-                current_failure_streak += 1;
+                sync_failed = true;
             }
         }
 
-        match sync_from_the_tip(
-            agent.clone(),
-            storage_client.clone(),
-            maximum_blocks_per_request,
-            archive_canister_ids.clone(),
-        )
-        .await
-        {
-            Ok(_) => {
-                is_initial_sync = false;
-            }
-            Err(e) => {
-                error!("Error while syncing blocks: {}", e);
-                all_operations_succeeded = false;
-                current_failure_streak += 1;
+        if !sync_failed {
+            match sync_from_the_tip(
+                agent.clone(),
+                storage_client.clone(),
+                maximum_blocks_per_request,
+                archive_canister_ids.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    is_initial_sync = false;
+                }
+                Err(e) => {
+                    error!("Error while syncing blocks: {}", e);
+                    sync_failed = true;
+                }
             }
         }
 
@@ -201,12 +201,13 @@ pub async fn start_synching_blocks(
             Ok(_) => {}
             Err(e) => {
                 error!("Error while updating account balances: {}", e);
-                all_operations_succeeded = false;
-                current_failure_streak += 1;
+                sync_failed = true;
             }
         }
 
-        if all_operations_succeeded {
+        if sync_failed {
+            current_failure_streak += 1;
+        } else {
             current_failure_streak = 0;
         }
 
