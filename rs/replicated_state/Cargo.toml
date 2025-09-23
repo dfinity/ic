@@ -53,6 +53,7 @@ tempfile = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 assert_matches = { workspace = true, optional = true }
 ic-test-utilities-io = { path = "../test_utilities/io", optional = true }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics", optional = true }
 proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -81,5 +82,6 @@ fuzzing_code = [
     "dep:arbitrary",
     "dep:assert_matches",
     "dep:ic-test-utilities-io",
+    "dep:ic-test-utilities-metrics",
     "dep:proptest",
 ]
