@@ -43,6 +43,7 @@ LIB_DEPENDENCIES = [
     "//rs/registry/canister",
     "//rs/registry/canister/api",
     "//rs/registry/keys",
+    "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
