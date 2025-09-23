@@ -223,6 +223,20 @@ impl RequestState {
             | RequestState::Failed { request, .. } => request,
         }
     }
+
+    fn name(&self) -> &str {
+        match self {
+            RequestState::Accepted { .. } => "Accepted",
+            RequestState::ControllersChanged { .. } => "ControllersChanged",
+            RequestState::StoppedAndReady { .. } => "StoppedAndReady",
+            RequestState::RenamedTarget { .. } => "RenamedTarget",
+            RequestState::UpdatedRoutingTable { .. } => "UpdateRoutingTable",
+            RequestState::RoutingTableChangeAccepted { .. } => "RoutingTableChangeAccepted",
+            RequestState::SourceDeleted { .. } => "SourceDeleted",
+            RequestState::RestoredControllers { .. } => "RestoredControllers",
+            RequestState::Failed { .. } => "Failed",
+        }
+    }
 }
 
 #[derive(Clone, Display, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
@@ -231,6 +245,14 @@ pub enum Event {
     Succeeded { request: Request },
     #[strum(to_string = "Event::Failed {{ request: {request}, reason: {reason} }}")]
     Failed { request: Request, reason: String },
+}
+
+impl Event {
+    fn request(&self) -> &Request {
+        match self {
+            Event::Succeeded { request } | Event::Failed { request, .. } => request,
+        }
+    }
 }
 
 impl Storable for Request {
