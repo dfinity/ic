@@ -261,7 +261,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 Ok(Box::new(self.recovery.get_download_certs_step(
                     self.params.subnet_id,
                     SshUser::Admin,
-                    /*alt_key_file=*/ None,
+                    self.recovery.key_file.clone(),
                     !self.interactive(),
                 )))
             }
