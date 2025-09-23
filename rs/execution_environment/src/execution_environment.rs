@@ -81,8 +81,7 @@ use ic_types::{
     messages::{
         CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
-        SignedIngressContent, StopCanisterCallId, StopCanisterContext,
-        extract_effective_canister_id,
+        SignedIngress, StopCanisterCallId, StopCanisterContext, extract_effective_canister_id,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
@@ -899,7 +898,7 @@ impl ExecutionEnvironment {
                     self.get_canister_status(
                         *msg.sender(),
                         args.get_canister_id(),
-                        &mut state,
+                        &state,
                         registry_settings.subnet_size,
                         ready_for_migration,
                     )
@@ -2272,12 +2271,12 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
-        state: &mut ReplicatedState,
+        state: &ReplicatedState,
         subnet_size: usize,
         ready_for_migration: bool,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(canister_id, state)?;
+        let canister = get_canister(canister_id, state)?;
         self.canister_manager
             .get_canister_status(
                 sender,
@@ -2884,7 +2883,7 @@ impl ExecutionEnvironment {
         &self,
         state: Arc<ReplicatedState>,
         provisional_whitelist: &ProvisionalWhitelist,
-        ingress: &SignedIngressContent,
+        ingress: &SignedIngress,
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
@@ -2897,8 +2896,8 @@ impl ExecutionEnvironment {
                 )),
             }
         };
-        let effective_canister_id = extract_effective_canister_id(ingress)
-            .map_err(|err| err.into_user_error(ingress.method_name()))?;
+        let effective_canister_id = extract_effective_canister_id(ingress.content())
+            .map_err(|err| err.into_user_error(ingress.content().method_name()))?;
 
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
@@ -2939,11 +2938,11 @@ impl ExecutionEnvironment {
             }
         }
 
-        if ingress.is_addressed_to_subnet() {
+        if ingress.content().is_addressed_to_subnet() {
             return self.canister_manager.should_accept_ingress_message(
                 state,
                 provisional_whitelist,
-                ingress,
+                ingress.content(),
                 effective_canister_id,
             );
         }
@@ -2997,7 +2996,7 @@ impl ExecutionEnvironment {
         inspect_message::execute_inspect_message(
             state.time(),
             canister_state.clone(),
-            ingress,
+            ingress.content(),
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,

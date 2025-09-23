@@ -1,8 +1,9 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
+use ic_canonical_state::encoding::encode_subnet_canister_ranges;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, LookupStatus, MixedHashTree, Path as LabelPath, flatmap,
+    Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, flatmap,
     sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
@@ -16,6 +17,7 @@ use ic_management_canister_types_private::{
     TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -3114,15 +3116,27 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
             }
             assert_no_remaining_chunks(dst_metrics);
 
-            // The second state sync targets the same state at height 1.
+            // The second state sync targets the same state at height 1 based on the cache from the first state sync.
+            // Here, canister.pbuf files are both copied and fetched via file group chunks. However, we don't fetch any chunks.
+            // This is to test that the remaining_chunks metric is correctly updated to 0 during drop.
+            {
+                let mut chunkable =
+                    set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+                let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+                let result = pipe_manifest(&msg, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+            }
+            assert_no_remaining_chunks(dst_metrics);
+
+            // The third state sync targets the same state at height 1 based on the cache from the second state sync.
             // Here, canister.pbuf files are both copied and fetched via file group chunks.
             // This is to test that when applying file group chunks, any already-copied individual chunks are properly skipped.
             // We verify this behavior by asserting that the remaining chunks metric never becomes negative.
             {
-                // Compared to the checkpoint at height 1, the only different file in checkpoint at height 2 is `system_metadata.pbuf`.
                 let mut chunkable =
                     set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-
                 let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
                 assert_matches!(result, Ok(false));
                 let result = pipe_manifest(&msg, &mut *chunkable, false);
@@ -3137,8 +3151,7 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
 
                 let fetch_chunks: HashSet<ChunkId> =
                     omit1.union(&file_group_chunks).copied().collect();
-
-                // Only the chunks not fetched in the first state sync plus chunks of the file group should still be requested
+                // Only the chunks not fetched in the previous state syncs plus chunks of the file group should still be requested
                 assert_eq!(fetch_chunks, chunkable.chunks_to_download().collect());
 
                 // Only finish the copy phase by omitting the chunks to fetch
@@ -5116,6 +5129,100 @@ fn certified_read_can_produce_proof_of_absence() {
                                 label("status") => Leaf(b"replied".to_vec()),
                                 label("reply") => Leaf(b"done".to_vec()),
                             }),
+                    })
+            })
+        );
+    })
+}
+
+#[test]
+fn certified_read_can_exclude_canister_ranges() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+
+        let mut subnets = BTreeMap::new();
+        let mut routing_table = RoutingTable::new();
+
+        for i in 0..4 {
+            let subnet_id = subnet_test_id(i);
+            subnets.insert(
+                subnet_id,
+                SubnetTopology {
+                    public_key: vec![i as u8; 133],
+                    nodes: Default::default(),
+                    subnet_type: SubnetType::Application,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                },
+            );
+            routing_table
+                .insert(
+                    CanisterIdRange {
+                        start: canister_test_id(1000 * i + 1),
+                        end: canister_test_id(1000 * (i + 1)),
+                    },
+                    subnet_id,
+                )
+                .unwrap();
+        }
+
+        let network_topology = NetworkTopology {
+            subnets,
+            routing_table: Arc::new(routing_table),
+            ..Default::default()
+        };
+
+        state.metadata.network_topology = network_topology;
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
+
+        let path = SubTree(flatmap! {
+            label("subnet") => Leaf(())
+        });
+        let delivered_certification = certify_height(&state_manager, height(1));
+
+        // Drop all `canister_ranges` leafs except for `some_subnet_id`
+        let some_subnet_id = subnet_test_id(1);
+        let exclusion = vec![
+            MatchPattern::Inclusive("subnet".into()),
+            MatchPattern::Exclusive(label(some_subnet_id.get_ref())),
+            MatchPattern::Inclusive("canister_ranges".into()),
+        ];
+
+        let (_state, mixed_tree, cert) = state_manager
+            .read_certified_state_with_exclusion(&path, Some(&exclusion))
+            .expect("failed to read certified state");
+
+        assert_eq!(cert, delivered_certification);
+        assert_eq!(
+            tree_payload(mixed_tree),
+            SubTree(flatmap! {
+                label("subnet") =>
+                    SubTree(flatmap! {
+                        label(subnet_test_id(0).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("public_key") => Leaf(vec![0_u8; 133]),
+                            }),
+                        label(subnet_test_id(1).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("canister_ranges") => Leaf(
+                                    encode_subnet_canister_ranges(
+                                        Some(&vec![(canister_test_id(1001).get(), canister_test_id(2000).get())])
+                                    )
+                                ),
+                                label("public_key") => Leaf(vec![1_u8; 133]),
+                            }),
+                        label(subnet_test_id(2).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("public_key") => Leaf(vec![2_u8; 133]),
+                            }),
+                        label(subnet_test_id(3).get_ref()) =>
+                            SubTree(flatmap! {
+                                label("public_key") => Leaf(vec![3_u8; 133]),
+                            })
                     })
             })
         );

@@ -108,7 +108,10 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
-    canister_state::{NumWasmPages, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase},
+    canister_state::{
+        NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::{CanisterHistory, CyclesUseCase},
+    },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
 };
@@ -2303,7 +2306,7 @@ impl StateMachine {
         // Run `IngressFilter` on the ingress message.
         let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
-            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
+            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()
             .map_err(SubmitIngressError::UserError)?;
 
@@ -3845,7 +3848,7 @@ impl StateMachine {
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
         let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
-            msg.content(),
+            &msg,
             effective_canister_id,
             subnet_size,
             self.cost_schedule,
@@ -3876,7 +3879,7 @@ impl StateMachine {
         // Run `IngressFilter` on the ingress message.
         let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
-            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
+            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()?;
 
         let msg_id = msg.content().id();
@@ -4398,6 +4401,19 @@ impl StateMachine {
         let payload = PayloadBuilder::new().with_xnet_payload(xnet_payload);
 
         self.execute_payload(payload);
+    }
+
+    /// Returns the history of the given canister_id.
+    ///
+    /// # Panics
+    /// Panics if the canister_id does not exist in the replicated state.
+    pub fn get_canister_history(&self, canister_id: CanisterId) -> CanisterHistory {
+        self.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .clone()
     }
 }
 

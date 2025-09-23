@@ -917,6 +917,26 @@ fn ic0_stable64_read_does_not_trap_if_in_bounds() {
 }
 
 #[test]
+fn ic0_debug_print_out_of_bounds_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "debug_print"
+                (func $debug_print (param i32) (param i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (call $debug_print (i32.const 2147483647) (i32.const 1))
+                (call $msg_reply)
+            )
+            (memory 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
 fn time_with_5_nanoseconds() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -1719,6 +1739,29 @@ fn ic0_msg_reply_data_append_has_no_effect_without_ic0_msg_reply() {
 }
 
 #[test]
+fn ic0_msg_caller_size_and_copy_work_in_init() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.install_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        wasm().caller().set_global_data_from_stack().build(),
+    )
+    .unwrap();
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(test.user_id().get().as_slice().to_vec())
+    );
+}
+
+#[test]
 fn ic0_msg_caller_size_and_copy_work_in_update_calls() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
@@ -2456,6 +2499,29 @@ fn ic0_canister_self_copy_works() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     assert_eq!(WasmResult::Reply(canister_id.get().into_vec()), result);
+}
+
+#[test]
+fn ic0_canister_self_size_and_copy_work_in_init() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.install_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        wasm().self_().set_global_data_from_stack().build(),
+    )
+    .unwrap();
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(canister_id.get().as_slice().to_vec())
+    );
 }
 
 #[test]
@@ -5699,6 +5765,107 @@ fn cannot_stop_canister_with_open_call_context() {
         test.canister_state(a_id).system_state.status(),
         CanisterStatusType::Stopped
     );
+}
+
+/* Test that
+ * - uninstalling a canister generates reject response;
+ * - deleted call contexts prevents canister from getting stopped;
+ * - responses for deleted call contexts are not delivered.
+ */
+#[test]
+fn deleted_call_contexts() {
+    // This test uses manual execution to get finer control over the execution
+    // and message induction order.
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A, B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let cycles_balance =
+        |test: &mut ExecutionTest| test.canister_state(a_id).system_state.balance();
+
+    let global_data = |test: &mut ExecutionTest| {
+        let res = test.non_replicated_query(
+            a_id,
+            "query",
+            wasm().get_global_data().append_and_reply().build(),
+        );
+        get_reply(res)
+    };
+
+    // Canister A:
+    // 1. Sets global data and calls canister B.
+    // 2. Resets global data upon reply from B.
+    // Canister B:
+    // 1. Replies to A.
+    let a = wasm()
+        .set_global_data(b"BAR")
+        .call_with_cycles(
+            b_id,
+            "update",
+            call_args()
+                .other_side(wasm().reply().build())
+                .on_reply(wasm().set_global_data(b"FOO").reply().build()),
+            initial_cycles / 2_u128,
+        )
+        .build();
+
+    // Execute canister A.
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+
+    assert_eq!(global_data(&mut test), b"BAR");
+
+    // Uninstall canister A, which generates a reject for the ingress message.
+    test.uninstall_code(a_id).unwrap();
+    let ingress_status = test.ingress_status(&ingress_id);
+    let err = check_ingress_status(ingress_status).unwrap_err();
+    let reject_message = err.description();
+    assert!(
+        reject_message.contains("Canister has been uninstalled"),
+        "Unexpected error message: {}",
+        reject_message
+    );
+
+    // Install A back before B replies.
+    test.install_canister(a_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Now B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // The canister is not stopped yet because it has a deleted call context.
+    test.stop_canister(a_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopping
+    );
+
+    // The response from B was not processed yet (otherwise cycles would have been refunded).
+    assert!(cycles_balance(&mut test) < initial_cycles / 2_u128);
+
+    test.execute_message(a_id);
+
+    // The response was processed (because cycles have been refunded).
+    assert!(cycles_balance(&mut test) > initial_cycles * 3_u128 / 4_u128);
+
+    // The canister can now be stopped.
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopped
+    );
+
+    // Restart the canister so that we can get its global data.
+    test.start_canister(a_id).unwrap();
+
+    // Global data are still empty because no callback for a deleted call context was executed.
+    assert_eq!(global_data(&mut test), b"");
 }
 
 #[test]
@@ -9495,4 +9662,167 @@ fn page_metrics_are_recorded(
             }
         )])
     );
+}
+
+#[test]
+fn ic0_certified_data_present() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    for method in ["update", "query"] {
+        // Data certificate is not present in replicated execution.
+        let result = test
+            .ingress(
+                canister_id,
+                method,
+                wasm().data_certificate_present().reply_int().build(),
+            )
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(0_u32.to_le_bytes().to_vec()));
+        // And thus trying to access it fails.
+        let err = test
+            .ingress(
+                canister_id,
+                method,
+                wasm().data_certificate().append_and_reply().build(),
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    }
+}
+
+#[test]
+fn ic0_certified_data_initially_empty() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let certified_data = test
+        .canister_state(canister_id)
+        .system_state
+        .certified_data
+        .clone();
+    assert!(certified_data.is_empty());
+}
+
+#[test]
+fn ic0_certified_data_set_twice() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .certified_data_set(b"BAR")
+            .certified_data_set(b"FOO")
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let certified_data = test
+        .canister_state(canister_id)
+        .system_state
+        .certified_data
+        .clone();
+    assert_eq!(certified_data, b"FOO");
+}
+
+#[test]
+fn ic0_certified_data_set_and_then_trap() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let certified_data = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .certified_data
+            .clone()
+    };
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().certified_data_set(b"FOO").reply().build(),
+    )
+    .unwrap();
+    assert_eq!(certified_data(&test), b"FOO");
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().certified_data_set(b"BAR").trap().build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert_eq!(certified_data(&test), b"FOO");
+}
+
+#[test]
+fn ic0_certified_data_set_too_long() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let certified_data = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .certified_data
+            .clone()
+    };
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().certified_data_set(b"FOO").reply().build(),
+    )
+    .unwrap();
+    assert_eq!(certified_data(&test), b"FOO");
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().certified_data_set(&[42; 33]).build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(certified_data(&test), b"FOO");
+}
+
+#[test]
+fn replicated_query_does_not_commit_memory_changes() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let global_data = |test: &mut ExecutionTest| {
+        let res = test
+            .ingress(
+                canister_id,
+                "query",
+                wasm().get_global_data().append_and_reply().build(),
+            )
+            .unwrap();
+        match res {
+            WasmResult::Reply(data) => data,
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        }
+    };
+
+    // Replicated update commits memory changes.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().set_global_data(b"FOO").reply().build(),
+    )
+    .unwrap();
+    assert_eq!(global_data(&mut test), b"FOO");
+
+    // Replicated query does not commit memory changes.
+    test.ingress(
+        canister_id,
+        "query",
+        wasm().set_global_data(b"BAR").reply().build(),
+    )
+    .unwrap();
+    assert_eq!(global_data(&mut test), b"FOO");
 }

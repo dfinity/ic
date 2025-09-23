@@ -23,6 +23,7 @@ fn create_test_neuron_store() -> NeuronStore {
     .with_known_neuron_data(Some(KnownNeuronData {
         name: "Test Known Neuron".to_string(),
         description: Some("A test known neuron for deregistration".to_string()),
+        links: vec!["http://example.com".to_string()],
     }))
     .build();
 

@@ -284,7 +284,7 @@ impl IngressValidator {
         let ingress_filter = ingress_filter.lock().unwrap().clone();
 
         match ingress_filter
-            .oneshot((provisional_whitelist, msg.content().clone()))
+            .oneshot((provisional_whitelist, msg.clone()))
             .await
         {
             Err(_) => panic!("Can't panic on Infallible"),

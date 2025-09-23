@@ -246,12 +246,6 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-/// Max character length for a neuron's name, in KnownNeuronData.
-pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
-
-/// Max character length for the field "description" in KnownNeuronData.
-pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
-
 /// The number of seconds between automated Node Provider reward events
 /// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
@@ -453,6 +447,9 @@ impl NnsFunction {
             NnsFunction::NnsCanisterUpgrade | NnsFunction::NnsRootUpgrade => {
                 Err(format_obsolete_message("InstallCode"))
             }
+            NnsFunction::StopOrStartNnsCanister => {
+                Err(format_obsolete_message("Action::StopOrStartCanister"))
+            }
             NnsFunction::UpdateAllowedPrincipals => Err(
                 "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for the old SNS \
                 initialization mechanism, which is now obsolete. Use \
@@ -517,7 +514,6 @@ impl NnsFunction {
             NnsFunction::AddFirewallRules => (REGISTRY_CANISTER_ID, "add_firewall_rules"),
             NnsFunction::RemoveFirewallRules => (REGISTRY_CANISTER_ID, "remove_firewall_rules"),
             NnsFunction::UpdateFirewallRules => (REGISTRY_CANISTER_ID, "update_firewall_rules"),
-            NnsFunction::StopOrStartNnsCanister => (ROOT_CANISTER_ID, "stop_or_start_nns_canister"),
             NnsFunction::RemoveNodes => (REGISTRY_CANISTER_ID, "remove_nodes"),
             NnsFunction::UninstallCode => (CanisterId::ic_00(), "uninstall_code"),
             NnsFunction::UpdateNodeRewardsTable => {
@@ -573,7 +569,8 @@ impl NnsFunction {
             | NnsFunction::UpdateUnassignedNodesConfig
             | NnsFunction::UpdateNodesHostosVersion
             | NnsFunction::NnsCanisterUpgrade
-            | NnsFunction::NnsRootUpgrade => {
+            | NnsFunction::NnsRootUpgrade
+            | NnsFunction::StopOrStartNnsCanister => {
                 let error_message = match self.check_obsolete() {
                     Err(error_message) => error_message,
                     Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
@@ -605,7 +602,8 @@ impl NnsFunction {
             | NnsFunction::NnsCanisterUpgrade
             | NnsFunction::NnsRootUpgrade
             | NnsFunction::UpdateAllowedPrincipals
-            | NnsFunction::IcpXdrConversionRate => match self.check_obsolete() {
+            | NnsFunction::IcpXdrConversionRate
+            | NnsFunction::StopOrStartNnsCanister => match self.check_obsolete() {
                 Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
                 Err(error_message) => {
                     return Err(GovernanceError::new_with_message(
@@ -631,7 +629,6 @@ impl NnsFunction {
             | NnsFunction::DeployGuestosToAllSubnetNodes
             | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
             | NnsFunction::DeployGuestosToAllUnassignedNodes => Topic::IcOsVersionDeployment,
-            NnsFunction::StopOrStartNnsCanister => Topic::ApplicationCanisterManagement,
             NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
             NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
             NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
@@ -4357,8 +4354,8 @@ impl Governance {
                 self.reward_node_providers_from_proposal(pid, proposal)
                     .await;
             }
-            Action::RegisterKnownNeuron(known_neuron) => {
-                let result = self.register_known_neuron(known_neuron);
+            Action::RegisterKnownNeuron(register_request) => {
+                let result = register_request.execute(&mut self.neuron_store);
                 self.set_proposal_execution_status(pid, result);
             }
             Action::DeregisterKnownNeuron(deregister_request) => {
@@ -4978,8 +4975,10 @@ impl Governance {
             }
             Action::ApproveGenesisKyc(_)
             | Action::RewardNodeProvider(_)
-            | Action::RewardNodeProviders(_)
-            | Action::RegisterKnownNeuron(_) => Ok(()),
+            | Action::RewardNodeProviders(_) => Ok(()),
+            Action::RegisterKnownNeuron(register_known_neuron) => {
+                register_known_neuron.validate(&self.neuron_store)
+            }
 
             Action::SetDefaultFollowees(obsolete_action) => {
                 Self::validate_obsolete_proposal_action(obsolete_action)
@@ -6177,70 +6176,6 @@ impl Governance {
                 )
             }
         }
-    }
-
-    /// Add some identifying metadata to a neuron. This metadata is represented
-    /// in KnownNeuronData and includes:
-    ///  - Name: the name given to the neuron.
-    ///  - Description: optional field to add a short description of the neuron,
-    ///    or organization behind it.
-    ///
-    /// Preconditions:
-    ///  - A Neuron ID is given in the request and this ID identifies an existing neuron.
-    ///  - Known Neuron Data is specified in the request.
-    ///  - Name is at most of length KNOWN_NEURON_NAME_MAX_LEN.
-    ///  - Description, if present, is at most of length KNOWN_NEURON_DESCRIPTION_MAX_LEN.
-    ///  - Name is not already used in another known neuron.
-    fn register_known_neuron(&mut self, known_neuron: KnownNeuron) -> Result<(), GovernanceError> {
-        let neuron_id = known_neuron.id.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "No neuron ID specified in the request to register a known neuron.",
-            )
-        })?;
-        let known_neuron_data = known_neuron.known_neuron_data.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "No known neuron data specified in the register neuron request.",
-            )
-        })?;
-        if known_neuron_data.name.len() > KNOWN_NEURON_NAME_MAX_LEN {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                format!(
-                    "The maximum length for a neuron's name, which is {KNOWN_NEURON_NAME_MAX_LEN}, has been exceeded"
-                ),
-            ));
-        }
-        if known_neuron_data.description.is_some()
-            && known_neuron_data.description.as_ref().unwrap().len()
-                > KNOWN_NEURON_DESCRIPTION_MAX_LEN
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                format!(
-                    "The maximum length for a neuron's description, which is {KNOWN_NEURON_DESCRIPTION_MAX_LEN}, has been exceeded"
-                ),
-            ));
-        }
-        if self
-            .neuron_store
-            .contains_known_neuron_name(&known_neuron_data.name)
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "The name {} already belongs to a Neuron",
-                    known_neuron_data.name
-                ),
-            ));
-        }
-
-        self.with_neuron_mut(&neuron_id, |neuron| {
-            neuron.set_known_neuron_data(known_neuron_data)
-        })?;
-
-        Ok(())
     }
 
     pub async fn manage_neuron(

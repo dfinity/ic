@@ -19,12 +19,9 @@ ic_nested_nns_recovery_common = { path = "../nested/nns_recovery" }
 nested = { path = "../nested" }
 nns_dapp = { path = "../nns/nns_dapp" }
 os_qualification_utils = { path = "../dre/utils" }
-reqwest = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-url = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }
 
 [[bin]]
 name = "large"

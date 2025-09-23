@@ -183,6 +183,7 @@ upload_artifacts(
             "//ic-os/hostos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/setupos/envs/prod:bundle",
             "//ic-os/setupos/envs/dev:bundle",  # used by nested tests
+            "//ic-os/guestos/envs/recovery:bundle-update",  # used for manual recovery
         ],
     }),
     visibility = ["//visibility:public"],

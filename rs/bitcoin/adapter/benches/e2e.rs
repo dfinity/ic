@@ -80,13 +80,7 @@ fn e2e(criterion: &mut Criterion) {
         .make(|uds_path| {
             Ok(rt.block_on(async {
                 config.incoming_source = IncomingSource::Path(uds_path.to_path_buf());
-
-                start_server(
-                    &no_op_logger(),
-                    &MetricsRegistry::default(),
-                    rt.handle(),
-                    config.clone(),
-                );
+                start_server(no_op_logger(), MetricsRegistry::default(), config.clone()).await;
                 start_client(uds_path).await
             }))
         })
@@ -193,13 +187,19 @@ fn add_800k_block_headers(criterion: &mut Criterion) {
     group.sample_size(10);
 
     group.bench_function("add_headers", |bench| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
         bench.iter(|| {
-            let mut blockchain_state =
-                BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
+            let blockchain_state = BlockchainState::new(
+                Network::Bitcoin,
+                None,
+                &MetricsRegistry::default(),
+                no_op_logger(),
+            );
             // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
             for chunk in bitcoin_headers_to_add.chunks(MAX_HEADERS_SIZE) {
-                let (added_headers, error) = blockchain_state.add_headers(chunk);
-                assert_eq!(error, None);
+                let (added_headers, error) =
+                    rt.block_on(async { blockchain_state.add_headers(chunk).await });
+                assert!(error.is_none(), "Failed to add headers: {}", error.unwrap());
                 assert_eq!(added_headers.len(), chunk.len())
             }
         })
