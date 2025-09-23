@@ -2,27 +2,27 @@
   "guestos": {
     "subnets": {
       "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
-        "version": "9152ba15ab6cc3c12eb407e13f8ee483a1d5723c",
-        "update_img_hash": "2890407c42e50f201140c011e0bfd615964af0e7380bf424ab1058449831516e",
-        "update_img_hash_dev": "2338d54b205940f0b3b94535087c1efa70e908f82cbbb4c592432c46d20a6a0d"
+        "version": "a299620cd5e73ed21b415f2ebe3da0bb43a3649d",
+        "update_img_hash": "63a8dc2707fead820fb7971d5986a17e8e67074b0493198c796c5d799c5a7a13",
+        "update_img_hash_dev": "25077e209a5b876ca13c93710277a5a4689fece32538b355bab2651231c5388e"
       },
       "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": {
-        "version": "cf1ef976fe18d402f61345af07c0f75c1f86dc25",
-        "update_img_hash": "04562c9cdfe14a710fa0dff35c528c2445916c51aa6fc90da8558ed41d38848c",
-        "update_img_hash_dev": "2d4f7cd2483f289366ff53d056ffdc3e3050c5b577dc145fa36c278b18dee4c5"
+        "version": "bf0d4d1b8cb6c0c19a5afa1454ada014847aa5c6",
+        "update_img_hash": "e99faf6a9b0f15a40f0ee9b29fbc1090bc4b6f94c30a85462a1a1e92ed2a7e56",
+        "update_img_hash_dev": "095dee3fb90211224ae4fcfc2fce2975ce9a91527e636a8e8c97867825fb844e"
       }
     },
     "latest_release": {
-      "version": "a299620cd5e73ed21b415f2ebe3da0bb43a3649d",
-      "update_img_hash": "63a8dc2707fead820fb7971d5986a17e8e67074b0493198c796c5d799c5a7a13",
-      "update_img_hash_dev": "25077e209a5b876ca13c93710277a5a4689fece32538b355bab2651231c5388e"
+      "version": "bf0d4d1b8cb6c0c19a5afa1454ada014847aa5c6",
+      "update_img_hash": "e99faf6a9b0f15a40f0ee9b29fbc1090bc4b6f94c30a85462a1a1e92ed2a7e56",
+      "update_img_hash_dev": "095dee3fb90211224ae4fcfc2fce2975ce9a91527e636a8e8c97867825fb844e"
     }
   },
   "hostos": {
     "latest_release": {
-      "version": "a299620cd5e73ed21b415f2ebe3da0bb43a3649d",
-      "update_img_hash": "6a526b668720af9970a84a5d82f965416a17ff21aaac03c419ef1ed436403af3",
-      "update_img_hash_dev": "129427d5cf257782bfaed3f29c13d01248f7967bf4976000e06f9d029b90083b"
+      "version": "bf0d4d1b8cb6c0c19a5afa1454ada014847aa5c6",
+      "update_img_hash": "10d3207f24bb1b6a1c9ae371a07e464d4e97826727351c45a09b05bf8a4cb285",
+      "update_img_hash_dev": "4eab90a48baa92518a0a57eae640529e726aa7337ef3daab80289924dd59b262"
     }
   }
 }

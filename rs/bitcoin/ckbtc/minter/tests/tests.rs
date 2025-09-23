@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
@@ -659,13 +658,12 @@ fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
 }
 
 fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
-    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
     let cid = bitcoin_canister_id(btc_network);
     env.create_canister_with_cycles(Some(cid.into()), Cycles::new(0), None);
     env.install_existing_canister(
         cid,
         bitcoin_mock_wasm(),
-        Encode!(&BitcoinNetwork::from(btc_network)).unwrap(),
+        Encode!(&ic_cdk::bitcoin_canister::Network::from(btc_network)).unwrap(),
     )
     .unwrap();
 }

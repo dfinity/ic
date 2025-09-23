@@ -122,23 +122,26 @@ impl KernelCommandLine {
     /// command line.
     /// If the argument exists without a value, returns Some("").
     /// If the argument doesn't exist, returns None.
-    pub fn get_argument(&self, argument_name: &str) -> Option<&str> {
+    pub fn get_argument(&self, argument_name: &str) -> Option<String> {
         static REGEX: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r#"^(?<key>.+)=('(?<value1>.+)'|"(?<value2>.+)"|(?<value3>.+))$"#).unwrap()
         });
 
         self.tokenized_arguments.iter().find_map(|arg| {
             if *arg == argument_name {
-                Some("")
+                Some(String::new())
             } else {
                 REGEX.captures(arg).and_then(|caps| {
-                    (caps.name("key").unwrap().as_str() == argument_name).then_some(
-                        caps.name("value1")
-                            .or(caps.name("value2"))
-                            .or(caps.name("value3"))
-                            .unwrap()
-                            .as_str(),
-                    )
+                    let key = caps.name("key")?;
+                    if key.as_str() == argument_name {
+                        let value = caps
+                            .name("value1")
+                            .or_else(|| caps.name("value2"))
+                            .or_else(|| caps.name("value3"))?;
+                        Some(value.as_str().replace(['\n', '\r'], ""))
+                    } else {
+                        None
+                    }
                 })
             }
         })
@@ -386,25 +389,25 @@ Actual:
                 "get existing argument without value",
                 "rd.debug rd.initrd=/bin/bash",
                 "rd.debug",
-                Some(""),
+                Some(String::new()),
             ),
             (
                 "get existing argument with value",
                 "rd.debug rd.initrd=/bin/bash",
                 "rd.initrd",
-                Some("/bin/bash"),
+                Some("/bin/bash".to_string()),
             ),
             (
                 "get existing argument with value",
                 "repeating=ab repeating=cd repeating=ef",
                 "repeating",
-                Some("ab"),
+                Some("ab".to_string()),
             ),
             (
                 "get existing argument with quoted value",
                 "rd.debug rd.initrd=\"/bin/bash with spaces\"",
                 "rd.initrd",
-                Some("/bin/bash with spaces"),
+                Some("/bin/bash with spaces".to_string()),
             ),
             (
                 "get non-existent argument",
@@ -416,13 +419,13 @@ Actual:
                 "get argument that is substring of another",
                 "rd.debug rd.debuglevel=1",
                 "rd.debug",
-                Some(""),
+                Some(String::new()),
             ),
             (
                 "get argument including ' character",
                 "rd.debug rd.debuglevel=\"'quoted'\"",
                 "rd.debuglevel",
-                Some("'quoted'"),
+                Some("'quoted'".to_string()),
             ),
         ];
 

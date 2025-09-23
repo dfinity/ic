@@ -63,7 +63,7 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .unwrap();
 }
 
-pub fn uvm_serve_guestos_image(
+pub fn uvm_serve_recovery_image(
     env: &TestEnv,
     image_path: &Path,
     image_version: &str,
@@ -72,7 +72,7 @@ pub fn uvm_serve_guestos_image(
         env,
         image_path,
         Path::new(&format!(
-            "ic/{image_version}/guest-os/update-img/update-img.tar.zst"
+            "ic/{image_version}/guest-os/update-img-recovery/update-img.tar.zst"
         )),
     )
 }

@@ -219,7 +219,6 @@ sh_binary(
 
 sh_test(
     name = "buf-breaking",
-    size = "small",
     srcs = ["check-incompatibilities.sh"],
     data = [
         "//:WORKSPACE.bazel",
