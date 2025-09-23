@@ -13,9 +13,9 @@ use strum_macros::Display;
 use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
-        process_accepted, process_all_by_predicate, process_all_failed,
-        process_controllers_changed, process_renamed, process_restored_controllers,
-        process_routing_table, process_source_deleted, process_stopped, process_updated,
+        process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
+        process_controllers_changed, process_renamed, process_routing_table,
+        process_source_deleted, process_stopped, process_updated,
     },
 };
 
@@ -196,6 +196,8 @@ pub enum RequestState {
     /// source subnet have expired by now.
     /// Restored the controllers of the target canister (now addressed with source's id).
     ///
+    /// This state transitions to a success event without any additional work.
+    ///
     /// Called `update_settings` to restore controllers.
     #[strum(to_string = "RequestState::RestoredControllers {{ request: {request} }}")]
     RestoredControllers { request: Request },
@@ -334,13 +336,8 @@ pub fn start_timers() {
             process_source_deleted,
         ))
     });
-    // set_timer_interval(interval, || {
-    //     spawn(process_all_by_predicate(
-    //         "restored_controllers",
-    //         |r| matches!(r, RequestState::RestoredControllers { .. }),
-    //         process_restored_controllers,
-    //     ))
-    // });
+
+    set_timer_interval(interval, || spawn(process_all_succeeded()));
 
     // This one has a different type from the generic ones above.
     set_timer_interval(interval, || spawn(process_all_failed()));
