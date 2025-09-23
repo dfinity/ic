@@ -122,7 +122,12 @@ impl NNSRecoverySameNodes {
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
-            recovery_args.clone(),
+            RecoveryArgs {
+                // ic-admin is not needed for NNS recovery on same nodes so we force this argument
+                // to true to avoid downloading it.
+                use_local_binaries: true,
+                ..recovery_args.clone()
+            },
             /*neuron_args=*/ None,
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
