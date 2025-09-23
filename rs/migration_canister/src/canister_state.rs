@@ -12,7 +12,8 @@ use ic_stable_structures::{
 use crate::{DEFAULT_MAX_ACTIVE_REQUESTS, Event, RequestState};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
-
+/// Time in nanos since epoch.
+type Time = u64;
 thread_local! {
 
     static LOCKS: RefCell<Locks> = const {RefCell::new(Locks{ids: BTreeSet::new()}) };
@@ -29,7 +30,7 @@ thread_local! {
     static REQUESTS: RefCell<BTreeMap<RequestState, (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))));
 
-    static HISTORY: RefCell<BTreeMap<(u64, Event), (), Memory>> =
+    static HISTORY: RefCell<BTreeMap<(Time, Event), (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))));
 
     // TODO: consider a fail counter for active requests.
@@ -102,7 +103,10 @@ pub mod requests {
 
 // ============================== Events API ============================== //
 pub mod events {
-    use crate::{Event, canister_state::HISTORY};
+    use crate::{
+        Event,
+        canister_state::{HISTORY, Time},
+    };
     use candid::Principal;
     use ic_cdk::api::time;
 
@@ -111,12 +115,12 @@ pub mod events {
         HISTORY.with_borrow_mut(|h| h.insert((time, event), ()));
     }
 
-    pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<(u64, Event)> {
+    pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<(Time, Event)> {
         // TODO: implement pagination
         HISTORY.with_borrow(|h| h.keys().collect())
     }
 
-    pub fn find_event(source: Principal, target: Principal) -> Vec<(u64, Event)> {
+    pub fn find_event(source: Principal, target: Principal) -> Vec<(Time, Event)> {
         // TODO: should do a range scan for efficiency.
         HISTORY.with_borrow(|r| {
             r.keys()
