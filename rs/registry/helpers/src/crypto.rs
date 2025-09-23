@@ -13,16 +13,16 @@ use ic_registry_keys::{
     make_crypto_tls_cert_key,
 };
 use ic_types::crypto::threshold_sig::{
-    ni_dkg::{
-        config::{receivers::NiDkgReceivers, NiDkgThreshold},
-        NiDkgId, NiDkgTranscript,
-    },
     ThresholdSigPublicKey,
+    ni_dkg::{
+        NiDkgId, NiDkgTranscript,
+        config::{NiDkgThreshold, receivers::NiDkgReceivers},
+    },
 };
 use ic_types::{
+    NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId,
     crypto::KeyPurpose,
     registry::{RegistryClientError, RegistryClientError::DecodeError},
-    NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId,
 };
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
@@ -90,10 +90,9 @@ impl<T: RegistryClient + ?Sized> CryptoRegistry for T {
         let option_threshold_sig_pubkey = option_public_key_proto.map(|public_key_proto| {
             ThresholdSigPublicKey::try_from(public_key_proto).unwrap_or_else(|e| {
                 panic!(
-                    "Failed to convert registry data to threshold signing public key: {:?}. \
+                    "Failed to convert registry data to threshold signing public key: {e:?}. \
                      This indicates that the key was not (properly) checked to be well-formed \
-                     and valid as part of the process that added the key to registry.",
-                    e
+                     and valid as part of the process that added the key to registry."
                 )
             })
         });
@@ -162,7 +161,7 @@ pub fn initial_ni_dkg_transcript_from_registry_record(
             PrincipalId::try_from(&n[..])
                 .map(NodeId::from)
                 .map_err(|err| DecodeError {
-                    error: format!("invalid principal ID: {}", err),
+                    error: format!("invalid principal ID: {err}"),
                 })
         })
         .collect::<Result<BTreeSet<_>, RegistryClientError>>()?;
@@ -171,20 +170,17 @@ pub fn initial_ni_dkg_transcript_from_registry_record(
         dkg_id,
         threshold: NiDkgThreshold::new(NumberOfNodes::new(dkg_transcript_record.threshold))
             .map_err(|err| DecodeError {
-                error: format!("invalid threshold: {:?}", err),
+                error: format!("invalid threshold: {err:?}"),
             })?,
         committee: NiDkgReceivers::new(committee).map_err(|err| DecodeError {
-            error: format!("invalid committee: {}", err),
+            error: format!("invalid committee: {err}"),
         })?,
         registry_version: RegistryVersion::new(dkg_transcript_record.registry_version),
         internal_csp_transcript: serde_cbor::from_slice(
             dkg_transcript_record.internal_csp_transcript.as_slice(),
         )
         .map_err(|err| DecodeError {
-            error: format!(
-                "failed to deserialize CSP NI-DKG transcript from CBOR: {}",
-                err
-            ),
+            error: format!("failed to deserialize CSP NI-DKG transcript from CBOR: {err}"),
         })?,
     })
 }

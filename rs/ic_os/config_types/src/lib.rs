@@ -23,7 +23,7 @@
 use ic_types::malicious_behavior::MaliciousBehavior;
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.5.0";
+pub const CONFIG_VERSION: &str = "1.7.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -100,6 +100,8 @@ pub struct GuestOSConfig {
     /// environment is enabled in icos_settings.enable_trusted_execution_environment
     #[serde(default)]
     pub trusted_execution_environment_config: Option<TrustedExecutionEnvironmentConfig>,
+    /// The hash of the recovery artifacts to be used in the event of a manual recovery.
+    pub recovery_config: Option<RecoveryConfig>,
 }
 
 #[serde_as]
@@ -208,6 +210,7 @@ pub struct GuestOSDevSettings {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
+    pub dogecoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
     // An optional hostname to override the deterministically generated hostname
@@ -215,6 +218,13 @@ pub struct GuestOSDevSettings {
     // Generate and inject a self-signed TLS certificate and key for ic-boundary
     // for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
+}
+
+/// GuestOS recovery configuration used in the event of a manual recovery.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct RecoveryConfig {
+    /// The hash of the recovery artifacts to be used in the event of a manual recovery.
+    pub recovery_hash: String,
 }
 
 /// Configures the usage of the backup spool directory.
@@ -355,6 +365,7 @@ mod tests {
                 "inject_ic_crypto": false,
                 "inject_ic_state": false,
                 "inject_ic_registry_local_store": false,
+                "recovery_hash": None::<String>,
                 "guestos_dev_settings": {}
             },
             "guest_vm_type": "unknown_future_variant"
@@ -424,8 +435,7 @@ mod tests {
         for field in field_names {
             assert!(
                 !reserved_field_names.contains(field.as_str()),
-                "Field name '{}' is reserved and should not be used.",
-                field
+                "Field name '{field}' is reserved and should not be used."
             );
         }
 

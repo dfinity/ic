@@ -1,13 +1,13 @@
 #![allow(deprecated)]
-use candid::{decode_one, Encode, Principal};
+use candid::{Encode, Principal, decode_one};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
-    blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
-    CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionQueryArgs,
-    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, CheckTransactionStrArgs, InitArg, UpgradeArg,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
-    INITIAL_MAX_RESPONSE_BYTES,
+    BtcNetwork, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckAddressArgs, CheckAddressResponse, CheckArg, CheckMode, CheckTransactionArgs,
+    CheckTransactionIrrecoverableError, CheckTransactionQueryArgs, CheckTransactionQueryResponse,
+    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
+    CheckTransactionStrArgs, INITIAL_MAX_RESPONSE_BYTES, InitArg, UpgradeArg, blocklist,
+    get_tx_cycle_cost,
 };
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -16,14 +16,14 @@ use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use pocket_ic::{
+    PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
-        CanisterHttpResponse, EmptyConfig, MockCanisterHttpResponse, NonmainnetFeatures,
-        RawMessageId,
+        CanisterHttpResponse, IcpConfig, IcpConfigFlag, MockCanisterHttpResponse, RawMessageId,
     },
-    query_candid, PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
+    query_candid,
 };
 use std::str::FromStr;
 
@@ -62,15 +62,15 @@ fn btc_checker_wasm() -> Vec<u8> {
 impl Setup {
     fn new(btc_network: BtcNetwork) -> Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
-        // Enable nonmainnet_features to avoid CanisterInstallCodeRateLimited error
+        // Disable rate-limiting to avoid CanisterInstallCodeRateLimited error
         // for canister upgrades
-        let nonmainnet_features = NonmainnetFeatures {
-            disable_canister_execution_rate_limiting: Some(EmptyConfig::default()),
+        let icp_config = IcpConfig {
+            canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
             ..Default::default()
         };
         let env = PocketIcBuilder::new()
             .with_application_subnet()
-            .with_nonmainnet_features(nonmainnet_features)
+            .with_icp_config(icp_config)
             .build();
 
         let init_arg = InitArg {
@@ -168,8 +168,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Failed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 
     // Satoshi's address hopefully is not in the blocklist
@@ -183,8 +182,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Passed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 
     // Test with a malformed address
@@ -197,7 +195,7 @@ fn test_check_address() {
         },),
     );
 
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid Bitcoin address")));
+    assert!(result.is_err_and(|err| format!("{err:?}").contains("Invalid Bitcoin address")));
 
     // Test with a testnet address
     let result = query_candid::<_, (CheckAddressResponse,)>(
@@ -208,7 +206,7 @@ fn test_check_address() {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin mainnet address")));
+    assert!(result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin mainnet address")));
 
     // Test CheckMode::AcceptAll
     env.upgrade_canister(
@@ -233,8 +231,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Passed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 
     // Test a mainnet address against testnet setup
@@ -252,7 +249,7 @@ fn test_check_address() {
             address: blocked_address,
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin testnet address")));
+    assert!(result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin testnet address")));
 
     // Test CheckMode::RejectAll
     env.upgrade_canister(
@@ -277,8 +274,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Failed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 }
 
@@ -505,8 +501,8 @@ fn mock_fetch_txids_responses(env: &PocketIc) {
                 CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
                     status: 200,
                     headers: vec![CanisterHttpHeader {
-                        name: format!("name-{}", i),
-                        value: format!("{}", i),
+                        name: format!("name-{i}"),
+                        value: format!("{i}"),
                     }],
                     body: body.clone(),
                 })
@@ -913,9 +909,7 @@ fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {
     let canister_http_requests = env.get_canister_http();
     assert!(
         !canister_http_requests.is_empty(),
-        "The canister did not produce another request in {} ticks {:?}",
-        MAX_TICKS,
-        canister_http_requests
+        "The canister did not produce another request in {MAX_TICKS} ticks {canister_http_requests:?}"
     );
     canister_http_requests
 }

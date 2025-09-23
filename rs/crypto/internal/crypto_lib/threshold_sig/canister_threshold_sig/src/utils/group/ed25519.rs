@@ -1,5 +1,5 @@
 use curve25519_dalek::{edwards::CompressedEdwardsY, traits::MultiscalarMul};
-use group::{ff::Field, Group, GroupEncoding};
+use group::{Group, GroupEncoding, ff::Field};
 use hex_literal::hex;
 use ic_crypto_sha2::Sha512;
 use std::ops::{Add, Mul, Neg, Sub};
@@ -248,6 +248,15 @@ impl Scalar {
         }
 
         Some(Self::new(self.s.invert()))
+    }
+
+    /// Perform modular inversion
+    ///
+    /// Returns None if no modular inverse exists (ie because the
+    /// scalar is zero)
+    pub fn invert_vartime(&self) -> Option<Self> {
+        // Currently, Dalek doesn't support a variable time inversion
+        self.invert()
     }
 
     /// Check if the scalar is zero

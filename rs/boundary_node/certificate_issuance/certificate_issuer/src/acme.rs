@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, anyhow};
 use async_trait::async_trait;
 use instant_acme::{
     Account, Authorization, Challenge, ChallengeType, Identifier, NewOrder, OrderStatus,
@@ -169,8 +169,7 @@ impl Finalize for Acme {
             None => {
                 let status = order.state().status;
                 return Err(FinalizeError::OrderNotReady(format!(
-                    "Certificate unavailable despite previous Valid status, current status {:?}",
-                    status
+                    "Certificate unavailable despite previous Valid status, current status {status:?}"
                 )));
             }
         };

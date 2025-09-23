@@ -535,6 +535,29 @@ pub struct RegisterExtension {
 #[derive(
     candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
 )]
+pub enum Wasm {
+    Bytes(Vec<u8>),
+    Chunked(ChunkedCanisterWasm),
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct ExtensionUpgradeArg {
+    pub value: Option<PreciseValue>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct UpgradeExtension {
+    pub extension_canister_id: Option<PrincipalId>,
+    pub wasm: Option<Wasm>,
+    pub canister_upgrade_arg: Option<ExtensionUpgradeArg>,
+}
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
 pub struct ExtensionOperationArg {
     pub value: Option<PreciseValue>,
 }
@@ -722,6 +745,10 @@ pub mod proposal {
         ///
         /// Id = 18.
         ExecuteExtensionOperation(super::ExecuteExtensionOperation),
+        /// Upgrade an SNS extension canister.
+        ///
+        /// Id = 19.
+        UpgradeExtension(super::UpgradeExtension),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]

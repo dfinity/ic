@@ -1,18 +1,22 @@
 //! The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
 
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
+use anyhow::Result;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_types::{hostos_version::HostosVersion, ReplicaVersion};
+use ic_types::{ReplicaVersion, hostos_version::HostosVersion};
 use url::Url;
 
 /// Pull the version of the initial GuestOS image from the environment.
 pub fn get_guestos_img_version() -> ReplicaVersion {
+    try_get_guestos_img_version().expect("Invalid ReplicaVersion")
+}
+
+/// Pull the version of the initial GuestOS image from the environment,
+/// allowing failure.
+pub fn try_get_guestos_img_version() -> Result<ReplicaVersion> {
     let env = "ENV_DEPS__GUESTOS_DISK_IMG_VERSION";
 
-    ReplicaVersion::try_from(
-        std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")),
-    )
-    .expect("Invalid ReplicaVersion")
+    Ok(ReplicaVersion::try_from(std::env::var(env)?)?)
 }
 
 /// Pull the URL of the initial GuestOS image from the environment.

@@ -1,12 +1,12 @@
 use std::io::Write;
 
 use candid::{
-    types::{Serializer, Type},
     CandidType, Func,
+    types::{Serializer, Type},
 };
 use flate2::{
-    write::{DeflateEncoder, GzEncoder},
     Compression,
+    write::{DeflateEncoder, GzEncoder},
 };
 use serde::Deserialize;
 
@@ -152,7 +152,7 @@ pub fn request(req: HttpRequest) -> HttpResponse {
                 body: vec![],
                 streaming_strategy: None,
                 upgrade: true,
-            }
+            };
         }
         "GET" => {}
         method => {
@@ -162,7 +162,7 @@ pub fn request(req: HttpRequest) -> HttpResponse {
                 body: format!("{method} not implemented").into(),
                 streaming_strategy: None,
                 upgrade: false,
-            }
+            };
         }
     }
 
@@ -271,7 +271,7 @@ pub fn request_update(req: HttpRequest) -> HttpResponse {
                 body: format!("{method} not implemented").into(),
                 streaming_strategy: None,
                 upgrade: false,
-            }
+            };
         }
     }
     let val = match String::from_utf8(req.body) {
@@ -283,7 +283,7 @@ pub fn request_update(req: HttpRequest) -> HttpResponse {
                 body: format!("Body was not UTF8: {e}").into(),
                 streaming_strategy: None,
                 upgrade: false,
-            }
+            };
         }
     };
 

@@ -32,6 +32,7 @@ pub const SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 13;
 pub const ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 14;
 pub const ICP_LEDGER_ARCHIVE_3_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 15;
 pub const NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 16;
+pub const MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 17;
 // Exchange Rate, Cycles Ledger (Index) Canisters are deployed to the II subnet.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x2100001;
 pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x2100002;
@@ -123,6 +124,9 @@ pub const ICP_LEDGER_ARCHIVE_3_CANISTER_ID: CanisterId =
 // 16: sgymv-uiaaa-aaaaa-aaaia-cai
 pub const NODE_REWARDS_CANISTER_ID: CanisterId =
     CanisterId::from_u64(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET);
+// 17: sbzkb-zqaaa-aaaaa-aaaiq-cai
+pub const MIGRATION_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET);
 /// 0x2_100_001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
@@ -245,12 +249,11 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         // Because 0 through 14 accounts for the first 15 canister +
         // 1 for exchange rate canister.
         18,
-        "{:#?}",
-        id_to_name
+        "{id_to_name:#?}"
     );
 
     id_to_name
         .get(&canister_id)
         .map(|name| name.to_string())
-        .unwrap_or_else(|| format!("{}", canister_id))
+        .unwrap_or_else(|| format!("{canister_id}"))
 }

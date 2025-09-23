@@ -1,6 +1,6 @@
-use crate::types::conversions::PublicKeyFromBytesError;
 use crate::types::PublicKey;
 use crate::types::PublicKeyBytes;
+use crate::types::conversions::PublicKeyFromBytesError;
 use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
 use ic_types::CanisterId;
 use std::convert::TryFrom;

@@ -36,7 +36,88 @@ type AddBlockResult = variant {
 
 type StandardRecord = record { url : text; name : text };
 
-service : {
+type Value = variant {
+  Blob : blob;
+  Text : text;
+  Nat : nat;
+  Nat64 : nat64;
+  Int : int;
+  Array : vec Value;
+  Map : Map
+};
+
+type Map = vec record { text; Value };
+
+type Block = Value;
+
+// A prefix of the block range specified in the [GetBlocksArgs] request.
+type BlockRange = record {
+  // A prefix of the requested block range.
+  // The index of the first block is equal to [GetBlocksArgs.start].
+  //
+  // Note that the number of blocks might be less than the requested
+  // [GetBlocksArgs.length] for various reasons, for example:
+  //
+  // 1. The query might have hit the replica with an outdated state
+  //    that doesn't have the whole range yet.
+  // 2. The requested range is too large to fit into a single reply.
+  //
+  // NOTE: the list of blocks can be empty if:
+  //
+  // 1. [GetBlocksArgs.length] was zero.
+  // 2. [GetBlocksArgs.start] was larger than the last block known to
+  //    the canister.
+  blocks : vec Block
+};
+
+// A function for fetching archived blocks.
+type QueryBlockArchiveFn = func(GetBlocksArgs) -> (BlockRange) query;
+
+// The result of a "get_blocks" call.
+type GetBlocksResponse = record {
+  // The index of the first block in "blocks".
+  // If the blocks vector is empty, the exact value of this field is not specified.
+  first_index : BlockIndex;
+
+  // The total number of blocks in the chain.
+  // If the chain length is positive, the index of the last block is `chain_len - 1`.
+  chain_length : nat64;
+
+  // System certificate for the hash of the latest block in the chain.
+  // Only present if `get_blocks` is called in a non-replicated query context.
+  certificate : opt blob;
+
+  // List of blocks that were available in the ledger when it processed the call.
+  //
+  // The blocks form a contiguous range, with the first block having index
+  // [first_block_index] (see below), and the last block having index
+  // [first_block_index] + len(blocks) - 1.
+  //
+  // The block range can be an arbitrary sub-range of the originally requested range.
+  blocks : vec Block;
+
+  // Encoding of instructions for fetching archived blocks.
+  archived_blocks : vec record {
+    // The index of the first archived block.
+    start : BlockIndex;
+
+    // The number of blocks that can be fetched.
+    length : nat;
+
+    // Callback to fetch the archived blocks.
+    callback : QueryBlockArchiveFn
+  }
+};
+
+type ICRC3DataCertificate = record {
+  // See https://internetcomputer.org/docs/current/references/ic-interface-spec#certification
+  certificate : blob;
+
+  // CBOR encoded hash_tree
+  hash_tree : blob
+};
+
+service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
 
@@ -45,6 +126,9 @@ service : {
     // Query endpoint to retrieve blocks (ICRC-3 compatible)
     icrc3_get_blocks : (vec GetBlocksArgs) -> (GetBlocksResult) query;
 
+    icrc3_get_tip_certificate : () -> (opt ICRC3DataCertificate) query;
+
     icrc10_supported_standards : () -> (vec StandardRecord) query;
 
+    get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;
 }

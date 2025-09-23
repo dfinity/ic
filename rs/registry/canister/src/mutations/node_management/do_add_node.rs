@@ -34,10 +34,7 @@ impl Registry {
     pub fn do_add_node(&mut self, payload: AddNodePayload) -> Result<NodeId, String> {
         // Get the caller ID and check if it is in the registry
         let caller_id = dfn_core::api::caller();
-        println!(
-            "{}do_add_node started: {:?} caller: {:?}",
-            LOG_PREFIX, payload, caller_id
-        );
+        println!("{LOG_PREFIX}do_add_node started: {payload:?} caller: {caller_id:?}");
         self.do_add_node_(payload, caller_id)
     }
 
@@ -47,13 +44,13 @@ impl Registry {
         caller_id: PrincipalId,
     ) -> Result<NodeId, String> {
         let mut node_operator_record = get_node_operator_record(self, caller_id)
-            .map_err(|err| format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err))?;
+            .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
-            .map_err(|err| format!("{}do_add_node: {}", LOG_PREFIX, err))?;
+            .map_err(|err| format!("{LOG_PREFIX}do_add_node: {err}"))?;
 
-        println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
+        println!("{LOG_PREFIX}do_add_node: The node id is {node_id:?}");
 
         // 2. Clear out any nodes that already exist at this IP.
         // This will only succeed if the same NO was in control of the original nodes.
@@ -97,8 +94,7 @@ impl Registry {
         // 3. Check if adding one more node will get us over the cap for the Node Operator
         if node_operator_record.node_allowance + num_removed_nodes == 0 {
             return Err(format!(
-                "{}do_add_node: Node allowance for this Node Operator is exhausted",
-                LOG_PREFIX
+                "{LOG_PREFIX}do_add_node: Node allowance for this Node Operator is exhausted"
             ));
         }
 
@@ -108,10 +104,7 @@ impl Registry {
             .as_ref()
             .map(|t| {
                 validate_str_as_node_reward_type(t).map_err(|e| {
-                    format!(
-                        "{}do_add_node: Error parsing node type from payload: {}",
-                        LOG_PREFIX, e
-                    )
+                    format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
                 })
             })
             .transpose()?
@@ -120,8 +113,7 @@ impl Registry {
         // 4a.  Conditionally enforce node_reward_type presence if node rewards are enabled
         if self.are_node_rewards_enabled() && node_reward_type.is_none() {
             return Err(format!(
-                "{}do_add_node: Node reward type is required.",
-                LOG_PREFIX
+                "{LOG_PREFIX}do_add_node: Node reward type is required."
             ));
         }
 
@@ -188,7 +180,7 @@ impl Registry {
         // 10. Check invariants and then apply mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_add_node finished: {payload:?}");
 
         Ok(node_id)
     }
@@ -213,7 +205,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3" => NodeRewardType::Type3,
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
-        _ => return Err(format!("Invalid node type: {}", type_string)),
+        _ => return Err(format!("Invalid node type: {type_string}")),
     })
 }
 
@@ -222,10 +214,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
 /// The string is written in form: `ipv4:port` or `[ipv6]:port`.
 pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
     match endpoint.parse::<SocketAddr>() {
-        Err(e) => panic!(
-            "Could not convert {:?} to a connection endpoint: {:?}",
-            endpoint, e
-        ),
+        Err(e) => panic!("Could not convert {endpoint:?} to a connection endpoint: {e:?}"),
         Ok(sa) => ConnectionEndpoint {
             ip_addr: sa.ip().to_string(),
             port: sa.port() as u32, // because protobufs don't have u16
@@ -260,43 +249,28 @@ fn valid_keys_from_payload(
     // 2. get the keys for verification -- for that, we need to create
     // NodePublicKeys first
     let node_signing_pk = PublicKey::decode(&payload.node_signing_pk[..])
-        .map_err(|e| format!("node_signing_pk is not in the expected format: {:?}", e))?;
-    let committee_signing_pk =
-        PublicKey::decode(&payload.committee_signing_pk[..]).map_err(|e| {
-            format!(
-                "committee_signing_pk is not in the expected format: {:?}",
-                e
-            )
-        })?;
+        .map_err(|e| format!("node_signing_pk is not in the expected format: {e:?}"))?;
+    let committee_signing_pk = PublicKey::decode(&payload.committee_signing_pk[..])
+        .map_err(|e| format!("committee_signing_pk is not in the expected format: {e:?}"))?;
     let tls_certificate = X509PublicKeyCert::decode(&payload.transport_tls_cert[..])
-        .map_err(|e| format!("transport_tls_cert is not in the expected format: {:?}", e))?;
+        .map_err(|e| format!("transport_tls_cert is not in the expected format: {e:?}"))?;
     let dkg_dealing_encryption_pk = PublicKey::decode(&payload.ni_dkg_dealing_encryption_pk[..])
         .map_err(|e| {
-            format!(
-                "ni_dkg_dealing_encryption_pk is not in the expected format: {:?}",
-                e
-            )
+            format!("ni_dkg_dealing_encryption_pk is not in the expected format: {e:?}")
         })?;
     // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
     let idkg_dealing_encryption_pk =
         if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
             Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
-                format!(
-                    "idkg_dealing_encryption_pk is not in the expected format: {:?}",
-                    e
-                )
+                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
             })?)
         } else {
             None
         };
 
     // 3. get the node id from the node_signing_pk
-    let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk).map_err(|e| {
-        format!(
-            "node signing public key couldn't be converted to a NodeId: {:?}",
-            e
-        )
-    })?;
+    let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk)
+        .map_err(|e| format!("node signing public key couldn't be converted to a NodeId: {e:?}"))?;
 
     // 4. get the keys for verification -- for that, we need to create
     let node_pks = CurrentNodePublicKeys {
@@ -310,7 +284,7 @@ fn valid_keys_from_payload(
     // 5. validate the keys and the node_id
     match ValidNodePublicKeys::try_from(node_pks, node_id, now()?) {
         Ok(valid_pks) => Ok((node_id, valid_pks)),
-        Err(e) => Err(format!("Could not validate public keys, due to {:?}", e)),
+        Err(e) => Err(format!("Could not validate public keys, due to {e:?}")),
     }
 }
 
@@ -320,7 +294,7 @@ fn now() -> Result<Time, String> {
         .map_err(|e| format!("Could not get current time since UNIX_EPOCH: {e}"))?;
 
     let nanos = u64::try_from(duration.as_nanos())
-        .map_err(|e| format!("Current time cannot be converted to u64: {:?}", e))?;
+        .map_err(|e| format!("Current time cannot be converted to u64: {e:?}"))?;
 
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
@@ -744,12 +718,14 @@ mod tests {
         let node_record_2 = registry.get_node_or_panic(node_id_2);
         assert_eq!(node_record_2, node_record_expected_2);
         // Assert first node record is removed from the registry because of the IP conflict
-        assert!(registry
-            .get(
-                make_node_record_key(node_id_1).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(node_id_1).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
         // Assert node allowance counter has decremented by one (as only one node record was effectively added)
         let node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
@@ -790,7 +766,9 @@ mod tests {
         let e = registry
             .do_add_node_(payload_2.clone(), node_operator_id)
             .unwrap_err();
-        assert!(e.contains("do_add_node: There is already another node with the same IPv4 address"));
+        assert!(
+            e.contains("do_add_node: There is already another node with the same IPv4 address")
+        );
     }
 
     // This test is disabled until it becomes possible to directly replace nodes that are active in a subnet.
@@ -818,10 +796,7 @@ mod tests {
         let expected_remove_node_id = node_ids[1]; // same offset as the subnet membership vector
         let expected_remove_node = registry.get_node(subnet_membership[1]).unwrap();
 
-        println!(
-            "Original subnet membership (node ids): {:?}",
-            subnet_membership
-        );
+        println!("Original subnet membership (node ids): {subnet_membership:?}");
 
         // Add a new node with the same IP address and port as an existing node, which should replace the existing node
         let (mut payload, _valid_pks) = prepare_add_node_payload(2);
@@ -923,12 +898,14 @@ mod tests {
             .expect("failed to add a node");
 
         // Verify that there is an API boundary node record for the new node
-        assert!(registry
-            .get(
-                make_api_boundary_node_record_key(new_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_some());
+        assert!(
+            registry
+                .get(
+                    make_api_boundary_node_record_key(new_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_some()
+        );
 
         // Verify the old node is removed from the registry
         assert!(registry.get_node(old_node_id).is_none());
@@ -1040,8 +1017,7 @@ mod tests {
         // Assert
         assert!(
             result.is_ok(),
-            "Could not create node with no node reward type: {:?}",
-            result
+            "Could not create node with no node reward type: {result:?}"
         );
     }
 

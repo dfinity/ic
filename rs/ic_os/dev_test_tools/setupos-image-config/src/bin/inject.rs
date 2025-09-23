@@ -9,9 +9,9 @@ use anyhow::{Context, Error};
 use clap::Parser;
 use tempfile::NamedTempFile;
 
-use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
+use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
 use setupos_image_config::{
-    update_deployment, write_config, write_public_keys, ConfigIni, DeploymentConfig,
+    ConfigIni, DeploymentConfig, update_deployment, write_config, write_public_keys,
 };
 
 #[derive(Parser)]
@@ -52,9 +52,7 @@ async fn main() -> Result<(), Error> {
 
     // Update config.ini
     let config_ini = NamedTempFile::new()?;
-    write_config(config_ini.path(), &cli.config_ini)
-        .await
-        .context("failed to write config file")?;
+    write_config(config_ini.path(), &cli.config_ini).context("failed to write config file")?;
     config
         .write_file(config_ini.path(), Path::new("/config.ini"))
         .await

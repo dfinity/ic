@@ -1,26 +1,25 @@
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InitialTime, InstanceConfig,
-    InstanceId, MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal,
-    RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
-    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId,
-    TickConfigs, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
+    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles,
+    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
-pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_server, IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse,
-    StartServerParams, Time,
+    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams, Time,
+    copy_dir, start_server,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use ic_certification::{Certificate, Label, LookupResult};
 use ic_management_canister_types::{
@@ -35,10 +34,10 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::{StatusCode, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{read_dir, File};
+use std::fs::{File, read_dir};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -136,11 +135,12 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         mut state_dir: Option<PocketIcState>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -148,6 +148,7 @@ impl PocketIc {
             let (_, server_url) = start_server(StartServerParams {
                 server_binary,
                 reuse: true,
+                ttl: None,
             })
             .await;
             server_url
@@ -196,17 +197,18 @@ impl PocketIc {
 
         let instance_config = InstanceConfig {
             subnet_config_set,
+            http_gateway_config,
             #[cfg(not(windows))]
             state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
             #[cfg(windows)]
             state_dir: state_dir
                 .as_ref()
                 .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
-            nonmainnet_features: Some(nonmainnet_features),
+            icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
-            allow_incomplete_state: Some(false),
+            incomplete_state: None,
             initial_time,
         };
 
@@ -214,7 +216,7 @@ impl PocketIc {
         let log_guard = setup_tracing(test_driver_pid);
 
         let reqwest_client = reqwest::Client::new();
-        let instance_id = match reqwest_client
+        let (instance_id, http_gateway_info) = match reqwest_client
             .post(server_url.join("instances").unwrap())
             .json(&instance_config)
             .send()
@@ -224,7 +226,11 @@ impl PocketIc {
             .await
             .expect("Could not parse response for create instance request")
         {
-            CreateInstanceResponse::Created { instance_id, .. } => instance_id,
+            CreateInstanceResponse::Created {
+                instance_id,
+                http_gateway_info,
+                ..
+            } => (instance_id, http_gateway_info),
             CreateInstanceResponse::Error { message } => panic!("{}", message),
         };
         debug!("instance_id={} New instance created.", instance_id);
@@ -232,7 +238,7 @@ impl PocketIc {
         Self {
             instance_id,
             max_request_time_ms,
-            http_gateway: None,
+            http_gateway: http_gateway_info,
             server_url,
             reqwest_client,
             owns_instance: true,
@@ -462,7 +468,9 @@ impl PocketIc {
         if let Some(url) = self.url() {
             return url;
         }
-        self.auto_progress().await;
+        if !self.auto_progress_enabled().await {
+            self.auto_progress().await;
+        }
         self.start_http_gateway(
             ip_addr.map(|ip_addr| ip_addr.to_string()),
             listen_at,
@@ -519,7 +527,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {}", message)
+                panic!("Failed to crate http gateway: {message}")
             }
         }
     }
@@ -547,12 +555,6 @@ impl PocketIc {
     pub async fn stop_live(&mut self) {
         self.stop_http_gateway().await;
         self.stop_progress().await;
-    }
-
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub async fn make_deterministic(&mut self) {
-        self.stop_live().await;
     }
 
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
@@ -709,10 +711,9 @@ impl PocketIc {
         match status {
             IngressStatusResult::NotAvailable => None,
             IngressStatusResult::Success(status) => Some(status),
-            IngressStatusResult::Forbidden(err) => panic!(
-                "Retrieving ingress status was forbidden: {}. This is a bug!",
-                err
-            ),
+            IngressStatusResult::Forbidden(err) => {
+                panic!("Retrieving ingress status was forbidden: {err}. This is a bug!")
+            }
         }
     }
 
@@ -745,7 +746,11 @@ impl PocketIc {
             Ok(None) => IngressStatusResult::NotAvailable,
             Ok(Some(result)) => IngressStatusResult::Success(result.into()),
             Err((status, message)) => {
-                assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
+                assert_eq!(
+                    status,
+                    StatusCode::FORBIDDEN,
+                    "HTTP error code {status} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!"
+                );
                 IngressStatusResult::Forbidden(message)
             }
         }
@@ -956,7 +961,7 @@ impl PocketIc {
             Ok(CanisterIdRecord {
                 canister_id: actual_canister_id,
             }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{:?}", e)),
+            Err(e) => Err(format!("{e:?}")),
         }
     }
 
@@ -1566,7 +1571,7 @@ impl PocketIc {
                         let result = reqwest_client
                             .get(
                                 self.server_url
-                                    .join(&format!("/read_graph/{}/{}", state_label, op_id))
+                                    .join(&format!("/read_graph/{state_label}/{op_id}"))
                                     .unwrap(),
                             )
                             .send()
@@ -1847,12 +1852,14 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
                 tracing_subscriber::EnvFilter::try_from_env(LOG_DIR_LEVELS_ENV_NAME)
                     .unwrap_or_else(|_| "trace".parse().unwrap());
 
-            let layers = vec![tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking_appender)
-                // disable color escape codes in files
-                .with_ansi(false)
-                .with_filter(log_dir_filter)
-                .boxed()];
+            let layers = vec![
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking_appender)
+                    // disable color escape codes in files
+                    .with_ansi(false)
+                    .with_filter(log_dir_filter)
+                    .boxed(),
+            ];
             let _ = tracing_subscriber::registry().with(layers).try_init();
             Some(guard)
         }

@@ -1,7 +1,7 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
     pb::v1::{
-        update_canister_settings::LogVisibility, GovernanceError, Topic, UpdateCanisterSettings,
+        GovernanceError, Topic, UpdateCanisterSettings, update_canister_settings::LogVisibility,
     },
     proposals::call_canister::CallCanister,
 };
@@ -161,9 +161,7 @@ mod tests {
                     let error_message = error.error_message.to_lowercase();
                     assert!(
                         error_message.contains(keyword),
-                        "{} not found in {:#?}",
-                        keyword,
-                        error_message
+                        "{keyword} not found in {error_message:#?}"
                     );
                 }
             };
@@ -323,7 +321,7 @@ mod tests {
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
             (
                 CanisterId::from_u64(123_456_789),
-                Topic::NetworkCanisterManagement,
+                Topic::ApplicationCanisterManagement,
             ),
         ];
 

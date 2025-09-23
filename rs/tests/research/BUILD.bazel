@@ -13,7 +13,10 @@ package(default_visibility = ["//rs:system-tests-pkg"])
         env = {
             "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         },
-        tags = ["colocate"],
+        tags = [
+            "colocate",
+            "long_test",  # all the spec_compliance tests take ~7 minutes so let's no run them by default on PRs.
+        ],
         runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
             ":ic-hs",
             "//hs/spec_compliance:ic-ref-test",

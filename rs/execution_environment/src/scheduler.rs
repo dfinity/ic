@@ -1,8 +1,8 @@
 use crate::{
     canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
     execution_environment::{
-        as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
-        ExecutionEnvironment, RoundInstructions, RoundLimits,
+        ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
+        as_num_instructions, as_round_instructions, execute_canister,
     },
     ic00_permissions::Ic00MethodPermissions,
     metrics::MeasurementScope,
@@ -21,29 +21,29 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
-use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{
     CanisterStatusType, MasterPublicKeyId, Method as Ic00Method,
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    ReplicatedState,
     canister_state::{
-        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+        NextExecution, execution_state::NextScheduledMethod, system_state::CyclesUseCase,
     },
     num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
-    ReplicatedState,
 };
 use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES,
+    MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness,
+    ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
-    MAX_WASM_MEMORY_IN_BYTES,
+    messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
 };
-use ic_types::{nominal_cycles::NominalCycles, NumMessages};
+use ic_types::{NumMessages, nominal_cycles::NominalCycles};
 use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_rational::Ratio;
 use prometheus::Histogram;
@@ -206,7 +206,7 @@ impl SchedulerImpl {
                 None => continue,
                 Some(canister) => match canister.next_execution() {
                     NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
-                        continue
+                        continue;
                     }
                     NextExecution::ContinueInstallCode => {}
                 },

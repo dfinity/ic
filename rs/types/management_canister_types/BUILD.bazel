@@ -39,7 +39,6 @@ permanent_whitelist = [
 temporary_whitelist = [
     "//rs/bitcoin:__subpackages__",
     "//rs/determinism_test:__subpackages__",
-    "//rs/drun:__subpackages__",
     "//rs/ethereum:__subpackages__",
     "//rs/ledger_suite:__subpackages__",
     "//rs/nervous_system:__subpackages__",

@@ -20,10 +20,10 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
-    CallOrigin, CanisterState,
+    CallContextAction, CallOrigin, CanisterState,
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from,
 };
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -160,7 +160,7 @@ pub fn execute_call_or_task(
                 err,
                 original,
                 round,
-            )
+            );
         }
     };
 
@@ -529,6 +529,7 @@ impl CallOrTaskHelper {
             );
         }
 
+        let is_composite_query = matches!(original.method, WasmMethod::CompositeQuery(_));
         let heap_delta = match original.call_or_task {
             // Update methods and tasks can persist changes to the canister's state.
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
@@ -545,6 +546,7 @@ impl CallOrTaskHelper {
                     round.counters.state_changes_error,
                     call_tree_metrics,
                     original.time,
+                    is_composite_query,
                     &|system_state| self.deallocation_sender.send(Box::new(system_state)),
                 );
 
@@ -563,6 +565,7 @@ impl CallOrTaskHelper {
                         &mut self.canister.system_state,
                         round.network_topology,
                         round.hypervisor.subnet_id(),
+                        is_composite_query,
                         round.log,
                     )
                 {

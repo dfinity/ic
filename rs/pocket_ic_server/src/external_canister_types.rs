@@ -1,4 +1,45 @@
-use candid::CandidType;
+use candid::{CandidType, Principal};
+
+/* NNS dapp */
+
+#[derive(CandidType)]
+pub struct NnsDappCanisterArguments {
+    pub args: Vec<(String, String)>,
+}
+
+/* SNS aggregator */
+
+#[derive(CandidType)]
+pub struct SnsAggregatorConfig {
+    pub update_interval_ms: u64,
+    pub fast_interval_ms: u64,
+}
+
+/* Cycles ledger */
+
+#[derive(CandidType)]
+pub struct CyclesLedgerConfig {
+    pub max_blocks_per_request: u64,
+    pub index_id: Option<Principal>,
+}
+
+#[derive(CandidType)]
+pub enum ChangeIndexId {
+    Unset,
+    SetTo(Principal),
+}
+
+#[derive(CandidType)]
+pub struct CyclesLedgerUpgradeArgs {
+    pub max_blocks_per_request: Option<u64>,
+    pub change_index_id: Option<ChangeIndexId>,
+}
+
+#[derive(CandidType)]
+pub enum CyclesLedgerArgs {
+    Init(CyclesLedgerConfig),
+    Upgrade(Option<CyclesLedgerUpgradeArgs>),
+}
 
 /* Internet Identity */
 
@@ -43,8 +84,20 @@ pub struct CaptchaConfig {
 }
 
 #[derive(CandidType)]
-pub struct OpenIdConfig {
+pub struct GoogleOpenIdConfig {
     pub client_id: String,
+}
+
+#[derive(CandidType)]
+pub struct OpenIdConfig {
+    pub name: String,
+    pub logo: String,
+    pub issuer: String,
+    pub client_id: String,
+    pub jwks_uri: String,
+    pub auth_uri: String,
+    pub auth_scope: Vec<String>,
+    pub fedcm_uri: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -72,11 +125,13 @@ pub struct InternetIdentityInit {
     pub captcha_config: Option<CaptchaConfig>,
     pub related_origins: Option<Vec<String>>,
     pub new_flow_origins: Option<Vec<String>>,
-    pub openid_google: Option<Option<OpenIdConfig>>,
+    pub openid_google: Option<Option<GoogleOpenIdConfig>>,
+    pub openid_configs: Option<Vec<OpenIdConfig>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub fetch_root_key: Option<bool>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
     pub feature_flag_continue_from_another_device: Option<bool>,
+    pub feature_flag_enable_generic_open_id_fe: Option<bool>,
 }
