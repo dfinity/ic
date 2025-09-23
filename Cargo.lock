@@ -2611,6 +2611,7 @@ dependencies = [
  "fs_extra",
  "get_if_addrs",
  "ic-config",
+ "linux_kernel_command_line",
  "macaddr",
  "network",
  "once_cell",
@@ -5351,6 +5352,7 @@ dependencies = [
  "ic-metrics-tool",
  "ic_device",
  "ic_sev",
+ "linux_kernel_command_line",
  "macaddr",
  "nix 0.24.3",
  "regex",
@@ -6892,6 +6894,7 @@ version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.5-doge.0",
  "csv",
+ "hex",
  "rstest",
 ]
 
@@ -7837,6 +7840,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-secp256k1 0.2.0",
  "ic-secp256r1",
+ "ic-sys",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-time",
@@ -7861,6 +7865,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
+ "thiserror 2.0.12",
  "tokio",
 ]
 
@@ -9456,6 +9461,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
@@ -9771,7 +9777,7 @@ dependencies = [
  "ic-base-types",
  "ic-ed25519 0.3.0",
  "ic-icp-rosetta-runner",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
@@ -9793,7 +9799,7 @@ name = "ic-icp-rosetta-runner"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-rosetta-test-utils",
  "icp-ledger",
  "pocket-ic",
@@ -9824,7 +9830,7 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
- "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-rosetta-api",
@@ -9918,7 +9924,9 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-in-memory-ledger",
+ "ic-ledger-suite-state-machine-helpers",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-nns-test-utils-golden-nns-state",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
@@ -9983,10 +9991,10 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
  "ic-metrics-encoder",
  "ic-registry-subnet-type",
- "ic-rosetta-test-utils",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -10027,7 +10035,10 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-in-memory-ledger",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
@@ -10377,6 +10388,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-suite-in-memory-ledger"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-agent",
+ "ic-base-types",
+ "ic-icrc1",
+ "ic-icrc1-test-utils",
+ "ic-icrc1-tokens-u256",
+ "ic-icrc1-tokens-u64",
+ "ic-ledger-core",
+ "ic-ledger-suite-state-machine-helpers",
+ "ic-state-machine-tests",
+ "ic-types",
+ "icp-ledger",
+ "icrc-ledger-types",
+]
+
+[[package]]
 name = "ic-ledger-suite-orchestrator"
 version = "0.9.0"
 dependencies = [
@@ -10443,6 +10473,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-suite-state-machine-helpers"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-http-types",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "ic-management-canister-types-private",
+ "ic-state-machine-tests",
+ "ic-types",
+ "ic-universal-canister",
+ "icp-ledger",
+ "icrc-ledger-types",
+ "num-traits",
+]
+
+[[package]]
 name = "ic-ledger-suite-state-machine-tests"
 version = "0.9.0"
 dependencies = [
@@ -10466,9 +10514,11 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-in-memory-ledger",
+ "ic-ledger-suite-state-machine-helpers",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
- "ic-rosetta-test-utils",
  "ic-state-machine-tests",
  "ic-types",
  "ic-universal-canister",
@@ -10479,9 +10529,12 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
- "serde",
  "serde_bytes",
 ]
+
+[[package]]
+name = "ic-ledger-suite-state-machine-tests-constants"
+version = "0.9.0"
 
 [[package]]
 name = "ic-ledger-test-utils"
@@ -10722,10 +10775,13 @@ dependencies = [
  "ic-management-canister-types",
  "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
+ "itertools 0.12.1",
  "pocket-ic",
  "registry-canister",
  "serde",
  "serde_cbor",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tempfile",
  "tokio",
 ]
@@ -12988,7 +13044,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-ledger-test-utils",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-management-canister-types",
  "ic-nns-common",
@@ -14198,6 +14254,7 @@ dependencies = [
  "serde_json",
  "serde_regex",
  "serde_yaml",
+ "setupos-image-config",
  "slog",
  "slog-async",
  "slog-term",
@@ -14321,6 +14378,7 @@ version = "0.9.0"
 name = "ic-test-utilities-consensus"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "bincode",
  "ic-base-types",
  "ic-crypto-test-utils-canister-threshold-sigs",
@@ -15447,6 +15505,8 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-in-memory-ledger",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
  "ic-ledger-test-utils",
  "ic-nns-constants",
@@ -15481,7 +15541,7 @@ dependencies = [
  "ic-agent",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-client",
- "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-rosetta-api",
  "ic-sender-canister",
  "ic-test-utilities-load-wasm",
@@ -15544,7 +15604,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "assert_matches",
  "base32",
@@ -16467,26 +16527,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 
 [[package]]
-name = "launch-single-vm"
-version = "0.1.0"
-dependencies = [
- "clap 4.5.27",
- "config",
- "config_types",
- "ic-prep",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "reqwest 0.12.15",
- "serde",
- "slog",
- "slog-async",
- "slog-term",
- "tempfile",
- "url",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16533,7 +16573,9 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
@@ -17598,6 +17640,7 @@ dependencies = [
  "canister_http",
  "cloner-canister-types",
  "dfn_candid",
+ "futures",
  "ic-agent",
  "ic-base-types",
  "ic-cdk",
@@ -17610,6 +17653,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-message",
  "ic-networking-subnet-update-workload",
+ "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-prep",
  "ic-protobuf",
@@ -17624,12 +17668,14 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
  "itertools 0.12.1",
  "leb128",
  "proxy_canister",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
+ "rejoin-test-lib",
  "reqwest 0.12.15",
  "serde",
  "serde_cbor",
@@ -19052,6 +19098,7 @@ dependencies = [
  "bitcoin 0.28.2",
  "candid",
  "candid_parser",
+ "cycles-minting-canister",
  "ed25519-dalek",
  "flate2",
  "hex",
@@ -19060,13 +19107,16 @@ dependencies = [
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
  "ic-management-canister-types",
+ "ic-nns-governance-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
+ "ic-sns-wasm",
  "ic-transport-types",
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
+ "registry-canister",
  "reqwest 0.12.15",
  "schemars",
  "serde",
@@ -19143,6 +19193,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
+ "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-delegation-manager",
@@ -20545,6 +20596,7 @@ dependencies = [
 name = "rejoin-test-lib"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "candid",
  "canister-test",
  "chrono",
@@ -23258,11 +23310,8 @@ dependencies = [
  "nested",
  "nns_dapp",
  "os_qualification_utils",
- "reqwest 0.12.15",
- "serde",
  "serde_json",
  "slog",
- "url",
  "xrc-mock",
 ]
 
@@ -24184,7 +24233,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
