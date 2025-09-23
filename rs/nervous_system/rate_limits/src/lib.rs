@@ -91,6 +91,7 @@ pub struct RateLimiterConfig {
     pub add_capacity_amount: u64,
     pub add_capacity_interval: Duration,
     pub max_capacity: u64,
+    pub reservation_timeout: Duration,
 }
 
 #[derive(Debug, PartialEq)]
@@ -248,6 +249,7 @@ mod tests {
             add_capacity_amount: 1,
             add_capacity_interval: Duration::from_secs(10),
             max_capacity: 10,
+            reservation_timeout: Duration::from_secs(u64::MAX),
         });
 
         let now = SystemTime::now();
@@ -302,6 +304,7 @@ mod tests {
             add_capacity_amount: 2, // Add 2 capacity every 10 seconds
             add_capacity_interval: Duration::from_secs(10),
             max_capacity: 10,
+            reservation_timeout: Duration::from_secs(u64::MAX),
         });
 
         let now = SystemTime::now();
