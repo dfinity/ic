@@ -350,21 +350,21 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_latest_guest_img" if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST_GUESTOS_REVISION, "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_LATEST_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_LATEST_GUESTOS_DEV_HASH
-        env["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guest_img:launch_measurements" if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev:launch_measurements"
+        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guest_img//:launch_measurements" if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev//:launch_measurements"
 
     if uses_guestos_mainnet_nns_img:
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_GUESTOS_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_nns_guest_img" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_NNS_GUESTOS_DEV_HASH
-        env["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_guest_img:launch_measurements" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev:launch_measurements"
+        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_guest_img//:launch_measurements" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev//:launch_measurements"
 
     if uses_guestos_mainnet_app_img:
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APP_GUESTOS_REVISION
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_app_guest_img" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_APP_GUESTOS_DEV_HASH
-        env["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_guest_img:launch_measurements" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev:launch_measurements"
+        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_guest_img//:launch_measurements" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev//:launch_measurements"
 
     if uses_guestos_recovery_dev_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
@@ -391,19 +391,19 @@ def system_test(
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_GUESTOS_REVISION
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST_GUESTOS_REVISION, "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_LATEST_GUESTOS_DEV_HASH
-        env["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guest_img:launch_measurements" if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev:launch_measurements"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guest_img//:launch_measurements" if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev//:launch_measurements"
 
     if uses_guestos_mainnet_nns_update:
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS_GUESTOS_REVISION
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_NNS_GUESTOS_DEV_HASH
-        env["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_guest_img:launch_measurements" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev:launch_measurements"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_guest_img//:launch_measurements" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev//:launch_measurements"
 
     if uses_guestos_mainnet_app_update:
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_APP_GUESTOS_REVISION
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_APP_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_APP_GUESTOS_DEV_HASH
-        env["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_guest_img:launch_measurements" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev:launch_measurements"
+        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_guest_img//:launch_measurements" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev//:launch_measurements"
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
@@ -417,7 +417,7 @@ def system_test(
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
         env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst"
-        env["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_setupos_disk_image_launch_measurements" if not uses_dev_mainnet else "@mainnet_latest_setupos_disk_image_dev_launch_measurements"
+        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_setupos_disk_image_launch_measurements" if not uses_dev_mainnet else "@mainnet_latest_setupos_disk_image_dev_launch_measurements"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
 
