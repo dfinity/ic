@@ -1,5 +1,3 @@
-use super::{AllowanceProvider, BalanceProvider, get_all_ledger_and_archive_blocks};
-use crate::metrics::parse_metric;
 use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
@@ -8,6 +6,9 @@ use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, BalanceProvider, get_all_ledger_and_archive_blocks, parse_metric,
+};
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
@@ -247,10 +248,10 @@ where
         });
         self.decrease_balance(from, amount);
         self.decrease_total_supply(amount);
-        if let Some(spender) = spender {
-            if from != spender {
-                self.decrease_allowance(from, spender, amount, None);
-            }
+        if let Some(spender) = spender
+            && from != spender
+        {
+            self.decrease_allowance(from, spender, amount, None);
         }
         self.transactions += 1;
     }
@@ -271,12 +272,11 @@ where
     ) {
         self.decrease_balance(from, amount);
         self.collect_fee(from, fee);
-        if let Some(fee) = fee {
-            if let Some(spender) = spender {
-                if from != spender {
-                    self.decrease_allowance(from, spender, amount, Some(fee));
-                }
-            }
+        if let Some(fee) = fee
+            && let Some(spender) = spender
+            && from != spender
+        {
+            self.decrease_allowance(from, spender, amount, Some(fee));
         }
         self.increase_balance(to, amount);
         self.transactions += 1;
@@ -472,10 +472,10 @@ where
             .allowances
             .iter()
             .filter_map(|(key, allowance)| {
-                if let Some(expires_at) = allowance.expires_at {
-                    if now >= expires_at {
-                        return Some(key.clone());
-                    }
+                if let Some(expires_at) = allowance.expires_at
+                    && now >= expires_at
+                {
+                    return Some(key.clone());
                 }
                 None
             })
@@ -759,22 +759,22 @@ where
                 &spender
             );
             let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
-            if let Some(in_memory_expires_at) = allowance.expires_at {
-                if in_memory_expires_at.as_nanos_since_unix_epoch() < current_ledger_timestamp {
-                    assert_eq!(
-                        Tokens::zero(),
-                        Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-                        "Expected amount of expired actual allowance to be zero, but it is not: {:?}",
-                        &actual_allowance
-                    );
-                    assert!(
-                        actual_allowance.expires_at.is_none(),
-                        "Expected expired actual allowance to have no expires_at, but it has one: {:?}",
-                        &actual_allowance
-                    );
-                    allowances_checked += 1;
-                    continue;
-                }
+            if let Some(in_memory_expires_at) = allowance.expires_at
+                && in_memory_expires_at.as_nanos_since_unix_epoch() < current_ledger_timestamp
+            {
+                assert_eq!(
+                    Tokens::zero(),
+                    Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
+                    "Expected amount of expired actual allowance to be zero, but it is not: {:?}",
+                    &actual_allowance
+                );
+                assert!(
+                    actual_allowance.expires_at.is_none(),
+                    "Expected expired actual allowance to have no expires_at, but it has one: {:?}",
+                    &actual_allowance
+                );
+                allowances_checked += 1;
+                continue;
             }
             match actual_allowance.expires_at {
                 None => {

@@ -379,7 +379,7 @@ impl Block {
         Self::from_transaction(parent_hash, transaction, timestamp, effective_fee, None)
     }
 
-    pub fn transaction(&self) -> Cow<Transaction> {
+    pub fn transaction(&self) -> Cow<'_, Transaction> {
         Cow::Borrowed(&self.transaction)
     }
 }

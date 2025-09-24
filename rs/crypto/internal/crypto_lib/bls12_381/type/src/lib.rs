@@ -269,6 +269,53 @@ impl Scalar {
         }
     }
 
+    /// Return the multiplicative inverse of the various scalar if each inverse exists
+    pub fn batch_inverse_vartime(values: &[Self]) -> Option<Vec<Self>> {
+        if values.is_empty() {
+            return Some(vec![]);
+        }
+
+        let n = values.len();
+        let mut accum = Scalar::one();
+        let mut products = Vec::with_capacity(n);
+
+        /*
+         * This uses Montgomery's Trick to compute many inversions using just a
+         * single field inversion. This is worthwhile because field inversions
+         * are quite expensive (for BLS12-381, an inversion costs approximately 52
+         * field multiplications plus 255 field squarings)
+         *
+         * The basic idea here (for n=2) is taking advantage of the fact that if
+         * x and y both have inverses then so does x*y, and (x*y)^-1 * x = y^-1
+         * and (x*y)^-1 * y = x^-1
+         *
+         * This is described in more detail in various texts such as
+         *  - <https://eprint.iacr.org/2008/199.pdf> section 2
+         *  - "Guide to Elliptic Curve Cryptography" Algorithm 2.26
+         */
+
+        for v in values {
+            accum *= v;
+            products.push(accum.clone());
+        }
+
+        if let Some(mut inv) = accum.inverse() {
+            let mut result = Vec::with_capacity(n);
+
+            for i in (1..n).rev() {
+                result.push(&inv * &products[i - 1]);
+                inv *= &values[i];
+            }
+
+            result.push(inv);
+            result.reverse();
+
+            Some(result)
+        } else {
+            None
+        }
+    }
+
     /// Return a random scalar
     pub fn random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
         loop {
