@@ -31,7 +31,7 @@ fn get_state(
     // failures. Such failures are considered spurious, because we are not
     // testing anything to do with cycles. We are just trying to verify that
     // upgrades will work.
-    state_machine.add_cycles(swap_canister_id, 5e12 as u128);
+    state_machine.add_cycles(swap_canister_id, 100e12 as u128);
 
     let args = Encode!(&GetStateRequest {}).unwrap();
     let state_before_upgrade = state_machine
