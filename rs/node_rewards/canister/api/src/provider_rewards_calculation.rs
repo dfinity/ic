@@ -12,6 +12,9 @@ pub struct GetNodeProviderRewardsCalculationRequest {
 
 pub type GetNodeProviderRewardsCalculationResponse = Result<Vec<NodeProviderRewardsDaily>, String>;
 
+// These are API-facing types with all fields wrapped in `Option`
+// to ensure forward compatibility. This way, new fields can be added
+// in the future without breaking clients that consume the API.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: Option<PrincipalId>,

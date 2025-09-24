@@ -71,20 +71,27 @@ impl DayUtc {
     }
 
     pub fn first_ts_nanos(&self) -> u64 {
-        (self.last_ts_nanoseconds / NANOS_PER_DAY) * NANOS_PER_DAY
+        let extra = self.last_ts_nanoseconds.checked_rem(NANOS_PER_DAY).unwrap();
+
+        self.last_ts_nanoseconds.saturating_sub(extra)
     }
 
     pub fn last_ts_secs(&self) -> u64 {
-        self.last_ts_nanos() / 1_000_000_000
+        self.last_ts_nanos().checked_div(1_000_000_000).unwrap()
     }
 
     pub fn first_ts_secs(&self) -> u64 {
-        self.first_ts_nanos() / 1_000_000_000
+        self.first_ts_nanos()
+            .checked_div(1_000_000_000)
+            .expect("underflow detected in first_ts_secs")
     }
 
     pub fn next_day(&self) -> DayUtc {
         DayUtc {
-            last_ts_nanoseconds: self.last_ts_nanoseconds + NANOS_PER_DAY,
+            last_ts_nanoseconds: self
+                .last_ts_nanoseconds
+                .checked_add(NANOS_PER_DAY)
+                .expect("overflow detected in next_day"),
         }
     }
 
