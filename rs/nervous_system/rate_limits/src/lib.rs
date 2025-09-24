@@ -8,68 +8,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-// type TimeWindow = u32;
-//
-// #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-// struct TimeWindowCount {
-//     window: TimeWindow,
-//     count: u64,
-// }
-//
-// struct Counter {
-//     time_windows: VecDeque<TimeWindowCount>,
-//     total_count: u64,
-// }
-//
-// fn time_to_window(time: SystemTime, resolution: Duration) -> TimeWindow {
-//     (time.duration_since(UNIX_EPOCH).unwrap().as_secs() / resolution.as_secs())
-//         .try_into()
-//         .unwrap()
-// }
-// fn window_to_time(window: TimeWindow, resolution: Duration) -> SystemTime {
-//     UNIX_EPOCH + resolution * window
-// }
-//
-// impl Counter {
-//     fn use_capacity(&mut self, now: SystemTime, capacity: u64, resolution: Duration) -> Self {
-//         let window = time_to_window(now, resolution);
-//
-//         if self
-//             .time_windows
-//             .back()
-//             .filter(|w| w.window >= window)
-//             .is_none()
-//         {
-//             self.time_windows.push_back(TimeWindowCount {
-//                 window,
-//                 count: Cycles::zero(),
-//             });
-//         };
-//
-//         self.time_windows.back_mut().unwrap().count += capacity;
-//         self.total_count += capacity;
-//     }
-//
-//     fn purge_old(&mut self, now: SystemTime, resolution: Duration) {
-//         while let Some(oldest) = self.time_windows.front() {
-//             if window_to_time(oldest.window + 1) + self.max_age <= now {
-//                 self.total_count -= oldest.count;
-//                 self.time_windows.pop_front();
-//             } else {
-//                 break;
-//             }
-//         }
-//     }
-// }
-//
-// trait RateLimiterDataProvider<K> {
-//     // Implementation should clean up Counter if there is no window data in it, and supply
-//     // a fresh counter if it has no record of one.
-//     fn with_counter_for<R>(&self, key: &K, f: fn(&mut Counter) -> R) -> R;
-//     fn limit_for(&self, key: &K) -> u64;
-//     fn keys(&self) -> Vec<K>;
-// }
-
 struct UsageRecord {
     last_updated: SystemTime,
     capacity_used: u64,
