@@ -7,20 +7,22 @@ use crate::{
     Event, RequestState, ValidationError,
     canister_state::{
         MethodGuard,
+        events::insert_event,
         requests::{insert_request, list_by, remove_request},
     },
     external_interfaces::{
         management::{
-            CanisterStatusType, assert_no_snapshots, canister_status, get_canister_info,
-            rename_canister, set_exclusive_controller, set_original_controllers,
+            CanisterStatusType, assert_no_snapshots, canister_status, delete_canister,
+            get_canister_info, get_registry_version, rename_canister, set_exclusive_controller,
+            set_original_controllers,
         },
         registry::migrate_canister,
     },
 };
+use candid::Principal;
 use futures::future::join_all;
 use ic_cdk::{
-    api::time,
-    management_canister::{SubnetInfoArgs, subnet_info},
+    api::{canister_self, time},
     println,
 };
 use std::{convert::Infallible, future::Future, iter::zip};
@@ -229,37 +231,85 @@ pub async fn process_updated(
     let RequestState::UpdatedRoutingTable {
         request,
         stopped_since,
-        registry_version: _,
+        registry_version,
     } = request
     else {
         println!("Error: list_by UpdatedRoutingTable returned bad variant");
         return ProcessingResult::NoProgress;
     };
     // call both subnets
-    let Ok(_source_subnet_info) = subnet_info(&SubnetInfoArgs {
-        subnet_id: request.source_subnet,
-    })
-    .await
+    let ProcessingResult::Success(source_subnet_version) =
+        get_registry_version(request.source_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    let Ok(_target_subnet_info) = subnet_info(&SubnetInfoArgs {
-        subnet_id: request.target_subnet,
-    })
-    .await
+    let ProcessingResult::Success(target_subnet_version) =
+        get_registry_version(request.target_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    // TODO: this version of the CDK does not include registry_version in the response to subnet_info.
-    // if source_subnet_info.registry_version >= registry_version && target_subnet_info.registry_version >= registry_version {}
-    let now = time();
-    if now - stopped_since < 3 * 60 * 1_000_000_000 {
+    println!(
+        "Registry version: {} {} {}",
+        registry_version, source_subnet_version, target_subnet_version
+    );
+    if source_subnet_version < registry_version || target_subnet_version < registry_version {
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
         request,
         stopped_since,
     })
+}
+
+pub async fn process_routing_table(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::RoutingTableChangeAccepted {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by RoutingTableChangeAccepted returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    let ProcessingResult::Success(()) =
+        delete_canister(request.source, request.source_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    ProcessingResult::Success(RequestState::SourceDeleted {
+        request,
+        stopped_since,
+    })
+}
+
+pub async fn process_source_deleted(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::SourceDeleted {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by SourceDeleted returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    if time() - stopped_since < 5 * 60 * 1_000_000_000 {
+        return ProcessingResult::NoProgress;
+    }
+    // restore controllers of target
+    let controllers = request
+        .source_original_controllers
+        .iter()
+        .filter(|x| **x != canister_self())
+        .cloned()
+        .collect::<Vec<Principal>>();
+    let ProcessingResult::Success(()) =
+        set_original_controllers(request.source, controllers, request.target_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    ProcessingResult::Success(RequestState::RestoredControllers { request })
 }
 
 // ----------------------------------------------------------------------------
@@ -269,13 +319,25 @@ pub async fn process_all_failed() {
     };
     let mut tasks = vec![];
     let requests = list_by(|r| matches!(r, RequestState::Failed { .. }));
+    if requests.is_empty() {
+        return;
+    }
+    println!("Entering `failed` with {} pending requests", requests.len());
     for request in requests.iter() {
         tasks.push(process_failed(request.clone()));
     }
     let results = join_all(tasks).await;
+    let mut success_counter = 0;
     for (req, res) in zip(requests, results) {
+        if res.is_success() {
+            success_counter += 1;
+        }
         res.transition(req);
     }
+    println!(
+        "Exiting `failed` with {} successful transitions.",
+        success_counter
+    );
 }
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
@@ -308,6 +370,20 @@ async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infall
     }
     // We successfully returned controllership.
     ProcessingResult::Success(Event::Failed { request, reason })
+}
+
+pub async fn process_all_succeeded() {
+    let Ok(_guard) = MethodGuard::new("succeeded") else {
+        return;
+    };
+    let requests = list_by(|r| matches!(r, RequestState::RestoredControllers { .. }));
+    for request in requests.into_iter() {
+        remove_request(&request);
+        if let RequestState::RestoredControllers { request } = request {
+            let event = Event::Succeeded { request };
+            insert_event(event);
+        }
+    }
 }
 
 #[must_use]
@@ -401,10 +477,10 @@ impl ProcessingResult<RequestState, RequestState> {
 impl ProcessingResult<Event, Infallible> {
     fn transition(self, old_state: RequestState) {
         match self {
-            ProcessingResult::Success(_event) => {
+            ProcessingResult::Success(event) => {
                 // Cleanup successful.
                 remove_request(&old_state);
-                // TODO: insert_event(event);
+                insert_event(event);
             }
             ProcessingResult::NoProgress => {}
             ProcessingResult::FatalFailure(_) => {}

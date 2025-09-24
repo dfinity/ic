@@ -13,8 +13,9 @@ use strum_macros::Display;
 use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
-        process_accepted, process_all_by_predicate, process_all_failed,
-        process_controllers_changed, process_renamed, process_stopped, process_updated,
+        process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
+        process_controllers_changed, process_renamed, process_routing_table,
+        process_source_deleted, process_stopped, process_updated,
     },
 };
 
@@ -23,6 +24,8 @@ mod external_interfaces;
 mod migration_canister;
 mod privileged;
 mod processing;
+#[cfg(test)]
+mod tests;
 mod validation;
 
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
@@ -71,6 +74,25 @@ pub struct Request {
 }
 
 impl Request {
+    pub fn new(
+        source: Principal,
+        source_subnet: Principal,
+        source_original_controllers: Vec<Principal>,
+        target: Principal,
+        target_subnet: Principal,
+        target_original_controllers: Vec<Principal>,
+        caller: Principal,
+    ) -> Self {
+        Self {
+            source,
+            source_subnet,
+            source_original_controllers,
+            target,
+            target_subnet,
+            target_original_controllers,
+            caller,
+        }
+    }
     fn affects_canister(&self, src_id: Principal, tgt_id: Principal) -> Option<Principal> {
         if self.source == src_id || self.target == src_id {
             return Some(src_id);
@@ -195,6 +217,8 @@ pub enum RequestState {
     /// source subnet have expired by now.
     /// Restored the controllers of the target canister (now addressed with source's id).
     ///
+    /// This state transitions to a success event without any additional work.
+    ///
     /// Called `update_settings` to restore controllers.
     #[strum(to_string = "RequestState::RestoredControllers {{ request: {request} }}")]
     RestoredControllers { request: Request },
@@ -220,6 +244,20 @@ impl RequestState {
             | RequestState::Failed { request, .. } => request,
         }
     }
+
+    fn name(&self) -> &str {
+        match self {
+            RequestState::Accepted { .. } => "Accepted",
+            RequestState::ControllersChanged { .. } => "ControllersChanged",
+            RequestState::StoppedAndReady { .. } => "StoppedAndReady",
+            RequestState::RenamedTarget { .. } => "RenamedTarget",
+            RequestState::UpdatedRoutingTable { .. } => "UpdatedRoutingTable",
+            RequestState::RoutingTableChangeAccepted { .. } => "RoutingTableChangeAccepted",
+            RequestState::SourceDeleted { .. } => "SourceDeleted",
+            RequestState::RestoredControllers { .. } => "RestoredControllers",
+            RequestState::Failed { .. } => "Failed",
+        }
+    }
 }
 
 #[derive(Clone, Display, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
@@ -228,6 +266,14 @@ pub enum Event {
     Succeeded { request: Request },
     #[strum(to_string = "Event::Failed {{ request: {request}, reason: {reason} }}")]
     Failed { request: Request, reason: String },
+}
+
+impl Event {
+    fn request(&self) -> &Request {
+        match self {
+            Event::Succeeded { request } | Event::Failed { request, .. } => request,
+        }
+    }
 }
 
 impl Storable for Request {
@@ -319,6 +365,22 @@ pub fn start_timers() {
             process_updated,
         ))
     });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "routing_table_change_accepted",
+            |r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }),
+            process_routing_table,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "source_deleted",
+            |r| matches!(r, RequestState::SourceDeleted { .. }),
+            process_source_deleted,
+        ))
+    });
+
+    set_timer_interval(interval, || spawn(process_all_succeeded()));
 
     // This one has a different type from the generic ones above.
     set_timer_interval(interval, || spawn(process_all_failed()));

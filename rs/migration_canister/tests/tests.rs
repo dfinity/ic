@@ -14,9 +14,10 @@ use std::{
     collections::{HashMap, VecDeque},
     time::Duration,
 };
+use strum::Display;
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
-pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(99);
+pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
 // TODO:
 // - test all conditions of validation after the MC is unique controller and fail there.
@@ -42,6 +43,16 @@ pub enum ValidationError {
     TargetHasSnapshots,
     TargetInsufficientCycles,
     CallFailed { reason: String },
+}
+
+#[derive(Clone, Display, PartialEq, Debug, CandidType, Deserialize)]
+enum MigrationStatus {
+    #[strum(to_string = "MigrationStatus::InProgress {{ status: {status} }}")]
+    InProgress { status: String },
+    #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason}, time: {time} }}")]
+    Failed { reason: String, time: u64 },
+    #[strum(to_string = "MigrationStatus::Succeeded {{ time: {time} }}")]
+    Succeeded { time: u64 },
 }
 
 pub struct Setup {
@@ -97,6 +108,17 @@ async fn setup(
     // Setup a unique controller each, and a shared one.
     let source_controllers = vec![c1, c2];
     let target_controllers = vec![c1, c3];
+
+    // install fresh version of registry canister:
+    let registry_wasm = Project::cargo_bin_maybe_from_env("registry-canister", &[]);
+    pic.upgrade_canister(
+        REGISTRY_CANISTER_ID.into(),
+        registry_wasm.bytes(),
+        vec![],
+        Some(Principal::from_text("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap()), /* root canister */
+    )
+    .await
+    .unwrap();
 
     let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
 
@@ -213,6 +235,32 @@ async fn migrate_canister(
     Decode!(&res, Result<(), ValidationError>).unwrap()
 }
 
+async fn get_status(
+    pic: &PocketIc,
+    sender: Principal,
+    args: &MigrateCanisterArgs,
+) -> Vec<MigrationStatus> {
+    let res = pic
+        .update_call(
+            MIGRATION_CANISTER_ID.into(),
+            sender,
+            "migration_status",
+            Encode!(args).unwrap(),
+        )
+        .await
+        .unwrap();
+    Decode!(&res, Vec<MigrationStatus>).unwrap()
+}
+
+/// Advances time by a second and executes enough ticks that the state machine
+/// can make progress.
+async fn advance(pic: &PocketIc) {
+    pic.advance_time(Duration::from_millis(1000)).await;
+    for _ in 0..10 {
+        pic.tick().await;
+    }
+}
+
 #[derive(Default, Debug)]
 struct Logs {
     map: HashMap<u64, String>,
@@ -304,6 +352,8 @@ async fn validation_succeeds() {
         "Entering `stopped` with 1 pending",
         "Exiting `stopped` with 1 successful",
         "Entering `renamed_target` with 1 pending",
+        "Exiting `renamed_target` with 1 successful",
+        "Entering `updated_routing_table` with 1 pending",
     ]));
 }
 
@@ -497,4 +547,91 @@ async fn validation_fails_snapshot() {
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
         Err(ValidationError::TargetHasSnapshots)
     ));
+}
+
+#[tokio::test]
+async fn status_correct() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "Accepted".to_string()
+        }
+    );
+
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "ControllersChanged".to_string()
+        }
+    );
+
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "StoppedAndReady".to_string()
+        }
+    );
+
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "RenamedTarget".to_string()
+        }
+    );
+
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "UpdatedRoutingTable".to_string()
+        }
+    );
+
+    // TODO: Depends on a PocketIC change
+
+    // advance(&pic).await;
+    // let status = get_status(&pic, sender, &args).await;
+    // assert_eq!(
+    //     status[0],
+    //     MigrationStatus::InProgress {
+    //         status: "RoutingTableChangeAccepted".to_string()
+    //     }
+    // );
+
+    // advance(&pic).await;
+    // let status = get_status(&pic, sender, &args).await;
+    // assert_eq!(
+    //     status[0],
+    //     MigrationStatus::InProgress {
+    //         status: "SourceDeleted".to_string()
+    //     }
+    // );
+
+    // advance(&pic).await;
+    // let status = get_status(&pic, sender, &args).await;
+    // assert_eq!(
+    //     status[0],
+    //     MigrationStatus::InProgress {
+    //         status: "RestoredControllers".to_string()
+    //     }
+    // );
 }
