@@ -569,15 +569,15 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
             // get_ancestor_chain always returns at least 1 header.
             if to_persist.len() > 1 {
                 let (_, node) = &to_persist[0];
+
                 let anchor_height = node.data.height;
                 on_disk.run_rw_txn(|tx| {
                     for (hash, node) in to_persist {
-                        on_disk.tx_add_header(tx, hash, node).inspect(|_| {
-                            self.metrics.on_disk_elements.inc();
-                        })?;
+                        on_disk.tx_add_header(tx, hash, node)?;
                     }
                     on_disk.tx_update_tip(tx, anchor).inspect(|_| {
-                        self.metrics.anchor_height_on_disk.set(anchor_height as i64)
+                        self.metrics.anchor_height_on_disk.set(anchor_height as i64);
+                        self.metrics.on_disk_elements.set(1 + anchor_height as i64);
                     })?;
                     Ok(())
                 })?;
@@ -696,6 +696,9 @@ pub(crate) mod test {
             assert_eq!(node.data.height, 0);
             assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
+            // Check initial metrics
+            assert_eq!(cache.metrics.in_memory_elements.get(), 1);
+            assert_eq!(cache.metrics.on_disk_elements.get(), 1);
 
             // Make a few new headers
             let mut next_headers = BTreeMap::new();
@@ -709,6 +712,7 @@ pub(crate) mod test {
                     next_headers.insert(header.block_hash(), header);
                 }
             }
+            assert_eq!(cache.metrics.in_memory_elements.get(), 7);
             // Add more headers
             let intermediate = cache.get_active_chain_tip();
             let intermediate_hash = intermediate.header.block_hash();
@@ -721,6 +725,7 @@ pub(crate) mod test {
                     next_headers.insert(header.block_hash(), header);
                 }
             }
+            assert_eq!(cache.metrics.in_memory_elements.get(), 13);
             let tip = cache.get_active_chain_tip();
             assert!(next_headers.contains_key(&tip.header.block_hash()));
             assert_eq!(
@@ -748,6 +753,9 @@ pub(crate) mod test {
             cache
                 .persist_and_prune_headers_below_anchor(intermediate_hash)
                 .unwrap();
+            assert_eq!(cache.metrics.anchor_height_on_disk.get(), 3);
+            assert_eq!(cache.metrics.on_disk_elements.get(), 4);
+            assert_eq!(cache.metrics.in_memory_elements.get(), 7);
 
             // Check if the chain from genesis to tip can still be found
             assert!(cache.get_header(genesis_block_hash).is_some());
@@ -789,6 +797,10 @@ pub(crate) mod test {
                 &MetricsRegistry::default(),
                 logger,
             );
+            assert_eq!(cache.metrics.anchor_height_on_disk.get(), 3);
+            assert_eq!(cache.metrics.on_disk_elements.get(), 4);
+            assert_eq!(cache.metrics.in_memory_elements.get(), 1);
+
             assert!(cache.get_header(genesis_block_hash).is_some());
             let tips = get_tips_of(&cache, genesis_block_hash);
             assert_eq!(tips.len(), 1);
