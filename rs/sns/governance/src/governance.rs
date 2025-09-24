@@ -1971,12 +1971,11 @@ impl Governance {
         }
 
         // Return the rejection fee to the proposal's proposer
-        if let Some(nid) = &proposal_data.proposer {
-            if let Some(neuron) = self.proto.neurons.get_mut(&nid.to_string()) {
-                if neuron.neuron_fees_e8s >= proposal_data.reject_cost_e8s {
-                    neuron.neuron_fees_e8s -= proposal_data.reject_cost_e8s;
-                }
-            }
+        if let Some(nid) = &proposal_data.proposer
+            && let Some(neuron) = self.proto.neurons.get_mut(&nid.to_string())
+            && neuron.neuron_fees_e8s >= proposal_data.reject_cost_e8s
+        {
+            neuron.neuron_fees_e8s -= proposal_data.reject_cost_e8s;
         }
 
         // A yes decision has been made, execute the proposal!
@@ -3182,30 +3181,19 @@ impl Governance {
             for canister_change in ledger_canister_info.changes().iter().rev() {
                 if canister_change.canister_version()
                     > ledger_canister_info_version_number_before_upgrade
-                {
-                    if let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
+                    && let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
                         canister_change.details()
+                    && let CanisterInstallMode::Upgrade = code_deployment.mode()
+                    && code_deployment.module_hash()[..] == current_version.ledger_wasm_hash[..]
+                {
+                    // success
+                    // update nervous-system-parameters transaction_fee if the fee is changed.
+                    if let Some(nervous_system_parameters) = self.proto.parameters.as_mut()
+                        && let Some(transfer_fee) = manage_ledger_parameters.transfer_fee
                     {
-                        if let CanisterInstallMode::Upgrade = code_deployment.mode() {
-                            if code_deployment.module_hash()[..]
-                                == current_version.ledger_wasm_hash[..]
-                            {
-                                // success
-                                // update nervous-system-parameters transaction_fee if the fee is changed.
-                                if let Some(nervous_system_parameters) =
-                                    self.proto.parameters.as_mut()
-                                {
-                                    if let Some(transfer_fee) =
-                                        manage_ledger_parameters.transfer_fee
-                                    {
-                                        nervous_system_parameters.transaction_fee_e8s =
-                                            Some(transfer_fee);
-                                    }
-                                }
-                                return Ok(());
-                            }
-                        }
+                        nervous_system_parameters.transaction_fee_e8s = Some(transfer_fee);
                     }
+                    return Ok(());
                 }
             }
 
@@ -5312,10 +5300,9 @@ impl Governance {
         if let Some(GovernanceCachedMetrics {
             timestamp_seconds, ..
         }) = self.proto.metrics
+            && now_seconds.saturating_sub(timestamp_seconds) < ONE_HOUR_SECONDS
         {
-            if now_seconds.saturating_sub(timestamp_seconds) < ONE_HOUR_SECONDS {
-                return;
-            }
+            return;
         }
 
         let num_treasury_metrics = self
@@ -5469,10 +5456,10 @@ impl Governance {
                     .take(proposals_of_action.len() - max_proposals_to_keep_per_action)
                 {
                     // Check that this proposal can be purged.
-                    if let Some(proposal) = self.proto.proposals.get(proposal_id) {
-                        if proposal.can_be_purged(now_seconds) {
-                            self.proto.proposals.remove(proposal_id);
-                        }
+                    if let Some(proposal) = self.proto.proposals.get(proposal_id)
+                        && proposal.can_be_purged(now_seconds)
+                    {
+                        self.proto.proposals.remove(proposal_id);
                     }
                 }
             }
