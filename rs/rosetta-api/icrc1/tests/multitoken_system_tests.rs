@@ -1436,6 +1436,9 @@ fn test_metrics() {
         let rosetta_verified_block_height = gauge_value(&metrics, "rosetta_verified_block_height")
             .expect("should export rosetta_verified_block_height metric");
         assert_eq!(rosetta_verified_block_height as u64, NUM_BLOCKS - 1);
+        let rosetta_target_block_height = gauge_value(&metrics, "rosetta_target_block_height")
+            .expect("should export rosetta_target_block_height metric");
+        assert_eq!(rosetta_target_block_height as u64, NUM_BLOCKS - 1);
     });
 }
 

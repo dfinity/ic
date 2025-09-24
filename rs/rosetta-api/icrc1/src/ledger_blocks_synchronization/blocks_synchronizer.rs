@@ -208,7 +208,7 @@ pub async fn start_synching_blocks(
                     .unwrap_or(0u64);
                 storage_client
                     .get_metrics()
-                    .set_synced_height(highest_block_index);
+                    .set_verified_height(highest_block_index);
             }
             Err(e) => {
                 error!("Error while updating account balances: {}", e);
@@ -277,7 +277,7 @@ pub async fn sync_from_the_tip(
 
     storage_client
         .get_metrics()
-        .set_verified_height(tip_block_index);
+        .set_target_height(tip_block_index);
 
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one.
     // The trailing parent hash is either `None` if the database is empty or the block hash of the block with the highest block index in storage.
@@ -445,6 +445,12 @@ async fn sync_blocks_interval(
         storage_client
             .get_metrics()
             .add_blocks_fetched(number_of_blocks_fetched);
+        // The first iteration of the loop will fetch blocks up to the end of the `sync_range`.
+        // Subsequent iterations will fetch blocks with lower indexes, and calls to
+        // `set_synced_height` will be redundant but harmless.
+        storage_client
+            .get_metrics()
+            .set_synced_height(*sync_range.index_range.end());
         pr.update(number_of_blocks_fetched);
 
         // If the interval of the last iteration started at the target height, then all blocks above and including the target height have been synched.
@@ -674,7 +680,7 @@ pub mod blocks_verifier {
         }
 
         let mut parent_hash = Some(blockchain[0].clone().get_block_hash().clone());
-        // The blockchain has more than one element so it is save to skip the first one.
+        // The blockchain has more than one element so it is safe to skip the first one.
         // The first element cannot be verified so we start at element 2.
         for block in blockchain.iter().skip(1) {
             if block.get_parent_hash() != parent_hash {
