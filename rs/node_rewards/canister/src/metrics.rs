@@ -51,7 +51,6 @@ where
     pub(crate) client: Box<dyn ManagementCanisterClient>,
     pub(crate) subnets_metrics:
         RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
-    pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, Memory>>,
     pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
 
@@ -59,38 +58,21 @@ impl<Memory> MetricsManager<Memory>
 where
     Memory: ic_stable_structures::Memory + 'static,
 {
-    pub async fn retry_failed_subnets(&self) {
-        let subnets_to_retry: Vec<SubnetId> = self
-            .subnets_to_retry
-            .borrow()
-            .keys()
-            .map(|key| key.into())
-            .collect();
-
-        if !subnets_to_retry.is_empty() {
-            ic_cdk::println!("Retrying metrics for subnets: {:?}", subnets_to_retry);
-            self.update_subnets_metrics(subnets_to_retry).await;
-        }
-    }
-
     /// Fetches subnets metrics for the specified subnets from their last stored timestamp.
     async fn fetch_subnets_metrics(
         &self,
-        last_timestamp_per_subnet: &BTreeMap<SubnetId, Option<UnixTsNanos>>,
+        last_timestamp_per_subnet: &BTreeMap<SubnetId, UnixTsNanos>,
     ) -> BTreeMap<SubnetId, CallResult<Vec<NodeMetricsHistoryRecord>>> {
         let mut subnets_history = Vec::new();
+        ic_cdk::println!(
+            "Updating node metrics for {} subnets",
+            last_timestamp_per_subnet.keys().count()
+        );
 
         for (subnet_id, last_stored_ts) in last_timestamp_per_subnet {
-            let refresh_ts = last_stored_ts.unwrap_or_default();
-            ic_cdk::println!(
-                "Updating node metrics for subnet {}: Refreshing metrics from timestamp {}",
-                subnet_id,
-                refresh_ts
-            );
-
             let args = NodeMetricsHistoryArgs {
                 subnet_id: subnet_id.get().0,
-                start_at_timestamp_nanos: refresh_ts,
+                start_at_timestamp_nanos: *last_stored_ts,
             };
 
             subnets_history
@@ -103,21 +85,33 @@ where
             .collect()
     }
 
+    fn last_timestamp_per_subnet(&self, subnets: Vec<SubnetId>) -> BTreeMap<SubnetId, UnixTsNanos> {
+        subnets
+            .into_iter()
+            .map(|subnet| {
+                let last_timestamp = self
+                    .last_timestamp_per_subnet
+                    .borrow()
+                    .get(&subnet.into())
+                    .unwrap_or_default();
+
+                (subnet, last_timestamp)
+            })
+            .collect()
+    }
+
     /// Updates the stored subnets metrics from remote management canisters.
     ///
     /// This function fetches the nodes metrics for the given subnets from the management canisters
     /// updating the local metrics with the fetched metrics.
-    pub async fn update_subnets_metrics(&self, subnets: Vec<SubnetId>) {
-        let last_timestamp_per_subnet: BTreeMap<SubnetId, _> = subnets
-            .into_iter()
-            .map(|subnet| {
-                let last_timestamp = self.last_timestamp_per_subnet.borrow().get(&subnet.into());
-
-                (subnet, last_timestamp)
-            })
-            .collect();
-
+    pub async fn update_subnets_metrics(
+        &self,
+        subnets: Vec<SubnetId>,
+    ) -> Result<UnixTsNanos, String> {
+        let mut success = true;
+        let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
         let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
+
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
                 Ok(subnet_update) => {
@@ -152,29 +146,29 @@ where
                             );
                         }
                     }
-
-                    self.subnets_to_retry.borrow_mut().remove(&subnet_id.into());
                 }
                 Err((_, e)) => {
+                    success = false;
                     ic_cdk::println!(
                         "Error fetching metrics for subnet {}: ERROR: {}",
                         subnet_id,
                         e
                     );
-
-                    // The call failed, will retry fetching metrics for this subnet.
-                    let mut retry_count = self
-                        .subnets_to_retry
-                        .borrow()
-                        .get(&subnet_id.into())
-                        .unwrap_or_default();
-                    retry_count += 1;
-
-                    self.subnets_to_retry
-                        .borrow_mut()
-                        .insert(subnet_id.into(), retry_count);
                 }
             }
+        }
+
+        if success {
+            let max_ts_update = self
+                .last_timestamp_per_subnet(subnets)
+                .into_values()
+                .into_iter()
+                .max()
+                .unwrap_or_default();
+
+            Ok(max_ts_update)
+        } else {
+            Err("Failed to update metrics".to_string())
         }
     }
 
