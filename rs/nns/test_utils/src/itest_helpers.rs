@@ -788,7 +788,7 @@ pub async fn set_up_sns_wasm_canister(
     canister
 }
 
-/// Compiles the migration canister, builds it's initial payload and installs it
+/// Compiles the migration canister and installs it.
 pub async fn install_migration_canister(canister: &mut Canister<'_>) {
     install_rust_canister(canister, "migration-canister", &[], None).await;
 }
