@@ -4,7 +4,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::{
-    DeregisterKnownNeuron, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse,
+    DeregisterKnownNeuron, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, TopicToFollow,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -96,6 +96,7 @@ fn test_known_neurons() {
                 name: "NeuronTwo".to_string(),
                 description: Some("Second test neuron".to_string()),
                 links: Some(vec![]),
+                committed_topics: Some(vec![]),
             }),
         },
     );
@@ -109,6 +110,7 @@ fn test_known_neurons() {
                 name: "NeuronThree".to_string(),
                 description: None,
                 links: Some(vec![]),
+                committed_topics: Some(vec![]),
             }),
         },
     );
@@ -124,6 +126,7 @@ fn test_known_neurons() {
                         name: "NeuronThree".to_string(),
                         description: None,
                         links: Some(vec![]),
+                        committed_topics: Some(vec![]),
                     }),
                 },
                 KnownNeuron {
@@ -132,6 +135,7 @@ fn test_known_neurons() {
                         name: "NeuronTwo".to_string(),
                         description: Some("Second test neuron".to_string()),
                         links: Some(vec![]),
+                        committed_topics: Some(vec![]),
                     }),
                 },
             ],
@@ -146,6 +150,7 @@ fn test_known_neurons() {
             name: "NeuronTwo".to_string(),
             description: Some("Second test neuron".to_string()),
             links: Some(vec![]),
+            committed_topics: Some(vec![]),
         }
     );
     assert_eq!(
@@ -157,6 +162,7 @@ fn test_known_neurons() {
             name: "NeuronThree".to_string(),
             description: None,
             links: Some(vec![]),
+            committed_topics: Some(vec![]),
         }
     );
 
@@ -181,6 +187,7 @@ fn test_known_neurons() {
                     name: "NeuronThree".to_string(),
                     description: None,
                     links: Some(vec![]),
+                    committed_topics: Some(vec![]),
                 }),
             }],
         }
@@ -203,6 +210,10 @@ fn test_known_neurons() {
                 name: "NeuronThree (changed)".to_string(),
                 description: Some("Third test neuron".to_string()),
                 links: Some(vec!["https://example.com".to_string()]),
+                committed_topics: Some(vec![
+                    TopicToFollow::NetworkEconomics,
+                    TopicToFollow::Governance,
+                ]),
             }),
         },
     );
@@ -217,6 +228,10 @@ fn test_known_neurons() {
                     name: "NeuronThree (changed)".to_string(),
                     description: Some("Third test neuron".to_string()),
                     links: Some(vec!["https://example.com".to_string()]),
+                    committed_topics: Some(vec![
+                        TopicToFollow::NetworkEconomics,
+                        TopicToFollow::Governance
+                    ]),
                 }),
             }],
         }
@@ -230,6 +245,10 @@ fn test_known_neurons() {
             name: "NeuronThree (changed)".to_string(),
             description: Some("Third test neuron".to_string()),
             links: Some(vec!["https://example.com".to_string()]),
+            committed_topics: Some(vec![
+                TopicToFollow::NetworkEconomics,
+                TopicToFollow::Governance
+            ]),
         }
     );
 }
