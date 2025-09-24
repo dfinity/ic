@@ -2087,6 +2087,7 @@ impl PocketIcSubnets {
             if icp_features.registry.is_some() {
                 let nns_subnet = self.nns_subnet.clone().expect("The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.").state_machine.clone();
 
+                let synced_registry_version_before = self.synced_registry_version;
                 loop {
                     let get_changes_since_request =
                         serialize_get_changes_since_request(self.synced_registry_version.get())
@@ -2121,7 +2122,9 @@ impl PocketIcSubnets {
                         break;
                     }
                 }
-                self.persist_registry_changes();
+                if synced_registry_version_before != self.synced_registry_version {
+                    self.persist_registry_changes();
+                }
             }
         }
     }
