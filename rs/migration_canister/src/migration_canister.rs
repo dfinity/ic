@@ -71,17 +71,11 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
 #[derive(Clone, Display, CandidType, Deserialize)]
 enum MigrationStatus {
     #[strum(to_string = "MigrationStatus::InProgress {{ status: {status} }}")]
-    InProgress {
-        status: String,
-    },
-    #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason} }}")]
-    Failed {
-        reason: String,
-        time: u64,
-    },
-    Succeeded {
-        time: u64,
-    },
+    InProgress { status: String },
+    #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason}, time: {time} }}")]
+    Failed { reason: String, time: u64 },
+    #[strum(to_string = "MigrationStatus::Succeeded {{ time: {time} }}")]
+    Succeeded { time: u64 },
 }
 
 #[query]

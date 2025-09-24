@@ -251,7 +251,7 @@ impl RequestState {
             RequestState::ControllersChanged { .. } => "ControllersChanged",
             RequestState::StoppedAndReady { .. } => "StoppedAndReady",
             RequestState::RenamedTarget { .. } => "RenamedTarget",
-            RequestState::UpdatedRoutingTable { .. } => "UpdateRoutingTable",
+            RequestState::UpdatedRoutingTable { .. } => "UpdatedRoutingTable",
             RequestState::RoutingTableChangeAccepted { .. } => "RoutingTableChangeAccepted",
             RequestState::SourceDeleted { .. } => "SourceDeleted",
             RequestState::RestoredControllers { .. } => "RestoredControllers",
