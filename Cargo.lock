@@ -11148,6 +11148,7 @@ dependencies = [
 name = "ic-nervous-system-rate-limits"
 version = "0.0.1"
 dependencies = [
+ "ic-stable-structures 0.6.8",
  "serde",
 ]
 
@@ -11443,6 +11444,7 @@ dependencies = [
  "ic-nervous-system-linear-map",
  "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
+ "ic-nervous-system-rate-limits",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-nervous-system-temporary",
