@@ -38,9 +38,9 @@ jobs:
   insta-tests:
     name: Quick Feedback Tests
     runs-on: &dind-small-setup
+      labels: dind-small
     container: *container-setup
     timeout-minutes: 30
-      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
