@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- Metric for `rosetta_synched_block_height` ([#6896](https://github.com/dfinity/ic/pull/6896))
+
 ### Changed
 - Burn and mint transaction fees are taken into account ([#6620](https://github.com/dfinity/ic/pull/6620))
 
