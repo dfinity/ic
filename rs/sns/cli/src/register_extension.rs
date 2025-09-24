@@ -50,6 +50,7 @@ pub struct RegisterExtensionArgs {
     pub sns_neuron_id: Option<ParsedSnsNeuron>,
 
     /// The Root canister ID of the SNS to which the extension is being registered.
+    #[clap(long)]
     pub sns_root_canister_id: CanisterId,
 
     /// The ID of the subnet on which the extension canister will be created.
@@ -57,6 +58,7 @@ pub struct RegisterExtensionArgs {
     /// Some extensions may require a specific subnet to operate correctly.
     ///
     /// The default is the fiduciary subnet.
+    #[clap(long)]
     pub subnet_id: Option<PrincipalId>,
 
     /// Path to a ICP WASM module file (may be gzipped).

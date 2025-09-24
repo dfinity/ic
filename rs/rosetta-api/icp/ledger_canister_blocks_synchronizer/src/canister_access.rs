@@ -193,13 +193,13 @@ impl CanisterAccess {
         let mut ongoing = self.ongoing_block_queries.lock().await;
         // clean up stale queries
         let a = ongoing.front().map(|(a, _, _)| *a);
-        if let Some(a) = a {
-            if a != start {
-                warn!("Requested for {} ignoring queries at {}.", start, a);
-                drop(ongoing);
-                self.clear_outstanding_queries().await;
-                return Err("Removed stale block queries".to_string());
-            }
+        if let Some(a) = a
+            && a != start
+        {
+            warn!("Requested for {} ignoring queries at {}.", start, a);
+            drop(ongoing);
+            self.clear_outstanding_queries().await;
+            return Err("Removed stale block queries".to_string());
         }
 
         let (a, b, jh) = {
