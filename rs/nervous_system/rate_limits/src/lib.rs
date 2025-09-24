@@ -12,14 +12,14 @@ use std::{
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UsageRecord {
-    pub last_updated: SystemTime,
+    pub last_capacity_drip: SystemTime,
     pub capacity_used: u64,
 }
 
 impl Storable for UsageRecord {
     fn to_bytes(&self) -> Cow<[u8]> {
         let timestamp_secs = self
-            .last_updated
+            .last_capacity_drip
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
@@ -45,7 +45,7 @@ impl Storable for UsageRecord {
         let last_updated = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(timestamp_secs);
 
         Self {
-            last_updated,
+            last_capacity_drip: last_updated,
             capacity_used,
         }
     }
@@ -285,7 +285,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
     pub fn commit(&mut self, reservation: Reservation<K>) {
         let now = SystemTime::now();
         let default_usage = UsageRecord {
-            last_updated: now,
+            last_capacity_drip: now,
             capacity_used: 0,
         };
 
@@ -305,12 +305,38 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
                     if let Some(reservation_data) =
                         reservations.remove(&(reservation.key.clone(), reservation.index))
                     {
-                        usage.last_updated = now;
                         usage.capacity_used = usage
                             .capacity_used
                             .saturating_add(reservation_data.capacity);
                     }
                 }
+            });
+    }
+
+    pub fn restore_capacity(&mut self, now: SystemTime, key: K, capacity_to_restore: u64) {
+        // If there's no usage record, do nothing (already at max capacity)
+        if !self.capacity_storage.get_usage(&key).is_some() {
+            return;
+        }
+
+        let default_usage = UsageRecord {
+            last_capacity_drip: now,
+            capacity_used: 0,
+        };
+
+        self.capacity_storage
+            .with_usage(key, default_usage, |usage| {
+                // Update token bucket capacity first (this may update last_updated)
+                update_capacity(
+                    usage,
+                    now,
+                    self.config.add_capacity_amount,
+                    self.config.add_capacity_interval,
+                );
+
+                // Restore capacity (subtract from used capacity, cannot go below 0)
+                // Don't update last_updated - let the natural token bucket drip continue
+                usage.capacity_used = usage.capacity_used.saturating_sub(capacity_to_restore);
             });
     }
 }
@@ -323,14 +349,14 @@ fn update_capacity(
 ) {
     // Calculate time elapsed since last update
     let elapsed = now
-        .duration_since(usage_record.last_updated)
+        .duration_since(usage_record.last_capacity_drip)
         .unwrap_or(Duration::ZERO);
 
     // Calculate how many complete intervals have passed
     let complete_intervals = elapsed.as_secs() / add_frequency.as_secs();
 
     // Calculate new last_updated so that the rate remains constant regardless of when this is checked.
-    let last_updated = usage_record.last_updated
+    let last_updated = usage_record.last_capacity_drip
         + Duration::from_secs(complete_intervals.saturating_mul(add_frequency.as_secs()));
 
     // Add capacity for complete intervals (saturating subtract from used capacity)
@@ -339,7 +365,7 @@ fn update_capacity(
 
     // Set last_updated to account for the remaining partial interval
     // This keeps the partial interval progress for the next call
-    usage_record.last_updated = last_updated;
+    usage_record.last_capacity_drip = last_updated;
 }
 
 #[derive(Clone, Debug)]
@@ -581,7 +607,7 @@ mod tests {
     fn test_usage_record_serialization() {
         let now = SystemTime::now();
         let original = UsageRecord {
-            last_updated: now,
+            last_capacity_drip: now,
             capacity_used: 42,
         };
 
@@ -598,10 +624,73 @@ mod tests {
             .unwrap()
             .as_secs();
         let deserialized_secs = deserialized
-            .last_updated
+            .last_capacity_drip
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs();
         assert_eq!(deserialized_secs, original_secs);
+    }
+
+    #[test]
+    fn test_restore_capacity() {
+        let mut rate_limiter = RateLimiter::new(
+            RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(100),
+                max_capacity: 10,
+                reservation_timeout: Duration::from_secs(u64::MAX),
+            },
+            InMemoryCapacityStorage::new(),
+        );
+
+        let now = SystemTime::now();
+
+        // First, use some capacity
+        let reservation1 = rate_limiter
+            .try_reserve(now, "test_key".to_string(), 8)
+            .unwrap();
+        rate_limiter.commit(reservation1);
+
+        // Verify capacity is used
+        let usage = rate_limiter
+            .capacity_storage
+            .get_usage(&"test_key".to_string())
+            .unwrap();
+        assert_eq!(usage.capacity_used, 8);
+
+        // Restore 3 units of capacity
+        rate_limiter.restore_capacity(now, "test_key".to_string(), 3);
+
+        // Should now have 5 units used (8 - 3 = 5)
+        let usage = rate_limiter
+            .capacity_storage
+            .get_usage(&"test_key".to_string())
+            .unwrap();
+        assert_eq!(usage.capacity_used, 5);
+
+        // Test saturating_sub: restore more than used
+        rate_limiter.restore_capacity(now, "test_key".to_string(), 10);
+
+        // Should now have 0 units used (5 - 10 = 0, saturating)
+        let usage = rate_limiter
+            .capacity_storage
+            .get_usage(&"test_key".to_string())
+            .unwrap();
+        assert_eq!(usage.capacity_used, 0);
+
+        // Test restoring capacity for a key that has no usage record (should do nothing)
+        rate_limiter.restore_capacity(now, "nonexistent_key".to_string(), 5);
+
+        // Should not create a new entry - no usage record should exist
+        assert!(
+            rate_limiter
+                .capacity_storage
+                .get_usage(&"nonexistent_key".to_string())
+                .is_none()
+        );
+
+        // Should be able to reserve full capacity since no usage record exists
+        let full_reservation = rate_limiter.try_reserve(now, "nonexistent_key".to_string(), 10);
+        assert!(full_reservation.is_ok());
     }
 }
