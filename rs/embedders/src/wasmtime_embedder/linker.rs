@@ -663,13 +663,13 @@ pub fn syscalls<
         .func_wrap("ic0", "trap", {
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
-                let length: usize = length.try_into().expect("Failed to convert I to usize");
+                let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
-                num_bytes += logging_charge_bytes(&mut caller, length as u64)?;
+                num_bytes += logging_charge_bytes(&mut caller, length)?;
                 num_bytes += length;
-                charge_for_cpu_and_mem(&mut caller, overhead::TRAP, num_bytes)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::TRAP, num_bytes as usize)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_trap(offset, length, memory)
+                    system_api.ic0_trap(offset, length as usize, memory)
                 })
             }
         })
