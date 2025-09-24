@@ -3225,6 +3225,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3283,6 +3284,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3326,6 +3328,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3391,6 +3394,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 

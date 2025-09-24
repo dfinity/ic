@@ -7,9 +7,9 @@ use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
-    NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
+    NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
@@ -370,7 +370,11 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 // `PROTOCOL_CANISTER_IDS`.
 fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
     let canister_ids = state_machine.get_canister_ids();
-    let non_protocol_canister_ids_in_nns_subnet = [NNS_UI_CANISTER_ID, SNS_WASM_CANISTER_ID];
+    let non_protocol_canister_ids_in_nns_subnet = [
+        NNS_UI_CANISTER_ID,
+        SNS_WASM_CANISTER_ID,
+        MIGRATION_CANISTER_ID, /* TODO: temporary fix until this canister has real state */
+    ];
 
     for canister_id in canister_ids {
         if non_protocol_canister_ids_in_nns_subnet.contains(&canister_id) {

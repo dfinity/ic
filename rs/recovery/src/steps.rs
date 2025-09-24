@@ -1057,12 +1057,12 @@ pub struct CreateNNSRecoveryTarStep {
 }
 
 impl CreateNNSRecoveryTarStep {
-    fn get_tar_name(&self) -> String {
+    pub fn get_tar_name() -> String {
         "recovery.tar.zst".to_string()
     }
 
-    fn get_sha_name(&self) -> String {
-        self.get_tar_name() + ".sha256"
+    pub fn get_sha_name() -> String {
+        Self::get_tar_name() + ".sha256"
     }
 
     fn get_create_commands(&self) -> String {
@@ -1076,8 +1076,8 @@ artifacts_hash="$(sha256sum {tar_file:?} | cut -d ' ' -f1)"
 echo "$artifacts_hash" > {sha_file:?}
             "#,
             output_dir = self.output_dir,
-            tar_file = self.output_dir.join(self.get_tar_name()),
-            sha_file = self.output_dir.join(self.get_sha_name()),
+            tar_file = self.output_dir.join(Self::get_tar_name()),
+            sha_file = self.output_dir.join(Self::get_sha_name()),
             work_dir = self.work_dir,
         )
     }
@@ -1086,19 +1086,17 @@ echo "$artifacts_hash" > {sha_file:?}
         // We use debug formatting because it escapes the paths in case they contain spaces.
         format!(
             r#"
-Recovery artifacts with checksum {artifacts_hash} were successfully created in {output_dir:?}.
+Recovery artifacts with hash {artifacts_hash} were successfully created in {output_dir:?}.
 Now please:
   - Upload {tar_file:?} to:
     - https://download.dfinity.systems/recovery/{artifacts_hash}/{tar_name}
     - https://download.dfinity.network/recovery/{artifacts_hash}/{tar_name}
-  - Run the following command and commit + push to a branch of dfinity/ic:
-    echo {artifacts_hash} > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash
-  - Build a recovery image from that branch.
-  - Provide other Node Providers with the commit hash as version and the image hash. Ask them to reboot and follow the recovery instructions.
+    - TODO: Update directions after recovery runbook complete
+  - Provide other Node Providers with the commit hash as version, the image hash, and the artifacts hash. Ask them to reboot and follow the recovery instructions.
             "#,
             output_dir = self.output_dir,
-            tar_file = self.output_dir.join(self.get_tar_name()),
-            tar_name = self.get_tar_name(),
+            tar_file = self.output_dir.join(Self::get_tar_name()),
+            tar_name = Self::get_tar_name(),
         )
     }
 }
@@ -1121,12 +1119,12 @@ impl Step for CreateNNSRecoveryTarStep {
         }
 
         let Some(sha256) =
-            exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))?
+            exec_cmd(Command::new("cat").arg(self.output_dir.join(Self::get_sha_name())))?
         else {
             return Err(RecoveryError::invalid_output_error(format!(
                 "Could not read {}/{}",
                 self.output_dir.display(),
-                self.get_sha_name()
+                Self::get_sha_name()
             )));
         };
         info!(self.logger, "{}", self.get_next_steps(sha256.trim()));

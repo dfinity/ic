@@ -143,10 +143,10 @@ pub enum WasmMemoryType {
 
 pub(crate) fn main_memory_type(module: &Module<'_>) -> WasmMemoryType {
     let mut mem_type = WasmMemoryType::Wasm32;
-    if let Some(mem) = module.memories.first() {
-        if mem.memory64 {
-            mem_type = WasmMemoryType::Wasm64;
-        }
+    if let Some(mem) = module.memories.first()
+        && mem.memory64
+    {
+        mem_type = WasmMemoryType::Wasm64;
     }
     mem_type
 }
@@ -727,10 +727,10 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner {
-            if *existing_ty == ty {
-                return idx as u32;
-            }
+        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner
+            && *existing_ty == ty
+        {
+            return idx as u32;
         }
     }
     module.types.push(SubType {

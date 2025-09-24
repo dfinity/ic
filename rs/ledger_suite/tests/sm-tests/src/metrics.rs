@@ -2,13 +2,11 @@ use crate::{
     ARCHIVE_TRIGGER_THRESHOLD, DECIMAL_PLACES, InitArgs, MINTER, NUM_BLOCKS_TO_ARCHIVE,
     default_approve_args, init_args, send_approval, setup, transfer,
 };
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{CandidType, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_http_types::{HttpRequest, HttpResponse};
+use ic_ledger_suite_state_machine_helpers::{parse_metric, retrieve_metrics};
 use ic_state_machine_tests::StateMachine;
-use ic_types::ingress::WasmResult;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
-use std::str::FromStr;
 
 pub enum LedgerSuiteType {
     ICP,
@@ -289,54 +287,4 @@ fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metri
         metrics.iter().any(|line| line.contains(metric)),
         "Expected metric not found: {metric} in:\n{metrics:?}"
     );
-}
-
-pub fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
-    let metrics = retrieve_metrics(env, canister_id);
-    for line in &metrics {
-        let tokens: Vec<&str> = line.split(' ').collect();
-        let name = *tokens
-            .first()
-            .unwrap_or_else(|| panic!("metric line '{line}' should have at least one token"));
-        if name != metric {
-            continue;
-        }
-        let value_str = *tokens
-            .get(1)
-            .unwrap_or_else(|| panic!("metric line '{line}' should have at least two tokens"));
-        let u64_value = f64::from_str(value_str)
-            .unwrap_or_else(|err| panic!("metric value is not an number: {line} ({err})"))
-            .round() as u64;
-        return u64_value;
-    }
-    panic!("metric '{metric}' not found in metrics: {metrics:?}");
-}
-
-pub fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
-    let request = HttpRequest {
-        method: "GET".to_string(),
-        url: "/metrics".to_string(),
-        headers: Default::default(),
-        body: Default::default(),
-    };
-    let result = env
-        .query(
-            canister_id,
-            "http_request",
-            Encode!(&request).expect("failed to encode HTTP request"),
-        )
-        .expect("should successfully query canister for metrics");
-    let reply = match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("expected a successful reply, got a reject: {reject}")
-        }
-    };
-    let response = Decode!(&reply, HttpResponse).expect("should successfully decode HttpResponse");
-    assert_eq!(response.status_code, 200_u16);
-    String::from_utf8_lossy(response.body.as_slice())
-        .trim()
-        .split('\n')
-        .map(|line| line.to_string())
-        .collect::<Vec<_>>()
 }

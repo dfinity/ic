@@ -26,7 +26,7 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions, NumOsPages,
+    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
@@ -259,12 +259,11 @@ impl WasmtimeEmbedder {
         let mut linker: wasmtime::Linker<StoreData> = Linker::new(module.engine());
         let mut main_memory_type = WasmMemoryType::Wasm32;
 
-        if let Some(export) = module.get_export(WASM_HEAP_MEMORY_NAME) {
-            if let Some(mem) = export.memory() {
-                if mem.is_64() {
-                    main_memory_type = WasmMemoryType::Wasm64;
-                }
-            }
+        if let Some(export) = module.get_export(WASM_HEAP_MEMORY_NAME)
+            && let Some(mem) = export.memory()
+            && mem.is_64()
+        {
+            main_memory_type = WasmMemoryType::Wasm64;
         }
 
         match main_memory_type {
@@ -424,7 +423,6 @@ impl WasmtimeEmbedder {
                 system_api,
                 num_instructions_global: None,
                 log: self.log.clone(),
-                num_stable_dirty_pages_from_non_native_writes: NumOsPages::from(0),
                 limits: StoreLimitsBuilder::new()
                     .memory_size(MAX_STABLE_MEMORY_IN_BYTES as usize)
                     .tables(MAX_STORE_TABLES)
@@ -539,10 +537,10 @@ impl WasmtimeEmbedder {
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
-        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME) {
-            if mem.ty(&store).is_64() {
-                main_memory_type = WasmMemoryType::Wasm64;
-            }
+        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME)
+            && mem.ty(&store).is_64()
+        {
+            main_memory_type = WasmMemoryType::Wasm64;
         }
         let dirty_page_overhead = match main_memory_type {
             WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
@@ -751,8 +749,6 @@ pub struct StoreData {
     pub system_api: Option<SystemApiImpl>,
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
-    /// Tracks the number of dirty pages in stable memory in non-native stable mode
-    pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
     pub canister_backtrace: FlagStatus,
 }

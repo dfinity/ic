@@ -37,10 +37,9 @@ pub fn generate_ic_config(
         .guestos_settings
         .guestos_dev_settings
         .generate_ic_boundary_tls_cert
+        && !domain_name.is_empty()
     {
-        if !domain_name.is_empty() {
-            generate_tls_certificate(domain_name)?;
-        }
+        generate_tls_certificate(domain_name)?;
     }
 
     Ok(())
@@ -338,8 +337,8 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
 mod tests {
     use super::*;
     use config_types::{
-        CONFIG_VERSION, FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
-        GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings,
+        CONFIG_VERSION, FixedIpv6Config, GuestOSConfig, GuestOSSettings, GuestOSUpgradeConfig,
+        GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings,
     };
     use ic_config::{ConfigOptional, config_parser::ConfigSource};
 
@@ -443,15 +442,11 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: config_types::ICOSDevSettings::default(),
             },
-            guestos_settings: GuestOSSettings {
-                inject_ic_crypto: false,
-                inject_ic_state: false,
-                inject_ic_registry_local_store: false,
-                guestos_dev_settings: GuestOSDevSettings::default(),
-            },
+            guestos_settings: GuestOSSettings::default(),
             guest_vm_type: GuestVMType::Default,
             upgrade_config: GuestOSUpgradeConfig::default(),
             trusted_execution_environment_config: None,
+            recovery_config: None,
         }
     }
 }
