@@ -1,6 +1,8 @@
 use crate::common::local_replica;
 use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
-use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
+use crate::common::utils::{
+    get_rosetta_blocks_from_icrc1_ledger, metrics_gauge_value, wait_for_rosetta_block,
+};
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
@@ -39,7 +41,6 @@ use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use prometheus_parse::{Scrape, Value};
 use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
@@ -1376,18 +1377,6 @@ fn test_metrics() {
 
     let icrc1_ledgers = setup.icrc1_ledgers.clone();
 
-    fn gauge_value(metrics: &Scrape, name: &str) -> Result<f64, String> {
-        let metric = metrics
-            .samples
-            .iter()
-            .find(|sample| sample.metric == name)
-            .ok_or(format!("No metric found with name {name}"))?;
-        match &metric.value {
-            Value::Gauge(value) => Ok(*value),
-            _ => panic!("{name} is not a gauge"),
-        }
-    }
-
     rt.block_on(async {
         let env = RosettaTestingEnvironmentBuilder::new(false, setup.port)
             .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_builder)
@@ -1430,14 +1419,17 @@ fn test_metrics() {
         assert_eq!(ledger_num_blocks as u64, NUM_BLOCKS);
         assert_eq!(current_index, NUM_BLOCKS - 1);
 
-        let rosetta_synched_block_height = gauge_value(&metrics, "rosetta_synched_block_height")
-            .expect("should export rosetta_synched_block_height metric");
+        let rosetta_synched_block_height =
+            metrics_gauge_value(&metrics, "rosetta_synched_block_height")
+                .expect("should export rosetta_synched_block_height metric");
         assert_eq!(rosetta_synched_block_height as u64, NUM_BLOCKS - 1);
-        let rosetta_verified_block_height = gauge_value(&metrics, "rosetta_verified_block_height")
-            .expect("should export rosetta_verified_block_height metric");
+        let rosetta_verified_block_height =
+            metrics_gauge_value(&metrics, "rosetta_verified_block_height")
+                .expect("should export rosetta_verified_block_height metric");
         assert_eq!(rosetta_verified_block_height as u64, NUM_BLOCKS - 1);
-        let rosetta_target_block_height = gauge_value(&metrics, "rosetta_target_block_height")
-            .expect("should export rosetta_target_block_height metric");
+        let rosetta_target_block_height =
+            metrics_gauge_value(&metrics, "rosetta_target_block_height")
+                .expect("should export rosetta_target_block_height metric");
         assert_eq!(rosetta_target_block_height as u64, NUM_BLOCKS - 1);
     });
 }
