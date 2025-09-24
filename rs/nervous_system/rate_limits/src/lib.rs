@@ -1,7 +1,9 @@
 //! Rate limits library for nervous system components.
 //!
 //! This crate provides utilities for implementing rate limiting in nervous system canisters.
+use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     fmt::Debug,
     sync::{Arc, Mutex, Weak},
@@ -14,12 +16,75 @@ pub struct UsageRecord {
     pub capacity_used: u64,
 }
 
-pub trait CapacityStorage<K> {
-    fn get_usage(&self, key: &K) -> Option<UsageRecord>;
-    fn insert_usage(&mut self, key: K, record: UsageRecord);
-    fn get_usage_mut(&mut self, key: &K) -> Option<&mut UsageRecord>;
+impl Storable for UsageRecord {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let timestamp = self
+            .last_updated
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
 
-    // Atomic update operation for more complex modifications
+        let mut bytes = Vec::with_capacity(16);
+        bytes.extend_from_slice(&timestamp.to_be_bytes());
+        bytes.extend_from_slice(&self.capacity_used.to_be_bytes());
+
+        Cow::Owned(bytes)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        if bytes.len() != 16 {
+            panic!("Invalid UsageRecord bytes length");
+        }
+
+        let timestamp_bytes: [u8; 8] = bytes[0..8].try_into().unwrap();
+        let capacity_bytes: [u8; 8] = bytes[8..16].try_into().unwrap();
+
+        let timestamp_nanos = u64::from_be_bytes(timestamp_bytes);
+        let capacity_used = u64::from_be_bytes(capacity_bytes);
+
+        let last_updated =
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(timestamp_nanos);
+
+        Self {
+            last_updated,
+            capacity_used,
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 16,
+        is_fixed_size: true,
+    };
+}
+
+// Note: String already implements Storable in ic-stable-structures
+// If you need a custom key type, create a newtype wrapper:
+//
+// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+// pub struct RateLimiterKey(pub String);
+//
+// impl Storable for RateLimiterKey {
+//     fn to_bytes(&self) -> Cow<[u8]> {
+//         Cow::Borrowed(self.0.as_bytes())
+//     }
+//
+//     fn from_bytes(bytes: Cow<[u8]>) -> Self {
+//         Self(String::from_utf8(bytes.into_owned()).expect("Invalid UTF-8 string"))
+//     }
+//
+//     const BOUND: Bound = Bound::Unbounded;
+// }
+
+/// Trait for storing and retrieving capacity usage records.
+/// This allows different storage backends (in-memory, persistent, etc.)
+pub trait CapacityStorage<K> {
+    /// Get usage record for a key
+    fn get_usage(&self, key: &K) -> Option<UsageRecord>;
+
+    /// Insert or update usage record for a key  
+    fn insert_usage(&mut self, key: K, record: UsageRecord);
+
+    /// Atomic update operation
     fn with_usage<R>(
         &mut self,
         key: K,
@@ -53,42 +118,55 @@ impl<K: Ord + Clone> CapacityStorage<K> for InMemoryCapacityStorage<K> {
     fn insert_usage(&mut self, key: K, record: UsageRecord) {
         self.storage.insert(key, record);
     }
+}
 
-    fn get_usage_mut(&mut self, key: &K) -> Option<&mut UsageRecord> {
-        self.storage.get_mut(key)
+/// Persistent capacity storage implementation using StableBTreeMap.
+/// This allows capacity usage to survive canister upgrades.
+pub struct StableBTreeMapCapacityStorage<K, Memory>
+where
+    K: Storable + Ord + Clone,
+    Memory: ic_stable_structures::Memory,
+{
+    map: StableBTreeMap<K, UsageRecord, Memory>,
+}
+
+impl<K, Memory> StableBTreeMapCapacityStorage<K, Memory>
+where
+    K: Ord + Clone + Storable,
+    Memory: ic_stable_structures::Memory,
+{
+    pub fn new(memory: Memory) -> Self {
+        Self {
+            map: StableBTreeMap::init(memory),
+        }
     }
 }
 
-// Example implementation for StableBTreeMap compatibility:
-//
-// impl<K, Memory> CapacityStorage<K> for StableBTreeMapWrapper<K, Memory>
-// where
-//     K: Ord + Clone + Storable,
-//     Memory: ic_stable_structures::Memory,
-//     UsageRecord: Storable,
-// {
-//     fn get_usage(&self, key: &K) -> Option<UsageRecord> {
-//         self.map.get(key)
-//     }
-//
-//     fn insert_usage(&mut self, key: K, record: UsageRecord) {
-//         self.map.insert(key, record);
-//     }
-//
-//     fn get_usage_mut(&mut self, key: &K) -> Option<&mut UsageRecord> {
-//         // StableBTreeMap doesn't support get_mut, so we need to implement
-//         // this differently, perhaps by returning None and relying on
-//         // the with_usage method for updates
-//         None
-//     }
-//
-//     fn with_usage<R>(&mut self, key: K, default: UsageRecord, f: impl FnOnce(&mut UsageRecord) -> R) -> R {
-//         let mut usage = self.get_usage(&key).unwrap_or(default);
-//         let result = f(&mut usage);
-//         self.insert_usage(key, usage);
-//         result
-//     }
-// }
+impl<K, Memory> CapacityStorage<K> for StableBTreeMapCapacityStorage<K, Memory>
+where
+    K: Ord + Clone + Storable,
+    Memory: ic_stable_structures::Memory,
+{
+    fn get_usage(&self, key: &K) -> Option<UsageRecord> {
+        self.map.get(key)
+    }
+
+    fn insert_usage(&mut self, key: K, record: UsageRecord) {
+        self.map.insert(key, record);
+    }
+
+    fn with_usage<R>(
+        &mut self,
+        key: K,
+        default: UsageRecord,
+        f: impl FnOnce(&mut UsageRecord) -> R,
+    ) -> R {
+        let mut usage = self.get_usage(&key).unwrap_or(default);
+        let result = f(&mut usage);
+        self.insert_usage(key, usage);
+        result
+    }
+}
 
 pub struct RateLimiter<K, S> {
     config: RateLimiterConfig,
@@ -99,6 +177,9 @@ pub struct RateLimiter<K, S> {
 
 // Convenience type alias for the common in-memory case
 pub type InMemoryRateLimiter<K> = RateLimiter<K, InMemoryCapacityStorage<K>>;
+
+// Convenience type alias for the stable structures case
+pub type StableRateLimiter<K, Memory> = RateLimiter<K, StableBTreeMapCapacityStorage<K, Memory>>;
 
 #[derive(Clone, Debug, PartialEq)]
 struct ReservationData {
@@ -447,5 +528,53 @@ mod tests {
                 .capacity_used,
             0
         );
+    }
+
+    #[test]
+    fn test_stable_rate_limiter() {
+        use ic_stable_structures::{
+            DefaultMemoryImpl,
+            memory_manager::{MemoryId, MemoryManager},
+        };
+
+        let memory_manager = MemoryManager::init(DefaultMemoryImpl::default());
+        let capacity_memory = memory_manager.get(MemoryId::new(0));
+        let capacity_storage = StableBTreeMapCapacityStorage::new(capacity_memory);
+
+        let mut rate_limiter = RateLimiter::new(
+            RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(100),
+                max_capacity: 10,
+                reservation_timeout: Duration::from_secs(u64::MAX),
+            },
+            capacity_storage,
+        );
+
+        let now = SystemTime::now();
+
+        // Test basic functionality with stable storage
+        let reservation1 = rate_limiter
+            .try_reserve(now, "stable_key".to_string(), 5)
+            .unwrap();
+        assert_eq!(reservation1.index, 0);
+        assert_eq!(reservation1.key, "stable_key".to_string());
+
+        // Commit the reservation
+        rate_limiter.commit(reservation1);
+
+        // Verify the usage is stored
+        let usage = rate_limiter
+            .capacity_storage
+            .get_usage(&"stable_key".to_string());
+        assert!(usage.is_some());
+        assert_eq!(usage.unwrap().capacity_used, 5);
+
+        // Verify rate limiting works with committed capacity
+        let reservation2 = rate_limiter.try_reserve(now, "stable_key".to_string(), 6);
+        assert!(matches!(
+            reservation2,
+            Err(RateLimiterError::NotEnoughCapacity)
+        ));
     }
 }
