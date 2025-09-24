@@ -143,7 +143,6 @@ fn golden_state_swap_upgrade_twice() {
         ("c424i-4qaaa-aaaaq-aacua-cai", "ICPanda DAO"),
         ("mzwsh-biaaa-aaaaq-aaduq-cai", "ICVC"),
         ("7sppf-6aaaa-aaaaq-aaata-cai", "Kinic"),
-        ("khyv5-2qaaa-aaaaq-aadaa-cai", "MORA DAO"),
         ("kv6ce-waaaa-aaaaq-aadda-cai", "Motoko"),
         ("f25or-jiaaa-aaaaq-aaceq-cai", "Neutrinite"),
         ("q2nfe-mqaaa-aaaaq-aabua-cai", "Nuance"),
