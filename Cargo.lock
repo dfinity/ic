@@ -20640,18 +20640,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "remote_attestation_client"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "attestation",
- "remote_attestation_shared",
- "thiserror 1.0.69",
- "tokio",
- "tonic",
-]
-
-[[package]]
 name = "remote_attestation_server"
 version = "0.0.0"
 dependencies = [
