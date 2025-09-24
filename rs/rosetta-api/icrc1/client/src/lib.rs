@@ -155,7 +155,7 @@ impl RosettaClient {
             .text()
             .await?;
         let lines: Vec<_> = body.lines().map(|s| Ok(s.to_string())).collect();
-        Ok(Scrape::parse(lines.into_iter()).map_err(|err| Error::parsing_unsuccessful(&err))?)
+        Scrape::parse(lines.into_iter()).map_err(|err| Error::parsing_unsuccessful(&err))
     }
 
     pub async fn make_submit_and_wait_for_transaction<T: RosettaSupportedKeyPair>(
