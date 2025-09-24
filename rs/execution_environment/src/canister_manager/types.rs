@@ -659,14 +659,14 @@ impl AsErrorHelp for CanisterManagerError {
                 ErrorHelp::UserError {
                     suggestion: "Only a controller of the canister that the snapshot belongs to can load it."
                         .to_string(),
-                    doc_link: "".to_string(),
+                    doc_link: "canister-snapshot-not-controller".to_string(),
                 }
             }
             CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "Snapshot is not currently loadable on the specified canister. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes)."
                         .to_string(),
-                    doc_link: "".to_string(),
+                    doc_link: "canister-snapshot-not-loadable".to_string(),
                 }
             }
             CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. } => {
