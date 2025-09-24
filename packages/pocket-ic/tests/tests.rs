@@ -3640,7 +3640,7 @@ fn send_too_large_body(
 
 #[cfg(not(windows))]
 #[test]
-fn test_registry_canister_sync() {
+fn test_registry_sync() {
     let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
     let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
 
@@ -3680,7 +3680,18 @@ fn test_registry_canister_sync() {
             .version
     };
 
-    let node_operator_record = |node_operator_id: PrincipalId| {
+    let check_registry_versions = |pocket_ic: &PocketIc, expected_registry_version: u64| {
+        assert_eq!(
+            latest_pocketic_registry_version(),
+            expected_registry_version
+        );
+        assert_eq!(
+            latest_canister_registry_version(pocket_ic),
+            expected_registry_version
+        );
+    };
+
+    let get_node_operator_record = |node_operator_id: PrincipalId| {
         let registry_proto_path = state_dir_path_buf.join("registry.proto");
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::load_from_file(
             registry_proto_path,
@@ -3692,20 +3703,18 @@ fn test_registry_canister_sync() {
             .unwrap()
     };
 
-    let pocketic_registry_version_before = latest_pocketic_registry_version();
-    let canister_registry_version_before = latest_canister_registry_version(&pocket_ic);
-    assert_eq!(
-        canister_registry_version_before,
-        pocketic_registry_version_before
-    );
+    // Initially the latest registry version in PocketIC registry and the registry canister match.
+    let initial_registry_version = latest_pocketic_registry_version();
+    check_registry_versions(&pocket_ic, initial_registry_version);
 
-    // Create a new registry version by creating a new node operator in the registry.
-    let node_operator_principal_id = Principal::from_slice(&[42; 29]);
+    // We update the registry in the registry canister
+    // by creating a new node operator in the registry.
+    let node_operator_principal_id = PrincipalId(Principal::from_slice(&[42; 29]));
     let node_provider_principal_id = Principal::from_slice(&[64; 29]);
-    assert!(node_operator_record(PrincipalId(node_operator_principal_id)).is_none());
+    assert!(get_node_operator_record(node_operator_principal_id).is_none());
     let add_node_operator_payload = AddNodeOperatorPayload {
         ipv6: None,
-        node_operator_principal_id: Some(PrincipalId(node_operator_principal_id)),
+        node_operator_principal_id: Some(node_operator_principal_id),
         node_allowance: 42,
         rewardable_nodes: BTreeMap::new(),
         node_provider_principal_id: Some(PrincipalId(node_provider_principal_id)),
@@ -3720,56 +3729,41 @@ fn test_registry_canister_sync() {
         (add_node_operator_payload,),
     )
     .unwrap();
+    assert!(get_node_operator_record(node_operator_principal_id).is_some());
 
-    // The latest registry version in both PocketIC and registry canister should increase by one
-    // and the new registry record is present in PocketIC registry.
-    let pocketic_registry_version_latest = latest_pocketic_registry_version();
-    assert_eq!(
-        pocketic_registry_version_latest,
-        pocketic_registry_version_before + 1
-    );
-    let canister_registry_version_latest = latest_canister_registry_version(&pocket_ic);
-    assert_eq!(
-        canister_registry_version_latest,
-        canister_registry_version_before + 1
-    );
-    assert!(node_operator_record(PrincipalId(node_operator_principal_id)).is_some());
+    // The latest registry version in both PocketIC and the registry canister should increase by one.
+    check_registry_versions(&pocket_ic, initial_registry_version + 1);
 
-    // Create a new subnet by creating a canister with a mainnet canister ID for which no subnet exists yet in PocketIC.
-    // This creates a new registry record in PocketIC registry that should be synced into the registry canister.
-    let topology = pocket_ic.topology();
-    assert!(topology.get_fiduciary().is_none());
+    // We update the registry in PocketIC
+    // by creating a new subnet in the registry.
     let specified_id = Principal::from_text("mxzaz-hqaaa-aaaar-qaada-cai").unwrap(); // ckBTC ledger => fiduciary subnet
+    let topology = pocket_ic.topology();
+    assert!(topology.get_fiduciary().is_none()); // fiduciary subnet does not exist initially
     pocket_ic
         .create_canister_with_id(None, None, specified_id)
         .unwrap();
     let topology = pocket_ic.topology();
-    assert!(topology.get_fiduciary().is_some());
+    assert!(topology.get_fiduciary().is_some()); // fiduciary subnet was created (also in the registry)
 
-    // Serialize PocketIC state.
+    // The latest registry version in both PocketIC and the registry canister should increase by one.
+    check_registry_versions(&pocket_ic, initial_registry_version + 2);
+
+    // We test if registry in both PocketIC and the registry canister is properly restored
+    // when creating a new PocketIC instance from the existing state.
     let state = pocket_ic.drop_and_take_state().unwrap();
-
-    // Create a PocketIC instance resuming from that state.
-    // This way, we also check if the registry is restored properly on a resumed instance.
     let pocket_ic = PocketIcBuilder::new().with_state(state).build();
 
-    // The latest registry version in both PocketIC and registry canister should increase by one.
-    let pocketic_registry_version_latest = latest_pocketic_registry_version();
-    assert_eq!(
-        pocketic_registry_version_latest,
-        pocketic_registry_version_before + 2
-    );
-    let canister_registry_version_latest = latest_canister_registry_version(&pocket_ic);
-    assert_eq!(
-        canister_registry_version_latest,
-        canister_registry_version_before + 2
-    );
+    // The latest registry version in both PocketIC and the registry canister should be as before.
+    check_registry_versions(&pocket_ic, initial_registry_version + 2);
 
-    // Create a new registry version by removing the node operator from the registry.
+    // We update the registry in the registry canister
+    // by removing the node operator from the registry.
+    // In particular, we test syncing registry key deletion.
+    assert!(get_node_operator_record(node_operator_principal_id).is_some());
     let remove_node_operators_payload = RemoveNodeOperatorsPayload {
         node_operators_to_remove: vec![], // legacy field
         node_operator_principals_to_remove: Some(NodeOperatorPrincipals {
-            principals: vec![PrincipalId(node_operator_principal_id)],
+            principals: vec![node_operator_principal_id],
         }),
     };
     update_candid_as::<_, ()>(
@@ -3780,18 +3774,8 @@ fn test_registry_canister_sync() {
         (remove_node_operators_payload,),
     )
     .unwrap();
+    assert!(get_node_operator_record(node_operator_principal_id).is_none());
 
-    // The latest registry version in both PocketIC and registry canister should increase by one
-    // and the node operator record is gone.
-    let pocketic_registry_version_latest = latest_pocketic_registry_version();
-    assert_eq!(
-        pocketic_registry_version_latest,
-        pocketic_registry_version_before + 3
-    );
-    let canister_registry_version_latest = latest_canister_registry_version(&pocket_ic);
-    assert_eq!(
-        canister_registry_version_latest,
-        canister_registry_version_before + 3
-    );
-    assert!(node_operator_record(PrincipalId(node_operator_principal_id)).is_none());
+    // The latest registry version in both PocketIC and the registry canister should increase by one.
+    check_registry_versions(&pocket_ic, initial_registry_version + 3);
 }

@@ -232,6 +232,7 @@ impl Verifier for FakeVerifier {
 /// - routing table record;
 /// - subnet list record;
 /// - chain key records;
+/// - (empty) node rewards table.
 pub fn add_global_registry_records(
     nns_subnet_id: SubnetId,
     routing_table: RoutingTable,
@@ -1002,6 +1003,9 @@ pub struct StateMachineBuilder {
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
+    /// If a registry version is provided, then new registry records are created for the `StateMachine`
+    /// at the provided registry version.
+    /// Otherwise, no new registry records are created.
     create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
 }
@@ -1273,6 +1277,9 @@ impl StateMachineBuilder {
         }
     }
 
+    /// If a registry version is provided, then new registry records are created for the `StateMachine`
+    /// at the provided registry version.
+    /// Otherwise, no new registry records are created.
     pub fn create_at_registry_version(self, registry_version: Option<RegistryVersion>) -> Self {
         Self {
             create_at_registry_version: registry_version,
@@ -1730,7 +1737,7 @@ impl StateMachine {
             malicious_flags.clone(),
         ));
 
-        if let Some(registry_version) = create_at_registry_version {
+        if let Some(create_registry_version) = create_at_registry_version {
             add_subnet_local_registry_records(
                 subnet_id,
                 subnet_type,
@@ -1740,7 +1747,7 @@ impl StateMachine {
                 &chain_keys_enabled_status,
                 ni_dkg_transcript,
                 registry_data_provider.clone(),
-                registry_version,
+                create_registry_version,
             );
         }
 

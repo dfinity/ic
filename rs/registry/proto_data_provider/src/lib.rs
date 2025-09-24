@@ -112,16 +112,12 @@ impl ProtoRegistryDataProvider {
     }
 
     pub fn decode<B: Buf>(buf: B) -> Self {
-        let registry = ProtoRegistry::decode(buf).expect("Could not decode protobuf registry.");
-
-        Self {
-            records: Arc::new(RwLock::new(registry.records)),
-        }
+        Self::try_decode(buf).unwrap()
     }
 
     pub fn try_decode<B: Buf>(buf: B) -> Result<Self, String> {
         let registry = ProtoRegistry::decode(buf)
-            .map_err(|err| format!("Could not decode registry: {:?}", err))?;
+            .map_err(|err| format!("Could not decode protobuf registry: {:?}", err))?;
 
         Ok(Self {
             records: Arc::new(RwLock::new(registry.records)),
