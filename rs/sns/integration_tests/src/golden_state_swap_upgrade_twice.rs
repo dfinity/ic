@@ -123,6 +123,9 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
 
 #[test]
 fn golden_state_swap_upgrade_twice() {
+    // Ideally, we would try to upgrade all SNS canisters (not just swap). For
+    // now, we only check these canisters. One slight difficulty of this is
+    // determining which SNSs are still "active".
     let snses_under_test = [
         ("vuqiy-liaaa-aaaaq-aabiq-cai", "BOOM DAO"),
         ("iuhw5-siaaa-aaaaq-aadoq-cai", "CYCLES-TRANSFER-STATION"),
