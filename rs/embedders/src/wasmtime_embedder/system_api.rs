@@ -1455,9 +1455,7 @@ impl SystemApiImpl {
             | ApiType::CompositeRejectCallback { reject_context, .. } => {
                 Some(reject_context.code() as i32)
             }
-            ApiType::Cleanup { reject_code, .. } => {
-                Some(*reject_code)
-            }
+            ApiType::Cleanup { reject_code, .. } => Some(*reject_code),
         }
     }
 

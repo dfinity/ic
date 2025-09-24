@@ -1092,7 +1092,7 @@ fn execute_response_cleanup(
     };
 
     let reject_code = match &original.message.response_payload {
-        Payload::Data(_) => 0, 
+        Payload::Data(_) => 0,
         Payload::Reject(context) => context.code() as i32,
     };
 
