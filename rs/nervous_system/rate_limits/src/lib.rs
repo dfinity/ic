@@ -108,12 +108,32 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         }
     }
 
+    fn cleanup_expired_reservations(&self, key: &K, now: SystemTime) {
+        if let Ok(mut reservations) = self.reservations.lock() {
+            let expired_keys: Vec<(K, u64)> = reservations
+                .range((key.clone(), 0)..(key.clone(), u64::MAX))
+                .filter(|(_, data)| {
+                    now.duration_since(data.now).unwrap_or(Duration::ZERO)
+                        > self.config.reservation_timeout
+                })
+                .map(|((k, idx), _)| (k.clone(), *idx))
+                .collect();
+
+            for expired_key in expired_keys {
+                reservations.remove(&expired_key);
+            }
+        }
+    }
+
     pub fn try_reserve(
         &mut self,
         now: SystemTime,
         key: K,
         requested_capacity: u64,
     ) -> Result<Reservation<K>, RateLimiterError> {
+        // Clean up expired reservations first
+        self.cleanup_expired_reservations(&key, now);
+
         let mut reservations = self.reservations.lock().unwrap();
 
         // Get all reservations for this key to calculate next index and current usage
@@ -184,7 +204,6 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
         // How do we handle that?
         if let Ok(mut reservations) = self.reservations.lock() {
-            println!("We are doing the reservation thing!");
             if let Some(reservation) =
                 reservations.remove(&(reservation.key.clone(), reservation.index))
             {
@@ -349,5 +368,51 @@ mod tests {
         let even_later = later + Duration::from_secs(9);
         let even_later_okay = rate_limiter.try_reserve(even_later, "Foo".to_string(), 4);
         assert!(even_later_okay.is_ok());
+    }
+
+    #[test]
+    fn test_reservation_timeouts() {
+        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(100),
+            max_capacity: 10,
+            reservation_timeout: Duration::from_secs(5), // 5 second timeout
+        });
+
+        let now = SystemTime::now();
+
+        // Create two reservations that use up all capacity
+        let reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 6).unwrap();
+        let reservation2 = rate_limiter.try_reserve(now, "Foo".to_string(), 4).unwrap();
+
+        // Should not be able to reserve more
+        let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 1);
+        assert!(matches!(
+            over_limit,
+            Err(RateLimiterError::NotEnoughCapacity)
+        ));
+
+        // Verify we have 2 reservations
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 2);
+
+        // Fast forward past the timeout
+        let later = now + Duration::from_secs(6);
+
+        // Try to reserve again - this should clean up the expired reservations
+        let after_timeout = rate_limiter.try_reserve(later, "Foo".to_string(), 8);
+        assert!(after_timeout.is_ok()); // Should work because expired reservations were cleaned up
+
+        // Both old reservations should be gone
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1); // Only the new reservation
+
+        // Try committing old reservations - should have no effect
+
+        rate_limiter.commit(reservation1);
+        rate_limiter.commit(reservation2);
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
+        assert_eq!(
+            rate_limiter.used_capacity.get("Foo").unwrap().capacity_used,
+            0
+        );
     }
 }
