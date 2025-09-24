@@ -3086,12 +3086,12 @@ impl StateMachine {
     ///
     /// The process has the following steps:
     /// - Write a checkpoint on `self`.
-    /// - Clone this checkpoint into a new `state_dir`.
+    /// - Clone its enire state directory into a new `state_dir`.
     /// - Create a new `StateMachine` using this `state_dir` and the provided `seed`.
-    /// - Adapt and reload the registry on both this and the new state machine.
-    /// - Perform the split on the latest state, then commit and certify on both state machines.
+    /// - Adapt the registry to reflect the split, then reload it on both state machines.
+    /// - Perform the split on the latest state on both state machines respectively.
     ///
-    /// Returns an error if there is no XNet layer or if the actual split fails.
+    /// Returns an error if there is no XNet layer or if splitting the state fails.
     pub fn split(
         &self,
         seed: [u8; 32],
@@ -3103,7 +3103,7 @@ impl StateMachine {
         self.checkpointed_tick();
         self.state_manager.flush_tip_channel();
 
-        // Create a state dir for the new env; then clone the contents of `self`.
+        // Create a state dir for the new env; then clone the contents of the entire state directory.
         let state_dir = Box::new(TempDir::new().expect("failed to create a temporary directory"));
         fs_extra::dir::copy(
             self.state_manager.state_layout().raw_path(),
