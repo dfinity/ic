@@ -56,6 +56,8 @@ rust_library(
 genrule(
     name = "empty-wasm",
     outs = ["empty_wasm.wasm"],
+    # This command writes the minimal legal wasm binary to a file. See also
+    # EMPTY_WASM, which is the same data as a rust constant.
     cmd = "echo -ne '\\x00\\x61\\x73\\x6d\\x01\\x00\\x00\\x00' > $@",
 )
 
