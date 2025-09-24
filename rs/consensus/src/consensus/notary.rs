@@ -60,18 +60,18 @@ const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 1;
 /// for each height that the latest finalized block is ahead of the latest certified state.
 /// The value was chosen empirically.
 const BACKLOG_DELAY_MILLIS: u64 = 2_000;
-pub struct Notary {
+pub(crate) struct Notary {
     time_source: Arc<dyn TimeSource>,
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     metrics: NotaryMetrics,
 }
 
 impl Notary {
-    pub fn new(
+    pub(crate) fn new(
         time_source: Arc<dyn TimeSource>,
         replica_config: ReplicaConfig,
         membership: Arc<Membership>,
@@ -94,7 +94,7 @@ impl Notary {
     /// If this node is a member of the notary group for the current round,
     /// attempt to find the best blocks that we can notarize, and notarize them.
     /// Else, do nothing.
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
+    pub(crate) fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
         trace!(self.log, "on_state_change");
         let notarized_height = pool.get_notarized_height();
         let mut notarization_shares = Vec::new();

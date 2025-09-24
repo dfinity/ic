@@ -38,22 +38,21 @@ use ic_types::{
 };
 use std::{cell::RefCell, sync::Arc, time::Instant};
 
-pub struct Finalizer {
-    pub(crate) replica_config: ReplicaConfig,
+pub(crate) struct Finalizer {
+    replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
     ingress_selector: Arc<dyn IngressSelector>,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
     last_batch_delivered_at: RefCell<Option<Instant>>,
 }
 
 impl Finalizer {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
         membership: Arc<Membership>,
@@ -80,7 +79,7 @@ impl Finalizer {
     /// Attempt to:
     /// * deliver finalized blocks (as `Batch`s) via `Messaging`
     /// * publish finalization shares for relevant rounds
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<FinalizationShare> {
+    pub(crate) fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<FinalizationShare> {
         trace!(self.log, "on_state_change");
         let notarized_height = pool.get_notarized_height();
         let finalized_height = pool.get_finalized_height();
