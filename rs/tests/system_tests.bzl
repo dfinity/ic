@@ -542,8 +542,7 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
 
     extra_mainnet_nns_tags = (
         # Disable the mainnet variant if requested
-        ["manual"] if not enable_mainnet_nns_variant else
-        []
+        ["manual"] if not enable_mainnet_nns_variant else []
     )
 
     mainnet_nns_systest = system_test(
