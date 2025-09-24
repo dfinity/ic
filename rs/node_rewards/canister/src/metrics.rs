@@ -187,7 +187,9 @@ where
         day_utc: &DayUtc,
     ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
         let mut metrics_by_subnet = BTreeMap::new();
-        let previous_day_ts = day_utc.previous_day().first_ts_nanos();
+        let previous_day_ts = day_utc
+            .previous_day()
+            .unix_timestamp_at_day_start_nanoseconds();
         let first_key = SubnetMetricsKey {
             timestamp_nanos: previous_day_ts,
             ..SubnetMetricsKey::min_key()

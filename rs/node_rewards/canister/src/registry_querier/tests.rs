@@ -146,7 +146,10 @@ fn add_dummy_data() {
     add_record_helper(&node_4_k, 39676, Some(node_4_v.clone()), "2025-07-16");
 
     // Removed and re-added node_3 same day
-    let ts_removed = DayUtc::try_from("2025-07-16").unwrap().first_ts_nanos() + 1;
+    let ts_removed = DayUtc::try_from("2025-07-16")
+        .unwrap()
+        .unix_timestamp_at_day_start_nanoseconds()
+        + 1;
     add_record_helper_ts(&node_3_k, 39676, None::<NodeRecord>, ts_removed);
     let ts_readded = ts_removed + 1;
     add_record_helper_ts(&node_3_k, 39677, Some(node_3_v), ts_readded);
