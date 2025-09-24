@@ -33,6 +33,7 @@ rust_canister(
 
 rust_ic_test(
     name = "tests",
+    timeout = "long",
     srcs = ["tests/stable_memory_integrity.rs"],
     aliases = {},
     crate_root = "tests/stable_memory_integrity.rs",

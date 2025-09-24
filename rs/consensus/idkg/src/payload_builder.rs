@@ -732,10 +732,9 @@ pub(crate) fn create_data_payload_helper_2(
                 .matched_pre_signature
                 .as_ref()
                 .is_some_and(|(pid, _)| idkg_payload.available_pre_signatures.contains_key(pid))
+                && let Ok(key_id) = context.key_id().try_into()
             {
-                if let Ok(key_id) = context.key_id().try_into() {
-                    *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
-                }
+                *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
             }
         }
 
@@ -1958,7 +1957,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2004,7 +2003,7 @@ mod tests {
 
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2158,7 +2157,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2210,7 +2209,7 @@ mod tests {
 
             let payload_2 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2273,7 +2272,7 @@ mod tests {
 
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(2),
@@ -2447,7 +2446,7 @@ mod tests {
             // set to Begin.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2496,7 +2495,7 @@ mod tests {
             // unfinished next_in_creation
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2534,7 +2533,7 @@ mod tests {
             );
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2630,7 +2629,7 @@ mod tests {
             // set to XnetReshareOfUnmaskedParams.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2744,7 +2743,7 @@ mod tests {
             // should be created successfully
             let payload_5 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(4),
@@ -2770,7 +2769,7 @@ mod tests {
             // should be created successfully
             let payload_6 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(5),

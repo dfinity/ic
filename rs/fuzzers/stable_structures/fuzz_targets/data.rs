@@ -20,7 +20,7 @@ pub struct UnboundedFuzzStruct {
 
 // The struct has size bounds reflected by Bound::Bounded::max_size
 impl Storable for BoundedFuzzStruct {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(serde_cbor::ser::to_vec(self).unwrap())
     }
 
@@ -37,7 +37,7 @@ impl Storable for BoundedFuzzStruct {
 
 // The struct has no size bounds
 impl Storable for UnboundedFuzzStruct {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(serde_cbor::ser::to_vec(self).unwrap())
     }
 

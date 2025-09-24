@@ -68,7 +68,7 @@ pub(super) fn as_bytes(vetkd_agreements: BTreeMap<CallbackId, VetKdAgreement>) -
 }
 
 /// Turn the given payload bytes into a generic [`PastPayload`]
-pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload {
+pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload<'_> {
     PastPayload {
         height: Height::from(0),
         time: UNIX_EPOCH,

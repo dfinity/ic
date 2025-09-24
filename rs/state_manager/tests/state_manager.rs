@@ -3116,15 +3116,27 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
             }
             assert_no_remaining_chunks(dst_metrics);
 
-            // The second state sync targets the same state at height 1.
+            // The second state sync targets the same state at height 1 based on the cache from the first state sync.
+            // Here, canister.pbuf files are both copied and fetched via file group chunks. However, we don't fetch any chunks.
+            // This is to test that the remaining_chunks metric is correctly updated to 0 during drop.
+            {
+                let mut chunkable =
+                    set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+                let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+                let result = pipe_manifest(&msg, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+            }
+            assert_no_remaining_chunks(dst_metrics);
+
+            // The third state sync targets the same state at height 1 based on the cache from the second state sync.
             // Here, canister.pbuf files are both copied and fetched via file group chunks.
             // This is to test that when applying file group chunks, any already-copied individual chunks are properly skipped.
             // We verify this behavior by asserting that the remaining chunks metric never becomes negative.
             {
-                // Compared to the checkpoint at height 1, the only different file in checkpoint at height 2 is `system_metadata.pbuf`.
                 let mut chunkable =
                     set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-
                 let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
                 assert_matches!(result, Ok(false));
                 let result = pipe_manifest(&msg, &mut *chunkable, false);
@@ -3139,8 +3151,7 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
 
                 let fetch_chunks: HashSet<ChunkId> =
                     omit1.union(&file_group_chunks).copied().collect();
-
-                // Only the chunks not fetched in the first state sync plus chunks of the file group should still be requested
+                // Only the chunks not fetched in the previous state syncs plus chunks of the file group should still be requested
                 assert_eq!(fetch_chunks, chunkable.chunks_to_download().collect());
 
                 // Only finish the copy phase by omitting the chunks to fetch
