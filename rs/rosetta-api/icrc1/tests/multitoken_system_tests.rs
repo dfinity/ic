@@ -39,6 +39,7 @@ use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
+use prometheus_parse::{Scrape, Value};
 use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
@@ -1348,6 +1349,66 @@ fn test_mempool() {
             .await;
         let err = response.expect_err("expected an error");
         assert_eq!(err, Error::mempool_transaction_missing());
+    });
+}
+
+#[test]
+fn test_metrics() {
+    let sender_keypair = Secp256k1KeyPair::generate(0);
+    let rt = Runtime::new().unwrap();
+    let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+        .with_symbol("SYM1")
+        .with_decimals(6)
+        .with_initial_balance(
+            sender_keypair.generate_principal_id().unwrap().0,
+            1_000_000_000_000u64,
+        );
+    let setup = Setup::builder()
+        .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+        .build(&rt);
+
+    let rosetta_ledger_setup_builder =
+        RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
+            .with_icrc1_symbol("SYM1".to_string());
+
+    fn gauge_value(metrics: &Scrape, name: &str) -> Result<f64, String> {
+        let metric = metrics
+            .samples
+            .iter()
+            .find(|sample| sample.metric == name)
+            .ok_or(format!("No metric found with name {name}"))?;
+        match &metric.value {
+            Value::Gauge(value) => Ok(*value),
+            _ => panic!("{name} is not a gauge"),
+        }
+    }
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(false, setup.port)
+            .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_builder)
+            .build()
+            .await;
+        wait_for_rosetta_block(
+            &env.rosetta_client,
+            env.rosetta_ledger_testing_envs[0]
+                .network_identifier
+                .clone(),
+            0,
+        )
+        .await;
+
+        let metrics = env
+            .rosetta_client
+            .metrics()
+            .await
+            .expect("should return metrics");
+
+        let rosetta_synched_block_height = gauge_value(&metrics, "rosetta_synched_block_height")
+            .expect("should export rosetta_synched_block_height metric");
+        assert_eq!(rosetta_synched_block_height as u64, 1u64);
+        let rosetta_verified_block_height = gauge_value(&metrics, "rosetta_verified_block_height")
+            .expect("should export rosetta_verified_block_height metric");
+        assert_eq!(rosetta_verified_block_height as u64, 1u64);
     });
 }
 
