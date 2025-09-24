@@ -56,8 +56,8 @@ jobs:
     container: *container-setup
     environment: Nightly Tests
     steps:
-      - <<: *checkout
-      - <<: *generate-bazel-invocation-ids
+      - *checkout
+      - *generate-bazel-invocation-ids
         with:
           targets: |
             [{
@@ -110,14 +110,15 @@ jobs:
 
   fi-tests-nightly:
     name: Bazel Test FI Nightly
-    <<: *dind-large-setup
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 720 # 12 hours
     environment: Nightly Tests
     steps:
-      - <<: *checkout
+      - *checkout
       - name: Set up backup pod access
-        <<: *backup-pod-access
-      - <<: *generate-bazel-invocation-ids
+        *backup-pod-access
+      - *generate-bazel-invocation-ids
         with:
           targets: |
             [{
@@ -140,14 +141,14 @@ jobs:
 
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
-    <<: *dind-large-setup
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 30
     environment: Nightly Tests
     steps:
-      - <<: *checkout
-      - name: Set up backup pod access
-        <<: *backup-pod-access
-      - <<: *generate-bazel-invocation-ids
+      - *checkout
+      - *backup-pod-access
+      - *generate-bazel-invocation-ids
         with:
           targets: |
             [{
@@ -178,11 +179,12 @@ jobs:
 
   pocketic-tests-nightly:
     name: Bazel Test PocketIC Nightly
-    <<: *dind-large-setup
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 30
     steps:
-      - <<: *checkout
-      - <<: *generate-bazel-invocation-ids
+      - *checkout
+      - *generate-bazel-invocation-ids
         with:
           targets: |
             [{
@@ -213,17 +215,12 @@ jobs:
 
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
-    <<: *dind-large-setup
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 480
     steps:
-      - <<: *checkout
-      - <<: *generate-bazel-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
+      - *checkout
+      - *generate-bazel-invocation-ids
 
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
@@ -263,7 +260,8 @@ jobs:
   dependency-scan-nightly:
     if: false
     name: Dependency Scan Nightly
-    <<: *dind-large-setup
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 60
     permissions:
       actions: write
@@ -279,7 +277,7 @@ jobs:
       GITHUB_REF: ${{ github.ref }}
       REPO_NAME: ${{ github.repository }}
     steps:
-      - <<: *checkout
+      - *checkout
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -309,10 +307,11 @@ jobs:
   # CI job is also executed in PR on use of 'CI_COVERAGE' label
   bazel-test-coverage:
     name: Bazel Test Coverage
-    <<: *dind-large-setup
+    runs-on: *dind-large-setup
+    container: *container-setup
     if: false
     steps:
-      - <<: *checkout
+      - *checkout
       - name: Run Bazel Test Coverage
         shell: bash
         # TODO: enable when bazel coverage is fixed
