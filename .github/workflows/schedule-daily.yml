@@ -25,8 +25,9 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
       options: >-
         -e NODE_NAME --privileged --cgroupns host
-    steps: &checkout
-      - name: Checkout
+    steps:
+      - &checkout
+        name: Checkout
         uses: actions/checkout@v4
       - &generate-bazel-invocation-ids
         name: Generate Bazel invocation IDs
@@ -55,8 +56,8 @@ jobs:
     container: *container-setup
     environment: Nightly Tests
     steps:
-      - *checkout
-      - *generate-bazel-invocation-ids
+      - uses: &checkout
+      - uses: *generate-bazel-invocation-ids
         with:
           targets: |
             [{
