@@ -415,6 +415,7 @@ pub enum ApiType {
     Cleanup {
         caller: PrincipalId,
         time: Time,
+        reject_code: i32,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
     },
@@ -1442,7 +1443,6 @@ impl SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
-            | ApiType::Cleanup { .. }
             | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -1454,6 +1454,9 @@ impl SystemApiImpl {
             ApiType::RejectCallback { reject_context, .. }
             | ApiType::CompositeRejectCallback { reject_context, .. } => {
                 Some(reject_context.code() as i32)
+            }
+            ApiType::Cleanup { reject_code, .. } => {
+                Some(*reject_code)
             }
         }
     }
