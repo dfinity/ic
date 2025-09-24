@@ -79,6 +79,7 @@ pub struct RateLimiter<K> {
     config: RateLimiterConfig,
     reservations: Arc<Mutex<BTreeMap<(K, u64), ReservationData>>>,
     used_capacity: BTreeMap<K, UsageRecord>,
+    next_index: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,6 +106,7 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
             config,
             reservations: Arc::new(Mutex::new(BTreeMap::new())),
             used_capacity: BTreeMap::new(),
+            next_index: 0,
         }
     }
 
@@ -136,20 +138,9 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
 
         let mut reservations = self.reservations.lock().unwrap();
 
-        // Get all reservations for this key to calculate next index and current usage
-        let key_reservations: Vec<(u64, &ReservationData)> = reservations
+        // Get all reservations for this key to calculate current usage
+        let reserved_capacity: u64 = reservations
             .range((key.clone(), 0)..(key.clone(), u64::MAX))
-            .map(|((_, index), data)| (*index, data))
-            .collect();
-
-        let next_index = key_reservations
-            .iter()
-            .map(|(index, _)| *index)
-            .max()
-            .map_or(0, |max_index| max_index + 1);
-
-        let reserved_capacity: u64 = key_reservations
-            .into_iter()
             .map(|(_, data)| data.capacity)
             .sum();
 
@@ -167,15 +158,19 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         };
 
         if reserved_capacity + committed_capacity + requested_capacity <= self.config.max_capacity {
+            // Only allocate global index on successful reservation
+            let index = self.next_index;
+            self.next_index += 1;
+
             let reservation_data = ReservationData {
                 now,
                 capacity: requested_capacity,
             };
-            reservations.insert((key.clone(), next_index), reservation_data);
+            reservations.insert((key.clone(), index), reservation_data);
 
             let reservation = Reservation {
                 key: key.clone(),
-                index: next_index,
+                index,
                 reservations_map: Arc::downgrade(&self.reservations),
             };
 
@@ -204,11 +199,13 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
         // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
         // How do we handle that?
         if let Ok(mut reservations) = self.reservations.lock() {
-            if let Some(reservation) =
+            if let Some(reservation_data) =
                 reservations.remove(&(reservation.key.clone(), reservation.index))
             {
                 usage.last_updated = SystemTime::now();
-                usage.capacity_used = usage.capacity_used.saturating_add(reservation.capacity);
+                usage.capacity_used = usage
+                    .capacity_used
+                    .saturating_add(reservation_data.capacity);
             }
         }
     }
@@ -302,7 +299,7 @@ mod tests {
         let one = rate_limiter.try_reserve(now, "Foo".to_string(), 5);
         assert!(one.is_ok());
         let one = one.unwrap();
-        // Still gets next highest index, b/c two is still there.
+        // Now gets global index (continuing from where it left off)
         assert_eq!(one.index, 2);
         assert_eq!(one.key, "Foo".to_string());
 
@@ -413,6 +410,52 @@ mod tests {
         assert_eq!(
             rate_limiter.used_capacity.get("Foo").unwrap().capacity_used,
             0
+        );
+    }
+
+    #[test]
+    fn test_monotonic_index_prevents_aba_problem() {
+        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(100),
+            max_capacity: 10,
+            reservation_timeout: Duration::from_secs(5),
+        });
+
+        let now = SystemTime::now();
+
+        // Create a reservation with global index 0
+        let reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 5).unwrap();
+        assert_eq!(reservation1.index, 0);
+
+        // Let it expire
+        let later = now + Duration::from_secs(6);
+
+        // Create a new reservation (this will clean up the expired one)
+        // Global index continues from 1, never reusing 0
+        let reservation2 = rate_limiter
+            .try_reserve(later, "Foo".to_string(), 5)
+            .unwrap();
+        assert_eq!(reservation2.index, 1); // Global index never reuses!
+
+        // Verify first reservation was cleaned up
+        assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
+
+        // Try to commit the expired reservation - should have no effect
+        // because (Foo, 0) no longer exists in the map
+        rate_limiter.commit(reservation1);
+
+        // Used capacity should still be 0 because reservation1 was already removed
+        assert_eq!(
+            rate_limiter.used_capacity.get("Foo").unwrap().capacity_used,
+            0
+        );
+
+        // But committing reservation2 should work because (Foo, 1) exists
+        rate_limiter.commit(reservation2);
+        assert_eq!(
+            rate_limiter.used_capacity.get("Foo").unwrap().capacity_used,
+            5
         );
     }
 }
