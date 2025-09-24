@@ -23,7 +23,6 @@ pub struct GenerateTestnetConfigArgs {
     pub node_reward_type: Option<String>,
     pub mgmt_mac: Option<MacAddr6>,
     pub deployment_environment: Option<DeploymentEnvironment>,
-    pub use_nns_public_key: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
     pub enable_trusted_execution_environment: Option<bool>,
     pub use_node_operator_private_key: Option<bool>,
@@ -74,7 +73,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        use_nns_public_key,
         nns_urls,
         enable_trusted_execution_environment,
         use_node_operator_private_key,
@@ -173,8 +171,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 
     let deployment_environment = deployment_environment.unwrap_or(DeploymentEnvironment::Testnet);
 
-    let use_nns_public_key = use_nns_public_key.unwrap_or(true);
-
     let nns_urls = match nns_urls {
         Some(urls) => urls
             .iter()
@@ -195,7 +191,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         mgmt_mac,
         deployment_environment,
         logging: Logging {},
-        use_nns_public_key,
+        use_nns_public_key: false,
         nns_urls,
         use_node_operator_private_key,
         enable_trusted_execution_environment,

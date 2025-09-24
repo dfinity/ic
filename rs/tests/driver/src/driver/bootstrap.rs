@@ -368,7 +368,7 @@ pub fn setup_and_start_nested_vms(
             info!(logger, "No gateway found, using dummy URL");
             url::Url::parse("http://localhost:8080").unwrap()
         });
-    let nns_public_key = env
+    let nns_public_key_override = env
         .prep_dir("")
         .and_then(|v| std::fs::read_to_string(v.root_public_key_path()).ok())
         .unwrap_or_else(|| {
@@ -386,7 +386,7 @@ pub fn setup_and_start_nested_vms(
         let t_farm = farm.clone();
         let t_group_name = group_name.to_string();
         let t_ic_gateway_url = ic_gateway_url.clone();
-        let t_nns_public_key = nns_public_key.clone();
+        let t_nns_public_key_override = nns_public_key_override.clone();
         let t_setupos_image_spec = setupos_image_spec.clone();
         join_handles.push(thread::spawn(move || {
             let vm_name = node.vm_name();
@@ -395,7 +395,7 @@ pub fn setup_and_start_nested_vms(
                 &t_env,
                 &vm_name,
                 &t_ic_gateway_url,
-                &t_nns_public_key,
+                &t_nns_public_key_override,
             )?;
             let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
                 &t_group_name,
@@ -496,7 +496,6 @@ fn create_config_disk_image(
         node_reward_type: None,
         mgmt_mac: None,
         deployment_environment: Some(DeploymentEnvironment::Testnet),
-        use_nns_public_key: Some(true),
         nns_urls: None,
         enable_trusted_execution_environment: None,
         use_node_operator_private_key: Some(true),
@@ -667,7 +666,7 @@ fn create_setupos_config_image(
     env: &TestEnv,
     name: &str,
     nns_url: &Url,
-    nns_public_key: &str,
+    nns_public_key_override: &str,
 ) -> anyhow::Result<PathBuf> {
     info!(
         env.logger(),
@@ -727,7 +726,7 @@ fn create_setupos_config_image(
         Some(&ssh_authorized_pub_keys_dir.join("admin")),
         DeploymentConfig {
             nns_urls: Some(nns_url.clone()),
-            nns_public_key: Some(nns_public_key.to_string()),
+            nns_public_key_override: Some(nns_public_key_override.to_string()),
             memory_gb: Some((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).get() as u32),
             cpu: Some(cpu.to_string()),
             nr_of_vcpus: Some((HOSTOS_VCPUS_PER_VM / 2).get() as u32),
