@@ -15,8 +15,9 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 
 jobs:
+  # This job is not run, but just used to set anchor references for other jobs
   anchor-setup:
-    if: false  # This job will always be skipped
+    if: false
     name: Dind Large Anchors
     runs-on: &dind-large-setup
       labels: dind-large
