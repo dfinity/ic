@@ -64,10 +64,9 @@ use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     http::{
-        PATH_CALL, PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH,
-        PATH_HEALTH, PATH_QUERY, PATH_QUERY_V2, PATH_QUERY_V3, PATH_READ_STATE, PATH_READ_STATE_V2,
-        PATH_READ_STATE_V3, PATH_STATUS, PATH_STATUS, PATH_SUBNET_READ_STATE,
-        PATH_SUBNET_READ_STATE_V2, PATH_SUBNET_READ_STATE_V3, RequestType,
+        PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
+        PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
+        PATH_SUBNET_READ_STATE_V3, RequestType,
         handlers::{self, LogsState, logs_canister},
         middleware::{
             cache::{CacheState, cache_middleware},
