@@ -14,44 +14,45 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_RUN_ID: ${{ github.run_id }}
 
-anchors:
-  image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
-  backup-pod-access: &backup-pod-access
-    run: |
-      # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-      if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-        eval "$(ssh-agent -s)"
-        ssh-add - <<'EOF'
-      ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
-      EOF
-        echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-      fi
-
-      rm -rf ~/.ssh
-      mkdir -p ~/.ssh
-      chmod 0700 ~/.ssh
-      echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-  dind-large-setup: &dind-large-setup
-    runs-on:
+jobs:
+  anchor-setup:
+    if: false  # This job will always be skipped
+    name: Dind Large Anchors
+    runs-on: &dind-large-setup
       labels: dind-large
-    container:
-      <<: *image
+    container: &container-setup
+      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
       options: >-
         -e NODE_NAME --privileged --cgroupns host
-    timeout-minutes: 120
-  checkout: &checkout
-    name: Checkout
-    uses: actions/checkout@v4
-  generate-bazel-invocation-ids: &generate-bazel-invocation-ids
-    name: Generate Bazel invocation IDs
-    id: gen-uuids
-    uses: ./.github/actions/generate-invocation-ids
+    steps: 
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@v4
+      - &generate-bazel-invocation-ids
+        name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+      - &backup-pod-access
+        name: Set up backup pod access
+        run: |
+          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            eval "$(ssh-agent -s)"
+            ssh-add - <<'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
+          EOF
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          fi
 
-jobs:
+          rm -rf ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 0700 ~/.ssh
+          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
-    <<: *dind-large-setup
+    runs-on: *dind-large-setup
+    container: *container-setup
     environment: Nightly Tests
     steps:
       - <<: *checkout
