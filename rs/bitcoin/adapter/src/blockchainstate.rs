@@ -107,6 +107,7 @@ where
         let header_cache = Arc::new(HybridHeaderCache::new(
             genesis_block_header,
             cache_dir,
+            metrics_registry,
             logger,
         ));
         let block_cache = RwLock::new(HashMap::new());
@@ -193,16 +194,12 @@ where
             .map_err(|err| AddHeaderError::InvalidHeader(block_hash, err))?;
 
         let header_cache = self.header_cache.clone();
-        let metrics = self.metrics.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            header_cache.add_header(block_hash, header).inspect(|_| {
-                metrics.header_cache_size.inc();
-            })
-        })
-        .await
-        .map_err(|err: tokio::task::JoinError| {
-            AddHeaderCacheError::Internal(format!("{}", err))
-        })??;
+        let result =
+            tokio::task::spawn_blocking(move || header_cache.add_header(block_hash, header))
+                .await
+                .map_err(|err: tokio::task::JoinError| {
+                    AddHeaderCacheError::Internal(format!("{}", err))
+                })??;
         Ok(result)
     }
 
