@@ -18,14 +18,14 @@ pub struct UsageRecord {
 
 impl Storable for UsageRecord {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let timestamp = self
+        let timestamp_secs = self
             .last_updated
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_nanos() as u64;
+            .as_secs();
 
         let mut bytes = Vec::with_capacity(16);
-        bytes.extend_from_slice(&timestamp.to_be_bytes());
+        bytes.extend_from_slice(&timestamp_secs.to_be_bytes());
         bytes.extend_from_slice(&self.capacity_used.to_be_bytes());
 
         Cow::Owned(bytes)
@@ -39,11 +39,10 @@ impl Storable for UsageRecord {
         let timestamp_bytes: [u8; 8] = bytes[0..8].try_into().unwrap();
         let capacity_bytes: [u8; 8] = bytes[8..16].try_into().unwrap();
 
-        let timestamp_nanos = u64::from_be_bytes(timestamp_bytes);
+        let timestamp_secs = u64::from_be_bytes(timestamp_bytes);
         let capacity_used = u64::from_be_bytes(capacity_bytes);
 
-        let last_updated =
-            SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(timestamp_nanos);
+        let last_updated = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(timestamp_secs);
 
         Self {
             last_updated,
@@ -576,5 +575,33 @@ mod tests {
             reservation2,
             Err(RateLimiterError::NotEnoughCapacity)
         ));
+    }
+
+    #[test]
+    fn test_usage_record_serialization() {
+        let now = SystemTime::now();
+        let original = UsageRecord {
+            last_updated: now,
+            capacity_used: 42,
+        };
+
+        // Serialize and deserialize
+        let bytes = original.to_bytes();
+        let deserialized = UsageRecord::from_bytes(bytes);
+
+        // Capacity should be exactly equal
+        assert_eq!(deserialized.capacity_used, original.capacity_used);
+
+        // Time should be equal when both are truncated to seconds
+        let original_secs = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let deserialized_secs = deserialized
+            .last_updated
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert_eq!(deserialized_secs, original_secs);
     }
 }
