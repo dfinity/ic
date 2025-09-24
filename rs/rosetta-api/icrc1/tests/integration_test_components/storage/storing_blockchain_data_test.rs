@@ -1,24 +1,28 @@
 #![allow(clippy::disallowed_types)]
 use crate::common::local_replica;
+use crate::common::local_replica::create_and_install_custom_icrc_ledger;
 use crate::common::local_replica::test_identity;
 use crate::common::local_replica::{create_and_install_icrc_ledger, get_custom_agent};
-use candid::Nat;
-use ic_agent::identity::BasicIdentity;
+use candid::{Decode, Encode, Nat};
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::FeatureFlags;
-use ic_icrc1_ledger::InitArgsBuilder;
-use ic_icrc1_test_utils::minter_identity;
-use ic_icrc1_test_utils::valid_transactions_strategy;
-use ic_icrc1_test_utils::ArgWithCaller;
-use ic_icrc1_test_utils::LedgerEndpointArg;
-use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
 use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, RecurrencyMode};
+use ic_icrc1_ledger::FeatureFlags;
+use ic_icrc1_ledger::InitArgsBuilder;
+use ic_icrc1_ledger::Tokens;
+use ic_icrc1_test_utils::ArgWithCaller;
+use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+use ic_icrc1_test_utils::LedgerEndpointArg;
+use ic_icrc1_test_utils::icrc3::BlockBuilder;
+use ic_icrc1_test_utils::minter_identity;
+use ic_icrc1_test_utils::valid_transactions_strategy;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use lazy_static::lazy_static;
@@ -243,6 +247,139 @@ fn test_self_transfer() {
                 .unwrap()
                 .unwrap(),
             Nat::from(100_000_000 - DEFAULT_TRANSFER_FEE)
+        );
+    });
+}
+
+fn icrc3_test_ledger() -> Vec<u8> {
+    std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
+}
+
+/// Adds the block to the ledger
+pub async fn add_block(agent: &Arc<Icrc1Agent>, block: &ICRC3Value) -> Result<Nat, String> {
+    let result = agent
+        .agent
+        .update(&agent.ledger_canister_id, "add_block")
+        .with_arg(Encode!(block).expect("failed to encode arg"))
+        .call_and_wait()
+        .await
+        .expect("failed to add block");
+    Decode!(&result, Result<Nat, String>).unwrap()
+}
+
+#[test]
+fn test_burn_and_mint_fee() {
+    // Create a tokio environment to conduct async calls
+    let rt = Runtime::new().unwrap();
+
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build();
+
+    let init_args = InitArgsBuilder::for_tests().build();
+
+    let icrc_ledger_canister_id =
+        create_and_install_custom_icrc_ledger(&pocket_ic, init_args, icrc3_test_ledger(), None);
+    let endpoint = pocket_ic.make_live(None);
+    let port = endpoint.port().unwrap();
+
+    rt.block_on(async {
+        let agent = Arc::new(Icrc1Agent {
+            agent: local_replica::get_testing_agent(port).await,
+            ledger_canister_id: icrc_ledger_canister_id,
+        });
+        let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+
+        const FEE_COLLECTOR: Account = Account {
+            owner: PrincipalId::new_user_test_id(2).0,
+            subaccount: None,
+        };
+
+        // Create mint and burn blocks with fees, and add them to the ledger
+        let block0 = BlockBuilder::new(0, 1000)
+            .with_fee(Tokens::from(50u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+        let block1 = BlockBuilder::new(1, 2000)
+            .with_parent_hash(block0.clone().hash().to_vec())
+            .with_fee(Tokens::from(50u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .build();
+        let result0 = add_block(&agent, &block0).await.unwrap();
+        assert_eq!(result0, Nat::from(0u64));
+        let result1 = add_block(&agent, &block1).await.unwrap();
+        assert_eq!(result1, Nat::from(1u64));
+
+        blocks_synchronizer::start_synching_blocks(
+            agent.clone(),
+            storage_client.clone(),
+            10,
+            Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
+            Box::new(|| {}),
+        )
+        .await
+        .unwrap();
+        storage_client.update_account_balances().unwrap();
+
+        assert_eq!(
+            storage_client
+                .get_account_balance(&TEST_ACCOUNT)
+                .unwrap()
+                .unwrap(),
+            Nat::from(850u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
+        );
+        assert!(
+            storage_client
+                .get_account_balance(&FEE_COLLECTOR)
+                .unwrap()
+                .is_none()
+        ); // no fee collector in the first 2 blocks
+
+        // Create mint and burn blocks with fees and fee collector, and add them to the ledger
+        let block2 = BlockBuilder::new(2, 3000)
+            .with_parent_hash(block1.clone().hash().to_vec())
+            .with_fee(Tokens::from(50u64))
+            .with_fee_collector(FEE_COLLECTOR)
+            .mint(*TEST_ACCOUNT, Tokens::from(100u64))
+            .build();
+        let block3 = BlockBuilder::new(3, 4000)
+            .with_parent_hash(block2.clone().hash().to_vec())
+            .with_fee_collector_block(2)
+            .with_fee(Tokens::from(50u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .build();
+        let result2 = add_block(&agent, &block2).await.unwrap();
+        assert_eq!(result2, Nat::from(2u64));
+        let result3 = add_block(&agent, &block3).await.unwrap();
+        assert_eq!(result3, Nat::from(3u64));
+
+        blocks_synchronizer::start_synching_blocks(
+            agent.clone(),
+            storage_client.clone(),
+            10,
+            Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
+            Box::new(|| {}),
+        )
+        .await
+        .unwrap();
+        storage_client.update_account_balances().unwrap();
+
+        assert_eq!(
+            storage_client
+                .get_account_balance(&TEST_ACCOUNT)
+                .unwrap()
+                .unwrap(),
+            Nat::from(800u64) // 850 + mint 100 - mint fee 50 - burn 50 - burn fee 50
+        );
+        assert_eq!(
+            storage_client
+                .get_account_balance(&FEE_COLLECTOR)
+                .unwrap()
+                .unwrap(),
+            Nat::from(100u64) // mint fee 50 + burn fee 50
         );
     });
 }

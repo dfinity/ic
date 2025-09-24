@@ -136,6 +136,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# dogecoin container used in test
+oci.pull(
+    name = "dogecoind",
+    image = "ghcr.io/dfinity/fiftysix/dogecoin-core@sha256:13c8b150b759eed9e11ebaf0edfdf998022bfd622164c8768d7057b43e4e156c",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
+
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
@@ -555,6 +565,56 @@ http_file(
     url = "https://download.dfinity.systems/testdata/testnet_blocks.json.gz",
 )
 
+# Contains blocks 0 to 700_000 (inclusive) of the Dogecoin mainnet blockchain.
+http_file(
+    name = "dogecoin_adapter_mainnet_headers",
+    downloaded_file_path = "doge_headers_mainnet_0_700000_raw.csv",
+    sha256 = "42c9f72499308f847312cae8fdb5148dcaed71120041a60d336f5628dd93e1fc",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_mainnet_0_700000_raw.csv",
+)
+
+# Contains blocks 1 to 15_000 (inclusive) of the Dogecoin mainnet blockchain in parsed format.
+http_file(
+    name = "dogecoin_adapter_mainnet_headers_parsed",
+    downloaded_file_path = "doge_headers_mainnet_1_15000_parsed.csv",
+    sha256 = "a76d47758cf8251e1a524510cd2372287888784f2587cea0834b6af9582b6448",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_mainnet_1_15000_parsed.csv",
+)
+
+# Contains blocks 521_337 to 536_336 (inclusive) of the Dogecoin mainnet blockchain in parsed format.
+# Contains 14_955 AuxPow headers out of 15,000 headers.
+http_file(
+    name = "dogecoin_adapter_mainnet_headers_auxpow_parsed",
+    downloaded_file_path = "doge_headers_mainnet_521337_536336_auxpow_parsed.csv",
+    sha256 = "248e36cf7962cb0d55f9e8f20d2beecee9611045713d118a6ad6ff8c98cd2070",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_mainnet_521337_536336_auxpow_parsed.csv",
+)
+
+# Contains blocks 0 to 2_000_000 (inclusive) of the Dogecoin testnet blockchain.
+http_file(
+    name = "dogecoin_adapter_testnet_headers",
+    downloaded_file_path = "doge_headers_testnet_0_2000000_raw.csv",
+    sha256 = "feefd751b10c174622f9a81bb0777eac035936a6a6f4ec3604fdcfa1201b0e42",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_0_2000000_raw.csv",
+)
+
+# Contains blocks 1 to 15_000 (inclusive) of the Dogecoin testnet blockchain in parsed format.
+http_file(
+    name = "dogecoin_adapter_testnet_headers_parsed",
+    downloaded_file_path = "doge_headers_testnet_1_15000_parsed.csv",
+    sha256 = "39d12178923b95e4f98257aaf537336e42ce1940b6b6c69277164c8c556fd15e",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_1_15000_parsed.csv",
+)
+
+# Contains blocks 293_100 to 308_099 (inclusive) of the Dogecoin testnet blockchain in parsed format.
+# Contains 14_746 AuxPow headers out of 15_000 headers.
+http_file(
+    name = "dogecoin_adapter_testnet_headers_auxpow_parsed",
+    downloaded_file_path = "doge_headers_testnet_293100_308099_auxpow_parsed.csv",
+    sha256 = "2aeb78d9564153607900a8e86d2e0fae72fb9fda362c2ce475e60c5d3e43f5e2",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_293100_308099_auxpow_parsed.csv",
+)
+
 # Internet Identity canister (test build)
 
 http_file(
@@ -569,8 +629,8 @@ http_file(
 http_file(
     name = "nns_dapp_canister",
     downloaded_file_path = "nns_dapp_canister.wasm.gz",
-    sha256 = "f4c5df6fdb8ee3aa043419ed4e4cc1fafdb07b4fde1c7faeb2a6730dfa04127f",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/nns-dapp_test.wasm.gz",
+    sha256 = "46e5cdad3c77465e938c6ddcc5f41f0ed0b22fd0efc4c9832c3bbd5eee656b0e",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/nightly-2025-09-03/nns-dapp_test.wasm.gz",
 )
 
 # SNS aggregator canister
@@ -578,8 +638,8 @@ http_file(
 http_file(
     name = "sns_aggregator",
     downloaded_file_path = "sns_aggregator_dev.wasm.gz",
-    sha256 = "8a18ab37807605fe912080b4a072fc7735b4657e9d22b3867c345250c6e77d91",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/sns_aggregator_dev.wasm.gz",
+    sha256 = "ad1b1a3faa5f5db553198ee68f36361b173cf6cfdc064f7727b2c02a81020c7b",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/nightly-2025-09-03/sns_aggregator_dev.wasm.gz",
 )
 
 # KongSwap backend canister
@@ -596,8 +656,8 @@ http_file(
 http_file(
     name = "kongswap-adaptor-canister",
     downloaded_file_path = "kongswap-adaptor-canister.wasm.gz",
-    sha256 = "4b3445ff18b417364a25c733f377eb0eb5943dea8781de73c226023657642ad1",
-    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250821-094346-bab9aa4/kongswap-adaptor-canister.wasm.gz",
+    sha256 = "1c07ceba560e7bcffa43d1b5ae97db81151854f068b707c1728e213948212a6c",
+    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/v1.0.0/kongswap-adaptor-canister.wasm.gz",
 )
 
 # Cycles Ledger canister
@@ -614,8 +674,8 @@ http_file(
 http_file(
     name = "subnet_rental_canister",
     downloaded_file_path = "subnet_rental_canister.wasm.gz",
-    sha256 = "d3d703b649bf32d60100e49f02b070a0b9c52022b556b30102139b1eb57bbb8b",
-    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.2.0/subnet_rental_canister.wasm.gz",
+    sha256 = "860d30bc74facd4287b7af766004344e4cea4989ae0bf5408b4fb70ff337bc42",
+    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.3.0/subnet_rental_canister.wasm.gz",
 )
 
 # Financial Integration artifacts for upgrade testing

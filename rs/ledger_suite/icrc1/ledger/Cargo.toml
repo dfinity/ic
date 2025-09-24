@@ -46,7 +46,10 @@ ciborium = { workspace = true }
 ic-agent = { workspace = true }
 ic-cbor = { workspace = true }
 ic-certification = { workspace = true }
+ic-ledger-suite-in-memory-ledger = { path = "../../test_utils/in_memory_ledger" }
+ic-ledger-suite-state-machine-helpers = { path = "../../test_utils/state_machine_helpers" }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
+ic-ledger-suite-state-machine-tests-constants = { path = "../../tests/sm-tests/constants" }
 ic-icrc1-test-utils = { path = "../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

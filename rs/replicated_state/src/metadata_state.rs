@@ -3,39 +3,39 @@ pub mod subnet_call_context_manager;
 #[cfg(test)]
 mod tests;
 
-use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::CanisterQueues;
-use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
+use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
-use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
+use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
-    MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse, IC_00,
+    IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
 };
 use ic_registry_routing_table::{
-    canister_id_into_u64, difference, intersection, CanisterIdRanges, CanisterMigrations,
-    RoutingTable, CANISTER_IDS_PER_SUBNET,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRanges, CanisterMigrations, RoutingTable,
+    canister_id_into_u64, difference, intersection,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
+    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response},
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
-    state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
+    state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
     subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
         StreamSlice,
     },
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -629,7 +629,7 @@ impl SystemMetadata {
         // whenever new fields are added.
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
-        let SystemMetadata {
+        let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
             canister_allocation_ranges: _,
@@ -764,7 +764,7 @@ impl SystemMetadata {
                     refund: request.payment,
                     response_payload: Payload::Reject(RejectContext::new(
                         RejectCode::SysTransient,
-                        format!("Canister {} migrated during a subnet split", canister_id),
+                        format!("Canister {canister_id} migrated during a subnet split"),
                     )),
                     deadline: request.deadline,
                 };
@@ -777,7 +777,7 @@ impl SystemMetadata {
                     time: self.time(),
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterNotFound,
-                        format!("Canister {} migrated during a subnet split", canister_id),
+                        format!("Canister {canister_id} migrated during a subnet split"),
                     )),
                 };
 
@@ -1316,10 +1316,10 @@ impl IngressHistoryState {
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            ref mut statuses,
+            statuses,
             pruning_times: _,
             next_terminal_time: _,
-            ref mut memory_usage,
+            memory_usage,
         } = self;
 
         // Filters for messages in terminal states or addressed to local canisters.

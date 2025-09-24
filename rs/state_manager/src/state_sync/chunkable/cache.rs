@@ -96,6 +96,7 @@ impl StateSyncCache {
         manifest: Manifest,
         fetch_chunks: HashSet<usize>,
         state_sync_file_group: FileGroupChunks,
+        copied_chunks_from_file_group: HashSet<ManifestChunkIndex>,
     ) {
         // fetch_chunks, as stored by IncompleteState considers the meta-manifest as chunk 0
         // For the cache we store indices into the manifest's chunk table as
@@ -112,13 +113,20 @@ impl StateSyncCache {
                 let chunks = state_sync_file_group
                     .get(&(i as u32))
                     .expect("Unknown chunk group");
-                missing_chunks.extend(chunks.iter().map(|i| *i as usize));
+                missing_chunks.extend(
+                    chunks
+                        .iter()
+                        .filter(|i| !copied_chunks_from_file_group.contains(i))
+                        .map(|i| *i as usize),
+                );
             }
         }
 
-        debug_assert!(missing_chunks
-            .iter()
-            .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize));
+        debug_assert!(
+            missing_chunks
+                .iter()
+                .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize)
+        );
 
         // We rename the folder to decouple the cache from active state syncs a bit.
         // Otherwise we'd have to assume that there won't be an active state sync at
@@ -168,10 +176,13 @@ impl StateSyncCache {
         // same height (and path)
         if let Some(ref entry) = self.entry {
             match sync.state {
-                DownloadState::Blank => {
+                // Retain the existing cache entry if the state is Blank or Prep.
+                // The cache is only populated after `initialize_state_on_disk()` is called,
+                // as it incorporates actual state data from previous checkpoints or syncs at that point.
+                DownloadState::Blank | DownloadState::Prep { .. } => {
                     // Keep what we have
                 }
-                _ => {
+                DownloadState::Loading { .. } | DownloadState::Complete => {
                     if sync.height >= entry.height {
                         self.entry = None;
                     }
@@ -185,12 +196,19 @@ impl StateSyncCache {
                 manifest,
                 state_sync_file_group,
                 fetch_chunks,
+                copied_chunks_from_file_group,
             } => {
                 if self.entry.is_some() {
                     // The current cache is newer
                     delete_folder(&self.log, &sync.root);
                 } else {
-                    self.push_inner(sync, manifest, fetch_chunks, state_sync_file_group);
+                    self.push_inner(
+                        sync,
+                        manifest,
+                        fetch_chunks,
+                        state_sync_file_group,
+                        copied_chunks_from_file_group,
+                    );
                 }
             }
             DownloadState::Complete | DownloadState::Blank | DownloadState::Prep { .. } => {

@@ -29,7 +29,7 @@ use ic_system_test_driver::{
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
-        test_env_api::{load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, load_wasm},
     },
     systest,
 };

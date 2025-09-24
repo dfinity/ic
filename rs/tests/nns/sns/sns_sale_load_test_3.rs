@@ -3,9 +3,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use sns_system_test_lib::sns_deployment::{
     initiate_token_swap_with_oc_parameters, sns_setup_with_many_sale_participants,
+    workload_many_users_rps20_refresh_buyer_tokens,
     workload_many_users_rps100_refresh_buyer_tokens,
     workload_many_users_rps200_refresh_buyer_tokens,
-    workload_many_users_rps20_refresh_buyer_tokens,
     workload_many_users_rps400_refresh_buyer_tokens,
 };
 use std::time::Duration;

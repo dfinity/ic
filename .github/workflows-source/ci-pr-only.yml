@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+    image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
   container: &container
     container:
       <<: *image
@@ -38,6 +38,10 @@ anchors:
     uses: actions/checkout@v4
   skip-merge-group: &skip-merge-group
     if: ${{ github.event_name != 'merge_group' }}
+  generate-bazel-invocation-ids: &generate-bazel-invocation-ids
+    name: Generate Bazel invocation IDs
+    id: gen-uuids
+    uses: ./.github/actions/generate-invocation-ids
 
 jobs:
   insta-tests:
@@ -46,10 +50,18 @@ jobs:
     <<: *skip-merge-group
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id"
+            }]
+
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
-          run: bazel test //:insta_tests
+          run: bazel test --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-build-fuzzers-archives:

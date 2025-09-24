@@ -1,48 +1,48 @@
 #![allow(clippy::disallowed_types)]
 use aide::{
     axum::{
-        routing::{get, post},
         ApiRouter, IntoApiResponse,
+        routing::{get, post},
     },
     openapi::{Info, OpenApi},
 };
 use async_trait::async_trait;
 use axum::{
+    Extension, Json,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
-    Extension, Json,
 };
 use axum_server::Handle;
 use clap::Parser;
 use ic_canister_sandbox_backend_lib::{
+    RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
     canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
-    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
-    RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    launcher::sandbox_launcher_main,
 };
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use libc::{getrlimit, rlimit, setrlimit, RLIMIT_NOFILE};
+use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
+use pocket_ic_server::BlobStore;
 use pocket_ic_server::state_api::routes::handler_read_graph;
 use pocket_ic_server::state_api::{
-    routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
+    routes::{AppState, RouterExt, http_gateway_routes, instances_routes, status},
     state::{ApiState, PocketIcApiStateBuilder},
 };
-use pocket_ic_server::BlobStore;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, Error};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::runtime::Runtime;
-use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc::channel;
 use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info};
@@ -57,7 +57,8 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "9.0.3")]
+#[clap(name = "pocket-ic-server")]
+#[clap(version = "10.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -82,7 +83,7 @@ fn current_binary_path() -> Option<PathBuf> {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-extern "C" {
+unsafe extern "C" {
     fn install_backtrace_handler();
 }
 
@@ -119,9 +120,28 @@ fn increase_nofile_limit(mut new_limit: u64) -> io::Result<()> {
 fn main() {
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
-    if current_binary_name != "pocket-ic" && current_binary_name != "pocket-ic-server" {
-        panic!("The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes).")
+    let allowed_binary_names = ["pocket-ic", "pocket-ic-server", "pocket-ic-server-head-nns"];
+    if !allowed_binary_names.contains(&current_binary_name) {
+        // The fact that `pocket-ic-server-head-nns` is allowed is an internal implementation
+        // detail that we do not advertize in the public-facing error message.
+        panic!(
+            "The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes)."
+        )
     }
+
+    // Set RUST_MIN_STACK if not yet set:
+    // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
+    unsafe { std::env::set_var("RUST_MIN_STACK", "8192000") };
+
+    // Set the maximum number of open files:
+    // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
+    if let Err(e) = increase_nofile_limit(16777216) {
+        error!(
+            "Failed to increase the maximum number of open files: {:?}",
+            e
+        );
+    }
+
     // Check if `pocket-ic-server` is running in the canister sandbox mode where it waits
     // for commands from the parent process. This check has to be performed
     // before the arguments are parsed because the parent process does not pass
@@ -166,23 +186,10 @@ async fn start(runtime: Arc<Runtime>) {
 
     let _guard = setup_tracing(args.log_levels);
 
-    // Set RUST_MIN_STACK if not yet set:
-    // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
-    std::env::set_var("RUST_MIN_STACK", "8192000");
-
-    // Set the maximum number of open files:
-    // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
-    if let Err(e) = increase_nofile_limit(16777216) {
-        error!(
-            "Failed to increase the maximum number of open files: {:?}",
-            e
-        );
-    }
-
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
     let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
-        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
+        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {addr}"));
     let real_port = listener.local_addr().unwrap().port();
 
     // The shared, mutable state of the PocketIC process.
@@ -296,7 +303,7 @@ async fn start(runtime: Arc<Runtime>) {
     while handle.listening().await.is_none() {}
 
     if let Some(mut port_file) = port_file {
-        let _ = port_file.write_all(format!("{}\n", real_port).as_bytes());
+        let _ = port_file.write_all(format!("{real_port}\n").as_bytes());
         let _ = port_file.flush();
     }
 
@@ -329,8 +336,8 @@ async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
 
 // Registers a global subscriber that collects tracing events and spans.
 fn setup_tracing(log_levels: Option<String>) -> Option<WorkerGuard> {
-    use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
+    use time::format_description::well_known::Rfc3339;
     use tracing_subscriber::prelude::*;
 
     let mut layers = Vec::new();
@@ -495,24 +502,21 @@ pub async fn verify_signature(
                 Err(err) => (
                     StatusCode::NOT_ACCEPTABLE,
                     Json(Err(format!(
-                        "Canister signature verification failed: {:?}",
-                        err
+                        "Canister signature verification failed: {err:?}"
                     ))),
                 ),
             },
             Err(err) => (
                 StatusCode::BAD_REQUEST,
                 Json(Err(format!(
-                    "Failed to parse DER encoded root public key: {:?}",
-                    err
+                    "Failed to parse DER encoded root public key: {err:?}"
                 ))),
             ),
         },
         Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(Err(format!(
-                "Failed to parse DER encoded public key: {:?}",
-                err
+                "Failed to parse DER encoded public key: {err:?}"
             ))),
         ),
     }

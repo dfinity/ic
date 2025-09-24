@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# ubuntu:noble-20250415.1
-FROM ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233
+# ubuntu:noble-20250910
+FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d
 ENV TZ=UTC
 
 ARG PACKAGE_FILE=ci/container/files/packages.common
@@ -151,7 +151,6 @@ RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-co
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./ci/container/files/docker.sh /usr/bin/docker
 
 USER ubuntu
 

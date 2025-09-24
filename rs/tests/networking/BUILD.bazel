@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -212,6 +212,9 @@ system_test_nns(
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/certification",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/http_endpoints/public",
         "//rs/limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
@@ -228,9 +231,13 @@ system_test_nns(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
+        "@crate_index//:time",
         "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )
 
@@ -273,7 +280,7 @@ system_test_nns(
     # which could take more than 15 minutes in total.
     test_timeout = "eternal",
     uses_guestos_img = False,
-    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
@@ -288,7 +295,7 @@ system_test_nns(
     # The nns_delegation_on_app_subnet_test subtest takes ~10 minutes eating up the time budget for other tests.
     test_timeout = "eternal",
     uses_guestos_img = True,
-    uses_guestos_nns_mainnet_img = False,
+    uses_guestos_mainnet_nns_img = False,
     uses_guestos_update = True,
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
@@ -405,6 +412,36 @@ system_test_nns(
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
+    ],
+)
+
+system_test_nns(
+    name = "state_sync_performance",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    env = UNIVERSAL_CANISTER_ENV | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
+    },
+    tags = [
+        "colocate",
+        # TODO: Investigate test failures
+        #"system_test_large",
+        "manual",
+    ],
+    test_timeout = "eternal",
+    runtime_deps =
+        GRAFANA_RUNTIME_DEPS +
+        STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
+        UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/registry/canister",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:futures",
+        "@crate_index//:tokio",
     ],
 )
 

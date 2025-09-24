@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -11,15 +11,15 @@ use ic_system_test_driver::{
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
     systest,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::{
     net::{IpAddr, SocketAddr},
     time::Duration,

@@ -81,8 +81,7 @@ impl Module {
                 ({ty}.const 100) ({ty}.const 18)
                 ({ty}.const 11)  ({ty}.const 0) ;; non-existent function
                 ({ty}.const 22)  ({ty}.const 0) ;; non-existent function
-            )"#,
-            ty = ty
+            )"#
         );
         let call_new_signature = format!(
             r#"(import "ic0" "call_new"
@@ -91,8 +90,7 @@ impl Module {
                 (param $name_src {ty})           (param $name_size {ty})
                 (param $reply_fun {ty})          (param $reply_env {ty})
                 (param $reject_fun {ty})         (param $reject_env {ty})
-                ))"#,
-            ty = ty
+                ))"#
         );
 
         match self {
@@ -160,10 +158,8 @@ impl Module {
                     LoopIterations::Mi,
                     format!(
                         r#"
-                            {CALL_NEW_PARAMS}
-                            {BODY}"#,
-                        CALL_NEW_PARAMS = call_new_params,
-                        BODY = body
+                            {call_new_params}
+                            {body}"#
                     ),
                     wasm64_status,
                 );
@@ -218,18 +214,15 @@ impl Module {
                 format!(
                     r#"
         (module
-            {IMPORTS}
-            {MEMORY}
+            {imports}
+            {memory}
             (table funcref (elem $test))
             (func $test (param $env i32)
                 (local $i i32) (local $s i32)
-                {BODY}
+                {body}
             )
         )
-            "#,
-                    IMPORTS = imports,
-                    MEMORY = memory,
-                    BODY = body
+            "#
                 )
             }
             Module::QueryTest => {
@@ -303,8 +296,7 @@ impl Module {
         match loop_iterations {
             LoopIterations::One => format!(
                 // Indent to match module and function
-                "{LOOP_BODY}",
-                LOOP_BODY = loop_body
+                "{loop_body}"
             ),
             LoopIterations::Mi => format!(
                 r#"

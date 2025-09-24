@@ -31,7 +31,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
@@ -56,7 +56,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 60
@@ -97,7 +97,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
@@ -124,7 +124,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
+      image: ghcr.io/dfinity/ic-build@sha256:98f8adafc935cc8a5d016edb2078ff59f8ea88e39a35e694720f6bc6a4c1abb5
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 180 # 3 hours
@@ -142,7 +142,7 @@ jobs:
               --config=stamped \
               --config=flaky_retry \
               --test_tag_filters= \
-              //rs/tests/dre:guest_os_qualification \
+              //rs/tests/dre:guest_os_qualification_colocate \
               --test_env=OLD_VERSION=${{ matrix.version }} \
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

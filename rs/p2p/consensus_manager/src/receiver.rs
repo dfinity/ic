@@ -1,23 +1,24 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use crate::{
+    CommitId, SlotNumber, SlotUpdate, Update,
     metrics::{
-        ConsensusManagerMetrics, ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED,
-        ASSEMBLE_TASK_RESULT_COMPLETED, ASSEMBLE_TASK_RESULT_DROP,
+        ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED, ASSEMBLE_TASK_RESULT_COMPLETED,
+        ASSEMBLE_TASK_RESULT_DROP, ConsensusManagerMetrics,
     },
-    uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
+    uri_prefix,
 };
 use axum::{
+    Extension, Router,
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
     response::IntoResponse,
     routing::any,
-    Extension, Router,
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, AssembleResult, Peers};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::p2p::v1 as pb;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
@@ -598,7 +599,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockArtifactAssembler};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
+    use ic_types::{RegistryVersion, artifact::IdentifiableArtifact};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use tokio::time::timeout;
     use tower::util::ServiceExt;

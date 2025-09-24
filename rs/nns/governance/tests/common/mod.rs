@@ -2,7 +2,7 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::Governance,
-    pb::v1::{manage_neuron, manage_neuron::NeuronIdOrSubaccount, ManageNeuron},
+    pb::v1::{ManageNeuron, manage_neuron, manage_neuron::NeuronIdOrSubaccount},
 };
 use ic_nns_governance_api::ManageNeuronResponse;
 
