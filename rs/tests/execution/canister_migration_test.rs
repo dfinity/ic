@@ -1,6 +1,5 @@
 use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use canister_test::Wasm;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nns_constants::MIGRATION_CANISTER_ID;
@@ -8,7 +7,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot, get_dependency_path,
+    IcNodeSnapshot,
 };
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
@@ -16,7 +15,6 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::CanisterId;
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use slog::Logger;
