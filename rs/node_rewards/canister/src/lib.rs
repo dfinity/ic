@@ -54,7 +54,7 @@ impl KeyRange for pb::v1::SubnetMetricsKey {
 //------------ Storable Implementations ------------//
 
 impl Storable for pb::v1::SubnetIdKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
@@ -69,7 +69,7 @@ impl Storable for pb::v1::SubnetIdKey {
 }
 
 impl Storable for pb::v1::SubnetMetricsKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
@@ -84,7 +84,7 @@ impl Storable for pb::v1::SubnetMetricsKey {
 }
 
 impl Storable for pb::v1::SubnetMetricsValue {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
@@ -96,7 +96,7 @@ impl Storable for pb::v1::SubnetMetricsValue {
 }
 
 impl Storable for pb::v1::NodeMetrics {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {

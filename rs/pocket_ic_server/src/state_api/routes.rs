@@ -56,7 +56,7 @@ use std::{
     sync::atomic::AtomicU64,
     time::{Duration, SystemTime},
 };
-use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use tokio::runtime::Runtime;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
 
@@ -88,7 +88,8 @@ const RETRY_TIMEOUT_S: u64 = 300;
 pub struct AppState {
     pub api_state: Arc<ApiState>,
     pub pending_requests: Arc<AtomicU64>,
-    pub min_alive_until: Arc<RwLock<Instant>>,
+    /// TTL in nanoseconds since UNIX epoch
+    pub min_alive_until: Arc<AtomicU64>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
 }
