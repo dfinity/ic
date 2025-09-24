@@ -884,7 +884,7 @@ pub struct StateMachine {
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
     is_vetkd_enabled: bool,
-    pub registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
     consensus_time: Arc<PocketConsensusTime>,
