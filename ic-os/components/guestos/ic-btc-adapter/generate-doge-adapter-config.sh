@@ -50,12 +50,14 @@ if [ "${config_socks_proxy}" != "" ] && [ "${config_socks_proxy}" != "null" ]; t
     SOCKS_PROXY="${config_socks_proxy}"
 fi
 
-DOGECOIN_NETWORK='dogecoin:testnet'
+DOGECOIN_NETWORK='"dogecoin:testnet"'
+CACHE_NAME='dogecoin_testnet_cache'
 DNS_SEEDS='"jrn.me.uk",
             "testseed.jrn.me.uk"'
 
 if [ "$MAINNET" = true ]; then
-    DOGECOIN_NETWORK='dogecoin'
+    DOGECOIN_NETWORK='"dogecoin"'
+    CACHE_NAME='dogecoin_mainnet_cache'
     DNS_SEEDS='"seed.multidoge.org",
             "seed2.multidoge.org"'
 fi
@@ -77,11 +79,11 @@ if [ "${config_dogecoind_addr}" != "" ] && [ "${config_dogecoind_addr}" != "null
         }
     }' >$OUT_FILE
 else
-    CACHE_DIR="/var/lib/ic/data/ic_adapter/${DOGECOIN_NETWORK}_cache"
+    CACHE_DIR="\"/var/lib/ic/data/ic_adapter/${CACHE_NAME}\""
     echo '{
-        "network": '"\"${DOGECOIN_NETWORK}\""',
+        "network": '"${DOGECOIN_NETWORK}"',
         "dns_seeds": ['"${DNS_SEEDS}"'],
-        "cache_dir": '"\"${CACHE_DIR}\""',
+        "cache_dir": '"${CACHE_DIR}"',
         "logger": {
             "format": "json",
             "level": "info"
