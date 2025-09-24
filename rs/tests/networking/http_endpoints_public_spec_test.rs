@@ -258,107 +258,141 @@ fn malformed_http_request(env: TestEnv) {
 
     block_on(async {
         for url in [subnet_replica_url, api_bn_url] {
-            let mut update_url = url.clone();
-            update_url.set_path(&format!("/api/v2/canister/{}/call", primary));
-
-            let ingress_expiry =
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(3 * 60);
-            let valid_content = btreemap! {
-                Value::Text("request_type".to_string()) => Value::Text("call".to_string()),
-                Value::Text("canister_id".to_string()) => Value::Bytes(primary.get().as_slice().to_vec()),
-                Value::Text("method_name".to_string()) => Value::Text("update".to_string()),
-                Value::Text("arg".to_string()) => Value::Bytes(wasm().reply().build()),
-                Value::Text("sender".to_string()) => Value::Bytes(Principal::anonymous().as_slice().to_vec()),
-                Value::Text("ingress_expiry".to_string()) => Value::Integer(ingress_expiry.as_nanos() as i128),
+            let call_content = btreemap! {
+                    Value::Text("canister_id".to_string()) => Value::Bytes(primary.get().as_slice().to_vec()),
+                    Value::Text("method_name".to_string()) => Value::Text("query".to_string()),
+                    Value::Text("arg".to_string()) => Value::Bytes(wasm().reply().build()),
             };
-            let envelope = |content: BTreeMap<Value, Value>| {
-                Value::Map(btreemap! {Value::Text("content".to_string()) => Value::Map(content) })
+            let read_state_content = btreemap! {
+                    Value::Text("paths".to_string()) => Value::Array(vec![]),
             };
-            let bytes = serde_cbor::to_vec(&envelope(valid_content.clone())).unwrap();
-            let client = reqwest::Client::builder()
-                .danger_accept_invalid_certs(true)
-                .build()
-                .unwrap();
-            let resp = client
-                .post(update_url.clone())
-                .header("Content-Type", "application/cbor")
-                .body(bytes)
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(resp.status(), StatusCode::ACCEPTED);
+            for (request_type, version, content, wrong_request_type) in [
+                ("call", "v2", call_content.clone(), "query"),
+                ("call", "v3", call_content.clone(), "query"),
+                // TODO(CON-1586): uncomment once API BN support is added.
+                // ("call", "v4", call_content.clone(), "query"),
+                ("query", "v2", call_content.clone(), "call"),
+                // TODO(CON-1586): uncomment once API BN support is added.
+                // ("query", "v3", call_content.clone(), "call"),
+                ("read_state", "v2", read_state_content.clone(), "query"),
+                // TODO(CON-1586): uncomment once API BN support is added.
+                // ("read state", "v3", read_state_content.clone(), "query"),
+            ] {
+                let mut request_url = url.clone();
+                request_url.set_path(&format!(
+                    "/api/{}/canister/{}/{}",
+                    version, primary, request_type
+                ));
+                let mut malformed_url = url.clone();
+                malformed_url.set_path(&format!(
+                    "/api/{}/canister/this-is-not-a-valid-canister-id/{}",
+                    version, request_type
+                ));
 
-            let assert_bad_request = |logger: Logger,
-                                      url: Url,
-                                      content: BTreeMap<Value, Value>,
-                                      expected_err: String| async move {
+                let mut valid_content = btreemap! {
+                    Value::Text("request_type".to_string()) => Value::Text(request_type.to_string()),
+                    Value::Text("sender".to_string()) => Value::Bytes(Principal::anonymous().as_slice().to_vec()),
+                };
+                valid_content.extend(content.into_iter());
+                let envelope = |mut content: BTreeMap<Value, Value>| {
+                    let ingress_expiry = SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+                        + Duration::from_secs(3 * 60);
+                    content.insert(
+                        Value::Text("ingress_expiry".to_string()),
+                        Value::Integer(ingress_expiry.as_nanos() as i128),
+                    );
+                    Value::Map(
+                        btreemap! {Value::Text("content".to_string()) => Value::Map(content) },
+                    )
+                };
+                let bytes = serde_cbor::to_vec(&envelope(valid_content.clone())).unwrap();
                 let client = reqwest::Client::builder()
                     .danger_accept_invalid_certs(true)
                     .build()
                     .unwrap();
-                let bytes = serde_cbor::to_vec(&envelope(content)).unwrap();
                 let resp = client
-                    .post(url)
+                    .post(request_url.clone())
                     .header("Content-Type", "application/cbor")
                     .body(bytes)
                     .send()
                     .await
                     .unwrap();
-                assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-                let bytes = resp.bytes().await.unwrap();
-                let err = String::from_utf8(bytes.to_vec()).unwrap();
-                info!(logger, "Response: {}", err);
-                assert!(err.contains(&expected_err));
-            };
+                assert!(resp.status().is_success());
 
-            let mut no_sender_content = valid_content.clone();
-            no_sender_content
-                .remove(&Value::Text("sender".to_string()))
-                .unwrap();
-            assert_bad_request(
-                logger.clone(),
-                update_url.clone(),
-                no_sender_content,
-                "missing field `sender`".to_string(),
-            )
-            .await;
+                let assert_bad_request =
+                    |logger: Logger,
+                     url: Url,
+                     content: BTreeMap<Value, Value>,
+                     expected_err: String| async move {
+                        let client = reqwest::Client::builder()
+                            .danger_accept_invalid_certs(true)
+                            .build()
+                            .unwrap();
+                        let bytes = serde_cbor::to_vec(&envelope(content)).unwrap();
+                        let resp = client
+                            .post(url)
+                            .header("Content-Type", "application/cbor")
+                            .body(bytes)
+                            .send()
+                            .await
+                            .unwrap();
+                        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+                        let bytes = resp.bytes().await.unwrap();
+                        let err = String::from_utf8(bytes.to_vec()).unwrap();
+                        info!(logger, "Response: {}", err);
+                        assert!(err.contains(&expected_err));
+                    };
 
-            let mut no_request_type_content = valid_content.clone();
-            no_request_type_content
-                .remove(&Value::Text("request_type".to_string()))
-                .unwrap();
-            assert_bad_request(
-                logger.clone(),
-                update_url.clone(),
-                no_request_type_content,
-                "missing field `request_type`".to_string(),
-            )
-            .await;
-
-            let mut wrong_request_type_content = valid_content.clone();
-            wrong_request_type_content
-                .insert(
-                    Value::Text("request_type".to_string()),
-                    Value::Text("query".to_string()),
+                let mut no_sender_content = valid_content.clone();
+                no_sender_content
+                    .remove(&Value::Text("sender".to_string()))
+                    .unwrap();
+                assert_bad_request(
+                    logger.clone(),
+                    request_url.clone(),
+                    no_sender_content,
+                    "missing field `sender`".to_string(),
                 )
-                .unwrap();
-            assert_bad_request(
-                logger.clone(),
-                update_url.clone(),
-                wrong_request_type_content,
-                "unknown variant `query`, expected `call`".to_string(),
-            )
-            .await;
+                .await;
 
-            let mut malformed_url = url;
-            malformed_url.set_path("/api/v2/canister/this-is-not-a-valid-canister-id/call");
-            assert_bad_request(
-                logger.clone(),
-                malformed_url.clone(),
-                valid_content,
-                "Text must be in valid Base32 encoding.".to_string(),
-            )
-            .await;
+                let mut no_request_type_content = valid_content.clone();
+                no_request_type_content
+                    .remove(&Value::Text("request_type".to_string()))
+                    .unwrap();
+                assert_bad_request(
+                    logger.clone(),
+                    request_url.clone(),
+                    no_request_type_content,
+                    "missing field `request_type`".to_string(),
+                )
+                .await;
+
+                let mut wrong_request_type_content = valid_content.clone();
+                wrong_request_type_content
+                    .insert(
+                        Value::Text("request_type".to_string()),
+                        Value::Text(wrong_request_type.to_string()),
+                    )
+                    .unwrap();
+                assert_bad_request(
+                    logger.clone(),
+                    request_url.clone(),
+                    wrong_request_type_content,
+                    format!(
+                        "unknown variant `{}`, expected `{}`",
+                        wrong_request_type, request_type
+                    ),
+                )
+                .await;
+
+                assert_bad_request(
+                    logger.clone(),
+                    malformed_url.clone(),
+                    valid_content,
+                    "Text must be in valid Base32 encoding.".to_string(),
+                )
+                .await;
+            }
         }
     });
 }
