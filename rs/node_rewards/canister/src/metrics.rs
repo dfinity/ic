@@ -193,7 +193,7 @@ where
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
-            timestamp_nanos: day_utc.last_ts_nanos(),
+            timestamp_nanos: day_utc.unix_timestamp_at_day_end_nanoseconds(),
             ..SubnetMetricsKey::max_key()
         };
 

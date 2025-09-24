@@ -38,10 +38,11 @@ impl From<Time> for DayUtc {
 
 impl Display for DayUtc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let dd_mm_yyyy = DateTime::from_timestamp_nanos(self.last_ts_nanos() as i64)
-            .naive_utc()
-            .format("%d-%m-%Y")
-            .to_string();
+        let dd_mm_yyyy =
+            DateTime::from_timestamp_nanos(self.unix_timestamp_at_day_end_nanoseconds() as i64)
+                .naive_utc()
+                .format("%d-%m-%Y")
+                .to_string();
         write!(f, "{}", dd_mm_yyyy)
     }
 }
@@ -66,7 +67,7 @@ impl Default for DayUtc {
 }
 
 impl DayUtc {
-    pub fn last_ts_nanos(&self) -> u64 {
+    pub fn unix_timestamp_at_day_end_nanoseconds(&self) -> u64 {
         self.last_ts_nanoseconds
     }
 
@@ -77,7 +78,9 @@ impl DayUtc {
     }
 
     pub fn last_ts_secs(&self) -> u64 {
-        self.last_ts_nanos().checked_div(1_000_000_000).unwrap()
+        self.unix_timestamp_at_day_end_nanoseconds()
+            .checked_div(1_000_000_000)
+            .unwrap()
     }
 
     pub fn first_ts_secs(&self) -> u64 {

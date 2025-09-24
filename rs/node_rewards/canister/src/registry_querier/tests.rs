@@ -45,7 +45,12 @@ fn add_record_helper(
     datetime_str: &str,
 ) {
     let ts = DayUtc::try_from(datetime_str).unwrap();
-    add_record_helper_ts(key, version, value, ts.last_ts_nanos());
+    add_record_helper_ts(
+        key,
+        version,
+        value,
+        ts.unix_timestamp_at_day_end_nanoseconds(),
+    );
 }
 
 fn add_record_helper_ts(key: &str, version: u64, value: Option<impl ::prost::Message>, ts: u64) {

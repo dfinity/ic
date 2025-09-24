@@ -157,7 +157,7 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier
-            .version_for_timestamp(day.last_ts_nanos())
+            .version_for_timestamp(day.unix_timestamp_at_day_end_nanoseconds())
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
         Ok(registry_querier.get_rewards_table(version))
     }
@@ -168,7 +168,10 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
     ) -> Result<BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>, String> {
         let metrics = self.metrics_manager.metrics_by_subnet(day);
         if metrics.is_empty() {
-            return Err(format!("No metrics found for day {}", day.last_ts_nanos()));
+            return Err(format!(
+                "No metrics found for day {}",
+                day.unix_timestamp_at_day_end_nanoseconds()
+            ));
         }
         Ok(metrics)
     }

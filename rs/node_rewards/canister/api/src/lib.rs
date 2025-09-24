@@ -29,7 +29,7 @@ impl DayUtc {
 impl From<rewards_calculation::types::DayUtc> for DayUtc {
     fn from(day_utc: rewards_calculation::types::DayUtc) -> Self {
         Self {
-            last_ts_nanoseconds: Some(day_utc.last_ts_nanos()),
+            last_ts_nanoseconds: Some(day_utc.unix_timestamp_at_day_end_nanoseconds()),
         }
     }
 }

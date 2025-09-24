@@ -252,7 +252,7 @@ impl NodeMetricsHistoryResponseTracker {
             for (proposed, failed) in proposed_failed {
                 let entry = self
                     .subnets_responses
-                    .entry(metrics_day.last_ts_nanos())
+                    .entry(metrics_day.unix_timestamp_at_day_end_nanoseconds())
                     .or_default();
                 let entry_sub = entry.entry(self.current_subnet).or_default();
 
