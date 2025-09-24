@@ -69,7 +69,8 @@ def get_lv_size(vg_name, lv_name):
     """
     lvs_data = json.loads(
         subprocess.Popen(
-            ["lvs", "--units", "k", "-o", "lv_free", "--reportformat", "json", "{0}/{1}".format(vg_name, lv_name)], stdout=subprocess.PIPE
+            ["lvs", "--units", "k", "-o", "lv_free", "--reportformat", "json", "{0}/{1}".format(vg_name, lv_name)],
+            stdout=subprocess.PIPE,
         ).stdout.read()
     )
     # The json output of lvs looks roughly like this:
@@ -151,12 +152,28 @@ def main():
         if expand_size > 0:
             # Prioritize re-sizing data.
             if data_fs_free < data_required_avail:
-                expand_lv(DATA_DEVICE_NAME, DATA_LV_NAME, data_fs_type, DATA_MOUNT_POINT, data_fs_free, data_required_avail, expand_size)
+                expand_lv(
+                    DATA_DEVICE_NAME,
+                    DATA_LV_NAME,
+                    data_fs_type,
+                    DATA_MOUNT_POINT,
+                    data_fs_free,
+                    data_required_avail,
+                    expand_size,
+                )
 
                 # Now the volume group available size changed, query it again.
                 vg_size, vg_free = get_vg_size_and_free(VG_NAME)
             elif backup_fs_free < backup_required_avail:
-                expand_lv(BACKUP_DEVICE_NAME, BACKUP_LV_NAME, backup_fs_type, BACKUP_MOUNT_POINT, backup_fs_free, backup_required_avail, expand_size)
+                expand_lv(
+                    BACKUP_DEVICE_NAME,
+                    BACKUP_LV_NAME,
+                    backup_fs_type,
+                    BACKUP_MOUNT_POINT,
+                    backup_fs_free,
+                    backup_required_avail,
+                    expand_size,
+                )
 
                 # Now the volume group available size changed, query it again.
                 vg_size, vg_free = get_vg_size_and_free(VG_NAME)
