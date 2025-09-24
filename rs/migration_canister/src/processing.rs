@@ -4,23 +4,25 @@
 //! process several requests concurrently.
 
 use crate::{
+    Event, RequestState, ValidationError,
     canister_state::{
-        requests::{insert_request, list_by, remove_request},
         MethodGuard,
+        events::insert_event,
+        requests::{insert_request, list_by, remove_request},
     },
     external_interfaces::{
         management::{
-            canister_status, get_canister_info, rename_canister, set_exclusive_controller,
-            set_original_controllers, CanisterStatusType,
+            CanisterStatusType, assert_no_snapshots, canister_status, delete_canister,
+            get_canister_info, get_registry_version, rename_canister, set_exclusive_controller,
+            set_original_controllers,
         },
         registry::migrate_canister,
     },
-    Event, RequestState, ValidationError,
 };
+use candid::Principal;
 use futures::future::join_all;
 use ic_cdk::{
-    api::time,
-    management_canister::{subnet_info, SubnetInfoArgs},
+    api::{canister_self, time},
     println,
 };
 use std::{convert::Infallible, future::Future, iter::zip};
@@ -41,13 +43,29 @@ pub async fn process_all_by_predicate<F>(
     };
     let mut tasks = vec![];
     let requests = list_by(predicate);
+    if requests.is_empty() {
+        return;
+    }
+    println!(
+        "Entering `{}` with {} pending requests",
+        tag,
+        requests.len()
+    );
     for request in requests.iter() {
         tasks.push(processor(request.clone()));
     }
     let results = join_all(tasks).await;
+    let mut success_counter = 0;
     for (req, res) in zip(requests, results) {
+        if res.is_success() {
+            success_counter += 1;
+        }
         res.transition(req);
     }
+    println!(
+        "Exiting `{}` with {} successful transitions.",
+        tag, success_counter
+    );
 }
 
 /// Accepts an `Accepted` request, returns `ControllersChanged` on success.
@@ -129,7 +147,17 @@ pub async fn process_controllers_changed(
             reason: "Target is not stopped.".to_string(),
         });
     }
-    // TODO: target has no snapshots
+    match assert_no_snapshots(request.target).await {
+        ProcessingResult::Success(_) => {}
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
+        ProcessingResult::FatalFailure(_) => {
+            return ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                reason: "Target has snapshots.".to_string(),
+            });
+        }
+    }
+
     // TODO: target has enough cycles
 
     // Determine history length of source
@@ -148,7 +176,7 @@ pub async fn process_stopped(
     request: RequestState,
 ) -> ProcessingResult<
     RequestState,
-    RequestState, /* TODO: should be `Infallible` but we want `transition` to be available */
+    RequestState, /* Should be `Infallible` but we want `transition` to be available */
 > {
     let RequestState::StoppedAndReady {
         request,
@@ -164,6 +192,7 @@ pub async fn process_stopped(
         request.source,
         canister_version,
         request.target,
+        request.target_subnet,
         canister_history_total_num,
     )
     .await
@@ -202,37 +231,85 @@ pub async fn process_updated(
     let RequestState::UpdatedRoutingTable {
         request,
         stopped_since,
-        registry_version: _,
+        registry_version,
     } = request
     else {
         println!("Error: list_by UpdatedRoutingTable returned bad variant");
         return ProcessingResult::NoProgress;
     };
     // call both subnets
-    let Ok(_source_subnet_info) = subnet_info(&SubnetInfoArgs {
-        subnet_id: request.source_subnet,
-    })
-    .await
+    let ProcessingResult::Success(source_subnet_version) =
+        get_registry_version(request.source_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    let Ok(_target_subnet_info) = subnet_info(&SubnetInfoArgs {
-        subnet_id: request.target_subnet,
-    })
-    .await
+    let ProcessingResult::Success(target_subnet_version) =
+        get_registry_version(request.target_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    // TODO: this version of the CDK does not include registry_version in the response to subnet_info.
-    // if source_subnet_info.registry_version >= registry_version && target_subnet_info.registry_version >= registry_version {}
-    let now = time();
-    if now - stopped_since < 3 * 60 * 1_000_000_000 {
+    println!(
+        "Registry version: {} {} {}",
+        registry_version, source_subnet_version, target_subnet_version
+    );
+    if source_subnet_version < registry_version || target_subnet_version < registry_version {
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
         request,
         stopped_since,
     })
+}
+
+pub async fn process_routing_table(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::RoutingTableChangeAccepted {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by RoutingTableChangeAccepted returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    let ProcessingResult::Success(()) =
+        delete_canister(request.source, request.source_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    ProcessingResult::Success(RequestState::SourceDeleted {
+        request,
+        stopped_since,
+    })
+}
+
+pub async fn process_source_deleted(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::SourceDeleted {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by SourceDeleted returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    if time().saturating_sub(stopped_since) < 5 * 60 * 1_000_000_000 {
+        return ProcessingResult::NoProgress;
+    }
+    // restore controllers of target
+    let controllers = request
+        .source_original_controllers
+        .iter()
+        .filter(|x| **x != canister_self())
+        .cloned()
+        .collect::<Vec<Principal>>();
+    let ProcessingResult::Success(()) =
+        set_original_controllers(request.source, controllers, request.target_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    ProcessingResult::Success(RequestState::RestoredControllers { request })
 }
 
 // ----------------------------------------------------------------------------
@@ -242,13 +319,25 @@ pub async fn process_all_failed() {
     };
     let mut tasks = vec![];
     let requests = list_by(|r| matches!(r, RequestState::Failed { .. }));
+    if requests.is_empty() {
+        return;
+    }
+    println!("Entering `failed` with {} pending requests", requests.len());
     for request in requests.iter() {
         tasks.push(process_failed(request.clone()));
     }
     let results = join_all(tasks).await;
+    let mut success_counter = 0;
     for (req, res) in zip(requests, results) {
+        if res.is_success() {
+            success_counter += 1;
+        }
         res.transition(req);
     }
+    println!(
+        "Exiting `failed` with {} successful transitions.",
+        success_counter
+    );
 }
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
@@ -281,6 +370,20 @@ async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infall
     }
     // We successfully returned controllership.
     ProcessingResult::Success(Event::Failed { request, reason })
+}
+
+pub async fn process_all_succeeded() {
+    let Ok(_guard) = MethodGuard::new("succeeded") else {
+        return;
+    };
+    let requests = list_by(|r| matches!(r, RequestState::RestoredControllers { .. }));
+    for request in requests.into_iter() {
+        remove_request(&request);
+        if let RequestState::RestoredControllers { request } = request {
+            let event = Event::Succeeded { request };
+            insert_event(event);
+        }
+    }
 }
 
 #[must_use]
@@ -321,7 +424,7 @@ impl<S, F> ProcessingResult<S, F> {
 
 impl<S, F> ProcessingResult<S, F>
 where
-    F: std::fmt::Debug,
+    F: std::fmt::Display,
 {
     /// Turns any `FatalFailure` into a `NoProgress`.
     ///
@@ -331,7 +434,7 @@ where
             ProcessingResult::Success(x) => ProcessingResult::Success(x),
             ProcessingResult::NoProgress => ProcessingResult::NoProgress,
             ProcessingResult::FatalFailure(f) => {
-                println!("Unreachable: Ignore failure {:?} and retry.", f);
+                println!("Unreachable: Ignore failure {} and retry.", f);
                 ProcessingResult::NoProgress
             }
         }
@@ -374,10 +477,10 @@ impl ProcessingResult<RequestState, RequestState> {
 impl ProcessingResult<Event, Infallible> {
     fn transition(self, old_state: RequestState) {
         match self {
-            ProcessingResult::Success(_event) => {
+            ProcessingResult::Success(event) => {
                 // Cleanup successful.
                 remove_request(&old_state);
-                // TODO: insert_event(event);
+                insert_event(event);
             }
             ProcessingResult::NoProgress => {}
             ProcessingResult::FatalFailure(_) => {}

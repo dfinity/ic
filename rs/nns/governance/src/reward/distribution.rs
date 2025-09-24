@@ -95,8 +95,7 @@ impl<Memory: ic_stable_structures::Memory> RewardsDistributionStateMachine<Memor
     ) -> Result<(), String> {
         if self.distributions.contains_key(&day_after_genesis) {
             return Err(format!(
-                "{}Rewards distribution already exists for day_after_genesis: {}",
-                LOG_PREFIX, day_after_genesis
+                "{LOG_PREFIX}Rewards distribution already exists for day_after_genesis: {day_after_genesis}"
             ));
         }
         self.distributions.insert(
@@ -189,7 +188,7 @@ impl RewardsDistribution {
 }
 
 impl Storable for RewardsDistributionInProgress {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
     }
 
@@ -234,7 +233,7 @@ mod test {
     use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
     use crate::pb::v1::VotingPowerEconomics;
     use crate::test_utils::{
-        test_subaccount_for_neuron_id, MockEnvironment, MockRandomness, StubCMC, StubIcpLedger,
+        MockEnvironment, MockRandomness, StubCMC, StubIcpLedger, test_subaccount_for_neuron_id,
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;

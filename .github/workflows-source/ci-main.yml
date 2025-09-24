@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
+    image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -61,6 +61,10 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
+  generate-bazel-invocation-ids: &generate-bazel-invocation-ids
+    name: Generate Bazel invocation IDs
+    id: gen-uuids
+    uses: ./.github/actions/generate-invocation-ids
 
 jobs:
   config:
@@ -125,6 +129,20 @@ jobs:
           fi
 
 
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
+              skip_didc_checks="true"
+          else
+              skip_didc_checks="false"
+          fi
+
+
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
+              skip_buf_checks="true"
+          else
+              skip_buf_checks="false"
+          fi
+
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -144,20 +162,34 @@ jobs:
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
+          echo "skip_didc_checks: $skip_didc_checks"
+          echo "skip_didc_checks=$skip_didc_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_didc_checks\` | \`$skip_didc_checks\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_buf_checks: $skip_buf_checks"
+          echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
+
   bazel-test-all:
     name: Bazel Test All
     needs: [ config ]
     <<: *dind-large-setup
     timeout-minutes: 150
-    env:
-      # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-      OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-      CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
     steps:
       - <<: *checkout
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }, {
+              "name": "Test",
+              "output_id": "test_id",
+            }]
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
@@ -167,11 +199,8 @@ jobs:
           run: |
             set -euo pipefail
 
-            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
-            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
-            SKIP_LONG_TESTS='${{ needs.config.outputs.skip_long_tests }}'
-            BASE_SHA='${{ github.event.pull_request.base.sha }}'
-            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
 
             # Determine bazel_args based on event type or branch name
             bazel_args=(
@@ -186,7 +215,7 @@ jobs:
                 bazel_args+=( --keep_going )
             fi
 
-            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
               # make sure the version is stamped in
               bazel_args+=( --config=stamped )
             fi
@@ -196,36 +225,55 @@ jobs:
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
             targets_args=()
-            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
-            if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_didc_checks")
             fi
-            "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
-            num_targets=$(wc <"$target_pattern_file" -l)
-            # if bazel targets is empty we don't need to run any tests
-            if [ "$num_targets" -eq 0 ]; then
-              echo "No bazel targets"
-              exit 0
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_buf_checks")
             fi
-            echo "Testing $num_targets targets ..."
-            # the target list can get quite big, so we wrap it in details/summary
-            {
-              echo '<details><summary>Tested '"$num_targets"' targets</summary>';
-              echo
-              echo '```'
-              cat "$target_pattern_file"
-              echo '```'
-              echo
-              echo '</details>';
-            } >>"$GITHUB_STEP_SUMMARY"
-            bazel_args+=( --target_pattern_file="$target_pattern_file" )
+            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
+            fi
 
-            echo "Building as user: $(whoami)"
-            echo "Bazel version: $(bazel version)"
+            bazel_do() {
+              bazel_cmd="$1"
+              invocation_id="$2"
 
-            bazel test "${bazel_args[@]}"
+              "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
+                    "${targets_args[@]}" >"$target_pattern_file"
+
+              num_targets=$(wc <"$target_pattern_file" -l)
+              # if bazel targets is empty we don't need to run any tests
+              if [ "$num_targets" -eq 0 ]; then
+                echo "No bazel targets to $bazel_cmd"
+                return
+              fi
+
+              echo "${bazel_cmd}ing $num_targets targets ..."
+              # the target list can get quite big, so we wrap it in details/summary
+              {
+                echo '<details><summary>'"$bazel_cmd"' '"$num_targets"' targets</summary>';
+                echo
+                echo '```'
+                cat "$target_pattern_file"
+                echo '```'
+                echo
+                echo '</details>';
+              } >>"$GITHUB_STEP_SUMMARY"
+
+              echo "Running bazel command: $bazel_cmd"
+
+              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+            }
+
+            bazel_do build "${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
+            bazel_do test "${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
 
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
@@ -241,13 +289,23 @@ jobs:
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     needs: [ config ]
-    timeout-minutes: 130
+    timeout-minutes: 180
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }
+            ${{ needs.config.outputs.full_macos_build == 'true' && ', { "name": "Test", "output_id": "test_id" }' || '' }}
+            ]
+
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
@@ -256,6 +314,7 @@ jobs:
           run: |
             bazel build \
               --config=stamped \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" \
               --build_tag_filters=test_macos \
               //... --nobuild
 
@@ -266,6 +325,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=test_macos \
               //...
 
@@ -298,6 +358,11 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
+      # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
+      # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
+      - name: Install lld
+        run: |
+          sudo apt install lld
 
       - name: Build and Test
         run: |
@@ -309,18 +374,19 @@ jobs:
               //packages/pocket-ic:all \
               //rs/pocket_ic_server:test \
               //rs/pocket_ic_server:gateway \
-              //rs/pocket_ic_server:pocket-ic-server
+              //rs/pocket_ic_server:pocket-ic-server \
+              //publish/binaries:pocket-ic.gz
 
           mkdir -p build
           cp \
-            ./bazel-bin/rs/pocket_ic_server/pocket-ic-server \
-            ./build/pocket-ic-server-arm64-linux
+            ./bazel-bin/publish/binaries/pocket-ic.gz \
+            ./build/pocket-ic-server-arm64-linux.gz
 
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
         with:
-          name: pocket-ic-server-arm64-linux
-          path: ./build/pocket-ic-server-arm64-linux
+          name: pocket-ic-server-arm64-linux.gz
+          path: ./build/pocket-ic-server-arm64-linux.gz
 
   bazel-test-arm64-darwin:
     name: Bazel Test macOS Apple Silicon
@@ -363,14 +429,14 @@ jobs:
 
           mkdir -p build
           cp \
-            ./bazel-bin/rs/pocket_ic_server/pocket-ic-server \
-            ./build/pocket-ic-server-arm64-darwin
+            ./bazel-bin/publish/binaries/pocket-ic.gz \
+            ./build/pocket-ic-server-arm64-darwin.gz
 
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
         with:
-          name: pocket-ic-server-arm64-darwin
-          path: ./build/pocket-ic-server-arm64-darwin
+          name: pocket-ic-server-arm64-darwin.gz
+          path: ./build/pocket-ic-server-arm64-darwin.gz
 
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
@@ -383,14 +449,14 @@ jobs:
       - name: Download pocket-ic-server (arm64-linux)
         uses: actions/download-artifact@v4
         with:
-          name: pocket-ic-server-arm64-linux
+          name: pocket-ic-server-arm64-linux.gz
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-arm64-linux
 
       - name: Download pocket-ic-server (arm64-darwin)
         uses: actions/download-artifact@v4
         with:
-          name: pocket-ic-server-arm64-darwin
+          name: pocket-ic-server-arm64-darwin.gz
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-arm64-darwin
 
@@ -401,10 +467,10 @@ jobs:
 
             # Create a "bundle" that the uploader can digest
             mkdir -p "$bundledir/binaries/arm64-linux/"
-            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$bundledir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux.gz "$bundledir/binaries/arm64-linux/pocket-ic.gz"
 
             mkdir -p "$bundledir/binaries/arm64-darwin/"
-            cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin "$bundledir/binaries/arm64-darwin/pocket-ic-server-arm64-darwin"
+            cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/pocket-ic.gz"
 
             echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
@@ -464,6 +530,15 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }]
+
+
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -475,6 +550,8 @@ jobs:
             DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
             BASE_SHA='${{ github.event.pull_request.base.sha }}'
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+            export BAZEL_BUILD_INVOCATION_ID="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
 
             cd "$CI_PROJECT_DIR"
 
@@ -592,10 +669,18 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }]
+
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
-          run: bazel build --config=stamped --config=local //...
+          run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   cargo-clippy-linux:

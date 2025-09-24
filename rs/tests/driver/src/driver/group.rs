@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -50,7 +50,7 @@ use crate::driver::{
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
 };
-use slog::{debug, error, info, trace, warn, Logger};
+use slog::{Logger, debug, error, info, trace, warn};
 use std::{
     collections::{BTreeMap, HashMap},
     iter::once,
@@ -235,9 +235,7 @@ fn timed(
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "timed(plan={:?}, timeout={:?})",
-        &plan,
-        &timeout
+        "timed(plan={:?}, timeout={:?})", &plan, &timeout
     );
     let timeout_task = TimeoutTask::new(
         ctx.rh.clone(),
@@ -259,10 +257,7 @@ fn compose(
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "compose(root={:?}, ordering={:?}, children={:?})",
-        &root_task,
-        &ordering,
-        &children
+        "compose(root={:?}, ordering={:?}, children={:?})", &root_task, &ordering, &children
     );
     let root_task = match root_task {
         Some(task) => task,
@@ -377,14 +372,13 @@ impl SystemTestSubGroup {
             SystemTestSubGroup::Singleton { task_fn, task_id } => {
                 let logger = ctx.logger.clone();
                 let group_ctx = ctx.group_ctx.clone();
-                if let Some(ref filter) = group_ctx.filter_tests {
-                    if let TaskId::Test(ref name) = task_id {
-                        if !name.contains(filter) {
-                            return Plan::Leaf {
-                                task: Box::from(SkipTestTask::new(task_id.clone())),
-                            };
-                        }
-                    }
+                if let Some(ref filter) = group_ctx.filter_tests
+                    && let TaskId::Test(ref name) = task_id
+                    && !name.contains(filter)
+                {
+                    return Plan::Leaf {
+                        task: Box::from(SkipTestTask::new(task_id.clone())),
+                    };
                 }
                 let closure = {
                     let task_id = task_id.clone();
@@ -394,7 +388,9 @@ impl SystemTestSubGroup {
                         let env = get_or_create_env(group_ctx, task_id).unwrap();
                         // This function will only be called after setup finishes
                         if SetupResult::try_read_attribute(&env).is_err() {
-                            panic!("Failed to find SetupResult attribute after setup. Cancelling test function.");
+                            panic!(
+                                "Failed to find SetupResult attribute after setup. Cancelling test function."
+                            );
                         }
                         task_fn(env)
                     }
@@ -589,9 +585,7 @@ impl SystemTestGroup {
                             .max_blocking_threads(1)
                             .enable_all()
                             .build()
-                            .unwrap_or_else(|err| {
-                                panic!("Could not create tokio runtime: {}", err)
-                            });
+                            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
                         let root_search_dir = {
                             let root_env = group_ctx
                                 .clone()
@@ -620,7 +614,10 @@ impl SystemTestGroup {
                                             .any(|pattern| pattern.is_match(&key));
 
                                         if key_match {
-                                            debug!(logger, "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern");
+                                            debug!(
+                                                logger,
+                                                "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern"
+                                            );
                                             skipped_uvms.insert(key);
                                             continue;
                                         }
@@ -673,28 +670,30 @@ impl SystemTestGroup {
                                     setup_dir,
                                     logger.clone(),
                                 );
-                                if let Ok(group_setup) = GroupSetup::try_read_attribute(&env) {
-                                    let farm_url = env.get_farm_url().unwrap();
-                                    let farm = Farm::new(farm_url.clone(), env.logger());
-                                    let group_name = group_setup.infra_group_name;
-                                    if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
-                                        panic!(
-                                            "{}",
-                                            format!(
-                                                "Failed to keep group {} alive via endpoint {:?}: {:?}",
-                                                group_name, farm_url, e
+                                match GroupSetup::try_read_attribute(&env) {
+                                    Ok(group_setup) => {
+                                        let farm_url = env.get_farm_url().unwrap();
+                                        let farm = Farm::new(farm_url.clone(), env.logger());
+                                        let group_name = group_setup.infra_group_name;
+                                        if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                                            panic!(
+                                                "{}",
+                                                format!(
+                                                    "Failed to keep group {group_name} alive via endpoint {farm_url:?}: {e:?}"
+                                                )
                                             )
-                                        )
-                                    };
-                                    debug!(
-                                        logger,
-                                        "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
-                                        group_name,
-                                        GROUP_TTL,
-                                        farm_url
-                                    );
-                                } else {
-                                    info!(logger, "Farm group not created yet.");
+                                        };
+                                        debug!(
+                                            logger,
+                                            "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
+                                            group_name,
+                                            GROUP_TTL,
+                                            farm_url
+                                        );
+                                    }
+                                    _ => {
+                                        info!(logger, "Farm group not created yet.");
+                                    }
                                 }
                             } else {
                                 info!(logger, "Setup directory not created yet.");
@@ -982,8 +981,7 @@ impl SystemTestGroup {
                     "Test function names must be unique across an entire SystemTestGroup instance"
                         .to_string(),
                 counterexample: format!(
-                    "test function name {} is specified more than once",
-                    duplicate_task_id
+                    "test function name {duplicate_task_id} is specified more than once"
                 )
             })
         }
@@ -1104,20 +1102,20 @@ struct JournalRecord {
 
 impl std::fmt::Display for JournalRecord {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(ref container) = self.container_name {
-            if container == COLOCATE_CONTAINER_NAME {
-                return write!(f, "TEST_LOG: {}", self.message);
-            }
+        if let Some(ref container) = self.container_name
+            && container == COLOCATE_CONTAINER_NAME
+        {
+            return write!(f, "TEST_LOG: {}", self.message);
         }
         let mut display = format!("message: \"{}\"", self.message);
         if let Some(x) = &self.system_unit {
-            display += format!(", system_unit: \"{}\"", x).as_str()
+            display += format!(", system_unit: \"{x}\"").as_str()
         }
         if let Some(x) = &self.container_name {
-            display += format!(", container_name: \"{}\"", x).as_str()
+            display += format!(", container_name: \"{x}\"").as_str()
         }
         if let Some(x) = &self.comm {
-            display += format!(", comm: \"{}\"", x).as_str()
+            display += format!(", comm: \"{x}\"").as_str()
         }
         write!(f, "JournalRecord {{{display}}}")
     }
@@ -1183,13 +1181,13 @@ impl std::fmt::Display for Cursor {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Cursor::Start => write!(f, ""),
-            Cursor::Position(x) => write!(f, "{}", x),
+            Cursor::Position(x) => write!(f, "{x}"),
         }
     }
 }
 
 macro_rules! unwrap_or_return {
-    ( $val1:expr, $val2:expr ) => {
+    ( $val1:expr_2021, $val2:expr_2021 ) => {
         match $val2 {
             Ok(x) => x,
             Err(x) => return ($val1, Err(x.into())),

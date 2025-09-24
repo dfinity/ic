@@ -1,27 +1,27 @@
+use crate::sign::BTreeSet;
 use crate::sign::tests::{REG_V1, REG_V2};
+use crate::sign::threshold_sig::CspPublicCoefficients;
 use crate::sign::threshold_sig::ni_dkg::retain_active_keys::retain_only_active_keys;
 use crate::sign::threshold_sig::ni_dkg::utils::epoch;
-use crate::sign::threshold_sig::CspPublicCoefficients;
-use crate::sign::BTreeSet;
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError, KeyNotFoundError,
 };
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     PublicCoefficientsBytes, Transcript,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
+use ic_types::RegistryVersion;
+use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::error as cryptoerror;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
-use ic_types::crypto::AlgorithmId;
-use ic_types::RegistryVersion;
 use std::collections::BTreeMap;
 
 #[test]

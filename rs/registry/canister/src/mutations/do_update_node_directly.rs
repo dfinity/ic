@@ -14,7 +14,7 @@ use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
 use ic_registry_canister_api::UpdateNodeDirectlyPayload;
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::update;
-use ic_types::{crypto::KeyPurpose, PrincipalId};
+use ic_types::{PrincipalId, crypto::KeyPurpose};
 
 // Since nodes update their keys in turn, every potential update delay will carry over to all
 // subsequent slots. At some point we might end up in a situation where many nodes race for an update,
@@ -34,7 +34,7 @@ impl Registry {
         &mut self,
         payload: UpdateNodeDirectlyPayload,
     ) -> Result<(), String> {
-        println!("{}do_update_node_directly: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_update_node_directly: {payload:?}");
         // We pull out the caller retrieval and determining of the current time, so that we can unit test the underlying function
         // with any node id.
         let node_id = NodeId::from(dfn_core::api::caller());
@@ -52,8 +52,7 @@ impl Registry {
         self
             .get(node_key.as_bytes(), self.latest_version())
             .ok_or_else(|| format!(
-            "{}do_update_node_directly: Node Id {:} not found in the registry, aborting node update.",
-            LOG_PREFIX, node_id))?;
+            "{LOG_PREFIX}do_update_node_directly: Node Id {node_id:} not found in the registry, aborting node update."))?;
 
         // 2. Disallow updating if the node is not on an signing subnet or key rotation is disabled.
         let subnet_record = self.get_subnet_from_node_id_or_panic(node_id);
@@ -76,16 +75,13 @@ impl Registry {
         // 3. Disallow updating if the existing key is sufficiently fresh.
         let duration_since_unix_epoch = now
             .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|err| format!("couldn't get time since unix epoch: {}", err))?;
+            .map_err(|err| format!("couldn't get time since unix epoch: {err}"))?;
 
         let idkg_pk_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
         let previous_timestamp_set = match self.get(idkg_pk_key.as_bytes(), self.latest_version()) {
             Some(record) => {
                 let pk = PublicKey::decode(record.value.as_slice()).map_err(|e| {
-                    format!(
-                        "idkg_dealing_encryption_pk is not in the expected format: {:?}",
-                        e
-                    )
+                    format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
                 })?;
                 // If the timestamp exists, we reject if it's recent enough, otherwise we accept the
                 // update as this is a new node joining the signing subnet.
@@ -109,20 +105,20 @@ impl Registry {
 
         // 4. Disallow updating if the most recent key update on the subnet is not old enough.
         //    If the node has no timestamp, skip all checks.
-        if previous_timestamp_set {
-            if let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record) {
-                // The node is on a signing subnet, and has a timestamp
-                let key_rotation_period_on_subnet =
-                    (idkg_key_rotation_period_ms as f64 / subnet_size as f64 * DELAY_COMPENSATION)
-                        as u64;
-                let sum = last_key_update_timestamp
-                    .checked_add(key_rotation_period_on_subnet)
-                    .ok_or_else(|| {
-                        "Integer overflow when adding key rotation period on subnet.".to_string()
-                    })?;
-                if Duration::from_millis(sum) > duration_since_unix_epoch {
-                    return Err("the signing subnet had a key update recently".to_string());
-                }
+        if previous_timestamp_set
+            && let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record)
+        {
+            // The node is on a signing subnet, and has a timestamp
+            let key_rotation_period_on_subnet = (idkg_key_rotation_period_ms as f64
+                / subnet_size as f64
+                * DELAY_COMPENSATION) as u64;
+            let sum = last_key_update_timestamp
+                .checked_add(key_rotation_period_on_subnet)
+                .ok_or_else(|| {
+                    "Integer overflow when adding key rotation period on subnet.".to_string()
+                })?;
+            if Duration::from_millis(sum) > duration_since_unix_epoch {
+                return Err("the signing subnet had a key update recently".to_string());
             }
         }
 
@@ -135,15 +131,12 @@ impl Registry {
                     .map_or(&vec![], |v| v)[..],
             )
             .map_err(|e| {
-                format!(
-                    "idkg_dealing_encryption_pk is not in the expected format: {:?}",
-                    e
-                )
+                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
             })?;
             // Set the key timestamp to the current time.
             pk.timestamp = Some(duration_since_unix_epoch.as_millis() as u64);
             ValidIDkgDealingEncryptionPublicKey::try_from(pk)
-                .map_err(|e| format!("key validation failed: {}", e))?
+                .map_err(|e| format!("key validation failed: {e}"))?
         };
 
         // 6. Create mutation for new record
@@ -166,10 +159,7 @@ impl Registry {
             .map(|subnet_id| self.get_subnet_or_panic(subnet_id))
             .find(|subnet_record| subnet_record.membership.contains(&node_id.get().to_vec()))
             .unwrap_or_else(|| {
-                panic!(
-                    "{}subnet record for node {:} not found in the registry.",
-                    LOG_PREFIX, node_id
-                )
+                panic!("{LOG_PREFIX}subnet record for node {node_id:} not found in the registry.")
             })
     }
 
@@ -206,7 +196,7 @@ mod test {
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
     use ic_test_utilities_types::ids::subnet_test_id;
     use std::ops::Add;
 
@@ -392,7 +382,7 @@ mod test {
             },
         ) {
             Err(msg) if msg.contains("KeyValidationError") => {}
-            val => panic!("unexpected result: {:?}", val),
+            val => panic!("unexpected result: {val:?}"),
         };
 
         match registry.do_update_node(
@@ -403,7 +393,7 @@ mod test {
             },
         ) {
             Err(msg) if msg.contains("DecodeError") => {}
-            val => panic!("unexpected result: {:?}", val),
+            val => panic!("unexpected result: {val:?}"),
         };
     }
 

@@ -1,26 +1,25 @@
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InitialTime, InstanceConfig,
-    InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, NonmainnetFeatures,
-    RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
+    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles,
+    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
-pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_server, IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse,
-    StartServerParams, Time,
+    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams, Time,
+    copy_dir, start_server,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use ic_certification::{Certificate, Label, LookupResult};
 use ic_management_canister_types::{
@@ -35,10 +34,10 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::{StatusCode, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{read_dir, File};
+use std::fs::{File, read_dir};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -136,7 +135,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         mut state_dir: Option<PocketIcState>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
@@ -149,6 +148,7 @@ impl PocketIc {
             let (_, server_url) = start_server(StartServerParams {
                 server_binary,
                 reuse: true,
+                ttl: None,
             })
             .await;
             server_url
@@ -204,11 +204,11 @@ impl PocketIc {
             state_dir: state_dir
                 .as_ref()
                 .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
-            nonmainnet_features: Some(nonmainnet_features),
+            icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
-            allow_incomplete_state: None,
+            incomplete_state: None,
             initial_time,
         };
 
@@ -527,7 +527,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {}", message)
+                panic!("Failed to crate http gateway: {message}")
             }
         }
     }
@@ -711,10 +711,9 @@ impl PocketIc {
         match status {
             IngressStatusResult::NotAvailable => None,
             IngressStatusResult::Success(status) => Some(status),
-            IngressStatusResult::Forbidden(err) => panic!(
-                "Retrieving ingress status was forbidden: {}. This is a bug!",
-                err
-            ),
+            IngressStatusResult::Forbidden(err) => {
+                panic!("Retrieving ingress status was forbidden: {err}. This is a bug!")
+            }
         }
     }
 
@@ -747,7 +746,11 @@ impl PocketIc {
             Ok(None) => IngressStatusResult::NotAvailable,
             Ok(Some(result)) => IngressStatusResult::Success(result.into()),
             Err((status, message)) => {
-                assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
+                assert_eq!(
+                    status,
+                    StatusCode::FORBIDDEN,
+                    "HTTP error code {status} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!"
+                );
                 IngressStatusResult::Forbidden(message)
             }
         }
@@ -958,7 +961,7 @@ impl PocketIc {
             Ok(CanisterIdRecord {
                 canister_id: actual_canister_id,
             }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{:?}", e)),
+            Err(e) => Err(format!("{e:?}")),
         }
     }
 
@@ -1568,7 +1571,7 @@ impl PocketIc {
                         let result = reqwest_client
                             .get(
                                 self.server_url
-                                    .join(&format!("/read_graph/{}/{}", state_label, op_id))
+                                    .join(&format!("/read_graph/{state_label}/{op_id}"))
                                     .unwrap(),
                             )
                             .send()
@@ -1601,21 +1604,19 @@ impl PocketIc {
                                 }
                             }
                         }
-                        if let Some(max_request_time_ms) = self.max_request_time_ms {
-                            if start.elapsed().unwrap_or_default()
+                        if let Some(max_request_time_ms) = self.max_request_time_ms
+                            && start.elapsed().unwrap_or_default()
                                 > Duration::from_millis(max_request_time_ms)
-                            {
-                                panic!("request to PocketIC server timed out.");
-                            }
+                        {
+                            panic!("request to PocketIC server timed out.");
                         }
                     }
                 }
             }
-            if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
-                {
-                    panic!("request to PocketIC server timed out.");
-                }
+            if let Some(max_request_time_ms) = self.max_request_time_ms
+                && start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
+            {
+                panic!("request to PocketIC server timed out.");
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
@@ -1849,12 +1850,14 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
                 tracing_subscriber::EnvFilter::try_from_env(LOG_DIR_LEVELS_ENV_NAME)
                     .unwrap_or_else(|_| "trace".parse().unwrap());
 
-            let layers = vec![tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking_appender)
-                // disable color escape codes in files
-                .with_ansi(false)
-                .with_filter(log_dir_filter)
-                .boxed()];
+            let layers = vec![
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking_appender)
+                    // disable color escape codes in files
+                    .with_ansi(false)
+                    .with_filter(log_dir_filter)
+                    .boxed(),
+            ];
             let _ = tracing_subscriber::registry().with(layers).try_init();
             Some(guard)
         }

@@ -46,6 +46,7 @@ component_files = {
     Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
     Label("guestos/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
     Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
+    Label("guestos/share/nns_public_key.pem"): "/opt/ic/share/nns_public_key.pem",
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
@@ -86,7 +87,6 @@ component_files = {
     Label("monitoring/guestos/fstrim/fstrim_tool.service"): "/etc/systemd/system/fstrim_tool.service",
     Label("monitoring/guestos/fstrim/fstrim_tool.timer"): "/etc/systemd/system/fstrim_tool.timer",
     Label("monitoring/guestos/fstrim/setup-fstrim-metrics.service"): "/etc/systemd/system/setup-fstrim-metrics.service",
-    Label("monitoring/guestos/setup-node-gen-status.service"): "/etc/systemd/system/setup-node-gen-status.service",
     Label("monitoring/guestos/nft-exporter/nft-exporter.service"): "/etc/systemd/system/nft-exporter.service",
     Label("monitoring/guestos/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
     Label("monitoring/guestos/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
@@ -163,6 +163,9 @@ component_files = {
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-crypto.service"): "/etc/systemd/system/setup-shared-crypto.service",
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-data.sh"): "/opt/ic/bin/setup-shared-data.sh",
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-data.service"): "/etc/systemd/system/setup-shared-data.service",
+    Label("upgrade/shared-resources/setup-shared-resources/setup-shared-swap.sh"): "/opt/ic/bin/setup-shared-swap.sh",
+    Label("upgrade/shared-resources/setup-shared-resources/setup-shared-swap.service"): "/etc/systemd/system/setup-shared-swap.service",
+    Label("upgrade/shared-resources/setup-shared-resources/tmp.mount.d/override.conf"): "/etc/systemd/system/tmp.mount.d/override.conf",
     Label("upgrade/systemd-generators/guestos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",

@@ -1,49 +1,50 @@
 #![allow(clippy::disallowed_types)]
 use aide::{
     axum::{
-        routing::{get, post},
         ApiRouter, IntoApiResponse,
+        routing::{get, post},
     },
     openapi::{Info, OpenApi},
 };
 use async_trait::async_trait;
 use axum::{
+    Extension, Json,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
-    Extension, Json,
 };
 use axum_server::Handle;
 use clap::Parser;
 use ic_canister_sandbox_backend_lib::{
+    RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
     canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
-    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
-    RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    launcher::sandbox_launcher_main,
 };
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use libc::{getrlimit, rlimit, setrlimit, RLIMIT_NOFILE};
+use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
+use pocket_ic_server::BlobStore;
 use pocket_ic_server::state_api::routes::handler_read_graph;
 use pocket_ic_server::state_api::{
-    routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
+    routes::{AppState, RouterExt, http_gateway_routes, instances_routes, status},
     state::{ApiState, PocketIcApiStateBuilder},
 };
-use pocket_ic_server::BlobStore;
+use std::cmp::max;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, Error};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::runtime::Runtime;
-use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
-use tokio::time::{Duration, Instant};
+use tokio::sync::mpsc::channel;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -83,7 +84,7 @@ fn current_binary_path() -> Option<PathBuf> {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-extern "C" {
+unsafe extern "C" {
     fn install_backtrace_handler();
 }
 
@@ -124,8 +125,24 @@ fn main() {
     if !allowed_binary_names.contains(&current_binary_name) {
         // The fact that `pocket-ic-server-head-nns` is allowed is an internal implementation
         // detail that we do not advertize in the public-facing error message.
-        panic!("The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes).")
+        panic!(
+            "The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes)."
+        )
     }
+
+    // Set RUST_MIN_STACK if not yet set:
+    // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
+    unsafe { std::env::set_var("RUST_MIN_STACK", "8192000") };
+
+    // Set the maximum number of open files:
+    // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
+    if let Err(e) = increase_nofile_limit(16777216) {
+        error!(
+            "Failed to increase the maximum number of open files: {:?}",
+            e
+        );
+    }
+
     // Check if `pocket-ic-server` is running in the canister sandbox mode where it waits
     // for commands from the parent process. This check has to be performed
     // before the arguments are parsed because the parent process does not pass
@@ -170,23 +187,10 @@ async fn start(runtime: Arc<Runtime>) {
 
     let _guard = setup_tracing(args.log_levels);
 
-    // Set RUST_MIN_STACK if not yet set:
-    // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
-    std::env::set_var("RUST_MIN_STACK", "8192000");
-
-    // Set the maximum number of open files:
-    // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
-    if let Err(e) = increase_nofile_limit(16777216) {
-        error!(
-            "Failed to increase the maximum number of open files: {:?}",
-            e
-        );
-    }
-
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
     let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
-        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
+        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {addr}"));
     let real_port = listener.local_addr().unwrap().port();
 
     // The shared, mutable state of the PocketIC process.
@@ -195,7 +199,12 @@ async fn start(runtime: Arc<Runtime>) {
         .build();
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while.
-    let min_alive_until = Arc::new(RwLock::new(Instant::now()));
+    let min_alive_until = Arc::new(AtomicU64::new(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64,
+    ));
     let app_state = AppState {
         api_state,
         pending_requests: Arc::new(AtomicU64::new(0)),
@@ -262,12 +271,15 @@ async fn start(runtime: Arc<Runtime>) {
     // This is a safeguard against orphaning this child process.
     tokio::spawn(async move {
         loop {
-            let pending_requests = app_state.pending_requests.load(Ordering::Relaxed);
-            let guard = app_state.min_alive_until.read().await;
-            if pending_requests == 0 && guard.elapsed() > Duration::from_secs(args.ttl) {
+            let pending_requests = app_state.pending_requests.load(Ordering::SeqCst);
+            let min_alive_until =
+                UNIX_EPOCH + Duration::from_nanos(app_state.min_alive_until.load(Ordering::SeqCst));
+            let elapsed = SystemTime::now()
+                .duration_since(min_alive_until)
+                .unwrap_or_default();
+            if pending_requests == 0 && elapsed > Duration::from_secs(args.ttl) {
                 break;
             }
-            drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
@@ -300,7 +312,7 @@ async fn start(runtime: Arc<Runtime>) {
     while handle.listening().await.is_none() {}
 
     if let Some(mut port_file) = port_file {
-        let _ = port_file.write_all(format!("{}\n", real_port).as_bytes());
+        let _ = port_file.write_all(format!("{real_port}\n").as_bytes());
         let _ = port_file.flush();
     }
 
@@ -333,8 +345,8 @@ async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
 
 // Registers a global subscriber that collects tracing events and spans.
 fn setup_tracing(log_levels: Option<String>) -> Option<WorkerGuard> {
-    use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
+    use time::format_description::well_known::Rfc3339;
     use tracing_subscriber::prelude::*;
 
     let mut layers = Vec::new();
@@ -395,6 +407,42 @@ fn create_file<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File>
         .open(&file_path)
 }
 
+struct PendingGuard {
+    pending_requests: Arc<AtomicU64>,
+    min_alive_until: Arc<AtomicU64>,
+}
+
+impl PendingGuard {
+    fn new(pending_requests: Arc<AtomicU64>, min_alive_until: Arc<AtomicU64>) -> Self {
+        pending_requests.fetch_add(1, Ordering::SeqCst);
+        Self {
+            pending_requests,
+            min_alive_until,
+        }
+    }
+}
+
+impl Drop for PendingGuard {
+    fn drop(&mut self) {
+        // TTL should not decrease: If now is later
+        // than the current TTL (from previous requests), reset it.
+        // Otherwise, a previous request set a larger TTL and we don't
+        // touch it.
+        let alive_until = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        self.min_alive_until
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |min_alive_until| {
+                Some(max(min_alive_until, alive_until))
+            })
+            .unwrap();
+        // Only mark the pending request as completed (by subtracting the counter)
+        // *after* updating TTL!
+        self.pending_requests.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 async fn bump_last_request_timestamp(
     State(AppState {
         pending_requests,
@@ -404,22 +452,8 @@ async fn bump_last_request_timestamp(
     request: http::Request<axum::body::Body>,
     next: Next,
 ) -> impl IntoApiResponse {
-    pending_requests.fetch_add(1, Ordering::Relaxed);
-    let resp = next.run(request).await;
-    // TTL should not decrease: If now is later
-    // than the current TTL (from previous requests), reset it.
-    // Otherwise, a previous request set a larger TTL and we don't
-    // touch it.
-    let alive_until = Instant::now();
-    let mut min_alive_until = min_alive_until.write().await;
-    if *min_alive_until < alive_until {
-        *min_alive_until = alive_until;
-    }
-    drop(min_alive_until);
-    // Only mark the pending request as completed (by subtracting the counter)
-    // *after* updating TTL!
-    pending_requests.fetch_sub(1, Ordering::Relaxed);
-    resp
+    let _guard = PendingGuard::new(pending_requests.clone(), min_alive_until.clone());
+    next.run(request).await
 }
 
 async fn get_blob_store_entry(
@@ -499,24 +533,21 @@ pub async fn verify_signature(
                 Err(err) => (
                     StatusCode::NOT_ACCEPTABLE,
                     Json(Err(format!(
-                        "Canister signature verification failed: {:?}",
-                        err
+                        "Canister signature verification failed: {err:?}"
                     ))),
                 ),
             },
             Err(err) => (
                 StatusCode::BAD_REQUEST,
                 Json(Err(format!(
-                    "Failed to parse DER encoded root public key: {:?}",
-                    err
+                    "Failed to parse DER encoded root public key: {err:?}"
                 ))),
             ),
         },
         Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(Err(format!(
-                "Failed to parse DER encoded public key: {:?}",
-                err
+                "Failed to parse DER encoded public key: {err:?}"
             ))),
         ),
     }

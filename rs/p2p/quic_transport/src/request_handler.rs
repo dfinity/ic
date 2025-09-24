@@ -12,23 +12,23 @@
 //!
 use std::time::Duration;
 
-use axum::{body::Body, Router}; // TODO: try to remove the axum dep here
+use axum::{Router, body::Body}; // TODO: try to remove the axum dep here
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::RecvStream;
 use tower::ServiceExt;
 
 use crate::{
+    ConnId, MAX_MESSAGE_SIZE_BYTES, P2PError, ResetStreamOnDrop,
     connection_handle::ConnectionHandle,
     metrics::{
-        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
-        QuicTransportMetrics, ERROR_TYPE_APP, INFALIBBLE, STREAM_TYPE_BIDI,
+        ERROR_TYPE_APP, INFALIBBLE, QuicTransportMetrics, STREAM_TYPE_BIDI, observe_conn_error,
+        observe_read_to_end_error, observe_stopped_error, observe_write_error,
     },
-    ConnId, P2PError, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -61,7 +61,7 @@ pub async fn start_stream_acceptor(
             bi = conn_handle.conn().accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
-                        let send_stream = ResetStreamOnDrop::new(bi_tx);
+                        let send_stream = ResetStreamOnDrop::new(bi_tx, metrics.connection_handle_incoming_streams_total.clone());
                         inflight_requests.spawn(
                             metrics.request_task_monitor.instrument(
                                 handle_bi_stream(

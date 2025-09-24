@@ -13,6 +13,8 @@ component_files = {
     Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    Label("hostos/misc/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
+    Label("hostos/misc/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
     Label("hostos/misc/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
 
     # early-boot
@@ -58,6 +60,7 @@ component_files = {
     Label("monitoring/hostos/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",
     Label("monitoring/hostos/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
     Label("monitoring/hostos/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
+    Label("monitoring/hostos/setup-node-gen-status.service"): "/etc/systemd/system/setup-node-gen-status.service",
     Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",
     Label("monitoring/node_exporter/node_exporter.key"): "/etc/node_exporter/node_exporter.key",
     Label("monitoring/node_exporter/web.yml"): "/etc/node_exporter/web.yml",

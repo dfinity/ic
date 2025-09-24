@@ -6,8 +6,8 @@ use ic_config::{
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
+    ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
+    SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -23,11 +23,11 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
+    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
     batch::CanisterCyclesCostSchedule,
-    messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
+    messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext},
     methods::SystemMethod,
     time::UNIX_EPOCH,
-    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
 };
 use maplit::btreemap;
 use std::collections::BTreeMap;

@@ -19,16 +19,10 @@ impl Registry {
     /// This method is called directly by the node operator tied to the node.
     pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
         let caller_id = dfn_core::api::caller();
-        println!(
-            "{}do_remove_node_directly started: {:?} caller: {:?}",
-            LOG_PREFIX, payload, caller_id
-        );
+        println!("{LOG_PREFIX}do_remove_node_directly started: {payload:?} caller: {caller_id:?}");
         self.do_remove_node(payload.clone(), caller_id);
 
-        println!(
-            "{}do_remove_node_directly finished: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_remove_node_directly finished: {payload:?}");
     }
 
     #[cfg(test)]
@@ -64,12 +58,7 @@ impl Registry {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
         let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
-            .map_err(|e| {
-                format!(
-                    "{}do_remove_node_directly: Aborting node removal: {}",
-                    LOG_PREFIX, e
-                )
-            })
+            .map_err(|e| format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"))
             .unwrap();
 
         // 2. Compare the caller_id (node operator) with the node's node operator and, if that fails,
@@ -81,40 +70,27 @@ impl Registry {
         if caller_id != node_operator_id {
             let node_operator_caller = get_node_operator_record(self, caller_id)
                 .map_err(|e| {
-                    format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 })
                 .unwrap();
             let dc_caller = node_operator_caller.dc_id;
             let dc_orig_node_operator = get_node_operator_record(self, node_operator_id)
                 .map_err(|e| {
-                    format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 })
                 .unwrap()
                 .dc_id;
             assert_eq!(
                 dc_caller, dc_orig_node_operator,
-                "The DC {} of the caller {}, does not match the DC of the node {}.",
-                dc_caller, caller_id, dc_orig_node_operator
+                "The DC {dc_caller} of the caller {caller_id}, does not match the DC of the node {dc_orig_node_operator}."
             );
             let node_provider_caller = get_node_provider_id_for_operator_id(self, caller_id)
                 .map_err(|e| {
-                    format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 });
             let node_provider_of_the_node =
                 get_node_provider_id_for_operator_id(self, node_operator_id).map_err(|e| {
-                    format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 });
             assert_eq!(
                 node_provider_caller, node_provider_of_the_node,
@@ -152,7 +128,9 @@ impl Registry {
         // Disabled until the direct replacement of nodes that are active in a subnet is possible.
         let replacements_of_nodes_in_subnets_enabled = false;
         if let Some(subnet_id) = is_node_in_subnet {
-            if new_node_id.is_some() && replacements_of_nodes_in_subnets_enabled {
+            if let Some(new_node_id) = new_node_id
+                && replacements_of_nodes_in_subnets_enabled
+            {
                 // The node is in a subnet and is being replaced with a new node.
                 // Update the subnet record with the new node membership.
                 let mut subnet_record = self.get_subnet_or_panic(subnet_id);
@@ -164,7 +142,7 @@ impl Registry {
                     .collect();
 
                 subnet_membership.retain(|&id| id != payload.node_id);
-                subnet_membership.push(new_node_id.unwrap());
+                subnet_membership.push(new_node_id);
 
                 // Update the subnet record with the new membership (and double check that the new node is not in a subnet)
                 self.replace_subnet_record_membership(
@@ -177,7 +155,8 @@ impl Registry {
                     subnet_record.encode_to_vec(),
                 ));
             } else {
-                panic!("{}do_remove_node_directly: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
+                panic!(
+                    "{}do_remove_node_directly: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
                     LOG_PREFIX,
                     make_subnet_record_key(subnet_id)
                 );
@@ -187,10 +166,7 @@ impl Registry {
         // 5. Retrieve the NO record and increment its node allowance by 1
         let mut updated_node_operator_record = get_node_operator_record(self, node_operator_id)
             .map_err(|err| {
-                format!(
-                    "{}do_remove_node_directly: Aborting node removal: {}",
-                    LOG_PREFIX, err
-                )
+                format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {err}")
             })
             .unwrap();
         updated_node_operator_record.node_allowance += 1;
@@ -311,28 +287,34 @@ mod tests {
         registry.do_replace_node_with_another(payload, node_operator_id, new_node_id);
 
         // Verify the removed node's API boundary node record has been removed
-        assert!(registry
-            .get(
-                make_api_boundary_node_record_key(old_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_api_boundary_node_record_key(old_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify the replacement node has been turned into an API boundary node
-        assert!(registry
-            .get(
-                make_api_boundary_node_record_key(new_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_some());
+        assert!(
+            registry
+                .get(
+                    make_api_boundary_node_record_key(new_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_some()
+        );
 
         // Verify the old node is removed from the registry
-        assert!(registry
-            .get(
-                make_node_record_key(old_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(old_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify the new node is present in the registry
         assert!(registry.get_node(new_node_id).is_some());
@@ -543,10 +525,10 @@ mod tests {
         };
         let actual_operator_record_1 =
             get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
-        println!("node_operator_1_record: {:#?}", actual_operator_record_1);
+        println!("node_operator_1_record: {actual_operator_record_1:#?}");
         let actual_operator_record_2 =
             get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
-        println!("node_operator_2_record: {:#?}", actual_operator_record_2);
+        println!("node_operator_2_record: {actual_operator_record_2:#?}");
 
         assert_eq!(actual_operator_record_1, expected_operator_record_1);
         assert_eq!(actual_operator_record_2, expected_operator_record_2);
@@ -662,12 +644,14 @@ mod tests {
         assert_eq!(actual_membership, expected_membership);
 
         // Verify the old node is removed from the registry
-        assert!(registry
-            .get(
-                make_node_record_key(node_ids[0]).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(node_ids[0]).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify the new node is present in the registry
         assert!(registry.get_node(node_ids[1]).is_some());

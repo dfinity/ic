@@ -8,7 +8,7 @@
 //! (and ideally forwards) compatibility with one or more preceding
 //! protocol versions.
 
-use crate::{all_supported_versions, encoding::*, CertificationVersion};
+use crate::{CertificationVersion, all_supported_versions, encoding::*};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -21,15 +21,15 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
+    CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
     crypto::CryptoHash,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-        NO_DEADLINE,
+        CallbackId, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata,
+        RequestOrResponse, Response,
     },
     nominal_cycles::NominalCycles,
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndex},
-    CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
 };
 use serde_cbor::value::Value;
 use std::collections::{BTreeMap, VecDeque};
@@ -1276,8 +1276,7 @@ where
             let prev = map.insert(Value::Integer(999), Value::Integer(999));
             assert!(
                 prev.is_none(),
-                "Expected no field with index 999, found {:?}",
-                prev
+                "Expected no field with index 999, found {prev:?}"
             );
             map
         };
@@ -1288,7 +1287,7 @@ where
     fn encode_without_field(t: T, field: usize) -> Result<Vec<u8>, serde_cbor::Error> {
         let remove_field = |mut map: MapValue| {
             map.remove(&Value::Integer(field as i128))
-                .unwrap_or_else(|| panic!("No such field: {}", field));
+                .unwrap_or_else(|| panic!("No such field: {field}"));
             map
         };
 
@@ -1307,7 +1306,7 @@ fn encode_with_mutation<T: serde::Serialize>(
 
     let value = match value {
         Value::Map(map) => Value::Map(mutate(map)),
-        other => panic!("Expected struct to serialize to a map, was {:?}", other),
+        other => panic!("Expected struct to serialize to a map, was {other:?}"),
     };
 
     serde_cbor::ser::to_vec_packed(&value)

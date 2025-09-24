@@ -97,7 +97,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
                         dealer_index,
                         corruption_target,
                         &pk0,
-                        &rng.gen::<[u8; 32]>(),
+                        &rng.r#gen::<[u8; 32]>(),
                     )
                     .unwrap_err(),
                 CanisterThresholdError::InvalidProof
@@ -220,7 +220,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresho
             alg,
             Seed::from_rng(rng),
             threshold,
-            &[pk.clone()],
+            std::slice::from_ref(&pk),
             dealer_index,
             associated_data,
         )?;

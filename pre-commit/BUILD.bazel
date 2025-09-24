@@ -219,7 +219,6 @@ sh_binary(
 
 sh_test(
     name = "buf-breaking",
-    size = "small",
     srcs = ["check-incompatibilities.sh"],
     data = [
         "//:WORKSPACE.bazel",
@@ -234,13 +233,13 @@ sh_test(
     },
     env_inherit = [
         "MERGE_BASE_SHA",
-        "CI_OVERRIDE_BUF_BREAKING",
     ],
     tags = [
         # tags copied from other pre-commit tests, but unclear if they are required
         "external",
         "local",
         "smoke",
+        "buf",
     ],
     visibility = ["//visibility:public"],
 )

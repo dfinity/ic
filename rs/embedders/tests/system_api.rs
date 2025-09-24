@@ -2,8 +2,8 @@ use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
+    ApiType, DefaultOutOfInstructionsHandler, MAX_ENV_VAR_NAME_SIZE, SystemApiImpl,
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl, MAX_ENV_VAR_NAME_SIZE,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -15,7 +15,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
+    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState, testing::CanisterQueuesTesting,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
@@ -24,14 +24,14 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
+    CanisterTimer, CountBytes, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId, SubnetId, Time,
     batch::CanisterCyclesCostSchedule,
     messages::{
-        CallbackId, RejectContext, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+        CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
     },
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
-    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
@@ -1209,6 +1209,7 @@ fn certified_data_set() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1371,10 +1372,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         Ok(code) => {
             assert_eq!(code, RejectCode::SysTransient as i32);
         }
-        _ => panic!(
-            "expected to get an InsufficientCyclesInMessageMemoryGrow error, got {:?}",
-            res
-        ),
+        _ => panic!("expected to get an InsufficientCyclesInMessageMemoryGrow error, got {res:?}"),
     }
     let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
@@ -1383,6 +1381,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1534,6 +1533,7 @@ fn helper_test_on_low_wasm_memory(
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1800,6 +1800,7 @@ fn push_output_request_respects_memory_limits() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1916,6 +1917,7 @@ fn push_output_request_oversized_request_memory_limits() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1952,6 +1954,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -2200,6 +2203,7 @@ fn ic0_call_with_best_effort_response() {
                 &mut system_state,
                 &default_network_topology(),
                 own_subnet_id,
+                false,
                 &no_op_logger(),
             )
             .unwrap();
@@ -2481,15 +2485,19 @@ fn test_env_var_value_operations() {
     copy_to_heap(&mut heap, invalid_utf8);
     let result = api.ic0_env_var_value_size(0, invalid_utf8.len(), &heap);
     let error = result.unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("ic0.env_var_value_size: Variable name is not a valid UTF-8 string."));
+    assert!(
+        error
+            .to_string()
+            .contains("ic0.env_var_value_size: Variable name is not a valid UTF-8 string.")
+    );
 
     let result = api.ic0_env_var_value_copy(0, invalid_utf8.len(), 0, 0, 0, &mut heap);
     let error = result.unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("Variable name is not a valid UTF-8 string."));
+    assert!(
+        error
+            .to_string()
+            .contains("Variable name is not a valid UTF-8 string.")
+    );
 
     // Test name too long
     let long_name = "A".repeat(MAX_ENV_VAR_NAME_SIZE + 1);

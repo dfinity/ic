@@ -9,18 +9,25 @@ on the process that this file is part of, see
 
 ## Added
 
-* The neuron `Split` command accepts an optional `memo` field that can be used to derive the neuron
-  subaccount, rather than generating a random one.
+* Added a new proposal type `DeregisterKnownNeuron` without enabling it (behind feature flag).
+
+* Enable FulfillSubnetRentalRequest proposals. The main effect of such proposals
+  is the creation of an EXCLUSIVE subnet, meaning that only ONE principal is
+  allowed to create canisters in the subnet. For details, see
+  https://forum.dfinity.org/t/subnet-rental-canister-work-on-next-phase-has-started/52803
+  (This is also discussed under the heading "Swiss subnet".)
+
+* Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
+  proposal.
 
 ## Changed
 
-* The protobuf-encoded `Storable` implementations are changed to `Unbounded`.
-
 ## Deprecated
 
-## Removed
+* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
+  instead).
 
-* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
+## Removed
 
 ## Fixed
 

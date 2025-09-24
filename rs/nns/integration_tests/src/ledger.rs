@@ -10,24 +10,24 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID};
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::{
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
+    ManageNeuron, ManageNeuronResponse, Neuron,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance_error::ErrorType,
     manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
         ClaimOrRefresh, Command, Disburse, NeuronIdOrSubaccount,
+        claim_or_refresh::{By, MemoAndController},
     },
     manage_neuron_response::Command as CommandResponse,
-    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
-    ManageNeuron, ManageNeuronResponse, Neuron,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     state_test_helpers::nns_start_dissolving,
 };
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
-    LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE,
+    LedgerCanisterInitPayload, Memo, SendArgs, Tokens, tokens_from_proto,
 };
 use std::{collections::HashMap, time::Duration};
 
@@ -125,7 +125,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 .expect("Error calling the manage_neuron api.");
 
             let neuron_id = match manage_neuron_response.command.unwrap() {
-                CommandResponse::Error(error) => panic!("Unexpected error: {}", error),
+                CommandResponse::Error(error) => panic!("Unexpected error: {error}"),
                 CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
                     claim_or_refresh_response.refreshed_neuron_id.unwrap()
                 }
@@ -337,21 +337,18 @@ fn test_stake_and_disburse_neuron_with_account() {
             assert_eq!(
                 full_neuron.id.as_ref().unwrap(),
                 &neuron_id,
-                "Neuron: {:?}",
-                full_neuron
+                "Neuron: {full_neuron:?}"
             );
             assert_eq!(
                 full_neuron.cached_neuron_stake_e8s,
                 stake.get_e8s(),
-                "Neuron: {:?}",
-                full_neuron
+                "Neuron: {full_neuron:?}"
             );
-            assert_eq!(full_neuron.neuron_fees_e8s, 0, "Neuron: {:?}", full_neuron);
+            assert_eq!(full_neuron.neuron_fees_e8s, 0, "Neuron: {full_neuron:?}");
             assert_eq!(
                 full_neuron.controller.as_ref().unwrap(),
                 &user.get_principal_id(),
-                "Neuron: {:?}",
-                full_neuron
+                "Neuron: {full_neuron:?}"
             );
             nns_start_dissolving(state_machine, user.get_principal_id(), neuron_id)
                 .expect("Failed to start dissolving neuron");

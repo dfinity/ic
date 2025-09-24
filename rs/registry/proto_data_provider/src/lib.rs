@@ -4,8 +4,8 @@ use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegis
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_registry_transport::upsert;
-use ic_sys::fs::{write_atomically, Clobber};
-use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
+use ic_sys::fs::{Clobber, write_atomically};
+use ic_types::{RegistryVersion, registry::RegistryDataProviderError};
 use std::collections::HashMap;
 use std::{
     io::Write,
@@ -95,7 +95,7 @@ impl ProtoRegistryDataProvider {
                     return Err(ProtoRegistryDataProviderError::KeyAlreadyExists {
                         key: key.to_string(),
                         version,
-                    })
+                    });
                 }
                 Err(idx) => {
                     let record = ProtoRegistryRecord {

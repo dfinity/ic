@@ -100,23 +100,25 @@ where
     /// Removes and returns the value corresponding to the key from the cache or
     /// `None` if it does not exist.
     pub fn pop(&mut self, key: &K) -> Option<V> {
-        if let Some((key, value)) = self.cache.pop_entry(key) {
-            self.pop_inner(&key, &value);
-            self.check_invariants();
-            Some(value)
-        } else {
-            None
+        match self.cache.pop_entry(key) {
+            Some((key, value)) => {
+                self.pop_inner(&key, &value);
+                self.check_invariants();
+                Some(value)
+            }
+            _ => None,
         }
     }
 
     /// Remove the least recently used entry from the cache.
     pub fn pop_lru(&mut self) -> Option<(K, V)> {
-        if let Some((key, value)) = self.cache.pop_lru() {
-            self.pop_inner(&key, &value);
-            self.check_invariants();
-            Some((key, value))
-        } else {
-            None
+        match self.cache.pop_lru() {
+            Some((key, value)) => {
+                self.pop_inner(&key, &value);
+                self.check_invariants();
+                Some((key, value))
+            }
+            _ => None,
         }
     }
 

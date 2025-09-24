@@ -8,12 +8,12 @@ use crate::{
 };
 use candid::Encode;
 use canister_test::{
-    local_test_with_config_e, local_test_with_config_with_mutations_on_system_subnet, Canister,
-    Project, Runtime, Wasm,
+    Canister, Project, Runtime, Wasm, local_test_with_config_e,
+    local_test_with_config_with_mutations_on_system_subnet,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use dfn_candid::{candid_one, CandidOne};
-use futures::{executor::block_on, future::join_all, FutureExt};
+use dfn_candid::{CandidOne, candid_one};
+use futures::{FutureExt, executor::block_on, future::join_all};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_management_canister_types_private::CanisterInstallMode;
@@ -23,20 +23,20 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
-use ic_nns_governance_api::{test_api::TimeWarp, Governance, NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{Governance, NnsFunction, ProposalStatus, test_api::TimeWarp};
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
 use ic_types::Cycles;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
 use lifeline::LIFELINE_CANISTER_WASM;
-use on_wire::{bytes, IntoWire};
+use on_wire::{IntoWire, bytes};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use std::{future::Future, path::Path, thread, time::SystemTime};
@@ -81,7 +81,7 @@ impl NnsCanisters<'_> {
         .into_iter()
         .collect();
 
-        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
+        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {e}"));
         eprintln!("NNS canisters created after {:.1} s", since_start_secs());
 
         // TODO (after deploying SNS-WASMs to mainnet) update ALL_NNS_CANISTER_IDS to the resulting
@@ -627,7 +627,7 @@ pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerCa
 pub async fn set_up_ledger_canister(
     runtime: &Runtime,
     args: LedgerCanisterInitPayload,
-) -> Canister {
+) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister
@@ -879,10 +879,7 @@ pub async fn forward_call_via_universal_canister(
     {
         UNIVERSAL_CANISTER_YEAH_RESPONSE => true,
         UNIVERSAL_CANISTER_NOPE_RESPONSE => false,
-        other => panic!(
-            "Unexpected response from the universal canister: {:?}",
-            other
-        ),
+        other => panic!("Unexpected response from the universal canister: {other:?}"),
     }
 }
 

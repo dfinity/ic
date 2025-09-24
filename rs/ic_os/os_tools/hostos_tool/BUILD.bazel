@@ -10,6 +10,8 @@ DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:itertools",
+    "@crate_index//:regex",
 ]
 
 DEV_DEPENDENCIES = []

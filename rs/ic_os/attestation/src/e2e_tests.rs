@@ -2,7 +2,7 @@ use crate::attestation_package::generate_attestation_package;
 use crate::custom_data::EncodeSevCustomData;
 use crate::verification::verify_attestation_package;
 use crate::{
-    verification, SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail,
+    SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail, verification,
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::MockSevGuestFirmware;
@@ -121,10 +121,10 @@ fn test_invalid_signature() {
     let mut attestation_package = generate_valid_attestation_package();
 
     // Corrupt the attestation report to invalidate the signature.
-    if let Some(report) = &mut attestation_package.attestation_report {
-        if !report.is_empty() {
-            report[0] ^= 0xFF; // Flip some bits
-        }
+    if let Some(report) = &mut attestation_package.attestation_report
+        && !report.is_empty()
+    {
+        report[0] ^= 0xFF; // Flip some bits
     }
 
     let error = verify_attestation_package(

@@ -2,8 +2,8 @@ use std::{
     net::IpAddr,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU32, Ordering},
         Arc,
+        atomic::{AtomicU32, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -21,8 +21,8 @@ use axum::{
 use candid::Principal;
 use ic_agent::Agent;
 use ic_bn_lib::prometheus::{
-    register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
-    IntGauge, Registry,
+    IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
+    register_int_gauge_with_registry,
 };
 use ic_bn_lib::{http::ConnInfo, tasks::Run};
 use ic_types::CanisterId;
@@ -31,7 +31,7 @@ use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as Requ
 use ratelimit::Ratelimiter;
 use strum::{Display, IntoStaticStr};
 #[allow(clippy::disallowed_types)]
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{Mutex, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
@@ -40,7 +40,7 @@ use super::{
         CanisterConfigFetcherQuery, CanisterConfigFetcherUpdate, CanisterFetcher, FetchesConfig,
         FetchesRules, FileFetcher,
     },
-    sharded::{create_ratelimiter, ShardedRatelimiter},
+    sharded::{ShardedRatelimiter, create_ratelimiter},
 };
 
 use crate::{
@@ -103,24 +103,23 @@ impl Eq for Bucket {}
 
 impl Bucket {
     fn evaluate(&self, ctx: &Context) -> Option<Decision> {
-        if let Some(v) = self.rule.subnet_id {
-            if ctx.subnet_id != v {
-                return None;
-            }
+        if let Some(v) = self.rule.subnet_id
+            && ctx.subnet_id != v
+        {
+            return None;
         }
 
-        if let Some(v) = self.rule.canister_id {
-            if let Some(x) = ctx.canister_id {
-                if x != v {
-                    return None;
-                }
-            }
+        if let Some(v) = self.rule.canister_id
+            && let Some(x) = ctx.canister_id
+            && x != v
+        {
+            return None;
         }
 
-        if let Some(v) = &self.rule.request_types {
-            if !v.contains(&convert_request_type(ctx.request_type)) {
-                return None;
-            }
+        if let Some(v) = &self.rule.request_types
+            && !v.contains(&convert_request_type(ctx.request_type))
+        {
+            return None;
         }
 
         if let Some(rgx) = &self.rule.methods_regex {
@@ -133,10 +132,10 @@ impl Bucket {
             }
         }
 
-        if let Some(v) = self.rule.ip {
-            if !v.contains(&ctx.ip) {
-                return None;
-            }
+        if let Some(v) = self.rule.ip
+            && !v.contains(&ctx.ip)
+        {
+            return None;
         }
 
         if self.rule.limit == Action::Pass {
@@ -320,10 +319,10 @@ impl GenericLimiter {
 
                 // Check if the same rule exists in the same position.
                 // If yes, then copy over the old limiter to avoid resetting it.
-                if let Some(v) = old.get(idx) {
-                    if v.rule == rule {
-                        return v.clone();
-                    }
+                if let Some(v) = old.get(idx)
+                    && v.rule == rule
+                {
+                    return v.clone();
                 }
 
                 let limiter = if let Action::Limit(limit, duration) = &rule.limit {
@@ -511,7 +510,7 @@ mod test {
     use indoc::indoc;
     use std::str::FromStr;
 
-    use crate::snapshot::{generate_stub_snapshot, ApiBoundaryNode};
+    use crate::snapshot::{ApiBoundaryNode, generate_stub_snapshot};
 
     struct BrokenFetcher;
 

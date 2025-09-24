@@ -14,10 +14,9 @@ use slog::{error, trace};
 use std::net::SocketAddr;
 use std::string::String;
 use std::time::Duration;
-use thiserror::Error;
 use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
-    timeout::error::Elapsed, BoxError, ServiceBuilder,
+    BoxError, ServiceBuilder, limit::concurrency::GlobalConcurrencyLimitLayer,
+    load_shed::error::Overloaded, timeout::error::Elapsed,
 };
 
 const LOG_INTERVAL_SECS: u64 = 30;
@@ -37,32 +36,6 @@ pub struct MetricsHttpEndpoint {
     metrics_registry: MetricsRegistry,
     log: slog::Logger,
     metrics: MetricsEndpointMetrics,
-}
-
-#[derive(Debug, Error)]
-struct HttpError {
-    response: Response<Body>,
-}
-
-impl std::fmt::Display for HttpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.response)
-    }
-}
-impl From<BoxError> for HttpError {
-    fn from(err: BoxError) -> Self {
-        let builder = if err.is::<Overloaded>() {
-            Response::builder().status(StatusCode::TOO_MANY_REQUESTS)
-        } else if err.is::<Elapsed>() {
-            Response::builder().status(StatusCode::GATEWAY_TIMEOUT)
-        } else {
-            Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR)
-        };
-        let response = builder
-            .body(Body::from(""))
-            .expect("Building response can't fail.");
-        Self { response }
-    }
 }
 
 #[derive(Clone)]
@@ -249,7 +222,7 @@ async fn map_box_error_to_response(err: BoxError) -> (StatusCode, String) {
     } else {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Unexpected error: {}", err),
+            format!("Unexpected error: {err}"),
         )
     }
 }

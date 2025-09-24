@@ -122,23 +122,26 @@ impl KernelCommandLine {
     /// command line.
     /// If the argument exists without a value, returns Some("").
     /// If the argument doesn't exist, returns None.
-    pub fn get_argument(&self, argument_name: &str) -> Option<&str> {
+    pub fn get_argument(&self, argument_name: &str) -> Option<String> {
         static REGEX: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r#"^(?<key>.+)=('(?<value1>.+)'|"(?<value2>.+)"|(?<value3>.+))$"#).unwrap()
         });
 
         self.tokenized_arguments.iter().find_map(|arg| {
             if *arg == argument_name {
-                Some("")
+                Some(String::new())
             } else {
                 REGEX.captures(arg).and_then(|caps| {
-                    (caps.name("key").unwrap().as_str() == argument_name).then_some(
-                        caps.name("value1")
-                            .or(caps.name("value2"))
-                            .or(caps.name("value3"))
-                            .unwrap()
-                            .as_str(),
-                    )
+                    let key = caps.name("key")?;
+                    if key.as_str() == argument_name {
+                        let value = caps
+                            .name("value1")
+                            .or_else(|| caps.name("value2"))
+                            .or_else(|| caps.name("value3"))?;
+                        Some(value.as_str().replace(['\n', '\r'], ""))
+                    } else {
+                        None
+                    }
                 })
             }
         })
@@ -206,50 +209,43 @@ mod tests {
         let table = [
             (
                 "remove argument without value at the beginning of command line succeeds",
-                "rd.debug rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash rd.debug rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug"
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the beginning of command line succeeds",
-                "rd.debug=0 rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug=0 rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug=0 rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash rd.debug=0 rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=1"
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=1",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with quoted value at the beginning of command line succeeds",
-                "rd.debug=\"i am quoted value\" rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug=\"i am quoted value\" rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
@@ -261,20 +257,21 @@ mod tests {
             ),
             (
                 "remove argument with quoted value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "argument with substring does not get removed at end of string",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debu",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\""
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debu",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
             ),
             (
                 "argument removal chomps extra spaces after removal",
-                "rd.initrd=/bin/bash  rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash  rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debug",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
         ];
         for (name, input, argument_to_remove, expected) in table.iter() {
@@ -298,15 +295,15 @@ actual:   {result:?}",
         let table = [
             (
                 "misquoted argument at the beginning of command line succeeds",
-                "rd.debug=\"misquoted rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
+                "rd.debug=\"misquoted rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "misquoted argument in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug=\"misquoted rd.escaped=\"this is a multiline argument\""
+                "rd.initrd=/bin/bash rd.debug=\"misquoted rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "misquoted argument at the end of command line succeeds",
-                "rd.initrd=/bin/bash misquoted=\"true it's misquoted rd.escaped=\"this is a multiline argument\" rd.debug"
+                "rd.initrd=/bin/bash misquoted=\"true it's misquoted rd.escaped=\"this is a multiline argument\" rd.debug",
             ),
         ];
         for (name, input) in table.iter() {
@@ -392,25 +389,25 @@ Actual:
                 "get existing argument without value",
                 "rd.debug rd.initrd=/bin/bash",
                 "rd.debug",
-                Some(""),
+                Some(String::new()),
             ),
             (
                 "get existing argument with value",
                 "rd.debug rd.initrd=/bin/bash",
                 "rd.initrd",
-                Some("/bin/bash"),
+                Some("/bin/bash".to_string()),
             ),
             (
                 "get existing argument with value",
                 "repeating=ab repeating=cd repeating=ef",
                 "repeating",
-                Some("ab"),
+                Some("ab".to_string()),
             ),
             (
                 "get existing argument with quoted value",
                 "rd.debug rd.initrd=\"/bin/bash with spaces\"",
                 "rd.initrd",
-                Some("/bin/bash with spaces"),
+                Some("/bin/bash with spaces".to_string()),
             ),
             (
                 "get non-existent argument",
@@ -422,13 +419,13 @@ Actual:
                 "get argument that is substring of another",
                 "rd.debug rd.debuglevel=1",
                 "rd.debug",
-                Some(""),
+                Some(String::new()),
             ),
             (
                 "get argument including ' character",
                 "rd.debug rd.debuglevel=\"'quoted'\"",
                 "rd.debuglevel",
-                Some("'quoted'"),
+                Some("'quoted'".to_string()),
             ),
         ];
 

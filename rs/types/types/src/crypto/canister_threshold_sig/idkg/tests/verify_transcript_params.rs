@@ -12,6 +12,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use maplit::{btreemap, btreeset};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 type Itt = IDkgTranscriptType;
 type Imto = IDkgMaskedTranscriptOrigin;
@@ -169,8 +170,9 @@ fn should_fail_on_insufficient_num_of_dealings() {
     let rng = &mut reproducible_rng();
     let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3), node_id(4)});
-    transcript.verified_dealings =
-        btreemap! {0 => batch_signed_dealing(node_id(42), params.receivers.get().clone())};
+    transcript.verified_dealings = Arc::new(
+        btreemap! {0 => batch_signed_dealing(node_id(42), params.receivers.get().clone())},
+    );
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -182,8 +184,9 @@ fn should_fail_on_dealing_from_non_dealer() {
     let rng = &mut reproducible_rng();
     let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3)});
-    transcript.verified_dealings =
-        btreemap! {0 => batch_signed_dealing(node_id(999), params.receivers.get().clone())};
+    transcript.verified_dealings = Arc::new(
+        btreemap! {0 => batch_signed_dealing(node_id(999), params.receivers.get().clone())},
+    );
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -196,7 +199,7 @@ fn should_fail_on_mismatching_dealer_indexes() {
     let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(3), node_id(1), node_id(2)});
     transcript.verified_dealings =
-        btreemap! {0 => batch_signed_dealing(node_id(2), params.receivers.get().clone())};
+        Arc::new(btreemap! {0 => batch_signed_dealing(node_id(2), params.receivers.get().clone())});
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -213,8 +216,9 @@ fn should_fail_on_ineligible_signer() {
     let non_receiver = node_id(99999);
     assert!(!params.receivers.contains(non_receiver));
     let first_dealer_index = *transcript.verified_dealings.keys().next().unwrap();
-    transcript
-        .verified_dealings
+    let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+        .expect("No other refs to verified_dealings");
+    verified_dealings
         .get_mut(&first_dealer_index)
         .unwrap()
         .signature
@@ -225,7 +229,7 @@ fn should_fail_on_ineligible_signer() {
 
     assert_matches!(result, Err(e)
             if e.contains(&format!("ineligible signers (non-receivers) for \
-                           dealer index {}: {{{}}}", first_dealer_index, non_receiver))
+                           dealer index {first_dealer_index}: {{{non_receiver}}}"))
     );
 }
 
@@ -239,11 +243,11 @@ fn valid_transcript_and_params<R: Rng + CryptoRng>(
     let algorithm_id = AlgorithmId::ThresholdEcdsaSecp256k1;
 
     let transcript = IDkgTranscript {
-        verified_dealings: btreemap! {
+        verified_dealings: Arc::new(btreemap! {
             0 => batch_signed_dealing(node_id(42), receivers.get().clone()),
             1 => batch_signed_dealing(node_id(43), receivers.get().clone()),
             2 => batch_signed_dealing(node_id(44), receivers.get().clone()),
-        },
+        }),
         transcript_id,
         receivers: receivers.clone(),
         registry_version,
@@ -289,11 +293,11 @@ fn batch_signed_dealing(dealer_id: NodeId, signers: BTreeSet<NodeId>) -> BatchSi
 
 fn dummy_transcript() -> IDkgTranscript {
     IDkgTranscript {
-        verified_dealings: btreemap! {
+        verified_dealings: Arc::new(btreemap! {
             0 => batch_signed_dealing(node_id(42), BTreeSet::new()),
             1 => batch_signed_dealing(node_id(43), BTreeSet::new()),
             3 => batch_signed_dealing(node_id(45), BTreeSet::new())
-        },
+        }),
         transcript_id: dummy_transcript_id(),
         receivers: dummy_receivers(),
         registry_version: dummy_registry_version(),
