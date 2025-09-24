@@ -713,6 +713,7 @@ pub(crate) mod test {
                 }
             }
             assert_eq!(cache.metrics.in_memory_elements.get(), 7);
+            assert_eq!(cache.metrics.on_disk_elements.get(), 1);
             // Add more headers
             let intermediate = cache.get_active_chain_tip();
             let intermediate_hash = intermediate.header.block_hash();
@@ -726,6 +727,7 @@ pub(crate) mod test {
                 }
             }
             assert_eq!(cache.metrics.in_memory_elements.get(), 13);
+            assert_eq!(cache.metrics.on_disk_elements.get(), 1);
             let tip = cache.get_active_chain_tip();
             assert!(next_headers.contains_key(&tip.header.block_hash()));
             assert_eq!(
