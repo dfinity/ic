@@ -74,7 +74,6 @@ pub enum ValidationError {
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 enum MigrationStatus {
-    Unknown,
     InProgress { status: String },
     Failed { reason: String },
     Succeeded,
@@ -178,5 +177,10 @@ async fn test_async(env: TestEnv) {
     let decoded_status = Decode!(&status, Vec<MigrationStatus>)
         .expect("Failed to decode response from migration_status.");
 
-    assert_eq!(decoded_status, vec![MigrationStatus::Unknown]);
+    assert_eq!(
+        decoded_status,
+        vec![MigrationStatus::InProgress {
+            status: "Accepted".into()
+        }]
+    );
 }
