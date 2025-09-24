@@ -78,9 +78,11 @@ fn e2e(criterion: &mut Criterion) {
         .make(|uds_path| {
             let mut config = Config::default_with(network.into());
             config.incoming_source = IncomingSource::Path(uds_path.to_path_buf());
-            rt.spawn(async {
-                start_server(no_op_logger(), MetricsRegistry::default(), config).await;
-            });
+            rt.spawn(start_server(
+                no_op_logger(),
+                MetricsRegistry::default(),
+                config,
+            ));
             Ok(rt.block_on(async { start_client(uds_path).await }))
         })
         .unwrap()
