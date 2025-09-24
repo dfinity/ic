@@ -587,7 +587,6 @@ class ReproducibilityVerifier:
 
     def start_cdn_downloads_for_os(self, os_type: str, storage: Dirs) -> list[Download]:
         """Queues downloading of the OS artifact and sums file from the selected CDNs."""
-        # Map os_type to the actual path component, artifact name, and subdirectory
         if os_type == "setup-os":
             path_component = "setup-os"
             artifact = "disk-img"
@@ -618,7 +617,6 @@ class ReproducibilityVerifier:
                 ]
             )
         return downloads
-
 
     def start_proposal_download_if_needed(self, storage: Dirs) -> list[Download]:
         """If a proposal is set, download the package from the proposal-specified URLs."""
