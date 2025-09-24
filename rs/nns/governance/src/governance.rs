@@ -82,13 +82,16 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
-use ic_nervous_system_canisters::cmc::CMC;
-use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_canisters::{cmc::CMC, ledger::IcpLedger};
 use ic_nervous_system_common::{
     NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, ledger,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
+use ic_nervous_system_rate_limits::{
+    InMemoryCapacityStorage, InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError,
+    Reservation,
+};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
@@ -118,7 +121,6 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::sync::Arc;
 use std::{
     borrow::Cow,
     cmp::{Ordering, max},
@@ -128,6 +130,8 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 
 pub mod disburse_maturity;
@@ -147,9 +151,10 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
-use crate::pb::v1::AddOrRemoveNodeProvider;
-use crate::reward::distribution::RewardsDistribution;
-use crate::storage::with_voting_state_machines_mut;
+use crate::{
+    pb::v1::AddOrRemoveNodeProvider, reward::distribution::RewardsDistribution,
+    storage::with_voting_state_machines_mut,
+};
 #[cfg(feature = "tla")]
 pub use tla::{
     CLAIM_NEURON_DESC, DISBURSE_MATURITY_DESC, DISBURSE_NEURON_DESC, DISBURSE_TO_NEURON_DESC,
@@ -1309,6 +1314,10 @@ pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
 
+    fn now_system_time(&self) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(self.now())
+    }
+
     #[cfg(any(test, feature = "test"))]
     fn set_time_warp(&self, _new_time_warp: TimeWarp) {
         panic!("Not implemented.");
@@ -1407,8 +1416,7 @@ pub struct Governance {
     /// Scope guard for minting node provider rewards.
     minting_node_provider_rewards: bool,
 
-    /// Current neurons available to create
-    neuron_rate_limits: NeuronRateLimits,
+    rate_limiter: InMemoryRateLimiter<String>,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1543,6 +1551,18 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     }
 }
 
+fn new_rate_limiter() -> InMemoryRateLimiter<String> {
+    RateLimiter::new(
+        RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE),
+            max_capacity: MAX_NEURON_CREATION_SPIKE,
+            reservation_timeout: Duration::from_secs(10 * 60),
+        },
+        InMemoryCapacityStorage::new(),
+    )
+}
+
 impl Governance {
     /// Creates a new Governance instance with uninitialized fields. The canister should only have
     /// such state before the state is recovered from the stable memory in post_upgrade or
@@ -1566,7 +1586,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            neuron_rate_limits: NeuronRateLimits::default(),
+            rate_limiter: new_rate_limiter(),
         }
     }
 
@@ -1593,7 +1613,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            neuron_rate_limits: NeuronRateLimits::default(),
+            rate_limiter: new_rate_limiter(),
         }
     }
 
@@ -1625,7 +1645,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            neuron_rate_limits: NeuronRateLimits::default(),
+            rate_limiter: new_rate_limiter(),
         }
     }
 
@@ -1816,21 +1836,29 @@ impl Governance {
             ));
         }
 
-        if with_rate_limits && self.neuron_rate_limits.available_allowances < 1 {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "Reached maximum number of neurons that can be created in this hour. \
+        let maybe_reservation = if with_rate_limits {
+            match self.rate_limiter.try_reserve(
+                self.env.now_system_time(),
+                "add_neuron".to_string(),
+                1,
+            ) {
+                Ok(reservation) => Some(reservation),
+                Err(_) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::Unavailable,
+                        "Reached maximum number of neurons that can be created in this hour. \
                     Please wait and try again later.",
-            ));
-        }
+                    ));
+                }
+            }
+        } else {
+            None
+        };
 
         self.neuron_store.add_neuron(neuron)?;
 
-        if with_rate_limits {
-            self.neuron_rate_limits.available_allowances = self
-                .neuron_rate_limits
-                .available_allowances
-                .saturating_sub(1);
+        if let Some(reservation) = maybe_reservation {
+            self.rate_limiter.commit(reservation);
         }
 
         Ok(())
@@ -1849,7 +1877,9 @@ impl Governance {
             ));
         }
         self.neuron_store.remove_neuron(&neuron_id);
-        self.neuron_rate_limits.available_allowances += 1;
+
+        self.rate_limiter
+            .restore_capacity(self.env.now_system_time(), "add_neuron".to_string(), 1);
 
         Ok(())
     }
@@ -6330,30 +6360,6 @@ impl Governance {
         Ok(id)
     }
 
-    /// Increment neuron allowances if enough time has passed.
-    fn maybe_increase_neuron_allowances(&mut self) {
-        // We  increase the allowance over the maximum per hour to account
-        // for natural variations in rates, but not leaving too much spare capacity.
-        if self.neuron_rate_limits.available_allowances < MAX_NEURON_CREATION_SPIKE {
-            let time_elapsed_since_last_allowance_increase = self
-                .env
-                .now()
-                .saturating_sub(self.neuron_rate_limits.last_allowance_increase);
-
-            // Heartbeats should run frequently enough that the allowances increase fairly close
-            // to what's intended.  However, some variation is acceptable.
-            if time_elapsed_since_last_allowance_increase
-                >= MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE
-            {
-                self.neuron_rate_limits.available_allowances = self
-                    .neuron_rate_limits
-                    .available_allowances
-                    .saturating_add(1);
-                self.neuron_rate_limits.last_allowance_increase = self.env.now();
-            }
-        }
-    }
-
     pub fn get_ledger(&self) -> Arc<dyn IcpLedger + Send + Sync> {
         self.ledger.clone()
     }
@@ -6413,7 +6419,6 @@ impl Governance {
         }
 
         self.maybe_gc();
-        self.maybe_increase_neuron_allowances();
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
