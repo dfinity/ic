@@ -108,7 +108,10 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
-    canister_state::{NumWasmPages, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase},
+    canister_state::{
+        NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::{CanisterHistory, CyclesUseCase},
+    },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
 };
@@ -4398,6 +4401,19 @@ impl StateMachine {
         let payload = PayloadBuilder::new().with_xnet_payload(xnet_payload);
 
         self.execute_payload(payload);
+    }
+
+    /// Returns the history of the given canister_id.
+    ///
+    /// # Panics
+    /// Panics if the canister_id does not exist in the replicated state.
+    pub fn get_canister_history(&self, canister_id: CanisterId) -> CanisterHistory {
+        self.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .clone()
     }
 }
 
