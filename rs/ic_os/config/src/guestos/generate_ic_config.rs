@@ -16,20 +16,7 @@ include!(concat!(env!("OUT_DIR"), "/ic_config_template.rs"));
 pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) -> Result<()> {
     let config_vars = get_config_vars(guestos_config)?;
 
-    let template = IcConfigTemplate {
-        ipv6_address: config_vars.ipv6_address,
-        ipv6_prefix: config_vars.ipv6_prefix,
-        ipv4_address: config_vars.ipv4_address,
-        ipv4_gateway: config_vars.ipv4_gateway,
-        nns_urls: config_vars.nns_urls,
-        backup_retention_time_secs: config_vars.backup_retention_time_secs,
-        backup_purging_interval_secs: config_vars.backup_purging_interval_secs,
-        query_stats_epoch_length: config_vars.query_stats_epoch_length,
-        jaeger_addr: config_vars.jaeger_addr,
-        domain_name: config_vars.domain_name,
-        node_reward_type: config_vars.node_reward_type,
-        malicious_behavior: config_vars.malicious_behavior,
-    };
+    let template = IcConfigTemplate::from(config_vars);
 
     let output_content = template
         .render()
@@ -73,6 +60,25 @@ struct ConfigVariables {
     domain_name: String,
     node_reward_type: String,
     malicious_behavior: String,
+}
+
+impl From<ConfigVariables> for IcConfigTemplate {
+    fn from(vars: ConfigVariables) -> Self {
+        Self {
+            ipv6_address: vars.ipv6_address,
+            ipv6_prefix: vars.ipv6_prefix,
+            ipv4_address: vars.ipv4_address,
+            ipv4_gateway: vars.ipv4_gateway,
+            nns_urls: vars.nns_urls,
+            backup_retention_time_secs: vars.backup_retention_time_secs,
+            backup_purging_interval_secs: vars.backup_purging_interval_secs,
+            query_stats_epoch_length: vars.query_stats_epoch_length,
+            jaeger_addr: vars.jaeger_addr,
+            domain_name: vars.domain_name,
+            node_reward_type: vars.node_reward_type,
+            malicious_behavior: vars.malicious_behavior,
+        }
+    }
 }
 
 fn generate_ipv6_prefix(ipv6_address: &str) -> String {
@@ -328,10 +334,6 @@ mod tests {
     };
     use ic_config::{ConfigOptional, config_parser::ConfigSource};
 
-    const IC_JSON5_TEMPLATE_BYTES: &[u8] = include_bytes!(
-        "../../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template"
-    );
-
     #[test]
     fn test_generate_ipv6_prefix() {
         let result = generate_ipv6_prefix("2001:db8:1234:5678:9abc:def0:1234:5678");
@@ -348,20 +350,7 @@ mod tests {
         let config_vars = get_config_vars(&guestos_config).unwrap();
 
         // Create the Askama template struct
-        let template = IcConfigTemplate {
-            ipv6_address: config_vars.ipv6_address,
-            ipv6_prefix: config_vars.ipv6_prefix,
-            ipv4_address: config_vars.ipv4_address,
-            ipv4_gateway: config_vars.ipv4_gateway,
-            nns_urls: config_vars.nns_urls,
-            backup_retention_time_secs: config_vars.backup_retention_time_secs,
-            backup_purging_interval_secs: config_vars.backup_purging_interval_secs,
-            query_stats_epoch_length: config_vars.query_stats_epoch_length,
-            jaeger_addr: config_vars.jaeger_addr,
-            domain_name: config_vars.domain_name,
-            node_reward_type: config_vars.node_reward_type,
-            malicious_behavior: config_vars.malicious_behavior,
-        };
+        let template = IcConfigTemplate::from(config_vars);
 
         let output_content = template.render().unwrap();
 
