@@ -403,7 +403,6 @@ mod tests {
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1); // Only the new reservation
 
         // Try committing old reservations - should have no effect
-
         rate_limiter.commit(reservation1);
         rate_limiter.commit(reservation2);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
