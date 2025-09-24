@@ -8,17 +8,97 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-struct UsageRecord {
-    last_updated: SystemTime,
-    capacity_used: u64,
+#[derive(Clone, Debug, PartialEq)]
+pub struct UsageRecord {
+    pub last_updated: SystemTime,
+    pub capacity_used: u64,
 }
 
-pub struct RateLimiter<K> {
+pub trait CapacityStorage<K> {
+    fn get_usage(&self, key: &K) -> Option<UsageRecord>;
+    fn insert_usage(&mut self, key: K, record: UsageRecord);
+    fn get_usage_mut(&mut self, key: &K) -> Option<&mut UsageRecord>;
+
+    // Atomic update operation for more complex modifications
+    fn with_usage<R>(
+        &mut self,
+        key: K,
+        default: UsageRecord,
+        f: impl FnOnce(&mut UsageRecord) -> R,
+    ) -> R {
+        let mut usage = self.get_usage(&key).unwrap_or(default);
+        let result = f(&mut usage);
+        self.insert_usage(key, usage);
+        result
+    }
+}
+
+pub struct InMemoryCapacityStorage<K> {
+    storage: BTreeMap<K, UsageRecord>,
+}
+
+impl<K: Ord + Clone> InMemoryCapacityStorage<K> {
+    pub fn new() -> Self {
+        Self {
+            storage: BTreeMap::new(),
+        }
+    }
+}
+
+impl<K: Ord + Clone> CapacityStorage<K> for InMemoryCapacityStorage<K> {
+    fn get_usage(&self, key: &K) -> Option<UsageRecord> {
+        self.storage.get(key).cloned()
+    }
+
+    fn insert_usage(&mut self, key: K, record: UsageRecord) {
+        self.storage.insert(key, record);
+    }
+
+    fn get_usage_mut(&mut self, key: &K) -> Option<&mut UsageRecord> {
+        self.storage.get_mut(key)
+    }
+}
+
+// Example implementation for StableBTreeMap compatibility:
+//
+// impl<K, Memory> CapacityStorage<K> for StableBTreeMapWrapper<K, Memory>
+// where
+//     K: Ord + Clone + Storable,
+//     Memory: ic_stable_structures::Memory,
+//     UsageRecord: Storable,
+// {
+//     fn get_usage(&self, key: &K) -> Option<UsageRecord> {
+//         self.map.get(key)
+//     }
+//
+//     fn insert_usage(&mut self, key: K, record: UsageRecord) {
+//         self.map.insert(key, record);
+//     }
+//
+//     fn get_usage_mut(&mut self, key: &K) -> Option<&mut UsageRecord> {
+//         // StableBTreeMap doesn't support get_mut, so we need to implement
+//         // this differently, perhaps by returning None and relying on
+//         // the with_usage method for updates
+//         None
+//     }
+//
+//     fn with_usage<R>(&mut self, key: K, default: UsageRecord, f: impl FnOnce(&mut UsageRecord) -> R) -> R {
+//         let mut usage = self.get_usage(&key).unwrap_or(default);
+//         let result = f(&mut usage);
+//         self.insert_usage(key, usage);
+//         result
+//     }
+// }
+
+pub struct RateLimiter<K, S> {
     config: RateLimiterConfig,
     reservations: Arc<Mutex<BTreeMap<(K, u64), ReservationData>>>,
-    used_capacity: BTreeMap<K, UsageRecord>,
+    capacity_storage: S,
     next_index: u64,
 }
+
+// Convenience type alias for the common in-memory case
+pub type InMemoryRateLimiter<K> = RateLimiter<K, InMemoryCapacityStorage<K>>;
 
 #[derive(Clone, Debug, PartialEq)]
 struct ReservationData {
@@ -38,12 +118,12 @@ pub enum RateLimiterError {
     NotEnoughCapacity,
 }
 
-impl<K: Ord + Clone + Debug> RateLimiter<K> {
-    pub fn new(config: RateLimiterConfig) -> Self {
+impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
+    pub fn new(config: RateLimiterConfig, capacity_storage: S) -> Self {
         Self {
             config,
             reservations: Arc::new(Mutex::new(BTreeMap::new())),
-            used_capacity: BTreeMap::new(),
+            capacity_storage,
             next_index: 0,
         }
     }
@@ -83,13 +163,17 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
             .sum();
 
         // Update token bucket capacity and get current committed usage
-        let committed_capacity = if let Some(usage) = self.used_capacity.get_mut(&key) {
+        let committed_capacity = if let Some(usage_record) = self.capacity_storage.get_usage(&key) {
+            let mut usage = usage_record;
             update_capacity(
-                usage,
+                &mut usage,
                 now,
                 self.config.add_capacity_amount,
                 self.config.add_capacity_interval,
             );
+            // Update the storage with the modified usage
+            self.capacity_storage
+                .insert_usage(key.clone(), usage.clone());
             usage.capacity_used
         } else {
             0
@@ -119,33 +203,35 @@ impl<K: Ord + Clone + Debug> RateLimiter<K> {
     }
 
     pub fn commit(&mut self, reservation: Reservation<K>) {
-        let usage = self
-            .used_capacity
-            .entry(reservation.key.clone())
-            .or_insert_with(|| UsageRecord {
-                last_updated: SystemTime::now(),
-                capacity_used: 0,
+        let now = SystemTime::now();
+        let default_usage = UsageRecord {
+            last_updated: now,
+            capacity_used: 0,
+        };
+
+        self.capacity_storage
+            .with_usage(reservation.key.clone(), default_usage, |usage| {
+                // Update token bucket capacity
+                update_capacity(
+                    usage,
+                    now,
+                    self.config.add_capacity_amount,
+                    self.config.add_capacity_interval,
+                );
+
+                // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
+                // How do we handle that?
+                if let Ok(mut reservations) = self.reservations.lock() {
+                    if let Some(reservation_data) =
+                        reservations.remove(&(reservation.key.clone(), reservation.index))
+                    {
+                        usage.last_updated = now;
+                        usage.capacity_used = usage
+                            .capacity_used
+                            .saturating_add(reservation_data.capacity);
+                    }
+                }
             });
-
-        update_capacity(
-            usage,
-            SystemTime::now(),
-            self.config.add_capacity_amount,
-            self.config.add_capacity_interval,
-        );
-
-        // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
-        // How do we handle that?
-        if let Ok(mut reservations) = self.reservations.lock() {
-            if let Some(reservation_data) =
-                reservations.remove(&(reservation.key.clone(), reservation.index))
-            {
-                usage.last_updated = SystemTime::now();
-                usage.capacity_used = usage
-                    .capacity_used
-                    .saturating_add(reservation_data.capacity);
-            }
-        }
     }
 }
 
@@ -199,12 +285,15 @@ mod tests {
 
     #[test]
     fn test_rate_limiter_just_reservations() {
-        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(10),
-            max_capacity: 10,
-            reservation_timeout: Duration::from_secs(u64::MAX),
-        });
+        let mut rate_limiter = RateLimiter::new(
+            RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(10),
+                max_capacity: 10,
+                reservation_timeout: Duration::from_secs(u64::MAX),
+            },
+            InMemoryCapacityStorage::new(),
+        );
 
         let now = SystemTime::now();
 
@@ -254,12 +343,15 @@ mod tests {
 
     #[test]
     fn test_token_bucket_replenishment() {
-        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
-            add_capacity_amount: 2, // Add 2 capacity every 10 seconds
-            add_capacity_interval: Duration::from_secs(10),
-            max_capacity: 10,
-            reservation_timeout: Duration::from_secs(u64::MAX),
-        });
+        let mut rate_limiter = RateLimiter::new(
+            RateLimiterConfig {
+                add_capacity_amount: 2, // Add 2 capacity every 10 seconds
+                add_capacity_interval: Duration::from_secs(10),
+                max_capacity: 10,
+                reservation_timeout: Duration::from_secs(u64::MAX),
+            },
+            InMemoryCapacityStorage::new(),
+        );
 
         let now = SystemTime::now();
 
@@ -307,12 +399,15 @@ mod tests {
 
     #[test]
     fn test_reservation_timeouts() {
-        let mut rate_limiter: RateLimiter<String> = RateLimiter::new(RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(100),
-            max_capacity: 10,
-            reservation_timeout: Duration::from_secs(5), // 5 second timeout
-        });
+        let mut rate_limiter = RateLimiter::new(
+            RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(100),
+                max_capacity: 10,
+                reservation_timeout: Duration::from_secs(5), // 5 second timeout
+            },
+            InMemoryCapacityStorage::new(),
+        );
 
         let now = SystemTime::now();
 
@@ -345,7 +440,11 @@ mod tests {
         rate_limiter.commit(reservation2);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
         assert_eq!(
-            rate_limiter.used_capacity.get("Foo").unwrap().capacity_used,
+            rate_limiter
+                .capacity_storage
+                .get_usage(&"Foo".to_string())
+                .unwrap()
+                .capacity_used,
             0
         );
     }
