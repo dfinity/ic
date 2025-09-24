@@ -63,19 +63,21 @@ jobs:
     environment: Nightly Tests
     steps:
       - *checkout
-      # - uses: *generate-bazel-invocation-ids
-      #   with:
-      #     targets: |
-      #       [{
-      #         "name": "HSM Test",
-      #         "output_id": "hsm_test_id",
-      #       }, {
-      #         "name": "Benchmark",
-      #         "output_id": "benchmark_id",
-      #       }, {
-      #         "name": "HostOS metrics",
-      #         "output_id": "hostos_metrics_id",
-      #       }]
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "HSM Test",
+              "output_id": "hsm_test_id",
+            }, {
+              "name": "Benchmark",
+              "output_id": "benchmark_id",
+            }, {
+              "name": "HostOS metrics",
+              "output_id": "hostos_metrics_id",
+            }]
 
       - name: Run Bazel Launch Bare Metal
         shell: bash
