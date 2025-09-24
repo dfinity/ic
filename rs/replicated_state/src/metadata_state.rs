@@ -1064,11 +1064,11 @@ impl Stream {
     ) -> BTreeMap<CanisterId, usize> {
         let mut result = BTreeMap::new();
         for (_, msg) in messages.iter() {
-            if let StreamMessage::Response(response) = msg {
-                // We only count guaranteed responses
-                if !response.is_best_effort() {
-                    *result.entry(response.respondent).or_insert(0) += 1;
-                }
+            // We only count guaranteed responses
+            if let StreamMessage::Response(response) = msg
+                && !response.is_best_effort()
+            {
+                *result.entry(response.respondent).or_insert(0) += 1;
             }
         }
         result
