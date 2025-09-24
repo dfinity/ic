@@ -4299,6 +4299,16 @@ fn cannot_execute_query_on_stopped_canister() {
     );
 }
 
+/// Helper function to compute the cost of logging during `debug_print` and `trap`.
+fn logging_charge_bytes(message_num_bytes: u64) -> u64 {
+    let capacity = 4 * 1024; // 4 KiB
+    let remaining_space = capacity;
+    let allocated_num_bytes = message_num_bytes.min(capacity as u64);
+    let transmitted_num_bytes = message_num_bytes.min(remaining_space as u64);
+    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes
+}
+
 #[test]
 fn ic0_trap_preserves_some_cycles() {
     let mut test = ExecutionTestBuilder::new().build();
@@ -4321,11 +4331,12 @@ fn ic0_trap_preserves_some_cycles() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    let trap_data_size = 12;
     let expected_executed_instructions = NumInstructions::from(
         instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
             + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
-            + 12 /* trap data */
+            + trap_data_size + logging_charge_bytes(trap_data_size) /* trap data */
             + 1, // Function is 1 instruction.
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
