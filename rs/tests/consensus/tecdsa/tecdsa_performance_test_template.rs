@@ -184,7 +184,10 @@ pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_required_host_features(vec![HostFeature::Performance, HostFeature::Supermicro])
+                .with_required_host_features(vec![
+                    HostFeature::Performance,
+                    HostFeature::Supermicro,
+                ])
                 .with_default_vm_resources(vm_resources)
                 .add_nodes(1),
         )
