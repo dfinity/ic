@@ -182,14 +182,15 @@ pub fn setup(env: TestEnv) {
     };
 
     InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_required_host_features(vec![HostFeature::Performance, HostFeature::Supermicro])
                 .with_default_vm_resources(vm_resources)
                 .add_nodes(1),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
