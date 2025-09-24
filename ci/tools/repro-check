@@ -761,6 +761,12 @@ class ReproducibilityVerifier:
             )
         os.chdir(ic_clone_path)
 
+        logger.info(f"Fetching {self.git_hash} from origin.")
+        try:
+            subprocess.run(["git", "fetch", "--quiet", "origin", self.git_hash], check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Could not fetch commit {self.git_hash} from the remote repository.")
+
         if self.git_commit:
             self.check_git_repo()
             self.check_ic_repo()
@@ -772,7 +778,6 @@ class ReproducibilityVerifier:
                 )
 
         logger.info(f"Checking out {self.git_hash}.")
-        subprocess.run(["git", "fetch", "--quiet", "origin", self.git_hash], check=True)
         subprocess.run(["git", "checkout", "--quiet", self.git_hash], check=True)
 
         shutil.rmtree(ic_clone_path_cache, ignore_errors=True)
