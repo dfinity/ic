@@ -203,24 +203,47 @@ pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
 
 /// Maps a `Subaccount` to a `Principal`.
 /// Reverse of `principal_to_subaccount` above.
+///
+/// # Panics
+/// Panics if the `Subaccount` does not contain a valid `Principal`.
+/// Use `try_from_subaccount_to_principal` if you want to handle the error instead
 pub fn subaccount_to_principal(subaccount: Subaccount) -> Principal {
     let len = subaccount[0] as usize;
     Principal::from_slice(&subaccount[1..len + 1])
 }
 
+/// Tries to map a `Subaccount` to a `Principal`.
+///
+/// # Errors
+/// * `PrincipalError::BytesTooLong()` if the length of the principal (`subaccount[0]`) if larger
+///   than 29.
+///
+/// # Returns
+/// The parsed `Principal`.
+pub fn try_from_subaccount_to_principal(
+    subaccount: Subaccount,
+) -> Result<Principal, PrincipalError> {
+    let len = subaccount[0] as usize;
+    if len > subaccount.len() - 2 {
+        return Err(PrincipalError::BytesTooLong());
+    }
+    Principal::try_from_slice(&subaccount[1..len + 1])
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use candid::Principal;
+    use candid::types::principal::PrincipalError;
     use ic_stable_structures::Storable;
     use proptest::prelude::prop;
     use proptest::strategy::Strategy;
     use std::borrow::Cow;
     use std::str::FromStr;
 
-    use candid::Principal;
-
     use crate::icrc1::account::{
         Account, ICRC1TextReprError, principal_to_subaccount, subaccount_to_principal,
+        try_from_subaccount_to_principal,
     };
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
@@ -388,6 +411,40 @@ mod tests {
             let subaccount = principal_to_subaccount(principal);
             prop_assert_eq!(subaccount_to_principal(subaccount), principal);
         })
+    }
+
+    #[test]
+    fn test_try_from_principal_to_subaccount() {
+        assert_matches!(
+            try_from_subaccount_to_principal([31u8; 32]),
+            Err(PrincipalError::BytesTooLong())
+        );
+        assert_matches!(
+            try_from_subaccount_to_principal([255u8; 32]),
+            Err(PrincipalError::BytesTooLong())
+        );
+        use proptest::{prop_assert_eq, proptest};
+        proptest!(|(principal in principal_strategy())| {
+            let subaccount = principal_to_subaccount(principal);
+            prop_assert_eq!(
+                try_from_subaccount_to_principal(subaccount).expect("converting of valid subaccount to principal should succeed"),
+                principal
+            );
+        })
+    }
+
+    #[test]
+    #[should_panic(expected = "slice length exceeds capacity")]
+    fn test_principal_error_subaccount_to_principal() {
+        let principal_slice_too_large = [31u8; 32];
+        subaccount_to_principal(principal_slice_too_large);
+    }
+
+    #[test]
+    #[should_panic(expected = "range end index 256 out of range for slice of length 32")]
+    fn test_index_out_of_range_subaccount_to_principal() {
+        let index_out_of_range_subaccount = [0xffu8; 32];
+        subaccount_to_principal(index_out_of_range_subaccount);
     }
 
     #[test]
