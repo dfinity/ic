@@ -663,7 +663,7 @@ pub fn syscalls<
         .func_wrap("ic0", "trap", {
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
-                let length: usize = length.try_into().expect("Failed to convert I to usize");
+                let length: u64 = length.try_into().expect("Failed to convert I to usize");
                 let mut num_bytes = 0;
                 num_bytes += logging_charge_bytes(&mut caller, length)?;
                 num_bytes += length;
