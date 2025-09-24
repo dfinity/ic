@@ -1,6 +1,9 @@
 //! Store headers received from p2p network.
 
-use crate::common::{BlockHeight, BlockchainHeader};
+use crate::{
+    common::{BlockHeight, BlockchainHeader},
+    metrics::HeaderCacheMetrics,
+};
 use bitcoin::{
     BlockHash, Work,
     block::Header as PureHeader,
@@ -8,6 +11,7 @@ use bitcoin::{
     io,
 };
 use ic_logger::{ReplicaLogger, error};
+use ic_metrics::MetricsRegistry;
 use lmdb::{
     Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
     Transaction, WriteFlags,
@@ -148,7 +152,7 @@ pub trait HeaderCache: Send + Sync {
     fn get_ancestor_chain(&self, from: BlockHash) -> Vec<(BlockHash, HeaderNode<Self::Header>)>;
 
     /// Prune headers below the anchor_height.
-    fn prune_headers_below_height(&self, anchor_height: BlockHeight);
+    fn prune_headers_below_height(&self, anchor_height: BlockHeight) -> usize;
 }
 
 impl<Header: BlockchainHeader> InMemoryHeaderCache<Header> {
@@ -238,11 +242,17 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         to_persist
     }
 
-    fn prune_headers_below_height(&self, anchor_height: BlockHeight) {
+    fn prune_headers_below_height(&self, anchor_height: BlockHeight) -> usize {
         let mut this = self.write().unwrap();
+        let removed = this
+            .cache
+            .iter()
+            .filter(|(_, node)| node.data.height < anchor_height)
+            .count();
         this.cache
             .retain(|_, node| node.data.height >= anchor_height);
         this.tips.retain(|tip| tip.height >= anchor_height);
+        removed
     }
 }
 
@@ -412,6 +422,17 @@ impl LMDBHeaderCache {
         tx.commit()?;
         Ok(result)
     }
+
+    fn used_size(&self) -> Result<usize, LMDBCacheError> {
+        let info = self.db_env.info()?;
+        let stat = self.db_env.stat()?;
+        let freelist = self.db_env.freelist()?;
+
+        let page_size = stat.page_size();
+        let last_page = info.last_pgno() + 1; // page number is 0-based
+        let used_pages = last_page - freelist;
+        Ok(used_pages * page_size as usize)
+    }
 }
 
 /// A 2-tier header cache consisting of an in-memory cache, and optionally
@@ -432,18 +453,29 @@ pub struct HybridHeaderCache<Header> {
     in_memory: RwLock<InMemoryHeaderCache<Header>>,
     on_disk: Option<LMDBHeaderCache>,
     genesis_hash: BlockHash,
+    metrics: HeaderCacheMetrics,
 }
 
 impl<Header: BlockchainHeader> HybridHeaderCache<Header> {
-    pub fn new(genesis_header: Header, cache_dir: Option<PathBuf>, log: ReplicaLogger) -> Self {
+    pub fn new(
+        genesis_header: Header,
+        cache_dir: Option<PathBuf>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
         let genesis_hash = genesis_header.block_hash();
         let genesis = HeaderData {
             work: genesis_header.work(),
             header: genesis_header,
             height: 0,
         };
+        let metrics = HeaderCacheMetrics::new(metrics_registry);
         let on_disk = cache_dir.map(|dir| {
             LMDBHeaderCache::new_with_genesis(dir, log, genesis.clone())
+                .and_then(|cache| {
+                    metrics.on_disk_db_size.set(cache.used_size()? as i64);
+                    Ok(cache)
+                })
                 .expect("Error initializing LMDBHeaderCache")
         });
         // Try reading the anchor (tip of the chain) from disk.
@@ -456,14 +488,20 @@ impl<Header: BlockchainHeader> HybridHeaderCache<Header> {
                     cache.log,
                     "tx_get_tip()"
                 )
+                .inspect(|anchor| {
+                    metrics.anchor_height_on_disk.set(anchor.height as i64);
+                    metrics.on_disk_elements.set(1 + anchor.height as i64);
+                })
                 .expect("LMDBHeaderCache contains no tip")
             })
             .unwrap_or(genesis);
         let in_memory = RwLock::new(InMemoryHeaderCache::new_with_anchor(anchor));
+        metrics.in_memory_elements.set(1);
         Self {
             in_memory,
             on_disk,
             genesis_hash,
+            metrics,
         }
     }
 }
@@ -509,7 +547,9 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
         block_hash: BlockHash,
         header: Header,
     ) -> Result<AddHeaderResult, AddHeaderCacheError> {
-        self.in_memory.add_header(block_hash, header)
+        self.in_memory
+            .add_header(block_hash, header)
+            .inspect(|_| self.metrics.in_memory_elements.inc())
     }
 
     /// Returns the tip header with the highest cumulative work.
@@ -538,12 +578,22 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
                 let anchor_height = node.data.height;
                 on_disk.run_rw_txn(|tx| {
                     for (hash, node) in to_persist {
-                        on_disk.tx_add_header(tx, hash, node)?;
+                        on_disk.tx_add_header(tx, hash, node).inspect(|_| {
+                            self.metrics.on_disk_elements.inc();
+                        })?;
                     }
-                    on_disk.tx_update_tip(tx, anchor)?;
+                    on_disk.tx_update_tip(tx, anchor).inspect(|_| {
+                        self.metrics.anchor_height_on_disk.set(anchor_height as i64)
+                    })?;
                     Ok(())
                 })?;
                 self.in_memory.prune_headers_below_height(anchor_height);
+                self.metrics
+                    .in_memory_elements
+                    .set(self.in_memory.read().unwrap().cache.len() as i64);
+                self.metrics
+                    .on_disk_db_size
+                    .set(on_disk.used_size()? as i64);
             }
         }
         Ok(())
@@ -644,6 +694,7 @@ pub(crate) mod test {
             let cache = <HybridHeaderCache<Header>>::new(
                 genesis_block_header,
                 Some(dir.path().to_path_buf()),
+                &MetricsRegistry::default(),
                 logger,
             );
             assert!(cache.get_header(genesis_block_hash).is_some());
@@ -741,6 +792,7 @@ pub(crate) mod test {
             let cache = <HybridHeaderCache<bitcoin::block::Header>>::new(
                 genesis_block_header,
                 Some(dir.path().to_path_buf()),
+                &MetricsRegistry::default(),
                 logger,
             );
             assert!(cache.get_header(genesis_block_hash).is_some());
