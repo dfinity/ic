@@ -3091,7 +3091,7 @@ impl StateMachine {
     /// - Adapt and reload the registry on both this and the new state machine.
     /// - Perform the split on the latest state, then commit and certify on both state machines.
     ///
-    /// Returns an error if there is no XNet layer or the actual split fails.
+    /// Returns an error if there is no XNet layer or if the actual split fails.
     pub fn split(
         &self,
         seed: [u8; 32],
@@ -3115,7 +3115,7 @@ impl StateMachine {
         )
         .expect("failed to clone state directory.");
 
-        // Create a new `StateMachine` using the same XNet pool if any.
+        // Create a new `StateMachine` using the same XNet pool.
         let env = StateMachineBuilder::new()
             .with_state_machine_state_dir(state_dir)
             .with_nonce(self.nonce.load(Ordering::Relaxed))
@@ -3134,19 +3134,11 @@ impl StateMachine {
                     .subnets(),
             );
 
-        let split_canisters = env
-            .get_latest_state()
-            .canister_states
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-
         // Adapt the registry.
         self.reroute_canister_range(canister_range, env.get_subnet_id());
         self.add_subnet_to_subnets_list(env.get_subnet_id());
 
-        // Reload registry on the two state machines to make sure that
-        // both the state machines have a consistent view of the registry.
+        // Reload registry to ensure on both state machines have a consistent view of the registry.
         self.reload_registry();
         env.reload_registry();
 
