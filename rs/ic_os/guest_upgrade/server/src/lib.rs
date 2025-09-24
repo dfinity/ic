@@ -11,8 +11,8 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
-use vsock_lib::protocol::Command;
 use vsock_lib::VSockClient;
+use vsock_lib::protocol::Command;
 
 mod server;
 mod service;

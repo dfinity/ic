@@ -1,6 +1,6 @@
 use crate::attestation_package::generate_attestation_package;
 use crate::custom_data::EncodeSevCustomData;
-use crate::verification::{verify_attestation_package, SevRootCertificateVerification};
+use crate::verification::{SevRootCertificateVerification, verify_attestation_package};
 use crate::{SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail};
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::MockSevGuestFirmware;

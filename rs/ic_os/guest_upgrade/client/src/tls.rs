@@ -1,8 +1,8 @@
+use rustls::PeerIncompatible;
 use rustls::client::danger::{ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::ring::default_provider;
 use rustls::crypto::verify_tls13_signature;
 use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::PeerIncompatible;
 use std::fmt::Debug;
 
 /// A `ServerCertVerifier` that skips server certificate verification.

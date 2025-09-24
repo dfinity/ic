@@ -1,5 +1,5 @@
-use crate::tls::SkipClientCertificateCheck;
 use crate::DiskEncryptionKeyExchangeError;
+use crate::tls::SkipClientCertificateCheck;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeServiceServer;
 use http_body_util::BodyExt;
@@ -15,15 +15,15 @@ use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Handle;
 use tokio_rustls::{
-    rustls::{
-        pki_types::{CertificateDer, PrivateKeyDer},
-        ServerConfig,
-    },
     TlsAcceptor,
+    rustls::{
+        ServerConfig,
+        pki_types::{CertificateDer, PrivateKeyDer},
+    },
 };
 use tokio_util::sync::CancellationToken;
-use tonic::body::BoxBody;
 use tonic::Status;
+use tonic::body::BoxBody;
 use tower::ServiceExt;
 use tower_http::ServiceBuilderExt;
 

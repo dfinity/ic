@@ -1,21 +1,21 @@
-use crate::server::ConnInfo;
 use crate::SevFirmwareFactory;
+use crate::server::ConnInfo;
 use attestation::attestation_package::generate_attestation_package;
-use attestation::verification::{verify_attestation_package, SevRootCertificateVerification};
+use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
 use guest_upgrade_shared::api::{
-    disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
     GetDiskEncryptionKeyRequest, GetDiskEncryptionKeyResponse, SignalStatusRequest,
     SignalStatusResponse,
+    disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
 };
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
-use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
+use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev::firmware::guest::AttestationReport;
 use std::ops::Deref;
 use std::path::Path;
 use tokio::sync::watch::Sender;
-use tonic::{async_trait, Request, Response, Status};
+use tonic::{Request, Response, Status, async_trait};
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
 

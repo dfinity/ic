@@ -15,17 +15,17 @@ use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
 };
-use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
+use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
 use std::net::Ipv6Addr;
 use std::path::Path;
-use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 use tempfile::NamedTempFile;
-use vsock_lib::protocol::{Command, Payload};
 use vsock_lib::MockVSockClient;
+use vsock_lib::protocol::{Command, Payload};
 
 static FREE_PORT: AtomicU16 = AtomicU16::new(DEFAULT_SERVER_PORT);
 
@@ -151,6 +151,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             trusted_execution_environment_config: Some(
                 trusted_execution_environment_config.clone(),
             ),
+            recovery_config: None,
         };
 
         let previous_key = NamedTempFile::new().unwrap();
@@ -343,9 +344,11 @@ async fn test_server_measurement_not_in_registry() {
     let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
     assert_statuses_contain_errors(fixture.run_key_exchange_test().await, "InvalidMeasurement");
 
-    assert!(std::fs::read(fixture.previous_key.path())
-        .unwrap()
-        .is_empty());
+    assert!(
+        std::fs::read(fixture.previous_key.path())
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
