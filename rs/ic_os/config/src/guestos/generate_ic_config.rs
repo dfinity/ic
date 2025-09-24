@@ -349,9 +349,7 @@ mod tests {
         let guestos_config = create_test_guestos_config();
         let config_vars = get_config_vars(&guestos_config).unwrap();
 
-        // Create the Askama template struct
         let template = IcConfigTemplate::from(config_vars);
-
         let output_content = template.render().unwrap();
 
         // Verify that all placeholders were replaced
