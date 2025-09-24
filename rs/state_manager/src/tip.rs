@@ -1429,7 +1429,7 @@ fn handle_compute_manifest_request(
         state_sync_version,
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-        manifest_delta,
+        manifest_delta.as_ref(),
         RehashManifest::No,
     )
     .unwrap_or_else(|err| {
@@ -1543,12 +1543,26 @@ fn handle_compute_manifest_request(
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
 
+    if let Some(manifest_delta) = &manifest_delta {
+        crate::manifest::observe_file_sizes(
+            &manifest,
+            &manifest_delta.base_manifest,
+            &metrics.manifest_metrics,
+        );
+    }
+
     if !manifest_is_incremental {
         *rehash_divergence = false;
         return;
     }
     let _timer = request_timer(metrics, "compute_manifest_rehash");
     let start = Instant::now();
+    let rehash_delta = ManifestDelta {
+        base_manifest: manifest.clone(),
+        base_checkpoint: checkpoint_layout.clone(),
+        base_height: checkpoint_layout.height(),
+        target_height: checkpoint_layout.height(),
+    };
     let rehashed_manifest = crate::manifest::compute_manifest(
         thread_pool,
         &metrics.manifest_metrics,
@@ -1556,12 +1570,7 @@ fn handle_compute_manifest_request(
         state_sync_version,
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-        Some(ManifestDelta {
-            base_manifest: manifest.clone(),
-            base_checkpoint: checkpoint_layout.clone(),
-            base_height: checkpoint_layout.height(),
-            target_height: checkpoint_layout.height(),
-        }),
+        Some(&rehash_delta),
         RehashManifest::Yes,
     )
     .unwrap_or_else(|err| {

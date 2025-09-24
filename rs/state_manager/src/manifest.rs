@@ -24,7 +24,10 @@ use hash::{ManifestHash, chunk_hasher, file_hasher, manifest_hasher};
 use ic_crypto_sha2::Sha256;
 use ic_logger::{ReplicaLogger, error, fatal, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CANISTER_FILE, CheckpointLayout, ReadOnly, UNVERIFIED_CHECKPOINT_MARKER};
+use ic_state_layout::{
+    CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
+    UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
+};
 use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
 use ic_utils::thread::parallel_map;
@@ -226,6 +229,48 @@ pub struct ManifestDelta {
     /// Wasm memory and stable memory pages that might have changed since the
     /// state at `base_height`.
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
+}
+
+pub(crate) const FILE_TYPES_TO_OBSERVE_SIZE: &[&str] = &[
+    CANISTER_FILE,
+    OVERLAY,
+    QUEUES_FILE,
+    SNAPSHOT_FILE,
+    WASM_FILE,
+];
+
+/// Records file size metrics for all files in the new manifest and new files only.
+/// This helps evaluate whether the current grouping selection and threshold is optimal.
+pub(crate) fn observe_file_sizes(
+    new_manifest: &Manifest,
+    old_manifest: &Manifest,
+    metrics: &ManifestMetrics,
+) {
+    let old_file_hash_set: HashSet<[u8; 32]> = old_manifest
+        .file_table
+        .iter()
+        .map(|file_info| file_info.hash)
+        .collect();
+
+    for file_info in new_manifest.file_table.iter() {
+        if let Some(file_type) = FILE_TYPES_TO_OBSERVE_SIZE
+            .iter()
+            .find(|&&file_type| file_info.relative_path.ends_with(file_type))
+        {
+            metrics
+                .file_size_bytes
+                .with_label_values(&[file_type])
+                .observe(file_info.size_bytes as f64);
+
+            // Also observe new files separately
+            if !old_file_hash_set.contains(&file_info.hash) {
+                metrics
+                    .new_file_sizes_bytes
+                    .with_label_values(&[file_type])
+                    .observe(file_info.size_bytes as f64);
+            }
+        }
+    }
 }
 
 /// Groups small files into larger chunks.
@@ -818,7 +863,7 @@ pub fn compute_manifest(
     version: StateSyncVersion,
     checkpoint: &CheckpointLayout<ReadOnly>,
     max_chunk_size: u32,
-    opt_manifest_delta: Option<ManifestDelta>,
+    opt_manifest_delta: Option<&ManifestDelta>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
     let mut files = {
@@ -854,7 +899,7 @@ pub fn compute_manifest(
             if uses_chunk_size(&manifest_delta.base_manifest, max_chunk_size) {
                 let dirty_file_chunks = dirty_pages_to_dirty_chunks(
                     log,
-                    &manifest_delta,
+                    manifest_delta,
                     checkpoint,
                     &files,
                     max_chunk_size,
