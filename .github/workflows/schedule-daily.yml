@@ -33,6 +33,12 @@ jobs:
         name: Generate Bazel invocation IDs
         id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - &backup-pod-access
         name: Set up backup pod access
         run: |
@@ -56,7 +62,7 @@ jobs:
     container: *container-setup
     environment: Nightly Tests
     steps:
-      - uses: &checkout
+      - *checkout
       - uses: *generate-bazel-invocation-ids
         with:
           targets: |
@@ -116,15 +122,8 @@ jobs:
     environment: Nightly Tests
     steps:
       - *checkout
-      - name: Set up backup pod access
-        *backup-pod-access
-      - *generate-bazel-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
+      - uses: *backup-pod-access
+      - uses: *generate-bazel-invocation-ids
 
       - name: Run FI Tests Nightly
         uses: ./.github/actions/bazel
@@ -149,12 +148,6 @@ jobs:
       - *checkout
       - *backup-pod-access
       - *generate-bazel-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
 
       - name: Run NNS Tests Nightly
         uses: ./.github/actions/bazel
@@ -185,12 +178,6 @@ jobs:
     steps:
       - *checkout
       - *generate-bazel-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
 
       - name: Run PocketIC Tests Nightly
         uses: ./.github/actions/bazel
