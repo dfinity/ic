@@ -33,7 +33,7 @@ The main endpoint to check a Bitcoin transaction is `check_transaction`, which t
 1. The received transaction is hashed and the result is compared against the transaction ID as they should match.
 1. If there is a match, it makes another HTTPS outcall for each input in the transaction as the inputs themselves are only references to previous transactions with an index that identifies the output that is consumed with the given input.
 1. For each received input transaction, the Bitcoin address is derived that corresponds to the output at the right index.
-1. Each address is looked up in the SDN list. If any address appears on the list, `Failed` is returned. Otherwise, the result is Passed.
+1. Each address is looked up in the SDN list. If any address appears on the list, `Failed` is returned. Otherwise, the result is `Passed`.
 
 Since this lookup is expensive due to the (potentially many) HTTPS outcalls, at least **40 billion cycles** must be attached to the call. The actual cost is likely lower, and unused cycles are refunded.
 
