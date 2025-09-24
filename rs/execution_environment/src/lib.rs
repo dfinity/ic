@@ -23,7 +23,7 @@ pub use execution_environment::{
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
@@ -87,6 +87,7 @@ pub struct ExecutionServices {
     pub https_outcalls_service: QueryExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
+    pub cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
 impl ExecutionServices {
@@ -98,21 +99,27 @@ impl ExecutionServices {
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        scheduler_config: SchedulerConfig,
         config: Config,
-        cycles_account_manager: Arc<CyclesAccountManager>,
+        subnet_config: SubnetConfig,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
         temp_dir: &Path,
     ) -> ExecutionServices {
+        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
+            subnet_config.scheduler_config.max_instructions_per_message,
+            own_subnet_type,
+            own_subnet_id,
+            subnet_config.cycles_account_manager_config,
+        ));
+
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
             metrics_registry,
             own_subnet_id,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
-            scheduler_config.dirty_page_overhead,
+            subnet_config.scheduler_config.dirty_page_overhead,
             Arc::clone(&fd_factory),
             Arc::clone(&state_reader),
             temp_dir,
@@ -138,15 +145,21 @@ impl ExecutionServices {
             metrics_registry,
             own_subnet_id,
             own_subnet_type,
-            RoundSchedule::compute_capacity_percent(scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(subnet_config.scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
-            scheduler_config.scheduler_cores,
+            subnet_config.scheduler_config.scheduler_cores,
             Arc::clone(&fd_factory),
-            scheduler_config.heap_delta_rate_limit,
-            scheduler_config.upload_wasm_chunk_instructions,
-            scheduler_config.canister_snapshot_baseline_instructions,
-            scheduler_config.canister_snapshot_data_baseline_instructions,
+            subnet_config.scheduler_config.heap_delta_rate_limit,
+            subnet_config
+                .scheduler_config
+                .upload_wasm_chunk_instructions,
+            subnet_config
+                .scheduler_config
+                .canister_snapshot_baseline_instructions,
+            subnet_config
+                .scheduler_config
+                .canister_snapshot_data_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
@@ -154,7 +167,9 @@ impl ExecutionServices {
             own_subnet_type,
             config.clone(),
             metrics_registry,
-            scheduler_config.max_instructions_per_message_without_dts,
+            subnet_config
+                .scheduler_config
+                .max_instructions_per_message_without_dts,
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         ));
@@ -193,7 +208,7 @@ impl ExecutionServices {
         );
 
         let scheduler = Box::new(SchedulerImpl::new(
-            scheduler_config,
+            subnet_config.scheduler_config,
             config.embedders_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
@@ -215,6 +230,7 @@ impl ExecutionServices {
             https_outcalls_service,
             scheduler,
             query_stats_payload_builder,
+            cycles_account_manager,
         }
     }
 
@@ -227,6 +243,7 @@ impl ExecutionServices {
         Box<dyn IngressHistoryReader>,
         QueryExecutionService,
         Box<dyn Scheduler<State = ReplicatedState>>,
+        Arc<CyclesAccountManager>,
     ) {
         (
             self.ingress_filter,
@@ -234,6 +251,7 @@ impl ExecutionServices {
             self.ingress_history_reader,
             self.query_execution_service,
             self.scheduler,
+            self.cycles_account_manager,
         )
     }
 }

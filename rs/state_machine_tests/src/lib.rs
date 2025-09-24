@@ -1745,13 +1745,6 @@ impl StateMachine {
             create_at_registry_version,
         );
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            subnet_type,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
-
         // get the CUP from the registry
         let cup: CatchUpPackage =
             make_registry_cup(&registry_client, subnet_id, &replica_logger).unwrap();
@@ -1808,9 +1801,8 @@ impl StateMachine {
                 &metrics_registry,
                 subnet_id,
                 subnet_type,
-                subnet_config.scheduler_config.clone(),
                 hypervisor_config.clone(),
-                Arc::clone(&cycles_account_manager),
+                subnet_config.clone(),
                 Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&state_manager.get_fd_factory()),
                 completed_execution_messages_tx,
@@ -1824,7 +1816,7 @@ impl StateMachine {
             Arc::clone(&execution_services.ingress_history_writer) as _,
             execution_services.scheduler,
             hypervisor_config,
-            cycles_account_manager.clone(),
+            Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
@@ -1984,7 +1976,7 @@ impl StateMachine {
             subnet_id,
             replica_logger.clone(),
             state_manager.clone(),
-            cycles_account_manager.clone(),
+            Arc::clone(&execution_services.cycles_account_manager),
             malicious_flags,
             RandomStateKind::Deterministic,
         ));
@@ -2048,7 +2040,7 @@ impl StateMachine {
             query_stats_payload_builder: pocket_query_stats_payload_builder,
             vetkd_payload_builder,
             remove_old_states,
-            cycles_account_manager,
+            cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
         }
     }
