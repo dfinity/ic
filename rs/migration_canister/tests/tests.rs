@@ -342,7 +342,6 @@ async fn validation_succeeds() {
         logs.add(log);
     }
 
-    // TODO: this should be a separate test disconnected from validation
     // Test that the state machine transitions in expected order
     assert!(logs.contains_in_order(vec![
         "Entering `accepted` with 1 pending",

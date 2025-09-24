@@ -176,7 +176,7 @@ pub async fn process_stopped(
     request: RequestState,
 ) -> ProcessingResult<
     RequestState,
-    RequestState, /* TODO: should be `Infallible` but we want `transition` to be available */
+    RequestState, /* Should be `Infallible` but we want `transition` to be available */
 > {
     let RequestState::StoppedAndReady {
         request,

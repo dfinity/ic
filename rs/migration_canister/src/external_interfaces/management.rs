@@ -281,7 +281,7 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
 
 // ========================================================================= //
 // `subnet_info`
-// TODO: we are handrolling this until the CDK exposes the new field
+// Handrolling this until the CDK exposes the new field
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct SubnetInfoArgs {
