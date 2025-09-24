@@ -2,8 +2,8 @@ use bitcoin::{BlockHash, block::Header as BlockHeader};
 use criterion::measurement::Measurement;
 use criterion::{BenchmarkGroup, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ic_btc_adapter::{
-    BlockchainNetwork, BlockchainState, Config, HeaderValidator, IncomingSource, MAX_HEADERS_SIZE,
-    start_server,
+    BlockchainHeader, BlockchainNetwork, BlockchainState, Config, HeaderValidator, IncomingSource,
+    MAX_HEADERS_SIZE, start_server,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
@@ -257,6 +257,12 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
                 no_op_logger(),
             );
             add_headers(&mut blockchain_state, headers, &rt);
+            rt.block_on(async {
+                blockchain_state
+                    .persist_and_prune_headers_below_anchor(headers.last().unwrap().block_hash())
+                    .await
+            });
+            assert_eq!(blockchain_state.num_headers(), Ok((headers.len(), 1)));
         })
     });
 }
