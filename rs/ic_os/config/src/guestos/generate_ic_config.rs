@@ -1,25 +1,39 @@
 use anyhow::{Context, Result, ensure};
+use askama::Template;
 use config_types::{GuestOSConfig, Ipv6Config};
 use get_if_addrs::get_if_addrs;
 use serde_json;
-use std::fs::{read_to_string, write};
+use std::fs::write;
 use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-/// Generate IC configuration from template and guestos config
-pub fn generate_ic_config(
-    guestos_config: &GuestOSConfig,
-    template_path: &Path,
-    output_path: &Path,
-) -> Result<()> {
-    let template_content = read_to_string(template_path)
-        .with_context(|| format!("Failed to read template file: {}", template_path.display()))?;
+// See build.rs
+include!(concat!(env!("OUT_DIR"), "/ic_config_template.rs"));
 
+/// Generate IC configuration from template and guestos config
+pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) -> Result<()> {
     let config_vars = get_config_vars(guestos_config)?;
 
-    let output_content = substitute_template(&template_content, &config_vars);
+    let template = IcConfigTemplate {
+        ipv6_address: config_vars.ipv6_address,
+        ipv6_prefix: config_vars.ipv6_prefix,
+        ipv4_address: config_vars.ipv4_address,
+        ipv4_gateway: config_vars.ipv4_gateway,
+        nns_urls: config_vars.nns_urls,
+        backup_retention_time_secs: config_vars.backup_retention_time_secs,
+        backup_purging_interval_secs: config_vars.backup_purging_interval_secs,
+        query_stats_epoch_length: config_vars.query_stats_epoch_length,
+        jaeger_addr: config_vars.jaeger_addr,
+        domain_name: config_vars.domain_name,
+        node_reward_type: config_vars.node_reward_type,
+        malicious_behavior: config_vars.malicious_behavior,
+    };
+
+    let output_content = template
+        .render()
+        .with_context(|| "Failed to render template")?;
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
@@ -203,34 +217,6 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
     })
 }
 
-fn substitute_template(template_content: &str, config_vars: &ConfigVariables) -> String {
-    let mut content = template_content.to_string();
-
-    content = content.replace("{{ ipv6_address }}", &config_vars.ipv6_address);
-    content = content.replace("{{ ipv6_prefix }}", &config_vars.ipv6_prefix);
-    content = content.replace("{{ ipv4_address }}", &config_vars.ipv4_address);
-    content = content.replace("{{ ipv4_gateway }}", &config_vars.ipv4_gateway);
-    content = content.replace("{{ domain_name }}", &config_vars.domain_name);
-    content = content.replace("{{ nns_urls }}", &config_vars.nns_urls);
-    content = content.replace(
-        "{{ backup_retention_time_secs }}",
-        &config_vars.backup_retention_time_secs,
-    );
-    content = content.replace(
-        "{{ backup_purging_interval_secs }}",
-        &config_vars.backup_purging_interval_secs,
-    );
-    content = content.replace("{{ malicious_behavior }}", &config_vars.malicious_behavior);
-    content = content.replace(
-        "{{ query_stats_epoch_length }}",
-        &config_vars.query_stats_epoch_length,
-    );
-    content = content.replace("{{ node_reward_type }}", &config_vars.node_reward_type);
-    content = content.replace("{{ jaeger_addr }}", &config_vars.jaeger_addr);
-
-    content
-}
-
 fn get_router_advertisement_ipv6_address() -> Result<String> {
     const MAX_RETRIES: usize = 12;
     const RETRY_DELAY: Duration = Duration::from_secs(10);
@@ -361,8 +347,23 @@ mod tests {
         let guestos_config = create_test_guestos_config();
         let config_vars = get_config_vars(&guestos_config).unwrap();
 
-        let template_content = String::from_utf8_lossy(IC_JSON5_TEMPLATE_BYTES);
-        let output_content = substitute_template(&template_content, &config_vars);
+        // Create the Askama template struct
+        let template = IcConfigTemplate {
+            ipv6_address: config_vars.ipv6_address,
+            ipv6_prefix: config_vars.ipv6_prefix,
+            ipv4_address: config_vars.ipv4_address,
+            ipv4_gateway: config_vars.ipv4_gateway,
+            nns_urls: config_vars.nns_urls,
+            backup_retention_time_secs: config_vars.backup_retention_time_secs,
+            backup_purging_interval_secs: config_vars.backup_purging_interval_secs,
+            query_stats_epoch_length: config_vars.query_stats_epoch_length,
+            jaeger_addr: config_vars.jaeger_addr,
+            domain_name: config_vars.domain_name,
+            node_reward_type: config_vars.node_reward_type,
+            malicious_behavior: config_vars.malicious_behavior,
+        };
+
+        let output_content = template.render().unwrap();
 
         // Verify that all placeholders were replaced
         assert!(!output_content.contains("{{ ipv6_address }}"));
