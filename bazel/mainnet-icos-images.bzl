@@ -5,26 +5,34 @@ This module defines Bazel targets for the mainnet versions of ICOS images
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
 
-MAINNET_LATEST_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["latest_release"]["version"]
-MAINNET_LATEST_GUESTOS_HASH = mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash"]
-MAINNET_LATEST_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash_dev"]
-MAINNET_LATEST_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["latest_release"]["launch_measurements"]
-MAINNET_LATEST_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["latest_release"]["launch_measurements_dev"]
-MAINNET_NNS_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["version"]
-MAINNET_NNS_GUESTOS_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash"]
-MAINNET_NNS_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash_dev"]
-MAINNET_NNS_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["launch_measurements"]
-MAINNET_NNS_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["launch_measurements_dev"]
-MAINNET_APP_GUESTOS_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["version"]
-MAINNET_APP_GUESTOS_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash"]
-MAINNET_APP_GUESTOS_DEV_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash_dev"]
-MAINNET_APP_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["launch_measurements"]
-MAINNET_APP_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["launch_measurements_dev"]
-MAINNET_LATEST_HOSTOS_REVISION = mainnet_icos_versions["hostos"]["latest_release"]["version"]
-MAINNET_LATEST_HOSTOS_HASH = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
-MAINNET_LATEST_HOSTOS_DEV_HASH = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash_dev"]
-MAINNET_LATEST_HOSTOS_GUESTOS_LAUNCH_MEASUREMENTS = mainnet_icos_versions["hostos"]["latest_release"]["launch_measurements"]
-MAINNET_LATEST_HOSTOS_GUESTOS_DEV_LAUNCH_MEASUREMENTS = mainnet_icos_versions["hostos"]["latest_release"]["launch_measurements_dev"]
+MAINNET_LATEST = {
+    "version": mainnet_icos_versions["guestos"]["latest_release"]["version"],
+    "hash": mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash"],
+    "dev_hash": mainnet_icos_versions["guestos"]["latest_release"]["update_img_hash_dev"],
+    "launch_measurements": mainnet_icos_versions["guestos"]["latest_release"]["launch_measurements"],
+    "dev_launch_measurements": mainnet_icos_versions["guestos"]["latest_release"]["launch_measurements_dev"],
+}
+MAINNET_NNS = {
+    "version": mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["version"],
+    "hash": mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash"],
+    "dev_hash": mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash_dev"],
+    "launch_measurements": mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["launch_measurements"],
+    "dev_launch_measurements": mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["launch_measurements_dev"],
+}
+MAINNET_APP = {
+    "version": mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["version"],
+    "hash": mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash"],
+    "dev_hash": mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash_dev"],
+    "launch_measurements": mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["launch_measurements"],
+    "dev_launch_measurements": mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["launch_measurements_dev"],
+}
+MAINNET_LATEST_HOSTOS = {
+    "version": mainnet_icos_versions["hostos"]["latest_release"]["version"],
+    "hash": mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"],
+    "dev_hash": mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash_dev"],
+    "launch_measurements": mainnet_icos_versions["hostos"]["latest_release"]["launch_measurements"],
+    "dev_launch_measurements": mainnet_icos_versions["hostos"]["latest_release"]["launch_measurements_dev"],
+}
 
 def icos_image_download_url(git_commit_id, variant, update):
     return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}/{component}.tar.zst".format(
@@ -45,48 +53,48 @@ def get_mainnet_setupos_images(versions):
     Pull the requested SetupOS mainnet images, and their measurements.
 
     Args:
-      versions: A list of name, version, measurements to pull.
+      versions: A dict of target names to image info used to expose images.
     """
 
-    for (name, version, measurements, dev_measurements) in versions:
+    for (name, info) in versions.items():
         http_file(
             name = name,
             downloaded_file_path = "disk-img.tar.zst",
-            url = icos_image_download_url(version, "setup-os", False),
+            url = icos_image_download_url(info["version"], "setup-os", False),
         )
 
         # TODO: This could live in the same repo as above
         _mainnet_measurements(
             name = name + "_launch_measurements",
-            measurements = json.encode(measurements),
+            measurements = json.encode(info["launch_measurements"]),
         )
 
         http_file(
             name = name + "_dev",
             downloaded_file_path = "disk-img.tar.zst",
-            url = icos_dev_image_download_url(version, "setup-os", False),
+            url = icos_dev_image_download_url(info["version"], "setup-os", False),
         )
 
         # TODO: This could live in the same repo as above
         _mainnet_measurements(
             name = name + "_dev_launch_measurements",
-            measurements = json.encode(dev_measurements),
+            measurements = json.encode(info["dev_launch_measurements"]),
         )
 
 def get_mainnet_guestos_images(versions, extract_guestos):
-    for (name, version, measurements, dev_measurements) in versions:
+    for (name, info) in versions.items():
         _get_mainnet_guestos_image(
             name = name,
-            setupos_url = icos_image_download_url(version, "setup-os", False),
+            setupos_url = icos_image_download_url(info["version"], "setup-os", False),
             extract_guestos = extract_guestos,
-            measurements = json.encode(measurements),
+            measurements = json.encode(info["launch_measurements"]),
         )
 
         _get_mainnet_guestos_image(
             name = name + "_dev",
-            setupos_url = icos_dev_image_download_url(version, "setup-os", False),
+            setupos_url = icos_dev_image_download_url(info["version"], "setup-os", False),
             extract_guestos = extract_guestos,
-            measurements = json.encode(dev_measurements),
+            measurements = json.encode(info["dev_launch_measurements"]),
         )
 
 _DEFS_CONTENTS = '''\
