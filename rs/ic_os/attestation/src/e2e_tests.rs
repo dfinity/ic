@@ -1,5 +1,5 @@
 use crate::attestation_package::generate_attestation_package;
-use crate::custom_data::EncodeSevCustomData;
+use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData};
 use crate::verification::verify_attestation_package;
 use crate::{
     SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail, verification,
@@ -38,7 +38,7 @@ fn generate_valid_attestation_package() -> SevAttestationPackage {
         &TrustedExecutionEnvironmentConfig {
             sev_cert_chain_pem: FakeAttestationReportSigner::default().get_certificate_chain_pem(),
         },
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
     )
     .expect("Failed to generate attestation package")
 }
@@ -58,7 +58,7 @@ fn test_valid_attestation_package() {
     assert_eq!(attestation_report.measurement.as_slice(), MEASUREMENT);
     assert_eq!(
         attestation_report.report_data.as_slice(),
-        &CUSTOM_DATA
+        &DerEncodedCustomData(CUSTOM_DATA)
             .encode_for_sev()
             .expect("Failed to encode custom data for SEV"),
     );
@@ -66,7 +66,7 @@ fn test_valid_attestation_package() {
     verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         Some(&CHIP_ID),
     )
     .expect("Failed to verify attestation package");
@@ -74,7 +74,7 @@ fn test_valid_attestation_package() {
     verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         None, // Skip chip ID check
     )
     .expect("Failed to verify attestation package");
@@ -97,7 +97,7 @@ fn test_invalid_attestation_report() {
     let error = verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         Some(&CHIP_ID),
     )
     .expect_err("Verification should fail due to invalid attestation report")
@@ -130,7 +130,7 @@ fn test_invalid_signature() {
     let error = verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         Some(&CHIP_ID),
     )
     .expect_err("Verification should fail due to invalid signature")
@@ -158,7 +158,7 @@ fn test_invalid_custom_data() {
     let error = verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &invalid_custom_data,
+        &DerEncodedCustomData(invalid_custom_data),
         Some(&CHIP_ID),
     )
     .expect_err("Verification should fail due to invalid custom data")
@@ -181,7 +181,7 @@ fn test_invalid_measurement() {
     let error = verify_attestation_package(
         &attestation_package,
         &[[0; 48]], // Different from MEASUREMENT
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         Some(&CHIP_ID),
     )
     .expect_err("Verification should fail due to invalid measurement")
@@ -204,7 +204,7 @@ fn test_invalid_chip_id() {
     let error = verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         Some(&[0; 64]), // Different from CHIP_ID
     )
     .expect_err("Verification should fail due to invalid chip ID")
@@ -235,7 +235,7 @@ fn test_invalid_certificate_chain() {
     let error = verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         Some(&CHIP_ID),
     )
     .expect_err("Verification should fail due to invalid certificate chain")
@@ -263,7 +263,7 @@ fn test_invalid_root_certificate() {
     let error = verify_attestation_package(
         &attestation_package,
         &[MEASUREMENT],
-        &CUSTOM_DATA,
+        &DerEncodedCustomData(CUSTOM_DATA),
         Some(&CHIP_ID),
     )
     .expect_err("Verification should fail due to invalid root certificate")
