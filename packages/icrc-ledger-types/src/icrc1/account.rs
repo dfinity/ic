@@ -224,7 +224,7 @@ pub fn try_from_subaccount_to_principal(
     subaccount: Subaccount,
 ) -> Result<Principal, PrincipalError> {
     let len = subaccount[0] as usize;
-    if len > subaccount.len() - 2 {
+    if len > Principal::MAX_LENGTH_IN_BYTES {
         return Err(PrincipalError::BytesTooLong());
     }
     Principal::try_from_slice(&subaccount[1..len + 1])
@@ -415,12 +415,14 @@ mod tests {
 
     #[test]
     fn test_try_from_principal_to_subaccount() {
+        // Should be caught by `Principal::try_from_slice`.
         assert_matches!(
-            try_from_subaccount_to_principal([31u8; 32]),
+            try_from_subaccount_to_principal([(Principal::MAX_LENGTH_IN_BYTES + 1) as u8; 32]),
             Err(PrincipalError::BytesTooLong())
         );
+        // Should be caught by the additional check in `try_from_subaccount_to_principal`.
         assert_matches!(
-            try_from_subaccount_to_principal([255u8; 32]),
+            try_from_subaccount_to_principal([32u8; 32]),
             Err(PrincipalError::BytesTooLong())
         );
         use proptest::{prop_assert_eq, proptest};
@@ -436,7 +438,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "slice length exceeds capacity")]
     fn test_principal_error_subaccount_to_principal() {
-        let principal_slice_too_large = [31u8; 32];
+        let principal_slice_too_large = [(Principal::MAX_LENGTH_IN_BYTES + 1) as u8; 32];
         subaccount_to_principal(principal_slice_too_large);
     }
 
