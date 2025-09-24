@@ -294,7 +294,7 @@ pub async fn process_source_deleted(
         println!("Error: list_by SourceDeleted returned bad variant");
         return ProcessingResult::NoProgress;
     };
-    if time() - stopped_since < 5 * 60 * 1_000_000_000 {
+    if time().saturating_sub(stopped_since) < 5 * 60 * 1_000_000_000 {
         return ProcessingResult::NoProgress;
     }
     // restore controllers of target
