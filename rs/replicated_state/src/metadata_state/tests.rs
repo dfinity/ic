@@ -546,7 +546,6 @@ fn system_metadata_split_with_batch_time() {
     );
 
     let assert_valid_subnet_b_split = |batch_time: Time| {
-        let prev_state_hash = system_metadata.prev_state_hash.clone();
         let split_metadata = system_metadata
             .clone()
             .split(SUBNET_B, Some(batch_time))
@@ -555,7 +554,7 @@ fn system_metadata_split_with_batch_time() {
         let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::Application);
         expected.split_from = Some(SUBNET_A);
         expected.batch_time = batch_time;
-        expected.prev_state_hash = prev_state_hash;
+        expected.prev_state_hash = system_metadata.prev_state_hash.clone();
         assert_eq!(expected, split_metadata);
     };
 
