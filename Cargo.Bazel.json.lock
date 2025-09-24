@@ -1,5 +1,5 @@
 {
-  "checksum": "4205d77f306af6cdd08fc713c9bf5f9418d2cd94957dba1378151826506709d5",
+  "checksum": "7931ff2e2dee824920f6f59ce379d430deb79c669f6ec3a8ea6a7ed4b2496ef1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -80991,6 +80991,7 @@
         ],
         "crate_features": {
           "common": [
+            "add-extension",
             "async-compression",
             "compression-br",
             "compression-deflate",
