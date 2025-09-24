@@ -238,12 +238,12 @@ impl CanisterHttpPoolManagerImpl {
         let socks_proxy_addrs = self.get_socks_proxy_addrs();
 
         for (id, context) in http_requests {
-            if let Replication::NonReplicated(delegated_node_id) = context.replication {
-                if delegated_node_id != self.replica_config.node_id {
-                    // If the request is delegated to another node, we do not make a request.
-                    // The delegated node will handle it.
-                    continue;
-                }
+            if let Replication::NonReplicated(delegated_node_id) = context.replication
+                && delegated_node_id != self.replica_config.node_id
+            {
+                // If the request is delegated to another node, we do not make a request.
+                // The delegated node will handle it.
+                continue;
             }
 
             if !request_ids_already_made.contains(&id) {
@@ -514,10 +514,9 @@ impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerIm
         if let Ok(subnet_features) = self.registry_client.get_features(
             self.replica_config.subnet_id,
             self.registry_client.get_latest_version(),
-        ) {
-            if subnet_features.unwrap_or_default().http_requests {
-                return self.generate_change_set(canister_http_pool);
-            }
+        ) && subnet_features.unwrap_or_default().http_requests
+        {
+            return self.generate_change_set(canister_http_pool);
         }
         vec![]
     }

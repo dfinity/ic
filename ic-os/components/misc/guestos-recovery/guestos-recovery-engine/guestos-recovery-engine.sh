@@ -45,7 +45,7 @@ perform_recovery() {
 
         echo "Attempting to download recovery artifact from $recovery_url"
 
-        if curl -L --fail -o "recovery.tar.zst" "$recovery_url"; then
+        if curl --proto '=https' --location --proto-redir '=https' --tlsv1.2 --silent --show-error --fail -o "recovery.tar.zst" "$recovery_url"; then
             echo "Successfully downloaded recovery artifact from $base_url"
             return 0
         else

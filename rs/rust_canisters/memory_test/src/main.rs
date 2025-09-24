@@ -121,15 +121,15 @@ fn read() {
         for _ in 0..repeat {
             for i in (src..src + len).step_by(step) {
                 let value = memory[i];
-                if let Some(expected_value) = operation.value {
-                    if expected_value != value as u8 {
-                        trap_with(&format!(
-                            "Value mismatch at {}, expected {}, got {}",
-                            i * ELEMENT_SIZE,
-                            expected_value,
-                            value
-                        ));
-                    }
+                if let Some(expected_value) = operation.value
+                    && expected_value != value as u8
+                {
+                    trap_with(&format!(
+                        "Value mismatch at {}, expected {}, got {}",
+                        i * ELEMENT_SIZE,
+                        expected_value,
+                        value
+                    ));
                 }
                 sum += value;
             }
@@ -250,12 +250,12 @@ fn stable_read() {
                     // provided the rest of the bytes are zeros.
                     // So the sum should match the sum of normal `read()`
                     let value = buf[i as usize];
-                    if let Some(expected_value) = operation.value {
-                        if expected_value != value {
-                            trap_with(&format!(
-                                "Value mismatch at {i}, expected {expected_value}, got {value}"
-                            ));
-                        }
+                    if let Some(expected_value) = operation.value
+                        && expected_value != value
+                    {
+                        trap_with(&format!(
+                            "Value mismatch at {i}, expected {expected_value}, got {value}"
+                        ));
                     }
                     sum += value as u64;
                 }
@@ -268,12 +268,12 @@ fn stable_read() {
                 for i in (src..src + len).step_by(step) {
                     stable::stable64_read(buf, i, 1);
                     let value = buf[0];
-                    if let Some(expected_value) = operation.value {
-                        if expected_value != value {
-                            trap_with(&format!(
-                                "Value mismatch at {i}, expected {expected_value}, got {value}"
-                            ));
-                        }
+                    if let Some(expected_value) = operation.value
+                        && expected_value != value
+                    {
+                        trap_with(&format!(
+                            "Value mismatch at {i}, expected {expected_value}, got {value}"
+                        ));
                     }
                     sum += value as u64;
                 }

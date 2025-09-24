@@ -941,44 +941,44 @@ impl PocketIcSubnets {
         };
         self.subnet_configs.push(subnet_config.clone());
 
-        if let Some(icp_features) = self.icp_features.clone() {
-            if update_registry_and_system_canisters {
-                // using `let IcpFeatures { }` with explicit field names
-                // to force an update after adding a new field to `IcpFeatures`
-                let IcpFeatures {
-                    registry,
-                    cycles_minting,
-                    icp_token,
-                    cycles_token,
-                    nns_governance,
-                    sns,
-                    ii,
-                    nns_ui,
-                } = icp_features;
-                if let Some(ref config) = registry {
-                    self.update_registry(config);
-                }
-                if let Some(ref config) = cycles_minting {
-                    self.update_cmc(config, &subnet_kind);
-                }
-                if let Some(ref config) = icp_token {
-                    self.deploy_icp_token(config);
-                }
-                if let Some(ref config) = cycles_token {
-                    self.deploy_cycles_token(config);
-                }
-                if let Some(ref config) = nns_governance {
-                    self.deploy_nns_governance(config);
-                }
-                if let Some(ref config) = sns {
-                    self.deploy_sns(config);
-                }
-                if let Some(ref config) = ii {
-                    self.deploy_ii(config);
-                }
-                if let Some(ref config) = nns_ui {
-                    self.deploy_nns_ui(config);
-                }
+        if let Some(icp_features) = self.icp_features.clone()
+            && update_registry_and_system_canisters
+        {
+            // using `let IcpFeatures { }` with explicit field names
+            // to force an update after adding a new field to `IcpFeatures`
+            let IcpFeatures {
+                registry,
+                cycles_minting,
+                icp_token,
+                cycles_token,
+                nns_governance,
+                sns,
+                ii,
+                nns_ui,
+            } = icp_features;
+            if let Some(ref config) = registry {
+                self.update_registry(config);
+            }
+            if let Some(ref config) = cycles_minting {
+                self.update_cmc(config, &subnet_kind);
+            }
+            if let Some(ref config) = icp_token {
+                self.deploy_icp_token(config);
+            }
+            if let Some(ref config) = cycles_token {
+                self.deploy_cycles_token(config);
+            }
+            if let Some(ref config) = nns_governance {
+                self.deploy_nns_governance(config);
+            }
+            if let Some(ref config) = sns {
+                self.deploy_sns(config);
+            }
+            if let Some(ref config) = ii {
+                self.deploy_ii(config);
+            }
+            if let Some(ref config) = nns_ui {
+                self.deploy_nns_ui(config);
             }
         }
 
@@ -2083,48 +2083,48 @@ impl PocketIcSubnets {
     }
 
     fn sync_registry_from_canister(&mut self) {
-        if let Some(icp_features) = &self.icp_features {
-            if icp_features.registry.is_some() {
-                let nns_subnet = self.nns_subnet.clone().expect("The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.").state_machine.clone();
+        if let Some(icp_features) = &self.icp_features
+            && icp_features.registry.is_some()
+        {
+            let nns_subnet = self.nns_subnet.clone().expect("The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.").state_machine.clone();
 
-                let synced_registry_version_before = self.synced_registry_version;
-                loop {
-                    let get_changes_since_request =
-                        serialize_get_changes_since_request(self.synced_registry_version.get())
-                            .unwrap();
-                    let wasm_result = nns_subnet
-                        .query(
-                            REGISTRY_CANISTER_ID,
-                            "get_changes_since",
-                            get_changes_since_request,
-                        )
+            let synced_registry_version_before = self.synced_registry_version;
+            loop {
+                let get_changes_since_request =
+                    serialize_get_changes_since_request(self.synced_registry_version.get())
                         .unwrap();
-                    let res = match wasm_result {
-                        WasmResult::Reply(bytes) => bytes,
-                        WasmResult::Reject(err) => {
-                            panic!("Unexpected reject from registry canister: {}", err)
-                        }
-                    };
-                    let (high_capacity_deltas, latest_version) =
-                        deserialize_get_changes_since_response(res).unwrap();
-                    let mut inlined_deltas = vec![];
-                    for delta in high_capacity_deltas {
-                        let delta = self
-                            .runtime
-                            .block_on(dechunkify_delta(delta, self))
-                            .unwrap();
-                        inlined_deltas.push(delta);
+                let wasm_result = nns_subnet
+                    .query(
+                        REGISTRY_CANISTER_ID,
+                        "get_changes_since",
+                        get_changes_since_request,
+                    )
+                    .unwrap();
+                let res = match wasm_result {
+                    WasmResult::Reply(bytes) => bytes,
+                    WasmResult::Reject(err) => {
+                        panic!("Unexpected reject from registry canister: {}", err)
                     }
-                    let records = registry_deltas_to_registry_records(inlined_deltas).unwrap();
-                    self.registry_data_provider.add_registry_records(records);
-                    self.synced_registry_version = self.registry_data_provider.latest_version();
-                    if self.synced_registry_version == latest_version.into() {
-                        break;
-                    }
+                };
+                let (high_capacity_deltas, latest_version) =
+                    deserialize_get_changes_since_response(res).unwrap();
+                let mut inlined_deltas = vec![];
+                for delta in high_capacity_deltas {
+                    let delta = self
+                        .runtime
+                        .block_on(dechunkify_delta(delta, self))
+                        .unwrap();
+                    inlined_deltas.push(delta);
                 }
-                if synced_registry_version_before != self.synced_registry_version {
-                    self.persist_registry_changes();
+                let records = registry_deltas_to_registry_records(inlined_deltas).unwrap();
+                self.registry_data_provider.add_registry_records(records);
+                self.synced_registry_version = self.registry_data_provider.latest_version();
+                if self.synced_registry_version == latest_version.into() {
+                    break;
                 }
+            }
+            if synced_registry_version_before != self.synced_registry_version {
+                self.persist_registry_changes();
             }
         }
     }
@@ -2455,19 +2455,16 @@ impl PocketIc {
                         }
                     }
                     for other_subnet_kind in SubnetKind::iter() {
-                        if subnet_kind != other_subnet_kind {
-                            if let Some(mut other_subnet_kind_ranges) =
+                        if subnet_kind != other_subnet_kind
+                            && let Some(mut other_subnet_kind_ranges) =
                                 subnet_kind_canister_range(other_subnet_kind)
+                        {
+                            other_subnet_kind_ranges.sort();
+                            if !are_disjoint(other_subnet_kind_ranges.iter(), sorted_ranges.iter())
                             {
-                                other_subnet_kind_ranges.sort();
-                                if !are_disjoint(
-                                    other_subnet_kind_ranges.iter(),
-                                    sorted_ranges.iter(),
-                                ) {
-                                    return Err(format!(
-                                        "The actual subnet canister ranges {sorted_ranges:?} for the subnet kind {subnet_kind:?} are not disjoint from the canister ranges {other_subnet_kind_ranges:?} for a different subnet kind {other_subnet_kind:?}."
-                                    ));
-                                }
+                                return Err(format!(
+                                    "The actual subnet canister ranges {sorted_ranges:?} for the subnet kind {subnet_kind:?} are not disjoint from the canister ranges {other_subnet_kind_ranges:?} for a different subnet kind {other_subnet_kind:?}."
+                                ));
                             }
                         }
                     }
@@ -2659,10 +2656,10 @@ fn subnet_kind_canister_range(subnet_kind: SubnetKind) -> Option<Vec<CanisterIdR
 fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
     use rest::SubnetKind::*;
     for subnet_kind in [NNS, II, Bitcoin, Fiduciary, SNS] {
-        if let Some(ranges) = subnet_kind_canister_range(subnet_kind) {
-            if ranges.iter().any(|r| r.contains(&canister_id)) {
-                return subnet_kind;
-            }
+        if let Some(ranges) = subnet_kind_canister_range(subnet_kind)
+            && ranges.iter().any(|r| r.contains(&canister_id))
+        {
+            return subnet_kind;
         }
     }
     Application
@@ -3230,10 +3227,10 @@ impl Operation for Tick {
                 .collect_vec()
         });
 
-        if let Some(ref bm_per_subnet) = blockmakers_per_subnet {
-            if let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet) {
-                return error;
-            }
+        if let Some(ref bm_per_subnet) = blockmakers_per_subnet
+            && let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet)
+        {
+            return error;
         }
 
         for subnet in pic.subnets.get_all() {
@@ -3409,15 +3406,13 @@ impl Operation for IngressMessageStatus {
         let subnet = route(pic, self.message_id.effective_principal.clone(), false);
         match subnet {
             Ok(subnet) => {
-                if let Some(caller) = self.caller {
-                    if let Some(actual_caller) = subnet.ingress_caller(&self.message_id.msg_id) {
-                        if caller != actual_caller.get().0 {
-                            return OpOut::Error(PocketIcError::Forbidden(
-                                "The user tries to access Request ID not signed by the caller."
-                                    .to_string(),
-                            ));
-                        }
-                    }
+                if let Some(caller) = self.caller
+                    && let Some(actual_caller) = subnet.ingress_caller(&self.message_id.msg_id)
+                    && caller != actual_caller.get().0
+                {
+                    return OpOut::Error(PocketIcError::Forbidden(
+                        "The user tries to access Request ID not signed by the caller.".to_string(),
+                    ));
                 }
                 match subnet.ingress_status(&self.message_id.msg_id) {
                     IngressStatus::Known {
