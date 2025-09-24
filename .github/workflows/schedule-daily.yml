@@ -18,7 +18,7 @@ jobs:
   # This job is not run, but just used to set anchor references for other jobs
   anchor-setup:
     if: false
-    name: Dind Large Anchors
+    name: Anchor Setup
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
