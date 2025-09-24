@@ -971,7 +971,6 @@ fn test_metrics_with_unrecognized_blocks() {
                 .expect("should export rosetta_verified_block_height metric");
         assert_eq!(rosetta_verified_block_height as u64, block_index);
     });
-    assert_eq!(1, 23);
 }
 
 #[test]
