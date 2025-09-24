@@ -40,8 +40,8 @@ use tracing::info;
 use crate::{
     errors::ErrorCause,
     http::{
-        middleware::{cache::CacheState, geoip, retry::RetryResult},
         RequestType,
+        middleware::{cache::CacheState, geoip, retry::RetryResult},
     },
     routes::{Health, RequestContext},
     snapshot::{Node, RegistrySnapshot, Subnet},
