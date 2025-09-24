@@ -1,7 +1,6 @@
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::{DataProvider, PerformanceBasedAlgorithm};
 use crate::types::DayUtc;
-use ic_base_types::PrincipalId;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -38,13 +37,11 @@ impl RewardsCalculationV1 {
     pub fn calculate_rewards(
         from_day: &DayUtc,
         to_day: &DayUtc,
-        node_provider_filter: Option<PrincipalId>,
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
             from_day,
             to_day,
-            node_provider_filter,
             data_provider,
         )
     }

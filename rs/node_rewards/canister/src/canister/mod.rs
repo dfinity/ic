@@ -1,4 +1,3 @@
-use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
@@ -128,7 +127,7 @@ impl NodeRewardsCanister {
     }
 
     fn validate_reward_period(from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
-        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
+        let today: DayUtc = current_time().into();
         if from_day > to_day {
             return Err("from_day must be before to_day".to_string());
         }
@@ -141,13 +140,12 @@ impl NodeRewardsCanister {
     fn calculate_rewards(
         &self,
         request: GetNodeProvidersRewardsRequest,
-        provider_filter: Option<PrincipalId>,
     ) -> Result<RewardsCalculatorResults, String> {
-        let start_day = DayUtc::from(request.from_day_timestamp_nanos);
-        let end_day = DayUtc::from(request.to_day_timestamp_nanos);
+        let start_day = request.from_day.into();
+        let end_day = request.to_day.into();
         Self::validate_reward_period(&start_day, &end_day)?;
 
-        RewardsCalculationV1::calculate_rewards(&start_day, &end_day, provider_filter, self)
+        RewardsCalculationV1::calculate_rewards(&start_day, &end_day, self)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))
     }
 }
@@ -157,7 +155,7 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier
-            .version_for_timestamp(day.unix_ts_at_day_end_nanoseconds())
+            .version_for_timestamp(day.last_ts_nanos())
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
         Ok(registry_querier.get_rewards_table(version))
     }
@@ -168,7 +166,7 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
     ) -> Result<BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>, String> {
         let metrics = self.metrics_manager.metrics_by_subnet(day);
         if metrics.is_empty() {
-            return Err(format!("No metrics found for day {}", day.get()));
+            return Err(format!("No metrics found for day {}", day.last_ts_nanos()));
         }
         Ok(metrics)
     }
@@ -182,21 +180,6 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         registry_querier
             .get_rewardable_nodes_per_provider(day, None)
             .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
-    }
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        day: &DayUtc,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String> {
-        let mut all_rewardable_nodes = self.get_rewardable_nodes(day)?;
-        let rewardable_nodes = all_rewardable_nodes.remove(provider_id).ok_or_else(|| {
-            format!(
-                "No rewardable nodes found for provider {} for day {}",
-                provider_id, day
-            )
-        })?;
-        Ok(rewardable_nodes)
     }
 }
 
@@ -285,7 +268,7 @@ impl NodeRewardsCanister {
                 )
             })?;
         NodeRewardsCanister::schedule_metrics_sync(canister).await;
-        let result = canister.with_borrow(|canister| canister.calculate_rewards(request, None))?;
+        let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
 
         let rewards_xdr_permyriad = result
             .total_rewards_xdr_permyriad
@@ -302,14 +285,14 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
-        let provider_id = PrincipalId::from(request.provider_id);
         let request_inner = GetNodeProvidersRewardsRequest {
-            from_day_timestamp_nanos: request.from_day_timestamp_nanos,
-            to_day_timestamp_nanos: request.to_day_timestamp_nanos,
+            from_day: request.day,
+            to_day: request.day,
         };
-        let result = canister
-            .with_borrow(|canister| canister.calculate_rewards(request_inner, Some(provider_id)))?;
-        into_rewards_calculation_results(result, provider_id)
+        let mut result =
+            canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
+        let (_, result_for_day) = result.daily_results.pop_first().ok_or("e")?;
+        Ok(result_for_day.into())
     }
 }
 
