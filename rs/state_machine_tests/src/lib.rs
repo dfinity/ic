@@ -3091,7 +3091,7 @@ impl StateMachine {
     /// - Adapt and reload the registry on both this and the new state machine.
     /// - Perform the split on the latest state, then commit and certify on both state machines.
     ///
-    /// Returns an error only if the actual split fails.
+    /// Returns an error if there is no XNet layer or the actual split fails.
     pub fn split(
         &self,
         seed: [u8; 32],
@@ -3101,17 +3101,22 @@ impl StateMachine {
 
         // Write a checkpoint.
         self.checkpointed_tick();
+        self.state_manager.flush_tip_channel();
 
         // Create a state dir for the new env; then clone the contents of `self`.
         let state_dir = Box::new(TempDir::new().expect("failed to create a temporary directory"));
         fs_extra::dir::copy(
             self.state_manager.state_layout().raw_path(),
             state_dir.path(),
-            &fs_extra::dir::CopyOptions::new(),
+            &fs_extra::dir::CopyOptions {
+                content_only: true,
+                ..fs_extra::dir::CopyOptions::new()
+            },
         )
         .expect("failed to clone state directory.");
 
-        let builder = StateMachineBuilder::new()
+        // Create a new `StateMachine` using the same XNet pool if any.
+        let env = StateMachineBuilder::new()
             .with_state_machine_state_dir(state_dir)
             .with_nonce(self.nonce.load(Ordering::Relaxed))
             .with_time(Time::from_nanos_since_unix_epoch(
@@ -3121,13 +3126,20 @@ impl StateMachine {
                 self.checkpoint_interval_length.load(Ordering::Relaxed),
             )
             .with_subnet_seed(seed)
-            .with_registry_data_provider(self.registry_data_provider.clone());
+            .with_registry_data_provider(self.registry_data_provider.clone())
+            .build_with_subnets(
+                (*self.pocket_xnet.read().unwrap())
+                    .as_ref()
+                    .ok_or("no XNet layer found")?
+                    .subnets(),
+            );
 
-        // Create a new `StateMachine` using the same XNet pool if any.
-        let env = match &*self.pocket_xnet.read().unwrap() {
-            Some(pocket_xnet) => builder.build_with_subnets(pocket_xnet.subnets()),
-            None => builder.build().into(),
-        };
+        let split_canisters = env
+            .get_latest_state()
+            .canister_states
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
 
         // Adapt the registry.
         self.reroute_canister_range(canister_range, env.get_subnet_id());
@@ -3146,7 +3158,7 @@ impl StateMachine {
             .expect("malformed routing table")
             .expect("missing routing table");
         for env in [self, &env] {
-            let (height, state) = self.state_manager.take_tip();
+            let (height, state) = env.state_manager.take_tip();
             let mut state = state.split(env.get_subnet_id(), &routing_table, None)?;
             state.after_split();
 
