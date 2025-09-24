@@ -152,7 +152,7 @@ pub trait HeaderCache: Send + Sync {
     fn get_ancestor_chain(&self, from: BlockHash) -> Vec<(BlockHash, HeaderNode<Self::Header>)>;
 
     /// Prune headers below the anchor_height.
-    fn prune_headers_below_height(&self, anchor_height: BlockHeight) -> usize;
+    fn prune_headers_below_height(&self, anchor_height: BlockHeight);
 }
 
 impl<Header: BlockchainHeader> InMemoryHeaderCache<Header> {
@@ -242,17 +242,11 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         to_persist
     }
 
-    fn prune_headers_below_height(&self, anchor_height: BlockHeight) -> usize {
+    fn prune_headers_below_height(&self, anchor_height: BlockHeight) {
         let mut this = self.write().unwrap();
-        let removed = this
-            .cache
-            .iter()
-            .filter(|(_, node)| node.data.height < anchor_height)
-            .count();
         this.cache
             .retain(|_, node| node.data.height >= anchor_height);
         this.tips.retain(|tip| tip.height >= anchor_height);
-        removed
     }
 }
 
