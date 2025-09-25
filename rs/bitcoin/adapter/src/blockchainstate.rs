@@ -205,7 +205,7 @@ where
 
     /// Background task to ersist headers below the anchor (as headers) and the anchor (as tip) on to disk, and
     /// prune headers below the anchor from the in-memory cache.
-    pub async fn persist_and_prune_headers_below_anchor(
+    pub fn persist_and_prune_headers_below_anchor(
         &self,
         anchor: BlockHash,
     ) -> tokio::task::JoinHandle<()> {

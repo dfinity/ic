@@ -262,7 +262,6 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
                 blockchain_state
                     .persist_and_prune_headers_below_anchor(headers.last().unwrap().block_hash())
                     .await
-                    .await
             })
             .unwrap();
             assert_eq!(blockchain_state.num_headers(), Ok((headers.len() + 2, 1)));

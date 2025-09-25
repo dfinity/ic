@@ -127,17 +127,14 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
 
         // Spawn persist-to-disk task without waiting for it to finish, and make sure there
         // is only one task running at a time.
-        let cache = self.state.header_cache.clone();
+        let state = self.state.clone();
         let mut handle = self.pruning_task_handle.lock().unwrap();
         let is_finished = handle
             .as_ref()
             .map(|handle| handle.is_finished())
             .unwrap_or(true);
         if is_finished {
-            *handle = Some(tokio::task::spawn_blocking(move || {
-                // Error is ignored, since it is a background task
-                let _ = cache.persist_and_prune_headers_below_anchor(request.anchor);
-            }));
+            *handle = Some(state.persist_and_prune_headers_below_anchor(request.anchor));
         }
 
         let (blocks, next, obsolete_blocks) = {
