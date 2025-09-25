@@ -169,9 +169,18 @@ pub fn load_transcript(
         transcript.registry_version,
     )?;
 
+    let internal_dealings =
+        internal_dealings_from_verified_dealings(transcript.verified_dealings.as_ref()).map_err(
+            |e: InternalDealingsFromVerifiedDealingsSerializationError| {
+                IDkgLoadTranscriptError::SerializationError {
+                    internal_error: e.serde_error,
+                }
+            },
+        )?;
+
     let internal_complaints = vault.idkg_load_transcript(
         transcript.algorithm_id,
-        transcript.verified_dealings.as_ref().clone(),
+        internal_dealings,
         transcript.context_data(),
         self_index,
         key_id_from_mega_public_key_or_panic(&self_mega_pubkey),

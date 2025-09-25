@@ -400,3 +400,76 @@ mod ensure_matching_transcript_ids_and_dealer_ids {
         }
     }
 }
+
+mod load_transcript_serialization_error {
+    use super::*;
+    use crate::sign::canister_threshold_sig::idkg::transcript::load_transcript;
+    use crate::sign::canister_threshold_sig::test_utils::batch_signed_dealing_with;
+    use crate::sign::canister_threshold_sig::test_utils::node_set;
+    use crate::sign::tests::REG_V1;
+    use ic_base_types::NodeId;
+    use ic_crypto_test_utils::map_of;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
+    use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
+    use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
+    use ic_interfaces_registry_mocks::MockRegistryClient;
+    use ic_registry_keys::make_crypto_node_key;
+    use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
+    use ic_types::crypto::canister_threshold_sig::idkg::{
+        IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptType,
+    };
+    use ic_types::crypto::{AlgorithmId, KeyPurpose};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use prost::Message;
+    use std::sync::Arc;
+
+    const DEALER_ID: NodeId = NODE_2;
+    const DEALER_INDEX: NodeIndex = 2;
+
+    #[test]
+    fn should_fail_with_serialization_error_when_internal_dealing_raw_is_invalid() {
+        // Create a BatchSignedIDkgDealing with invalid (empty) internal_dealing_raw
+        let invalid_dealing = batch_signed_dealing_with(vec![], DEALER_ID);
+        let invalid_verified_dealings = map_of(vec![(DEALER_INDEX, invalid_dealing)]);
+
+        let transcript = IDkgTranscript {
+            transcript_id: dummy_idkg_transcript_id_for_tests(42),
+            receivers: IDkgReceivers::new(node_set(&[NODE_1, NODE_2, NODE_3, NODE_4]))
+                .expect("creation of receivers should succeed"),
+            registry_version: REG_V1,
+            verified_dealings: Arc::new(invalid_verified_dealings),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+
+        let result = load_transcript(
+            &(Arc::new(MockLocalCspVault::new()) as _),
+            &NODE_1,
+            &mock_registry_with_valid_mega_pubkey_for_node(NODE_1),
+            &transcript,
+        );
+
+        assert_matches!(
+            result,
+            Err(IDkgLoadTranscriptError::SerializationError { internal_error })
+            if internal_error.contains("failed to deserialize internal dealing")
+        );
+    }
+
+    fn mock_registry_with_valid_mega_pubkey_for_node(node_id: NodeId) -> MockRegistryClient {
+        // Set up MockRegistryClient to return a valid mega public key for NODE_1
+        let mut registry = MockRegistryClient::new();
+        let registry_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
+        let mut idkg_dealing_encryption_public_key_bytes = Vec::new();
+        valid_idkg_dealing_encryption_public_key()
+            .encode(&mut idkg_dealing_encryption_public_key_bytes)
+            .expect("encoding public key should succeed");
+        let registry_key_clone = registry_key.clone();
+        registry
+            .expect_get_value()
+            .withf(move |key, version| key == registry_key_clone.as_str() && version == &REG_V1)
+            .return_const(Ok(Some(idkg_dealing_encryption_public_key_bytes)));
+        registry
+    }
+}
