@@ -255,7 +255,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             &upgrade_version,
             &logger,
             upgrade_image_hash.clone(),
-            guest_launch_measurements,
+            Some(guest_launch_measurements),
             vec![upgrade_image_url.to_string()],
         ));
     }
