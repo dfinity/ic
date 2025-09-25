@@ -16,9 +16,7 @@ include!(concat!(env!("OUT_DIR"), "/ic_config_template.rs"));
 pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) -> Result<()> {
     let template = get_config_vars(guestos_config)?;
 
-    let output_content = template
-        .render()
-        .with_context(|| "Failed to render template")?;
+    let output_content = template.render().context("Failed to render template")?;
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
