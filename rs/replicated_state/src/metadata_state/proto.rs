@@ -504,7 +504,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             messages.push(message.try_into()?);
         }
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
         let reject_signals = item

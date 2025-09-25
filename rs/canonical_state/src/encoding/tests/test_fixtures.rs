@@ -4,7 +4,8 @@ use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     Cycles, Time,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, Response, StreamMessage,
+        CallbackId, Payload, Refund, RejectContext, Request, RequestMetadata, Response,
+        StreamMessage,
     },
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamHeader},
@@ -68,4 +69,9 @@ pub fn reject_response(_certification_version: CertificationVersion) -> StreamMe
         deadline,
     }
     .into()
+}
+
+pub fn anonymous_refund(certification_version: CertificationVersion) -> StreamMessage {
+    assert!(certification_version >= CertificationVersion::V22);
+    Refund::anonymous(canister_test_id(7), Cycles::new(8)).into()
 }

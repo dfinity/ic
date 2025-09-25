@@ -840,7 +840,7 @@ impl Default for Stream {
         let messages = Default::default();
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
@@ -859,7 +859,7 @@ impl Default for Stream {
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
@@ -877,7 +877,7 @@ impl Stream {
         signals_end: StreamIndex,
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
@@ -939,7 +939,10 @@ impl Stream {
                 .or_insert(0) += 1;
         }
         self.messages.push(message);
-        debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+        debug_assert_eq!(
+            Self::calculate_size_bytes(&self.messages),
+            self.messages_size_bytes
+        );
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
             self.guaranteed_response_counts
@@ -983,7 +986,10 @@ impl Stream {
 
             // Deduct every discarded message from the stream's byte size.
             self.messages_size_bytes -= msg.count_bytes();
-            debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+            debug_assert_eq!(
+                Self::calculate_size_bytes(&self.messages),
+                self.messages_size_bytes
+            );
 
             if let StreamMessage::Response(response) = &msg
                 && !response.is_best_effort()
@@ -1055,7 +1061,7 @@ impl Stream {
     }
 
     /// Calculates the estimated byte size of the given messages.
-    fn size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
+    fn calculate_size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 
