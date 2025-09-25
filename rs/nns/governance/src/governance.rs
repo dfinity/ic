@@ -89,8 +89,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nervous_system_rate_limits::{
-    InMemoryCapacityStorage, InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError,
-    Reservation,
+    InMemoryCapacityStorage, InMemoryRateLimiter, RateLimiter, RateLimiterConfig,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
