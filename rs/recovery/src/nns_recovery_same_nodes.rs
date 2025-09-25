@@ -36,9 +36,9 @@ pub enum StepType {
     CreateRegistryTar,
     GetRecoveryCUP,
     CreateArtifacts,
+    UploadState,
     UploadCUPAndRegistry,
     WaitForCUP,
-    UploadState,
     Cleanup,
 }
 
@@ -238,7 +238,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::UploadCUPAndRegistry | StepType::UploadState => {
+            StepType::UploadState | StepType::UploadCUPAndRegistry => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = read_optional_data_location(
                         &self.logger,
@@ -384,6 +384,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
             )),
 
+            StepType::UploadState => {
+                if let Some(method) = self.params.upload_method {
+                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
+
             StepType::UploadCUPAndRegistry => {
                 if let Some(method) = self.params.upload_method {
                     let node_ip = match method {
@@ -399,14 +407,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             StepType::WaitForCUP => {
                 if let Some(node_ip) = self.params.wait_for_cup_node {
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
-                } else {
-                    Err(RecoveryError::StepSkipped)
-                }
-            }
-
-            StepType::UploadState => {
-                if let Some(method) = self.params.upload_method {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
