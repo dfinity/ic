@@ -370,9 +370,15 @@ impl LMDBHeaderCache {
     }
 
     fn tx_get_num_headers<Tx: Transaction>(&self, tx: &Tx) -> Result<usize, LMDBCacheError> {
-        tx.stat(self.headers)
+        let num = tx
+            .stat(self.headers)
             .map(|stat| stat.entries())
-            .map_err(LMDBCacheError::Lmdb)
+            .map_err(LMDBCacheError::Lmdb)?;
+        assert!(
+            num > 0,
+            "BUG: LMDBHeaderCache::new_with_genesis adds the tip header key '{TIP_KEY}'"
+        );
+        Ok(num - 1)
     }
 
     fn tx_add_header<Header: BlockchainHeader>(
