@@ -49,11 +49,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - &python-setup
-        name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
   config:
     name: Set Config
@@ -499,7 +494,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - *checkout
-      - *python-setup
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Run Python CI Tests
         shell: bash
         run: |
