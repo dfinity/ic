@@ -549,12 +549,9 @@ fn create_guestos_config_for_node(
 ) -> anyhow::Result<GuestOSConfig> {
     // Build NetworkSettings
     let ipv6_config = if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        let ip = format!("{}/64", node.node_config.public_api.ip());
+        let address = format!("{}/64", node.node_config.public_api.ip());
         let gateway = "fe80::ecee:eeff:feee:eeee".parse::<std::net::Ipv6Addr>()?;
-        Ipv6Config::Fixed(FixedIpv6Config {
-            address: ip,
-            gateway,
-        })
+        Ipv6Config::Fixed(FixedIpv6Config { address, gateway })
     } else {
         Ipv6Config::RouterAdvertisement
     };
