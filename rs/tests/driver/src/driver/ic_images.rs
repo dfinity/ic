@@ -56,8 +56,11 @@ pub fn get_guestos_initial_update_img_sha256() -> String {
 }
 
 /// Pull the launch measurement of the initial GuestOS update image from the environment.
-pub fn get_guestos_initial_launch_measurements() -> Option<GuestLaunchMeasurements> {
-    read_guest_launch_measurements("ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE")
+pub fn get_guestos_initial_launch_measurements() -> GuestLaunchMeasurements {
+    let env = "ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE";
+
+    serde_json::from_str(&read_dependency_from_env_to_string(env).unwrap())
+        .expect("Could not deserialize guest launch measurements")
 }
 
 /// Pull the version of the target GuestOS update image from the environment.
@@ -86,8 +89,11 @@ pub fn get_guestos_update_img_sha256() -> String {
 }
 
 /// Pull the launch measurement of the target GuestOS update image from the environment.
-pub fn get_guestos_launch_measurements() -> Option<GuestLaunchMeasurements> {
-    read_guest_launch_measurements("ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE")
+pub fn get_guestos_launch_measurements() -> GuestLaunchMeasurements {
+    let env = "ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE";
+
+    serde_json::from_str(&read_dependency_from_env_to_string(env).unwrap())
+        .expect("Could not deserialize guest launch measurements")
 }
 
 /// Pull the version of the initial SetupOS image from the environment.
@@ -136,15 +142,4 @@ pub fn get_hostos_update_img_sha256() -> String {
     let env = "ENV_DEPS__HOSTOS_UPDATE_IMG_HASH";
 
     std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
-}
-
-fn read_guest_launch_measurements(v: &str) -> Option<GuestLaunchMeasurements> {
-    // The launch measurements are not always set.
-    // TODO(NODE-1652): Remove this check once the environment variable is always set.
-    if std::env::var(v).is_ok() {
-        serde_json::from_str(&read_dependency_from_env_to_string(v).unwrap())
-            .expect("Could not deserialize guest launch measurements")
-    } else {
-        None
-    }
 }

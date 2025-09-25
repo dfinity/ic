@@ -248,7 +248,8 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
         "update_img_hash": replica_info.hash,
         "update_img_hash_dev": replica_info.dev_hash,
         "launch_measurements": replica_info.launch_measurements,
-        "launch_measurements_dev": replica_info.dev_measurements,
+        # TODO(NODE-1723): Currently dev measurements are not published. Track them once they are.
+        # "launch_measurements_dev": replica_info.dev_measurements,
     }
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -278,7 +279,8 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
         "update_img_hash": replica_info.hash,
         "update_img_hash_dev": replica_info.dev_hash,
         "launch_measurements": replica_info.launch_measurements,
-        "launch_measurements_dev": replica_info.dev_measurements,
+        # TODO(NODE-1723): Currently dev measurements are not published. Track them once they are.
+        # "launch_measurements_dev": replica_info.dev_measurements,
     }
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -307,7 +309,8 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
             "update_img_hash": replica_info.hash,
             "update_img_hash_dev": replica_info.dev_hash,
             "launch_measurements": replica_info.launch_measurements,
-            "launch_measurements_dev": replica_info.dev_measurements,
+            # TODO(NODE-1723): Currently dev measurements are not published. Track them once they are.
+            # "launch_measurements_dev": replica_info.dev_measurements,
         }
     }
 
