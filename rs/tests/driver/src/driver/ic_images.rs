@@ -56,11 +56,13 @@ pub fn get_guestos_initial_update_img_sha256() -> String {
 }
 
 /// Pull the launch measurement of the initial GuestOS update image from the environment.
-pub fn get_guestos_initial_launch_measurements() -> GuestLaunchMeasurements {
+pub fn get_guestos_initial_launch_measurements() -> Option<GuestLaunchMeasurements> {
     let env = "ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE";
 
-    serde_json::from_str(&read_dependency_from_env_to_string(env).unwrap())
-        .expect("Could not deserialize guest launch measurements")
+    Some(
+        serde_json::from_str(&read_dependency_from_env_to_string(env).unwrap())
+            .expect("Could not deserialize guest launch measurements"),
+    )
 }
 
 /// Pull the version of the target GuestOS update image from the environment.
@@ -89,11 +91,13 @@ pub fn get_guestos_update_img_sha256() -> String {
 }
 
 /// Pull the launch measurement of the target GuestOS update image from the environment.
-pub fn get_guestos_launch_measurements() -> GuestLaunchMeasurements {
+pub fn get_guestos_launch_measurements() -> Option<GuestLaunchMeasurements> {
     let env = "ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE";
 
-    serde_json::from_str(&read_dependency_from_env_to_string(env).unwrap())
-        .expect("Could not deserialize guest launch measurements")
+    Some(
+        serde_json::from_str(&read_dependency_from_env_to_string(env).unwrap())
+            .expect("Could not deserialize guest launch measurements"),
+    )
 }
 
 /// Pull the version of the initial SetupOS image from the environment.

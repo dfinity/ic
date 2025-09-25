@@ -425,7 +425,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             &target_version,
             sha256,
             vec![upgrade_url],
-            Some(guest_launch_measurements),
+            guest_launch_measurements,
         )
         .await;
 
