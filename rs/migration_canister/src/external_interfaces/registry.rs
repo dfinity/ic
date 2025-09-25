@@ -98,6 +98,17 @@ pub async fn migrate_canister(
             println!("Call `migrate_canisters` for {} failed: {:?}", source, e);
             ProcessingResult::NoProgress
         }
-        Ok(_) => ProcessingResult::Success(42 /* TODO */),
+        Ok(response) => match response.candid::<MigrateCanisterResponse>() {
+            Ok(MigrateCanisterResponse { registry_version }) => {
+                ProcessingResult::Success(registry_version)
+            }
+            Err(e) => {
+                println!(
+                    "Decoding `migrate_canisters` for {} failed: {:?}",
+                    source, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
     }
 }

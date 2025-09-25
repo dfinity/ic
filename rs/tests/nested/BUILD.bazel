@@ -84,12 +84,6 @@ system_test_nns(
     uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        ":nested",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
@@ -102,17 +96,12 @@ system_test_nns(
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
     uses_guestos_img = False,
     uses_guestos_mainnet_latest_img = True,
     uses_guestos_update = True,
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
-    deps = [
-        # Keep sorted.
-        ":nested",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
 )
 
 rust_binary(
@@ -138,12 +127,6 @@ system_test_nns(
     uses_hostos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        ":nested",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
@@ -156,17 +139,12 @@ system_test_nns(
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
     uses_guestos_img = False,
     uses_guestos_mainnet_latest_img = True,
     uses_hostos_update = True,
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
-    deps = [
-        # Keep sorted.
-        ":nested",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
 )
 
 # Tests the recovery-upgrader component by upgrading the GuestOS to the mainnet update image
@@ -180,6 +158,7 @@ system_test_nns(
         "manual",  # TODO(NODE-1707): re-enable this test after next weekly release
     ],
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
     uses_guestos_mainnet_nns_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,

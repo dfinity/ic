@@ -5,7 +5,7 @@ use prost::Message;
 use std::borrow::Cow;
 
 impl Storable for AuditEvent {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.encode_to_vec().into()
     }
 

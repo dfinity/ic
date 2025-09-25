@@ -107,6 +107,19 @@ message RequestOrResponse {
   }
 }
 
+message Refund {
+  types.v1.CanisterId recipient = 1;
+  Cycles amount = 2;
+}
+
+message StreamMessage {
+  oneof message {
+    Request request = 1;
+    Response response = 2;
+    Refund refund = 3;
+  }
+}
+
 message MessageDeadline {
   uint64 deadline = 1;
   uint64 index = 2;

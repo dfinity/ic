@@ -436,16 +436,15 @@ impl Hypervisor {
         }
         if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
             // If execution fails, remove the backtrace when the caller is not allowed to see logs.
-            if let (Some(caller), Err(err)) = (caller, &mut result.wasm_result) {
-                if check_log_visibility_permission(
+            if let (Some(caller), Err(err)) = (caller, &mut result.wasm_result)
+                && check_log_visibility_permission(
                     &caller,
                     &system_state.log_visibility,
                     &system_state.controllers,
                 )
                 .is_err()
-                {
-                    remove_backtrace(err);
-                }
+            {
+                remove_backtrace(err);
             }
         }
 
