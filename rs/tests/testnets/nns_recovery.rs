@@ -20,22 +20,62 @@
 //       "vm_name": "host-1"
 //     }
 // ```
+//
+// To get access to P8s and Grafana look for the following lines in the ict console output:
+//
+//     prometheus: Prometheus Web UI at http://prometheus.nns-recovery--1758812276301.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.nns-recovery--1758812276301.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.nns-recovery--1758812276301.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now,
+//
+// Happy testing!
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes, setup,
+    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
+use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME};
 use ic_system_test_driver::driver::nested::HasNestedVms;
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use slog::info;
 use std::time::Duration;
+
+fn setup(env: TestEnv) {
+    let subnet_size = std::env::var("SUBNET_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(1);
+
+    let dkg_interval = std::env::var("DKG_INTERVAL")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(199);
+
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
+
+    ic_nested_nns_recovery_common::setup(
+        env.clone(),
+        SetupConfig {
+            impersonate_upstreams: false,
+            subnet_size,
+            dkg_interval,
+        },
+    );
+
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+}
 
 fn log_instructions(env: TestEnv) {
     let ssh_priv_key_path = env
@@ -78,28 +118,9 @@ fn log_instructions(env: TestEnv) {
 }
 
 fn main() -> Result<()> {
-    let subnet_size = std::env::var("SUBNET_SIZE")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(1);
-
-    let dkg_interval = std::env::var("DKG_INTERVAL")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(199);
-
     SystemTestGroup::new()
-        .with_timeout_per_test(Duration::from_secs(30 * 60))
-        .with_setup(move |env| {
-            setup(
-                env,
-                SetupConfig {
-                    impersonate_upstreams: false,
-                    subnet_size,
-                    dkg_interval,
-                },
-            )
-        })
+        .with_timeout_per_test(Duration::from_secs(60 * 60))
+        .with_setup(setup)
         .add_test(systest!(log_instructions))
         .execute_from_args()?;
     Ok(())
