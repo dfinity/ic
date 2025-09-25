@@ -32,20 +32,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
             },
         ))],
-        # The upgrade to rust-1.86.0 in https://github.com/dfinity/ic/commit/d1dc4c2dc813c70611425749551c5ac40c8d5e40
-        # was initially reverted since it caused the `//rs/pocket_ic_server:...` and `//packages/pocket-ic:...` tests
-        # to fail on x86_64-apple-darwin.
-        #
-        # We have now debugged this failure and it turns out this is due to a bug in the apple linker that causes bad
-        # code to be generated for the `hyper` HTTP client crate used in both the pocket-ic library and server.
-        # (Full context [here](https://github.com/rust-lang/rust/issues/140686#issuecomment-2869525604)).
-        # LLVM has a [workaround](https://github.com/rust-lang/llvm-project/pull/181) that they merged and
-        # rustc will integrate it soon.
-        #
-        # Until then, it appears that the bug is only triggered when building with the default `opt-level=2`.
-        # Until we’ve upgraded to the newest rustc (for which we’ll probably need to wait for a new rules_rust version)
-        # we will build the `hyper` crate with `opt-level=0` (I tried `opt-level=1` but that results in the same failure).
-        "hyper": [crate.annotation(rustc_flags = crate.select([], {"x86_64-apple-darwin": ["-C", "opt-level=0"]}))],
         "openssl-sys": [crate.annotation(
             build_script_data = [
                 "@openssl//:gen_dir",
