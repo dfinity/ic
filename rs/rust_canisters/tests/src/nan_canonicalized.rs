@@ -52,7 +52,7 @@ fn remainder(f1: &Floats, f2: &Floats) -> Floats {
     product(|x, y| x % y, |x, y| x % y, f1, f2)
 }
 
-fn parse_unit(_: Vec<u8>) -> () {}
+fn parse_unit(_: Vec<u8>) {}
 
 fn return_result(result: Result<(), String>) -> Vec<u8> {
     serde_json::to_vec(&result).unwrap()
