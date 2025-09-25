@@ -1,10 +1,11 @@
 use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
+use ic_nervous_system_timer_task::RecurringSyncTask;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::{METRICS_MANAGER, RegistryStoreStableMemoryBorrower};
-use ic_node_rewards_canister::telemetry;
+use ic_node_rewards_canister::timer_tasks::HourlySyncTask;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -17,7 +18,6 @@ use ic_node_rewards_canister_api::providers_rewards::{
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
 use std::sync::Arc;
-use std::time::Duration;
 
 fn main() {}
 
@@ -50,42 +50,8 @@ fn post_upgrade() {
     schedule_timers();
 }
 
-// The frequency of regular registry syncs.  This is set to 1 hour to avoid
-// making too many requests.  Before meaningful calculations are made, however, the
-// registry data should be updated.
-const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
-
 fn schedule_timers() {
-    ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
-        ic_cdk::futures::spawn_017_compat(async move {
-            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
-            let mut instruction_counter = telemetry::InstructionCounter::default();
-            instruction_counter.lap();
-            let registry_sync_result = NodeRewardsCanister::schedule_registry_sync(&CANISTER).await;
-            let registry_sync_instructions = instruction_counter.lap();
-
-            let mut metrics_sync_instructions: u64 = 0;
-            match registry_sync_result {
-                Ok(_) => {
-                    instruction_counter.lap();
-                    NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await;
-                    metrics_sync_instructions = instruction_counter.lap();
-                    ic_cdk::println!("Successfully synced subnets metrics and local registry");
-                }
-                Err(e) => {
-                    ic_cdk::println!("Failed to sync local registry: {:?}", e)
-                }
-            }
-
-            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
-                m.record_last_sync_instructions(
-                    instruction_counter.sum(),
-                    registry_sync_instructions,
-                    metrics_sync_instructions,
-                )
-            });
-        });
-    });
+    HourlySyncTask::new(&CANISTER);
 }
 
 fn panic_if_caller_not_governance() {
@@ -109,11 +75,11 @@ async fn get_node_providers_monthly_xdr_rewards(
 }
 
 #[update]
-async fn get_node_providers_rewards(
+fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request)
 }
 
 #[query]

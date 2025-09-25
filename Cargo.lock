@@ -12054,6 +12054,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-http-types",
  "ic-interfaces-registry",
  "ic-management-canister-types",
  "ic-metrics-encoder",
@@ -12061,6 +12062,7 @@ dependencies = [
  "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-nervous-system-integration-tests",
+ "ic-nervous-system-timer-task",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
@@ -12088,6 +12090,8 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-nervous-system-proto",
+ "rewards-calculation",
+ "rust_decimal",
  "serde",
 ]
 
@@ -20879,6 +20883,7 @@ dependencies = [
  "chrono",
  "ic-base-types",
  "ic-protobuf",
+ "ic-types",
  "itertools 0.12.1",
  "maplit",
  "rust_decimal",

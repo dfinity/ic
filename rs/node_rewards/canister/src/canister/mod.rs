@@ -1,9 +1,7 @@
-use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
@@ -27,7 +25,7 @@ use rewards_calculation::performance_based_algorithm::results::RewardsCalculator
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
@@ -42,7 +40,7 @@ fn current_time() -> Time {
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
-fn current_time() -> Time {
+pub(crate) fn current_time() -> Time {
     ic_types::time::current_time()
 }
 
@@ -52,7 +50,7 @@ fn current_time() -> Time {
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
     metrics_manager: Rc<MetricsManager<VM>>,
-    last_metrics_update: RegistryVersion,
+    last_day_synced: RefCell<Option<DayUtc>>,
 }
 
 /// Internal methods
@@ -62,9 +60,9 @@ impl NodeRewardsCanister {
         metrics_manager: Rc<MetricsManager<VM>>,
     ) -> Self {
         Self {
-            last_metrics_update: registry_client.get_latest_version(),
             registry_client,
             metrics_manager,
+            last_day_synced: RefCell::new(None),
         }
     }
 
@@ -85,55 +83,43 @@ impl NodeRewardsCanister {
             .map_err(|e| format!("Failed to get registry value: {:?}", e))
     }
 
-    pub async fn schedule_registry_sync(
+    pub async fn sync(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-    ) -> Result<RegistryVersion, String> {
+    ) -> Result<(), String> {
         let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
+        let metrics_manager = canister.with(|canister| canister.borrow().get_metrics_manager());
 
-        registry_client.sync_registry_stored().await
-    }
-
-    pub async fn schedule_metrics_sync(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
-        let (registry_client, metrics_manager, pre_sync_version) = canister.with(|canister| {
-            (
-                canister.borrow().get_registry_client(),
-                canister.borrow().get_metrics_manager(),
-                canister.borrow().last_metrics_update,
-            )
-        });
-        let post_sync_version = registry_client.get_latest_version();
+        let _ = registry_client.sync_registry_stored().await?;
+        let version = registry_client.get_latest_version();
         let registry_querier = RegistryQuerier::new(registry_client.clone());
-
-        let mut subnets_list: HashSet<SubnetId> = HashSet::default();
-        let mut version = if pre_sync_version == ZERO_REGISTRY_VERSION {
-            // If the pre-sync version is 0, we consider all subnets from the post-sync version
-            post_sync_version
-        } else {
-            pre_sync_version
-        };
-        while version <= post_sync_version {
-            subnets_list.extend(registry_querier.subnets_list(version));
-
-            // Increment the version to sync the next one
-            version = version.increment();
-        }
-
-        metrics_manager
-            .update_subnets_metrics(subnets_list.into_iter().collect())
-            .await;
-        metrics_manager.retry_failed_subnets().await;
+        let subnets_list = registry_querier.subnets_list(version);
+        let last_synced_ts = metrics_manager.update_subnets_metrics(subnets_list).await?;
+        let last_day_synced = DayUtc::from_nanos(last_synced_ts);
         canister.with_borrow_mut(|canister| {
-            canister.last_metrics_update = post_sync_version;
+            canister
+                .last_day_synced
+                .borrow_mut()
+                .replace(last_day_synced)
         });
+
+        Ok(())
     }
 
-    fn validate_reward_period(from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
-        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
+    fn validate_reward_period(&self, from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
+        let today: DayUtc = current_time().into();
+
         if from_day > to_day {
-            return Err("from_day must be before to_day".to_string());
+            return Err("from ad");
         }
         if to_day >= &today {
-            return Err("to_day_timestamp_nanos must be earlier than today".to_string());
+            return Err(RewardPeriodError::ToNotBeforeToday);
+        }
+        let last_day = last_day_synced
+            .borrow()
+            .as_ref()
+            .ok_or(RewardPeriodError::NotYetSynced)?;
+        if to_day > last_day {
+            return Err(RewardPeriodError::BeyondSynced);
         }
         Ok(())
     }
@@ -141,13 +127,12 @@ impl NodeRewardsCanister {
     fn calculate_rewards(
         &self,
         request: GetNodeProvidersRewardsRequest,
-        provider_filter: Option<PrincipalId>,
     ) -> Result<RewardsCalculatorResults, String> {
-        let start_day = DayUtc::from(request.from_day_timestamp_nanos);
-        let end_day = DayUtc::from(request.to_day_timestamp_nanos);
-        Self::validate_reward_period(&start_day, &end_day)?;
+        let start_day = request.from_day.into();
+        let end_day = request.to_day.into();
+        self.validate_reward_period(&start_day, &end_day)?;
 
-        RewardsCalculationV1::calculate_rewards(&start_day, &end_day, provider_filter, self)
+        RewardsCalculationV1::calculate_rewards(&start_day, &end_day, self)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))
     }
 }
@@ -157,7 +142,7 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier
-            .version_for_timestamp(day.unix_ts_at_day_end_nanoseconds())
+            .version_for_timestamp(day.last_ts_nanos())
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
         Ok(registry_querier.get_rewards_table(version))
     }
@@ -168,7 +153,7 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
     ) -> Result<BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>, String> {
         let metrics = self.metrics_manager.metrics_by_subnet(day);
         if metrics.is_empty() {
-            return Err(format!("No metrics found for day {}", day.get()));
+            return Err(format!("No metrics found for day {}", day.last_ts_nanos()));
         }
         Ok(metrics)
     }
@@ -182,21 +167,6 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         registry_querier
             .get_rewardable_nodes_per_provider(day, None)
             .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
-    }
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        day: &DayUtc,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String> {
-        let mut all_rewardable_nodes = self.get_rewardable_nodes(day)?;
-        let rewardable_nodes = all_rewardable_nodes.remove(provider_id).ok_or_else(|| {
-            format!(
-                "No rewardable nodes found for provider {} for day {}",
-                provider_id, day
-            )
-        })?;
-        Ok(rewardable_nodes)
     }
 }
 
@@ -275,17 +245,7 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        NodeRewardsCanister::schedule_registry_sync(canister)
-            .await
-            .map_err(|e| {
-                format!(
-                    "Could not sync registry store to latest version, \
-                    please try again later: {:?}",
-                    e
-                )
-            })?;
-        NodeRewardsCanister::schedule_metrics_sync(canister).await;
-        let result = canister.with_borrow(|canister| canister.calculate_rewards(request, None))?;
+        let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
 
         let rewards_xdr_permyriad = result
             .total_rewards_xdr_permyriad
@@ -302,14 +262,14 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
-        let provider_id = PrincipalId::from(request.provider_id);
         let request_inner = GetNodeProvidersRewardsRequest {
-            from_day_timestamp_nanos: request.from_day_timestamp_nanos,
-            to_day_timestamp_nanos: request.to_day_timestamp_nanos,
+            from_day: request.day,
+            to_day: request.day,
         };
-        let result = canister
-            .with_borrow(|canister| canister.calculate_rewards(request_inner, Some(provider_id)))?;
-        into_rewards_calculation_results(result, provider_id)
+        let mut result =
+            canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
+        let (_, result_for_day) = result.daily_results.pop_first().ok_or("e")?;
+        Ok(result_for_day.into())
     }
 }
 

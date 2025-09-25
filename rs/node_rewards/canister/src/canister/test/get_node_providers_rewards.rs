@@ -188,7 +188,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p1_node3_t31),
         6,
-        day2.get(),
+        day2.last_ts_nanos(),
         None,
     );
 
@@ -214,7 +214,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p1_node5_perf),
         6,
-        day2.get(),
+        day2.last_ts_nanos(),
         None,
     );
 
@@ -231,7 +231,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p2_node1),
         6,
-        day2.get(),
+        day2.last_ts_nanos(),
         None,
     );
 
@@ -241,7 +241,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 1 subnet 1
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day1.unix_ts_at_day_end_nanoseconds(),
+            timestamp_nanos: day1.last_ts_nanos(),
             subnet_id: Some(subnet1.get()),
         },
         SubnetMetricsValue {
@@ -273,7 +273,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 1 subnet 2
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day1.unix_ts_at_day_end_nanoseconds(),
+            timestamp_nanos: day1.last_ts_nanos(),
             subnet_id: Some(subnet2.get()),
         },
         SubnetMetricsValue {
@@ -288,7 +288,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 2 subnet 1
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day2.unix_ts_at_day_end_nanoseconds(),
+            timestamp_nanos: day2.last_ts_nanos(),
             subnet_id: Some(subnet1.get()),
         },
         SubnetMetricsValue {
@@ -313,8 +313,8 @@ fn test_get_node_providers_rewards() {
     let to = DayUtc::try_from("2024-01-02").unwrap();
 
     let request = GetNodeProvidersRewardsRequest {
-        from_day_timestamp_nanos: from.unix_ts_at_day_start_nanoseconds(),
-        to_day_timestamp_nanos: to.unix_ts_at_day_end_nanoseconds(),
+        from_day: from.into(),
+        to_day: to.into(),
     };
     let result_endpoint =
         NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
