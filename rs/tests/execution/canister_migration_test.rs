@@ -17,7 +17,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
-use slog::Logger;
+use slog::{Logger, info};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -86,6 +86,12 @@ async fn install_canister<'a>(
     migration_canister_id: Principal,
     logger: &Logger,
 ) -> UniversalCanister<'a> {
+    info!(
+        logger,
+        "Installing canister on subnet {}",
+        node.subnet_id().unwrap()
+    );
+
     let management_canister = ManagementCanister::create(agent);
     let canister =
         UniversalCanister::new_with_retries(agent, node.effective_canister_id(), logger).await;
@@ -156,6 +162,8 @@ async fn test_async(env: TestEnv) {
     })
     .unwrap();
 
+    info!(logger, "Calling migrate_canister");
+
     let result = nns_agent
         .update(&migration_canister_id, "migrate_canister")
         .with_arg(args.clone())
@@ -168,6 +176,7 @@ async fn test_async(env: TestEnv) {
 
     assert_eq!(decoded_result, Ok(()));
 
+    info!(logger, "Calling migration_status");
     let status = nns_agent
         .update(&migration_canister_id, "migration_status")
         .with_arg(args)
