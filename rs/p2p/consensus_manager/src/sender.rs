@@ -63,14 +63,14 @@ pub struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, 
     current_commit_id: CommitId,
     active_slots: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
     active_transmit_tasks: JoinSet<()>,
-    assembler: Assembler,
+    assembler: Arc<Assembler>,
     marker: PhantomData<WireArtifact>,
 }
 
 impl<
     Artifact: IdentifiableArtifact,
     WireArtifact: PbArtifact,
-    Assembler: ArtifactAssembler<Artifact, WireArtifact>,
+    Assembler: ArtifactAssembler<Artifact, WireArtifact> + Sync,
 > ConsensusManagerSender<Artifact, WireArtifact, Assembler>
 {
     pub fn run(
@@ -93,7 +93,7 @@ impl<
             current_commit_id: CommitId::from(0),
             active_slots: HashMap::new(),
             active_transmit_tasks: JoinSet::new(),
-            assembler,
+            assembler: Arc::new(assembler),
             marker: PhantomData,
         };
 
@@ -173,9 +173,7 @@ impl<
         cancellation_token: CancellationToken,
     ) {
         let id = new_artifact.artifact.id();
-        let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
-        let wire_artifact_id = wire_artifact.id();
-        let entry = self.active_slots.entry(id.clone());
+        let entry = self.active_slots.entry(id);
 
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
@@ -188,17 +186,9 @@ impl<
             // Don't perform payload serialization in the main event loop
             let commit_id = self.current_commit_id;
             let slot_number = used_slot.slot_number();
-            let build_payload = move || {
-                Self::get_transmit_payload(
-                    commit_id,
-                    slot_number,
-                    ArtifactWithOpt {
-                        artifact: wire_artifact,
-                        is_latency_sensitive: new_artifact.is_latency_sensitive,
-                    },
-                    wire_artifact_id,
-                )
-            };
+            let assembler = self.assembler.clone();
+            let build_payload =
+                move || Self::get_transmit_payload(commit_id, slot_number, assembler, new_artifact);
 
             let route = uri_prefix::<WireArtifact>();
             let send_future = send_transmit_to_all_peers(
@@ -221,23 +211,23 @@ impl<
     fn get_transmit_payload(
         commit_id: CommitId,
         slot_number: SlotNumber,
-        ArtifactWithOpt {
-            artifact,
-            is_latency_sensitive,
-        }: ArtifactWithOpt<WireArtifact>,
-        id: WireArtifact::Id,
+        assembler: Arc<Assembler>,
+        new_artifact: ArtifactWithOpt<Artifact>,
     ) -> Bytes {
+        let wire_artifact = assembler.disassemble_message(new_artifact.artifact);
+        let wire_artifact_id = wire_artifact.id();
         let pb_slot_update = pb::SlotUpdate {
             commit_id: commit_id.get(),
             slot_id: slot_number.get(),
             update: Some({
-                let pb_artifact: WireArtifact::PbMessage = artifact.into();
+                let pb_artifact: WireArtifact::PbMessage = wire_artifact.into();
                 // Try to push artifact if size below threshold or it is latency sensitive.
-                if pb_artifact.encoded_len() < ARTIFACT_PUSH_THRESHOLD_BYTES || is_latency_sensitive
+                if pb_artifact.encoded_len() < ARTIFACT_PUSH_THRESHOLD_BYTES
+                    || new_artifact.is_latency_sensitive
                 {
                     pb::slot_update::Update::Artifact(pb_artifact.encode_to_vec())
                 } else {
-                    pb::slot_update::Update::Id(WireArtifact::PbId::proxy_encode(id))
+                    pb::slot_update::Update::Id(WireArtifact::PbId::proxy_encode(wire_artifact_id))
                 }
             }),
         };
