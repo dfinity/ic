@@ -126,8 +126,11 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":nested",
+        "//rs/registry/nns_data_provider",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
     ],
 )
 

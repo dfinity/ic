@@ -79,7 +79,7 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
 }
 
 /// Use an SSH channel to check the version on the running HostOS.
-pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
+pub fn check_hostos_version(node: &NestedVm) -> String {
     let session = node
         .block_on_ssh_session()
         .expect("Could not reach HostOS VM.");
@@ -209,7 +209,7 @@ pub async fn check_guestos_version(
 }
 
 /// Submit a proposal to elect a new HostOS version
-pub(crate) async fn elect_hostos_version(
+pub async fn elect_hostos_version(
     nns_node: &IcNodeSnapshot,
     target_version: &HostosVersion,
     sha256: &str,
@@ -234,7 +234,7 @@ pub(crate) async fn elect_hostos_version(
 }
 
 /// Submit a proposal to update the HostOS version on a node
-pub(crate) async fn update_nodes_hostos_version(
+pub async fn update_nodes_hostos_version(
     nns_node: &IcNodeSnapshot,
     new_hostos_version: &HostosVersion,
     node_ids: Vec<NodeId>,
