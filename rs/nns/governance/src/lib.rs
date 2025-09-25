@@ -211,6 +211,9 @@ thread_local! {
 
     static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_NEURON_INDEXES: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
