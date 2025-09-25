@@ -2691,6 +2691,8 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
     serialized_module.compilation_cost
 }
 
+// This function copies the behavior of the actual logging cost computation in
+// rs/embedders/src/wasmtime_embedder/linker.rs.
 fn logging_charge_bytes(message_num_bytes: u64) -> u64 {
     let capacity = 4 * 1024; // 4 KiB
     let remaining_space = capacity;
