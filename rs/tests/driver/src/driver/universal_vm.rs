@@ -376,6 +376,32 @@ impl DeployedUniversalVm {
         let p: PathBuf = [UNIVERSAL_VMS_DIR, &self.name].iter().collect();
         self.env.read_json_object(p.join("vm.json"))
     }
+    pub fn activate_fw(&self, ip: &str) -> Result<String> {
+
+        // let os_info_script = "cat /etc/os-release";
+        // return self.block_on_bash_script(os_info_script);
+
+        let firewall_script = format!(
+            r#"
+        nix-shell -p iptables --run "
+          set -e
+          echo 'Running firewall setup inside nix-shell with sudo...'
+        
+          # The firewall commands now use 'sudo' to run as root.
+          sudo ip6tables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+          sudo ip6tables -A INPUT -p tcp --dport 22 -j ACCEPT
+          sudo ip6tables -I INPUT 1 -s {proxy_ip} -p tcp --dport 20443 -j ACCEPT
+          sudo ip6tables -P INPUT DROP
+          # sudo ip6tables -P FORWARD ACCEPT
+        
+          echo 'Firewall setup complete.'
+        "
+        "#,
+            proxy_ip = ip
+        );
+
+        self.block_on_bash_script(firewall_script.as_str())
+    }
 }
 
 impl SshSession for DeployedUniversalVm {

@@ -118,6 +118,7 @@ system_test_nns(
         #"long_test",
         #"system_test_large",
         "manual",
+        "dynamic_testnet",
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
