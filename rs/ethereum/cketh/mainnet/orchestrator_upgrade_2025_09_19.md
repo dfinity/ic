@@ -57,6 +57,7 @@ git log --format="%C(auto) %h %s" 83923a194d39835e8a7d9549f9f0831b962a60c2..3f3d
 
 ```
 git log --format="%C(auto) %h %s" 83923a194d39835e8a7d9549f9f0831b962a60c2..3f3d9bfac750f82f424185ac5b32a756cfd45ad9 -- rs/ledger_suite/icrc1/index-ng
+ 49d659c29d feat: Unify ic-cdk to v0.18.6 (#6264)
  2ee6ac954b chore(Ledgers): format did files with default formatter (#6235)
  0fbd33e753 test(Ledgers): FI-1459: Add transfer_from to valid_transactions_strategy (#5592)
 ```
