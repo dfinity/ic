@@ -4390,3 +4390,24 @@ pub struct MaturityDisbursement {
     /// The account identifier to disburse the maturity to.
     pub account_identifier_to_disburse_to: Option<AccountIdentifier>,
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct ListNeuronVotesRequest {
+    pub neuron_id: Option<NeuronId>,
+    pub before_proposal: Option<ProposalId>,
+    pub limit: Option<u64>,
+}
+
+pub type ListNeuronVotesResponse = Result<NeuronVotes, GovernanceError>;
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct NeuronVotes {
+    pub votes: Option<Vec<NeuronVote>>,
+    pub all_finalized_before_proposal: Option<ProposalId>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct NeuronVote {
+    pub proposal_id: Option<ProposalId>,
+    pub vote: Option<Vote>,
+}
