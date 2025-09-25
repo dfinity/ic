@@ -804,6 +804,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
     "std",
     "brotli",
+    "tls12",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
