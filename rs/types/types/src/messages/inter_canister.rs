@@ -544,7 +544,7 @@ impl Hash for Response {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
-    /// Who this refund is to be delivered to.
+    /// Whom this refund is to be delivered to.
     recipient: CanisterId,
 
     /// The amount of cycles being refunded. Non-zero for anonymous refunds.
