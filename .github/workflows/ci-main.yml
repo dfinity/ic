@@ -426,7 +426,7 @@ jobs:
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
     name: Upload external artifacts
-    runs-on: *dind-small-setup
+    runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
     needs: [bazel-test-arm64-linux, bazel-test-arm64-darwin, config]
@@ -521,7 +521,9 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - *generate-bazel-invocation-ids
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
             [{
