@@ -17,7 +17,7 @@ pub struct UsageRecord {
 }
 
 impl Storable for UsageRecord {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let timestamp_secs = self
             .last_capacity_drip
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -106,6 +106,12 @@ impl<K: Ord + Clone> InMemoryCapacityStorage<K> {
         Self {
             storage: BTreeMap::new(),
         }
+    }
+}
+
+impl<K: Ord + Clone> Default for InMemoryCapacityStorage<K> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -315,7 +321,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
 
     pub fn restore_capacity(&mut self, now: SystemTime, key: K, capacity_to_restore: u64) {
         // If there's no usage record, do nothing (already at max capacity)
-        if !self.capacity_storage.get_usage(&key).is_some() {
+        if self.capacity_storage.get_usage(&key).is_none() {
             return;
         }
 
