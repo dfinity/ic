@@ -4,7 +4,7 @@
 //! process several requests concurrently.
 
 use crate::{
-    Event, RequestState, ValidationError,
+    EventType, RequestState, ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -342,7 +342,7 @@ pub async fn process_all_failed() {
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
 // TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
-async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infallible> {
+async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Infallible> {
     let RequestState::Failed { request, reason } = request else {
         println!("Error: list_failed returned bad variant");
         return ProcessingResult::NoProgress;
@@ -369,7 +369,7 @@ async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infall
         return ProcessingResult::NoProgress;
     }
     // We successfully returned controllership.
-    ProcessingResult::Success(Event::Failed { request, reason })
+    ProcessingResult::Success(EventType::Failed { request, reason })
 }
 
 pub async fn process_all_succeeded() {
@@ -380,7 +380,7 @@ pub async fn process_all_succeeded() {
     for request in requests.into_iter() {
         remove_request(&request);
         if let RequestState::RestoredControllers { request } = request {
-            let event = Event::Succeeded { request };
+            let event = EventType::Succeeded { request };
             insert_event(event);
         }
     }
@@ -474,7 +474,7 @@ impl ProcessingResult<RequestState, RequestState> {
 }
 
 // Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
-impl ProcessingResult<Event, Infallible> {
+impl ProcessingResult<EventType, Infallible> {
     fn transition(self, old_state: RequestState) {
         match self {
             ProcessingResult::Success(event) => {

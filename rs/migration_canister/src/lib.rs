@@ -261,18 +261,31 @@ impl RequestState {
 }
 
 #[derive(Clone, Display, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Event {
+pub enum EventType {
     #[strum(to_string = "Event::Succeeded {{ request: {request} }}")]
     Succeeded { request: Request },
     #[strum(to_string = "Event::Failed {{ request: {request}, reason: {reason} }}")]
     Failed { request: Request, reason: String },
 }
 
-impl Event {
+impl EventType {
     fn request(&self) -> &Request {
         match self {
-            Event::Succeeded { request } | Event::Failed { request, .. } => request,
+            EventType::Succeeded { request } | EventType::Failed { request, .. } => request,
         }
+    }
+}
+
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+struct Event {
+    /// IC time in nanos since epoch.
+    pub time: u64,
+    pub event: EventType,
+}
+
+impl Display for Event {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Event {{ time: {}, event: {} }}", self.time, self.event)
     }
 }
 
@@ -303,6 +316,22 @@ impl Storable for RequestState {
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         from_slice(&bytes).expect("RequestState deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for EventType {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(to_vec(&self).expect("EventType serialization failed"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("EventType deserialization failed")
     }
 
     const BOUND: Bound = Bound::Unbounded;

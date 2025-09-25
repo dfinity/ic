@@ -634,3 +634,25 @@ async fn status_correct() {
     //     }
     // );
 }
+
+#[tokio::test]
+async fn after_validation_not_stopped() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    // validation succeeded. now we break migration by interfering.
+    pic.start_canister(source, Some(sender)).await.unwrap();
+    advance(&pic).await;
+    advance(&pic).await;
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    println!("{}", status[0]); //MigrationStatus::Failed { reason: Source is not stopped., time: 1620328633000000042 }
+    // panic!();
+}

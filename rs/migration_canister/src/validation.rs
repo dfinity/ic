@@ -75,7 +75,7 @@ pub async fn validate_request(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
 
-    // n. Does the target have sufficient cycles for the migration?
+    // n. Does the source have sufficient cycles for the migration?
     // TODO
 
     let mut source_original_controllers = source_status.settings.controllers;
