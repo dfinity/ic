@@ -7,9 +7,11 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
+use maplit::btreemap;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal_macros::dec;
+use std::cmp::max;
 use std::collections::BTreeMap;
 
 pub mod results;
@@ -80,11 +82,17 @@ pub trait DataProvider {
         &self,
         day: &DayUtc,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
+
+    fn get_provider_rewardable_nodes(
+        &self,
+        day: &DayUtc,
+        provider_id: &PrincipalId,
+    ) -> Result<Vec<RewardableNode>, String>;
 }
 
 trait PerformanceBasedAlgorithm {
     /// The percentile used to calculate the failure rate for a subnet.
-    const SUBNET_FAILURE_RATE_PERCENTILE: Decimal;
+    const SUBNET_FAILURE_RATE_PERCENTILE: f64;
 
     /// The minimum and maximum failure rates for a node.
     /// Nodes with a failure rate below `MIN_FAILURE_RATE` will not be penalized.
@@ -109,6 +117,7 @@ trait PerformanceBasedAlgorithm {
     fn calculate_rewards(
         from_day: &DayUtc,
         to_day: &DayUtc,
+        node_provider_filter: Option<PrincipalId>,
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         if from_day > to_day {
@@ -121,13 +130,14 @@ trait PerformanceBasedAlgorithm {
 
         // Process each day in the reward period
         for day in reward_period {
-            let result_for_day = Self::calculate_daily_rewards(&data_provider, &day)?;
+            let result_for_day =
+                Self::calculate_daily_rewards(&data_provider, &day, &node_provider_filter)?;
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
                 total_rewards_per_provider
                     .entry(*provider_id)
-                    .and_modify(|total| *total = provider_rewards.rewards_total)
+                    .and_modify(|total| *total += provider_rewards.rewards_total)
                     .or_insert(provider_rewards.rewards_total);
             }
             daily_results.insert(day, result_for_day);
@@ -147,10 +157,16 @@ trait PerformanceBasedAlgorithm {
     fn calculate_daily_rewards(
         data_provider: &impl DataProvider,
         day: &DayUtc,
+        node_provider_filter: &Option<PrincipalId>,
     ) -> Result<DailyResults, String> {
         let rewards_table = data_provider.get_rewards_table(day)?;
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(day)?;
-        let providers_rewardable_nodes = data_provider.get_rewardable_nodes(day)?;
+        let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
+            let rewardable_nodes = data_provider.get_provider_rewardable_nodes(day, provider_id)?;
+            btreemap! { *provider_id => rewardable_nodes }
+        } else {
+            data_provider.get_rewardable_nodes(day)?
+        };
         let mut results_per_provider = BTreeMap::new();
 
         // Calculate failure rates for subnets and individual nodes
@@ -253,7 +269,7 @@ trait PerformanceBasedAlgorithm {
                 Decimal::ZERO
             } else {
                 let num_blocks_failed = Decimal::from(num_blocks_failed);
-                num_blocks_failed.checked_div(total_blocks).unwrap() // Safe because total_blocks != 0
+                num_blocks_failed / total_blocks
             }
         }
 
@@ -275,13 +291,9 @@ trait PerformanceBasedAlgorithm {
                 Decimal::ZERO
             } else {
                 let failure_rates = nodes_fr.iter().sorted().collect::<Vec<_>>();
-                let nodes_fr_count = Decimal::from(nodes_fr.len());
-                let index = (nodes_fr_count.checked_mul(Self::SUBNET_FAILURE_RATE_PERCENTILE))
-                    .unwrap() // Safe because nodes_fr_count > 0
-                    .ceil()
-                    .saturating_sub(dec!(1))
-                    .to_usize()
-                    .unwrap();
+                let index = ((nodes_fr.len() as f64) * Self::SUBNET_FAILURE_RATE_PERCENTILE).ceil()
+                    as usize
+                    - 1;
                 *failure_rates[index]
             };
             result.subnets_fr.insert(subnet_id, subnet_fr);
@@ -293,7 +305,7 @@ trait PerformanceBasedAlgorithm {
             } in subnet_nodes_metrics
             {
                 let original_fr = nodes_original_fr[&node_id];
-                let relative_fr = original_fr.saturating_sub(subnet_fr);
+                let relative_fr = max(Decimal::ZERO, original_fr - subnet_fr);
 
                 result.nodes_metrics_daily.insert(
                     node_id,
@@ -338,7 +350,7 @@ trait PerformanceBasedAlgorithm {
                 .unwrap_or(*extrapolated_fr);
 
             let rewards_reduction = calculate_rewards_reduction(daily_fr_used);
-            let performance_mult = dec!(1).saturating_sub(rewards_reduction);
+            let performance_mult = dec!(1) - rewards_reduction;
 
             reward_reduction.insert(node.node_id, rewards_reduction);
             performance_multiplier.insert(node.node_id, performance_mult);
@@ -371,9 +383,7 @@ trait PerformanceBasedAlgorithm {
                     // a) has xdr_permyriad_per_node_per_month entry set for this region, but
                     // b) does NOT have the reward_coefficient_percent value set
                     let reward_coefficient_percent =
-                        Decimal::from(rate.reward_coefficient_percent.unwrap_or(80))
-                            .checked_div(dec!(100))
-                            .unwrap();
+                        Decimal::from(rate.reward_coefficient_percent.unwrap_or(80)) / dec!(100);
 
                     (base_rewards_monthly, reward_coefficient_percent)
                 })
@@ -595,13 +605,6 @@ fn avg(values: &[Decimal]) -> Option<Decimal> {
     if values.is_empty() {
         None
     } else {
-        let values_count = Decimal::from(values.len());
-        Some(
-            values
-                .iter()
-                .sum::<Decimal>()
-                .checked_div(values_count)
-                .unwrap(),
-        ) // Safe because values_count > 0
+        Some(values.iter().sum::<Decimal>() / Decimal::from(values.len()))
     }
 }
