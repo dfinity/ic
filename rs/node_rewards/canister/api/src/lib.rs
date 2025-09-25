@@ -3,7 +3,7 @@ pub mod provider_rewards_calculation;
 pub mod providers_rewards;
 
 // These are API-facing types with all fields wrapped in `Option`
-// to ensure forward compatibility. This way, new fields can be added
+// to ensure deserialization always works
 // in the future without breaking clients that consume the API.
 #[derive(
     PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, Debug,
