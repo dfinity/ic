@@ -4325,7 +4325,7 @@ fn ic0_trap_preserves_some_cycles() {
         instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
             + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
-            + bytes_and_logging_cost(12) /* trap data */
+            + bytes_and_logging_cost(12) as u64 /* trap data */
             + 1, // Function is 1 instruction.
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);

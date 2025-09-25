@@ -720,7 +720,7 @@ mod tests {
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions
-                    + (bytes_and_logging_cost(num_bytes) as usize / BYTES_PER_INSTRUCTION) as u64
+                    + (bytes_and_logging_cost(num_bytes as usize) / BYTES_PER_INSTRUCTION) as u64
             )
         });
     }
