@@ -457,16 +457,16 @@ jobs:
       - name: Prepare bundle
         id: prepare-bundle
         run: |
-            bundledir=$(mktemp -d)
+          bundledir=$(mktemp -d)
 
-            # Create a "bundle" that the uploader can digest
-            mkdir -p "$bundledir/binaries/arm64-linux/"
-            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux.gz "$bundledir/binaries/arm64-linux/pocket-ic.gz"
+          # Create a "bundle" that the uploader can digest
+          mkdir -p "$bundledir/binaries/arm64-linux/"
+          cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux.gz "$bundledir/binaries/arm64-linux/pocket-ic.gz"
 
-            mkdir -p "$bundledir/binaries/arm64-darwin/"
-            cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/pocket-ic.gz"
+          mkdir -p "$bundledir/binaries/arm64-darwin/"
+          cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/pocket-ic.gz"
 
-            echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
+          echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
       - name: Upload
         uses: ./.github/actions/upload-artifacts
