@@ -14,9 +14,7 @@ include!(concat!(env!("OUT_DIR"), "/ic_config_template.rs"));
 
 /// Generate IC configuration from template and guestos config
 pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) -> Result<()> {
-    let config_vars = get_config_vars(guestos_config)?;
-
-    let template = IcConfigTemplate::from(config_vars);
+    let template = get_config_vars(guestos_config)?;
 
     let output_content = template
         .render()
@@ -44,41 +42,6 @@ pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) ->
     }
 
     Ok(())
-}
-
-#[derive(Debug)]
-struct ConfigVariables {
-    ipv6_address: String,
-    ipv6_prefix: String,
-    ipv4_address: String,
-    ipv4_gateway: String,
-    nns_urls: String,
-    backup_retention_time_secs: String,
-    backup_purging_interval_secs: String,
-    query_stats_epoch_length: String,
-    jaeger_addr: String,
-    domain_name: String,
-    node_reward_type: String,
-    malicious_behavior: String,
-}
-
-impl From<ConfigVariables> for IcConfigTemplate {
-    fn from(vars: ConfigVariables) -> Self {
-        Self {
-            ipv6_address: vars.ipv6_address,
-            ipv6_prefix: vars.ipv6_prefix,
-            ipv4_address: vars.ipv4_address,
-            ipv4_gateway: vars.ipv4_gateway,
-            nns_urls: vars.nns_urls,
-            backup_retention_time_secs: vars.backup_retention_time_secs,
-            backup_purging_interval_secs: vars.backup_purging_interval_secs,
-            query_stats_epoch_length: vars.query_stats_epoch_length,
-            jaeger_addr: vars.jaeger_addr,
-            domain_name: vars.domain_name,
-            node_reward_type: vars.node_reward_type,
-            malicious_behavior: vars.malicious_behavior,
-        }
-    }
 }
 
 fn generate_ipv6_prefix(ipv6_address: &str) -> String {
@@ -133,7 +96,7 @@ fn configure_ipv4(guestos_config: &GuestOSConfig) -> (String, String) {
     }
 }
 
-fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
+fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
     let (ipv6_address, ipv6_prefix) = configure_ipv6(guestos_config)?;
 
     let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
@@ -207,7 +170,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
         .map(|mb| serde_json::to_string(mb).unwrap_or_default())
         .unwrap_or_default();
 
-    Ok(ConfigVariables {
+    Ok(IcConfigTemplate {
         ipv6_address,
         ipv6_prefix,
         ipv4_address,
@@ -347,9 +310,7 @@ mod tests {
     #[test]
     fn test_template_substitution_with_default_config() {
         let guestos_config = create_test_guestos_config();
-        let config_vars = get_config_vars(&guestos_config).unwrap();
-
-        let template = IcConfigTemplate::from(config_vars);
+        let template = get_config_vars(&guestos_config).unwrap();
         let output_content = template.render().unwrap();
 
         // Verify that all placeholders were replaced
