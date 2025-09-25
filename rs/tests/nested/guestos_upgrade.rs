@@ -1,4 +1,6 @@
 use anyhow::Result;
+use reqwest::Client;
+use slog::info;
 use std::time::Duration;
 
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -7,8 +9,6 @@ use ic_system_test_driver::{
     systest,
     util::block_on,
 };
-use reqwest::Client;
-use slog::info;
 
 use nested::HOST_VM_NAME;
 

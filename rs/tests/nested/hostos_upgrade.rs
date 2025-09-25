@@ -1,4 +1,5 @@
 use anyhow::{Result, bail};
+use slog::info;
 use std::time::Duration;
 
 use ic_system_test_driver::{
@@ -6,7 +7,6 @@ use ic_system_test_driver::{
     retry_with_msg, systest,
     util::block_on,
 };
-use slog::info;
 
 use nested::HOST_VM_NAME;
 
