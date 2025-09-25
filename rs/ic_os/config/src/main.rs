@@ -92,8 +92,6 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub enable_trusted_execution_environment: Option<bool>,
     #[arg(long)]
-    pub use_nns_public_key: Option<bool>,
-    #[arg(long)]
     pub nns_urls: Option<Vec<String>>,
     #[arg(long)]
     pub use_node_operator_private_key: Option<bool>,
@@ -212,7 +210,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.deployment_environment,
                 logging: Logging {},
-                use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
+                use_nns_public_key: false,
                 nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
                     .exists(),
@@ -314,7 +312,6 @@ pub fn main() -> Result<()> {
                 node_reward_type: clap_args.node_reward_type,
                 mgmt_mac: clap_args.mgmt_mac,
                 deployment_environment: clap_args.deployment_environment,
-                use_nns_public_key: clap_args.use_nns_public_key,
                 nns_urls: clap_args.nns_urls,
                 enable_trusted_execution_environment: clap_args
                     .enable_trusted_execution_environment,
