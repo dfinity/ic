@@ -656,8 +656,8 @@ mod tests {
             // This test is to ensure that the callers of `charge_for_system_api_call`
             // properly convert `size: i32` to u64 and this process does not charge
             // more than the equivalent of `size` for values >= 2^31.
-            let num_bytes = 2147483648_u64; // equivalent to 2^31
-            let payload = vec![0u8; num_bytes as usize];
+            let num_bytes = 2147483648; // equivalent to 2^31
+            let payload = vec![0u8; num_bytes];
             let wasm = wat2wasm(
                 r#"
               (module
@@ -720,7 +720,7 @@ mod tests {
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions
-                    + (bytes_and_logging_cost(num_bytes as usize) / BYTES_PER_INSTRUCTION) as u64
+                    + (bytes_and_logging_cost(num_bytes) / BYTES_PER_INSTRUCTION) as u64
             )
         });
     }
