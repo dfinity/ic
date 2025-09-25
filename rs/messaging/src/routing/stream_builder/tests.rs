@@ -25,7 +25,7 @@ use ic_types::{
     CanisterId, Cycles, SubnetId, Time,
     messages::{
         CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload, RejectContext,
-        Request, RequestOrResponse, Response,
+        Request, RequestOrResponse, Response, StreamMessage,
     },
     time::{CoarseTime, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
@@ -1010,7 +1010,7 @@ fn requests_into_queue_round_robin(
     requests: Vec<Request>,
     byte_limit: Option<u64>,
     time: Time,
-) -> StreamIndexedQueue<RequestOrResponse> {
+) -> StreamIndexedQueue<StreamMessage> {
     let mut queue = StreamIndexedQueue::with_begin(start);
 
     let mut request_map: BTreeMap<CanisterId, BTreeMap<CanisterId, VecDeque<Request>>> =
@@ -1043,7 +1043,7 @@ fn requests_into_queue_round_robin(
                 {
                     break;
                 }
-                let req: RequestOrResponse = request.into();
+                let req: StreamMessage = request.into();
                 bytes_routed += req.count_bytes() as u64;
                 queue.push(req);
                 requests.push_back((dst, req_queue));
