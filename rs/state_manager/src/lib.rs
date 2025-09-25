@@ -122,7 +122,7 @@ const LABEL_VALUE_REUSED: &str = "reused";
 
 /// Labels for state sync metrics
 const LABEL_FETCH: &str = "fetch";
-const LABEL_COPY_FILES: &str = "copy_files";
+const LABEL_HARDLINK_FILES: &str = "hardlink_files";
 const LABEL_COPY_CHUNKS: &str = "copy_chunks";
 const LABEL_PREALLOCATE: &str = "preallocate";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
@@ -551,14 +551,14 @@ impl StateSyncMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         let size = metrics_registry.int_counter_vec(
             "state_sync_size_bytes_total",
-            "Size of chunks synchronized by different operations ('fetch', 'copy_files', 'copy_chunks', 'preallocate') during all the state sync in bytes.",
+            "Size of chunks synchronized by different operations ('fetch', 'hardlink_files', 'copy_chunks', 'preallocate') during all the state sync in bytes.",
             &["op"],
         );
 
         // Note [Metrics preallocation]
         for op in &[
             LABEL_FETCH,
-            LABEL_COPY_FILES,
+            LABEL_HARDLINK_FILES,
             LABEL_COPY_CHUNKS,
             LABEL_PREALLOCATE,
         ] {
@@ -592,7 +592,7 @@ impl StateSyncMetrics {
 
         let step_duration = metrics_registry.histogram_vec(
             "state_sync_step_duration_seconds",
-            "Duration of state sync sub-steps in seconds indexed by step ('copy_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint')",
+            "Duration of state sync sub-steps in seconds indexed by step ('hardlink_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint')",
             // 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, …, 1000s, 2000s, 5000s
             decimal_buckets(-1, 3),
             &["step"],
@@ -600,7 +600,7 @@ impl StateSyncMetrics {
 
         // Note [Metrics preallocation]
         for step in &[
-            LABEL_COPY_FILES,
+            LABEL_HARDLINK_FILES,
             LABEL_COPY_CHUNKS,
             LABEL_FETCH,
             LABEL_STATE_SYNC_MAKE_CHECKPOINT,
@@ -613,13 +613,13 @@ impl StateSyncMetrics {
 
         let corrupted_chunks = metrics_registry.int_counter_vec(
             "state_sync_corrupted_chunks",
-            "Number of chunks not copied/applied during state sync due to hash mismatch by source ('copy_files', 'copy_chunks', 'fetch_meta_manifest_chunk', 'fetch_manifest_chunk', 'fetch_state_chunk')",
+            "Number of chunks not copied/applied during state sync due to hash mismatch by source ('hardlink_files', 'copy_chunks', 'fetch_meta_manifest_chunk', 'fetch_manifest_chunk', 'fetch_state_chunk')",
             &["source"],
         );
 
         // Note [Metrics preallocation]
         for source in &[
-            LABEL_COPY_FILES,
+            LABEL_HARDLINK_FILES,
             LABEL_COPY_CHUNKS,
             LABEL_FETCH_META_MANIFEST_CHUNK,
             LABEL_FETCH_MANIFEST_CHUNK,

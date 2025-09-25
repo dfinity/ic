@@ -70,6 +70,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
+    "@crate_index//:prometheus-parse",
 ]
 
 MACRO_DEPENDENCIES = [
