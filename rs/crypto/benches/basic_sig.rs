@@ -173,13 +173,9 @@ fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
     });
 }
 
-fn criterion_only_once() -> Criterion {
-    Criterion::default().sample_size(20)
-}
-
 criterion_group! {
     name = benches;
-    config = criterion_only_once();
+    config = Criterion::default().sample_size(20).warm_up_time(WARM_UP_TIME);
     targets = crypto_basicsig_ed25519, crypto_basicsig_p256, crypto_basicsig_secp256k1, crypto_basicsig_rsasha256
 }
 
