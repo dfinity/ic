@@ -17,7 +17,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
-use ic_test_utilities_execution_environment::logging_charge_bytes;
+use ic_test_utilities_execution_environment::bytes_and_logging_cost;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
@@ -720,8 +720,7 @@ mod tests {
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions
-                    + ((num_bytes + logging_charge_bytes(num_bytes)) as usize
-                        / BYTES_PER_INSTRUCTION) as u64
+                    + (bytes_and_logging_cost(num_bytes) as usize / BYTES_PER_INSTRUCTION) as u64
             )
         });
     }

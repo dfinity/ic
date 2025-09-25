@@ -2691,14 +2691,18 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
     serialized_module.compilation_cost
 }
 
-/// Helper function to compute the cost of logging during `debug_print` and `trap`.
-pub fn logging_charge_bytes(message_num_bytes: u64) -> u64 {
+fn logging_charge_bytes(message_num_bytes: u64) -> u64 {
     let capacity = 4 * 1024; // 4 KiB
     let remaining_space = capacity;
     let allocated_num_bytes = message_num_bytes.min(capacity as u64);
     let transmitted_num_bytes = message_num_bytes.min(remaining_space as u64);
     const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
     2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes
+}
+
+/// Helper function to compute the cost of logging during `debug_print` and `trap`.
+pub fn bytes_and_logging_cost(num_bytes: u64) -> u64 {
+    num_bytes + logging_charge_bytes(num_bytes)
 }
 
 /// Create a routing table with an allocation range for the creation of canisters with specified Canister IDs.
