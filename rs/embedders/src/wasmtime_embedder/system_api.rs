@@ -2014,7 +2014,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn interim_slice_instruction_limit(&self) -> NumInstructions {
-        NumInstructions::from(50_000)
+        NumInstructions::from(250_000_000)
     }
 
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions {
