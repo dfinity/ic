@@ -52,7 +52,7 @@ pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 /// run when creating a new net (e.g. mainnet, or testnet). For whatever reason,
 /// that doesn't need ledger archive, nor ledger index. (I guess because those
 /// are spawned by ledger.) Thus, they are not included.
-pub const NNS_CANISTER_WASMS: [&str; 13] = [
+pub const NNS_CANISTER_WASMS: [&str; 14] = [
     "registry-canister",
     "governance-canister",
     "governance-canister_test",
@@ -67,6 +67,7 @@ pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "sns-wasm-canister",
     "ic-icrc1-ledger",
     "ic-ckbtc-minter",
+    "migration-canister",
 ];
 
 /// WARNING: This count is incomplete. See comments on NNS_CANISTER_WASMS.
@@ -118,13 +119,13 @@ pub const SUBNET_RENTAL_CANISTER_ID: CanisterId =
 /// 14: q4eej-kyaaa-aaaaa-aaaha-cai
 pub const ICP_LEDGER_ARCHIVE_2_CANISTER_ID: CanisterId =
     CanisterId::from_u64(ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET);
-// 15: q3fc5-haaaa-aaaaa-aaahq-cai
+/// 15: q3fc5-haaaa-aaaaa-aaahq-cai
 pub const ICP_LEDGER_ARCHIVE_3_CANISTER_ID: CanisterId =
     CanisterId::from_u64(ICP_LEDGER_ARCHIVE_3_CANISTER_INDEX_IN_NNS_SUBNET);
-// 16: sgymv-uiaaa-aaaaa-aaaia-cai
+/// 16: sgymv-uiaaa-aaaaa-aaaia-cai
 pub const NODE_REWARDS_CANISTER_ID: CanisterId =
     CanisterId::from_u64(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET);
-// 17: sbzkb-zqaaa-aaaaa-aaaiq-cai
+/// 17: sbzkb-zqaaa-aaaaa-aaaiq-cai
 pub const MIGRATION_CANISTER_ID: CanisterId =
     CanisterId::from_u64(MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET);
 /// 0x2_100_001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
@@ -151,7 +152,7 @@ pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
 ///
 /// As of May 2024, it looks like this is only used by (a whole bunch of) tests, mostly as the
 /// argument to send_whitelist.
-pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
+pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -169,9 +170,10 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
     &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
+    &MIGRATION_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 20] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -191,6 +193,7 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
     &BITCOIN_TESTNET_CANISTER_ID,
     &CYCLES_LEDGER_CANISTER_ID,
     &CYCLES_LEDGER_INDEX_CANISTER_ID,
+    &MIGRATION_CANISTER_ID,
 ];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
@@ -243,12 +246,13 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         ROOT_CANISTER_ID                 => "root",
         SNS_WASM_CANISTER_ID             => "sns-wasm",
         SUBNET_RENTAL_CANISTER_ID        => "subnet-rental",
+        MIGRATION_CANISTER_ID            => "migration"
     };
     debug_assert_eq!(
         id_to_name.len(),
         // Because 0 through 14 accounts for the first 15 canister +
         // 1 for exchange rate canister.
-        18,
+        19,
         "{id_to_name:#?}"
     );
 
