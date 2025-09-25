@@ -1048,8 +1048,9 @@ fn test_record_neuron_vote() {
         }]
     );
 
-    let voting_history =
-        with_voting_history_store(|voting_history| voting_history.list_neuron_votes(neuron_id));
+    let voting_history = with_voting_history_store(|voting_history| {
+        voting_history.list_neuron_votes(neuron_id, None, Some(10))
+    });
     if cfg!(feature = "test") {
         assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
     } else {

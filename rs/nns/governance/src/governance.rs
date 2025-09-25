@@ -70,7 +70,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
-    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store_mut},
+    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -99,8 +99,9 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
+    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoResponse,
+    ManageNeuronResponse, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
@@ -2038,6 +2039,46 @@ impl Governance {
             .collect();
 
         ListKnownNeuronsResponse { known_neurons }
+    }
+
+    pub fn list_neuron_votes(
+        &self,
+        request: ListNeuronVotesRequest,
+    ) -> Result<NeuronVotes, api::GovernanceError> {
+        let ListNeuronVotesRequest {
+            neuron_id,
+            before_proposal,
+            limit,
+        } = request;
+        let neuron_id = neuron_id.ok_or(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            "Neuron ID is required",
+        ))?;
+
+        let votes = with_voting_history_store(|voting_history| {
+            voting_history.list_neuron_votes(neuron_id, before_proposal, limit)
+        });
+        let votes = votes
+            .into_iter()
+            .map(|(proposal_id, vote)| NeuronVote {
+                proposal_id: Some(proposal_id),
+                vote: Some(vote.into()),
+            })
+            .collect();
+
+        let all_finalized_before_proposal =
+            self.heap_data.proposals.iter().find_map(|(id, proposal)| {
+                if proposal.ballots.is_empty() {
+                    None
+                } else {
+                    Some(ProposalId { id: *id })
+                }
+            });
+
+        Ok(NeuronVotes {
+            votes: Some(votes),
+            all_finalized_before_proposal,
+        })
     }
 
     /// Claim the neurons supplied by the GTC on behalf of `new_controller`

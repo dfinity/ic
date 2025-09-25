@@ -39,11 +39,12 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
+    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -2284,7 +2285,7 @@ pub fn nns_register_known_neuron(
     proposer_principal: PrincipalId,
     proposer_neuron_id: NeuronId,
     known_neuron: ic_nns_governance_api::KnownNeuron,
-) {
+) -> ProposalId {
     let proposal = ic_nns_governance_api::MakeProposalRequest {
         title: Some("Register Known Neuron".to_string()),
         summary: "Proposal to register a neuron as a known neuron".to_string(),
@@ -2305,6 +2306,7 @@ pub fn nns_register_known_neuron(
         ic_nns_governance_api::manage_neuron_response::Command::MakeProposal(response) => {
             let proposal_id = response.proposal_id.unwrap();
             nns_wait_for_proposal_execution(state_machine, proposal_id.id);
+            return proposal_id;
         }
         other => panic!("Expected MakeProposal response but got: {other:?}"),
     }
@@ -2340,6 +2342,34 @@ pub fn nns_deregister_known_neuron(
         }
         other => panic!("Expected MakeProposal response but got: {other:?}"),
     }
+}
+
+/// Helper function to list neuron votes.
+pub fn nns_list_neuron_votes(
+    state_machine: &StateMachine,
+    neuron_id: NeuronId,
+) -> Vec<(ProposalId, Vote)> {
+    let request = ListNeuronVotesRequest {
+        neuron_id: Some(neuron_id),
+        before_proposal: None,
+        limit: None,
+    };
+    let response = query(
+        state_machine,
+        GOVERNANCE_CANISTER_ID,
+        "list_neuron_votes",
+        Encode!(&request).unwrap(),
+    )
+    .expect("Error calling list_neuron_votes");
+    let response = Decode!(&response, ListNeuronVotesResponse)
+        .expect("Error decoding ListNeuronVotesResponse");
+    response
+        .unwrap()
+        .votes
+        .unwrap()
+        .into_iter()
+        .map(|vote| (vote.proposal_id.unwrap(), vote.vote.unwrap()))
+        .collect()
 }
 
 /// Helper function to list known neurons.
