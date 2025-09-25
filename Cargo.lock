@@ -17675,6 +17675,7 @@ dependencies = [
  "ic_consensus_threshold_sig_system_test_utils",
  "itertools 0.12.1",
  "leb128",
+ "maplit",
  "proxy_canister",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
