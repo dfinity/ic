@@ -1359,23 +1359,6 @@ pub enum HeapGrowthPotential {
     LimitedAvailability,
 }
 
-struct NeuronRateLimits {
-    /// The number of neurons that can be created.
-    available_allowances: u64,
-    /// The last time the number of neurons that can be created was increased.
-    last_allowance_increase: u64,
-}
-
-impl Default for NeuronRateLimits {
-    fn default() -> Self {
-        Self {
-            // Post-upgrade, we reset to max neurons per hour
-            available_allowances: MAX_NEURON_CREATION_SPIKE,
-            last_allowance_increase: 0,
-        }
-    }
-}
-
 /// The `Governance` canister implements the full public interface of the
 /// IC's governance system.
 pub struct Governance {
@@ -1858,7 +1841,8 @@ impl Governance {
         self.neuron_store.add_neuron(neuron)?;
 
         if let Some(reservation) = maybe_reservation {
-            self.rate_limiter.commit(reservation);
+            self.rate_limiter
+                .commit(self.env.now_system_time(), reservation);
         }
 
         Ok(())
