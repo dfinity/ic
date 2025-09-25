@@ -187,7 +187,7 @@ use crate::{
     signer::{ThresholdSigner, ThresholdSignerImpl},
     utils::IDkgBlockReaderImpl,
 };
-use ic_consensus_utils::{RoundRobin, bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
+use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     crypto::IDkgProtocol,
@@ -206,11 +206,11 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
 };
 use std::{
-    cell::RefCell,
     collections::HashSet,
     sync::Arc,
     time::{Duration, Instant},
 };
+use utils::IDkgSchedule;
 
 pub(crate) mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
@@ -245,13 +245,15 @@ pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(
 pub struct IDkgImpl {
     /// The Pre-Signer subcomponent
     pub pre_signer: Box<IDkgPreSignerImpl>,
+    pre_signer_schedule: IDkgSchedule<Height>,
     signer: Box<dyn ThresholdSigner>,
+    signer_schedule: IDkgSchedule<Height>,
     complaint_handler: Box<dyn IDkgComplaintHandler>,
+    complaint_schedule: IDkgSchedule<Height>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    schedule: RoundRobin,
-    last_transcript_purge_ts: RefCell<Instant>,
+    schedule: IDkgSchedule<Instant>,
     metrics: IDkgClientMetrics,
     logger: ReplicaLogger,
     #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
@@ -292,13 +294,15 @@ impl IDkgImpl {
         ));
         Self {
             pre_signer,
+            pre_signer_schedule: IDkgSchedule::new(Height::from(0)),
             signer,
+            signer_schedule: IDkgSchedule::new(Height::from(0)),
             complaint_handler,
+            complaint_schedule: IDkgSchedule::new(Height::from(0)),
             crypto,
             state_reader,
             consensus_block_cache,
-            schedule: RoundRobin::default(),
-            last_transcript_purge_ts: RefCell::new(Instant::now()),
+            schedule: IDkgSchedule::new(Instant::now()),
             metrics: IDkgClientMetrics::new(metrics_registry),
             logger,
             malicious_flags,
@@ -424,8 +428,11 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
             let changeset = timed_call(
                 "pre_signer",
                 || {
-                    self.pre_signer
-                        .on_state_change(idkg_pool, self.complaint_handler.as_transcript_loader())
+                    self.pre_signer.on_state_change(
+                        idkg_pool,
+                        self.complaint_handler.as_transcript_loader(),
+                        &self.pre_signer_schedule,
+                    )
                 },
                 &metrics.on_state_change_duration,
             );
@@ -443,8 +450,11 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
             timed_call(
                 "signer",
                 || {
-                    self.signer
-                        .on_state_change(idkg_pool, self.complaint_handler.as_transcript_loader())
+                    self.signer.on_state_change(
+                        idkg_pool,
+                        self.complaint_handler.as_transcript_loader(),
+                        &self.signer_schedule,
+                    )
                 },
                 &metrics.on_state_change_duration,
             )
@@ -452,7 +462,10 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
         let complaint_handler = || {
             timed_call(
                 "complaint_handler",
-                || self.complaint_handler.on_state_change(idkg_pool),
+                || {
+                    self.complaint_handler
+                        .on_state_change(idkg_pool, &self.complaint_schedule)
+                },
                 &metrics.on_state_change_duration,
             )
         };
@@ -460,7 +473,7 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
         let calls: [&'_ dyn Fn() -> IDkgChangeSet; 3] = [&pre_signer, &signer, &complaint_handler];
         let ret = self.schedule.call_next(&calls);
 
-        if self.last_transcript_purge_ts.borrow().elapsed() >= INACTIVE_TRANSCRIPT_PURGE_SECS {
+        if self.schedule.last_purge.borrow().elapsed() >= INACTIVE_TRANSCRIPT_PURGE_SECS {
             let block_reader =
                 IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
             timed_call(
@@ -468,7 +481,7 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
                 || self.purge_inactive_transcripts(&block_reader),
                 &metrics.on_state_change_duration,
             );
-            *self.last_transcript_purge_ts.borrow_mut() = Instant::now();
+            self.schedule.update_last_purge(Instant::now());
         }
         ret
     }
