@@ -19,8 +19,15 @@ pub struct DayUtc {
 
 impl DayUtc {
     pub fn from_nanos(value: u64) -> Self {
+        let last_ts_nanoseconds = value
+            .checked_div(NANOS_PER_DAY)
+            .and_then(|v| v.checked_add(1))
+            .and_then(|v| v.checked_mul(NANOS_PER_DAY))
+            .and_then(|v| v.checked_sub(1))
+            .unwrap();
+
         Self {
-            last_ts_nanoseconds: ((value / NANOS_PER_DAY) + 1) * NANOS_PER_DAY - 1,
+            last_ts_nanoseconds,
         }
     }
 
