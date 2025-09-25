@@ -1,7 +1,6 @@
 //! Common utils for the IDKG implementation.
 
 use crate::{
-    MAX_PARALLELISM,
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
@@ -614,10 +613,11 @@ impl<T: Ord + Copy> IDkgSchedule<T> {
     }
 }
 
-pub(crate) fn build_thread_pool() -> Arc<ThreadPool> {
+/// Builds a rayon thread pool with the given number of threads.
+pub(crate) fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
     Arc::new(
         ThreadPoolBuilder::new()
-            .num_threads(MAX_PARALLELISM)
+            .num_threads(num_threads)
             .build()
             .expect("Failed to create thread pool"),
     )
@@ -787,8 +787,11 @@ mod tests {
             ])
         );
 
-        inspect_idkg_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init_2.clone()])
-            .expect_err("Should fail when both arguments are non-empty");
+        inspect_idkg_chain_key_initializations(
+            std::slice::from_ref(&ecdsa_init),
+            std::slice::from_ref(&chain_key_init_2),
+        )
+        .expect_err("Should fail when both arguments are non-empty");
     }
 
     fn set_up_get_chain_key_config_test(

@@ -447,6 +447,9 @@ impl NnsFunction {
             NnsFunction::NnsCanisterUpgrade | NnsFunction::NnsRootUpgrade => {
                 Err(format_obsolete_message("InstallCode"))
             }
+            NnsFunction::StopOrStartNnsCanister => {
+                Err(format_obsolete_message("Action::StopOrStartCanister"))
+            }
             NnsFunction::UpdateAllowedPrincipals => Err(
                 "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for the old SNS \
                 initialization mechanism, which is now obsolete. Use \
@@ -511,7 +514,6 @@ impl NnsFunction {
             NnsFunction::AddFirewallRules => (REGISTRY_CANISTER_ID, "add_firewall_rules"),
             NnsFunction::RemoveFirewallRules => (REGISTRY_CANISTER_ID, "remove_firewall_rules"),
             NnsFunction::UpdateFirewallRules => (REGISTRY_CANISTER_ID, "update_firewall_rules"),
-            NnsFunction::StopOrStartNnsCanister => (ROOT_CANISTER_ID, "stop_or_start_nns_canister"),
             NnsFunction::RemoveNodes => (REGISTRY_CANISTER_ID, "remove_nodes"),
             NnsFunction::UninstallCode => (CanisterId::ic_00(), "uninstall_code"),
             NnsFunction::UpdateNodeRewardsTable => {
@@ -567,7 +569,8 @@ impl NnsFunction {
             | NnsFunction::UpdateUnassignedNodesConfig
             | NnsFunction::UpdateNodesHostosVersion
             | NnsFunction::NnsCanisterUpgrade
-            | NnsFunction::NnsRootUpgrade => {
+            | NnsFunction::NnsRootUpgrade
+            | NnsFunction::StopOrStartNnsCanister => {
                 let error_message = match self.check_obsolete() {
                     Err(error_message) => error_message,
                     Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
@@ -599,7 +602,8 @@ impl NnsFunction {
             | NnsFunction::NnsCanisterUpgrade
             | NnsFunction::NnsRootUpgrade
             | NnsFunction::UpdateAllowedPrincipals
-            | NnsFunction::IcpXdrConversionRate => match self.check_obsolete() {
+            | NnsFunction::IcpXdrConversionRate
+            | NnsFunction::StopOrStartNnsCanister => match self.check_obsolete() {
                 Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
                 Err(error_message) => {
                     return Err(GovernanceError::new_with_message(
@@ -625,7 +629,6 @@ impl NnsFunction {
             | NnsFunction::DeployGuestosToAllSubnetNodes
             | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
             | NnsFunction::DeployGuestosToAllUnassignedNodes => Topic::IcOsVersionDeployment,
-            NnsFunction::StopOrStartNnsCanister => Topic::ApplicationCanisterManagement,
             NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
             NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
             NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
@@ -1221,7 +1224,7 @@ impl Topic {
 }
 
 impl Storable for Topic {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned((*self as i32).to_le_bytes().to_vec())
     }
 
@@ -3831,16 +3834,16 @@ impl Governance {
 
         // The proposal was adopted, return the rejection fee for non-ManageNeuron
         // proposals.
-        if !proposal.is_manage_neuron() {
-            if let Some(nid) = proposal.proposer {
-                let rejection_cost = proposal.reject_cost_e8s;
-                self.with_neuron_mut(&nid, |neuron| {
-                    if neuron.neuron_fees_e8s >= rejection_cost {
-                        neuron.neuron_fees_e8s -= rejection_cost;
-                    }
-                })
-                .ok();
-            }
+        if !proposal.is_manage_neuron()
+            && let Some(nid) = proposal.proposer
+        {
+            let rejection_cost = proposal.reject_cost_e8s;
+            self.with_neuron_mut(&nid, |neuron| {
+                if neuron.neuron_fees_e8s >= rejection_cost {
+                    neuron.neuron_fees_e8s -= rejection_cost;
+                }
+            })
+            .ok();
         }
 
         if let Some(action) = action {
@@ -4790,13 +4793,13 @@ impl Governance {
             // successful conversion should indicate that the blob does not contain a large amount
             // of data.
             Command::Disburse(disburse) => {
-                if let Some(to_account) = &disburse.to_account {
-                    if AccountIdentifier::try_from(to_account).is_err() {
-                        return Err(GovernanceError::new_with_message(
-                            ErrorType::InvalidCommand,
-                            "The to_account field is invalid",
-                        ));
-                    }
+                if let Some(to_account) = &disburse.to_account
+                    && AccountIdentifier::try_from(to_account).is_err()
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "The to_account field is invalid",
+                    ));
                 }
             }
             Command::Follow(follow) => {

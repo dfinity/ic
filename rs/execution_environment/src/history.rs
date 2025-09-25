@@ -284,22 +284,22 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             _ => {}
         };
 
-        if let IngressStatus::Known { state, .. } = &status {
-            if state.is_terminal() {
-                // We want to send the height of the replicated state where
-                // ingress message went into a terminal state.
-                //
-                // latest_state_height() will return the height of the last committed state, `H`.
-                // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
-                let last_committed_height = self.state_reader.latest_state_height();
-                let completed_execution_and_updated_to_terminal_state: Height =
-                    last_committed_height + Height::from(1);
+        if let IngressStatus::Known { state, .. } = &status
+            && state.is_terminal()
+        {
+            // We want to send the height of the replicated state where
+            // ingress message went into a terminal state.
+            //
+            // latest_state_height() will return the height of the last committed state, `H`.
+            // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
+            let last_committed_height = self.state_reader.latest_state_height();
+            let completed_execution_and_updated_to_terminal_state: Height =
+                last_committed_height + Height::from(1);
 
-                let _ = self.completed_execution_messages_tx.try_send((
-                    message_id.clone(),
-                    completed_execution_and_updated_to_terminal_state,
-                ));
-            }
+            let _ = self.completed_execution_messages_tx.try_send((
+                message_id.clone(),
+                completed_execution_and_updated_to_terminal_state,
+            ));
         };
 
         state.set_ingress_status(

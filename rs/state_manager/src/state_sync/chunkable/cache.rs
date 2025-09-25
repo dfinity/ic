@@ -96,6 +96,7 @@ impl StateSyncCache {
         manifest: Manifest,
         fetch_chunks: HashSet<usize>,
         state_sync_file_group: FileGroupChunks,
+        copied_chunks_from_file_group: HashSet<ManifestChunkIndex>,
     ) {
         // fetch_chunks, as stored by IncompleteState considers the meta-manifest as chunk 0
         // For the cache we store indices into the manifest's chunk table as
@@ -112,7 +113,12 @@ impl StateSyncCache {
                 let chunks = state_sync_file_group
                     .get(&(i as u32))
                     .expect("Unknown chunk group");
-                missing_chunks.extend(chunks.iter().map(|i| *i as usize));
+                missing_chunks.extend(
+                    chunks
+                        .iter()
+                        .filter(|i| !copied_chunks_from_file_group.contains(i))
+                        .map(|i| *i as usize),
+                );
             }
         }
 
@@ -190,13 +196,19 @@ impl StateSyncCache {
                 manifest,
                 state_sync_file_group,
                 fetch_chunks,
-                copied_chunks_from_file_group: _,
+                copied_chunks_from_file_group,
             } => {
                 if self.entry.is_some() {
                     // The current cache is newer
                     delete_folder(&self.log, &sync.root);
                 } else {
-                    self.push_inner(sync, manifest, fetch_chunks, state_sync_file_group);
+                    self.push_inner(
+                        sync,
+                        manifest,
+                        fetch_chunks,
+                        state_sync_file_group,
+                        copied_chunks_from_file_group,
+                    );
                 }
             }
             DownloadState::Complete | DownloadState::Blank | DownloadState::Prep { .. } => {

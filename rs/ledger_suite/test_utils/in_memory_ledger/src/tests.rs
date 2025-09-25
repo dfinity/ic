@@ -1,5 +1,4 @@
-use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState};
-
+use crate::{ApprovalKey, InMemoryLedger, InMemoryLedgerState};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};

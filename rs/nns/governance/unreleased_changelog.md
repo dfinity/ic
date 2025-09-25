@@ -24,6 +24,9 @@ on the process that this file is part of, see
 
 ## Deprecated
 
+* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
+  instead).
+
 ## Removed
 
 ## Fixed
