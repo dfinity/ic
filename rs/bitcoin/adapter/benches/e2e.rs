@@ -225,16 +225,36 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
     fn add_headers<Network: BlockchainNetwork>(
         blockchain_state: &mut BlockchainState<Network>,
         headers: &[Network::Header],
+        expect_pruning: bool,
         runtime: &tokio::runtime::Runtime,
     ) where
         BlockchainState<Network>: HeaderValidator<Network>,
     {
+        // Genesis block header is automatically added when instantiating BlockchainState
+        let mut num_added_headers = 1;
         // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
         for chunk in headers.chunks(MAX_HEADERS_SIZE) {
             let (added_headers, error) =
                 runtime.block_on(async { blockchain_state.add_headers(chunk).await });
             assert!(error.is_none(), "Failed to add headers: {}", error.unwrap());
-            assert_eq!(added_headers.len(), chunk.len())
+            assert_eq!(added_headers.len(), chunk.len());
+            num_added_headers += added_headers.len();
+
+            runtime
+                .block_on(async {
+                    blockchain_state
+                        .persist_and_prune_headers_below_anchor(chunk.last().unwrap().block_hash())
+                        .await
+                })
+                .unwrap();
+            let (num_headers_disk, num_headers_memory) = blockchain_state.num_headers().unwrap();
+            if expect_pruning {
+                assert_eq!(num_headers_disk, num_added_headers);
+                assert_eq!(num_headers_memory, 1);
+            } else {
+                assert_eq!(num_headers_disk, 0);
+                assert_eq!(num_headers_memory, num_added_headers);
+            }
         }
     }
 
@@ -244,7 +264,7 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
         bench.iter(|| {
             let mut blockchain_state =
                 BlockchainState::new(network, None, &MetricsRegistry::default(), no_op_logger());
-            add_headers(&mut blockchain_state, headers, &rt);
+            add_headers(&mut blockchain_state, headers, false, &rt);
         })
     });
 
@@ -257,14 +277,7 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
                 &MetricsRegistry::default(),
                 no_op_logger(),
             );
-            add_headers(&mut blockchain_state, headers, &rt);
-            rt.block_on(async {
-                blockchain_state
-                    .persist_and_prune_headers_below_anchor(headers.last().unwrap().block_hash())
-                    .await
-            })
-            .unwrap();
-            assert_eq!(blockchain_state.num_headers(), Ok((headers.len() + 2, 1)));
+            add_headers(&mut blockchain_state, headers, true, &rt);
         })
     });
 }
