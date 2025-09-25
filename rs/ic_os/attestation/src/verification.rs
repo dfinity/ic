@@ -38,13 +38,13 @@ pub fn verify_attestation_package(
             ))
         })?;
 
-    if let Some(expected_chip_id) = expected_chip_id {
-        if parsed_attestation_report.chip_id.as_slice() != expected_chip_id {
-            return Err(VerificationError::invalid_chip_id(format!(
-                "Expected chip ID: {expected_chip_id:?}, actual: {:?}",
-                parsed_attestation_report.chip_id
-            )));
-        }
+    if let Some(expected_chip_id) = expected_chip_id
+        && parsed_attestation_report.chip_id.as_slice() != expected_chip_id
+    {
+        return Err(VerificationError::invalid_chip_id(format!(
+            "Expected chip ID: {expected_chip_id:?}, actual: {:?}",
+            parsed_attestation_report.chip_id
+        )));
     }
 
     let certificate_chain = attestation_package
