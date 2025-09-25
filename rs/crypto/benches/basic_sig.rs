@@ -175,7 +175,7 @@ fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
 
 criterion_group! {
     name = benches;
-    config = Criterion::default().sample_size(20).warm_up_time(WARM_UP_TIME);
+    config = Criterion::default().sample_size(20).warm_up_time(WARMUP_TIME);
     targets = crypto_basicsig_ed25519, crypto_basicsig_p256, crypto_basicsig_secp256k1, crypto_basicsig_rsasha256
 }
 
