@@ -722,6 +722,12 @@ impl CountBytes for Refund {
     }
 }
 
+/// Ensure that `RequestOrResponse` and `StreamMessage` have the same size, so that
+/// their respective `CountBytes` implementations are consistent.
+const _: () = {
+    assert!(size_of::<RequestOrResponse>() == size_of::<StreamMessage>());
+};
+
 impl CountBytes for RequestOrResponse {
     fn count_bytes(&self) -> usize {
         match self {
@@ -740,12 +746,6 @@ impl CountBytes for StreamMessage {
         }
     }
 }
-
-/// Ensure that `RequestOrResponse` and `StreamMessage` have the same size, so that
-/// their respective `CountBytes` implementations are consistent.
-const _: () = {
-    assert!(size_of::<RequestOrResponse>() == size_of::<StreamMessage>());
-};
 
 impl From<Request> for RequestOrResponse {
     fn from(req: Request) -> Self {
