@@ -58,7 +58,7 @@ fn log_instructions(env: TestEnv) {
     let upgrade_image_hash = get_guestos_update_img_sha256();
     info!(
         logger,
-        r#"Suggested GuestOS upgrade:
+        r#"Working GuestOS version:
     --upgrade-version {upgrade_version}
     --upgrade-image-url {upgrade_image_url}
     --upgrade-image-hash {upgrade_image_hash}"#
