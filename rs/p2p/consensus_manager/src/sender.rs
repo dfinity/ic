@@ -252,14 +252,13 @@ async fn send_transmit_to_all_peers<F>(
     build_payload: F,
     route: String,
     cancellation_token: CancellationToken,
-)
-where
+) where
     F: FnOnce() -> Bytes + Send + 'static,
 {
     // Run payload serialization in a blocking task to avoid blocking the async runtime.
     let result = tokio::task::spawn_blocking(build_payload).await;
     let body = panic_on_join_err(result);
-    
+
     let mut in_progress_transmissions = JoinSet::new();
     // Stores the connection ID and the [`CancellationToken`] of the last successful transmission task to a peer.
     let mut initiated_transmissions: HashMap<NodeId, (ConnId, CancellationToken)> = HashMap::new();
