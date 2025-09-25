@@ -117,15 +117,6 @@ pub mod response {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Refund {
-    #[prost(message, optional, tag = "1")]
-    pub recipient: ::core::option::Option<super::super::super::types::v1::CanisterId>,
-    #[prost(message, optional, tag = "2")]
-    pub amount: ::core::option::Option<Cycles>,
-    #[prost(uint64, optional, tag = "3")]
-    pub refund_id: ::core::option::Option<u64>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestOrResponse {
     #[prost(oneof = "request_or_response::R", tags = "1, 2")]
     pub r: ::core::option::Option<request_or_response::R>,
@@ -139,6 +130,15 @@ pub mod request_or_response {
         #[prost(message, tag = "2")]
         Response(super::Response),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Refund {
+    #[prost(message, optional, tag = "1")]
+    pub recipient: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(message, optional, tag = "2")]
+    pub amount: ::core::option::Option<Cycles>,
+    #[prost(uint64, optional, tag = "3")]
+    pub refund_id: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamMessage {

@@ -537,15 +537,15 @@ impl Hash for Response {
     }
 }
 
-/// Canister message type (like `Request` and `Response`) for guaranteed
-/// delivery of refunds for best-effort calls.
+/// XNet message type (like `Request` and `Response`) for guaranteed delivery of
+/// refunds for best-effort calls.
 ///
 /// Represents either an _anonymous refund_ (when `refund_id` is `None`) or a
 /// _refund notification_ (when `refund_id` is `Some(_)`).
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
-    /// Who this refund is to be delivered to.
+    /// Whom this refund is to be delivered to.
     recipient: CanisterId,
 
     /// The amount of cycles being refunded. Non-zero for anonymous refunds.
@@ -751,6 +751,12 @@ impl CountBytes for Refund {
     }
 }
 
+/// Ensure that `RequestOrResponse` and `StreamMessage` have the same size, so that
+/// their respective `CountBytes` implementations are consistent.
+const _: () = {
+    assert!(size_of::<RequestOrResponse>() == size_of::<StreamMessage>());
+};
+
 impl CountBytes for RequestOrResponse {
     fn count_bytes(&self) -> usize {
         match self {
@@ -769,12 +775,6 @@ impl CountBytes for StreamMessage {
         }
     }
 }
-
-/// Ensure that `RequestOrResponse` and `StreamMessage` have the same size, so that
-/// their respective `CountBytes` implementations are consistent.
-const _: () = {
-    assert!(size_of::<RequestOrResponse>() == size_of::<StreamMessage>());
-};
 
 impl From<Request> for RequestOrResponse {
     fn from(req: Request) -> Self {
