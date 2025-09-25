@@ -215,7 +215,7 @@ pub fn subaccount_to_principal(subaccount: Subaccount) -> Principal {
 /// Tries to map a `Subaccount` to a `Principal`.
 ///
 /// # Errors
-/// * `PrincipalError::BytesTooLong()` if the length of the principal (`subaccount[0]`) if larger
+/// * `PrincipalError::BytesTooLong()` if the length of the principal (`subaccount[0]`) is larger
 ///   than 29.
 ///
 /// # Returns
