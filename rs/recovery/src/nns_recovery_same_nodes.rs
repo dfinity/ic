@@ -69,21 +69,15 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub download_pool_node: Option<IpAddr>,
 
-    /// The method of downloading state. Possible values are either `local` (for a
-    /// local recovery on the admin node) or the ipv6 address of the source node.
-    /// Local recoveries allow us to skip a potentially expensive data transfer.
+    /// The location of the node with admin access. Possible values are either `local` (for a local
+    /// recovery on the admin node) or the ipv6 address of the source node. Local recoveries allow
+    /// us to skip a potentially expensive data transfer.
     #[clap(long, value_parser=crate::util::data_location_from_str)]
-    pub download_state_method: Option<DataLocation>,
+    pub admin_access_location: Option<DataLocation>,
 
     /// If the downloaded state should be backed up locally
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
-
-    /// The method of uploading state. Possible values are either `local` (for a
-    /// local recovery on the admin node) or the ipv6 address of the target node.
-    /// Local recoveries allow us to skip a potentially expensive data transfer.
-    #[clap(long, value_parser=crate::util::data_location_from_str)]
-    pub upload_method: Option<DataLocation>,
 
     /// IP address of the node used to poll for the recovery CUP
     #[clap(long)]
@@ -175,15 +169,20 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
-            StepType::StopReplica => {
-                if self.params.download_state_method.is_none() {
-                    self.params.download_state_method = read_optional_data_location(
+            StepType::StopReplica
+            | StepType::DownloadState
+            | StepType::UploadState
+            | StepType::UploadCUPAndRegistry => {
+                if self.params.admin_access_location.is_none() {
+                    self.params.admin_access_location = read_optional_data_location(
                         &self.logger,
-                        "Enter state download location (admin access required) [local/<ipv6>]:",
+                        "Enter state download/upload location (admin access required) [local/<ipv6>]:",
                     );
                 }
             }
-
+            _ => {}
+        }
+        match step_type {
             StepType::DownloadConsensusPool => {
                 print_height_info(
                     &self.logger,
@@ -200,16 +199,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::DownloadState => {
-                if self.params.download_state_method.is_none() {
-                    self.params.download_state_method = read_optional_data_location(
-                        &self.logger,
-                        "Enter state download location (admin access required) [local/<ipv6>]:",
-                    );
-                }
-
                 if self.params.keep_downloaded_state.is_none()
                     && let Some(&DataLocation::Remote(_)) =
-                        self.params.download_state_method.as_ref()
+                        self.params.admin_access_location.as_ref()
                 {
                     self.params.keep_downloaded_state = Some(consent_given(
                         &self.logger,
@@ -238,18 +230,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::UploadState | StepType::UploadCUPAndRegistry => {
-                if self.params.upload_method.is_none() {
-                    self.params.upload_method = read_optional_data_location(
-                        &self.logger,
-                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
-                    );
-                }
-            }
-
             StepType::WaitForCUP => {
                 if self.params.wait_for_cup_node.is_none() {
-                    if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
+                    if let Some(DataLocation::Remote(ip)) = self.params.admin_access_location {
                         self.params.wait_for_cup_node = Some(ip);
                     } else {
                         self.params.wait_for_cup_node = read_optional(
@@ -267,7 +250,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
             StepType::StopReplica => {
-                if let Some(method) = self.params.download_state_method {
+                if let Some(method) = self.params.admin_access_location {
                     let node_ip = match method {
                         DataLocation::Remote(ip) => ip,
                         DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
@@ -309,7 +292,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::DownloadState => {
-                match self.params.download_state_method {
+                match self.params.admin_access_location {
                     Some(DataLocation::Local) => {
                         Ok(Box::new(self.recovery.get_copy_local_state_step()))
                     }
@@ -385,7 +368,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             )),
 
             StepType::UploadState => {
-                if let Some(method) = self.params.upload_method {
+                if let Some(method) = self.params.admin_access_location {
                     Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -393,7 +376,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::UploadCUPAndRegistry => {
-                if let Some(method) = self.params.upload_method {
+                if let Some(method) = self.params.admin_access_location {
                     let node_ip = match method {
                         DataLocation::Remote(ip) => ip,
                         DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
