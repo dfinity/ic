@@ -84,15 +84,25 @@ impl Step for DownloadCertificationsStep {
         let ssh_user = self.ssh_user.to_string();
         let cert_path = format!("{IC_DATA_PATH}/{IC_CERTIFICATIONS_PATH}");
         let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
-        let downloaded_at_least_once = ips.iter().fold(false, |success, ip| {
+
+        let n = ips.len();
+        let f = (n.max(1) - 1) / 3;
+        let minimum_required = n - f;
+
+        let mut number_successful_downloads = 0;
+        for (i, ip) in ips.iter().enumerate() {
             let data_src = format!("{ssh_user}@[{ip}]:{cert_path}");
             let target = self.work_dir.join("certifications").join(ip.to_string());
             if let Err(e) = create_dir(&target) {
                 warn!(self.logger, "Failed to create target dir: {:?}", e);
-                return success;
+                continue;
             }
 
-            info!(self.logger, "Downloading certifications from {ip} ...");
+            info!(
+                self.logger,
+                "[{}/{n}] Downloading certifications from {ip} ...",
+                i + 1,
+            );
             let res = rsync_with_retries(
                 &self.logger,
                 vec![],
@@ -102,16 +112,24 @@ impl Step for DownloadCertificationsStep {
                 self.key_file.as_ref(),
                 self.auto_retry,
                 5,
-            )
-            .map_err(|e| warn!(self.logger, "Skipping download: {:?}", e));
+            );
 
-            success || res.is_ok()
-        });
+            match res {
+                Ok(_) => {
+                    info!(self.logger, "Successful download from {ip}");
 
-        if !downloaded_at_least_once {
-            Err(RecoveryError::invalid_output_error(
-                "Failed to download certifications from any node.",
-            ))
+                    number_successful_downloads += 1;
+                }
+                Err(e) => {
+                    warn!(self.logger, "Skipping download: {:?}", e);
+                }
+            }
+        }
+
+        if number_successful_downloads < minimum_required {
+            Err(RecoveryError::invalid_output_error(format!(
+                "Failed to download enough certification pools. Successfully downloaded from {number_successful_downloads} out of {n} nodes, while at least {minimum_required} are required."
+            )))
         } else {
             Ok(())
         }
