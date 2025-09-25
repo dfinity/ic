@@ -1,4 +1,4 @@
-use bitcoin::{BlockHash, block::Header as BlockHeader};
+use bitcoin::{BlockHash, Network, block::Header as BlockHeader};
 use criterion::measurement::Measurement;
 use criterion::{BenchmarkGroup, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ic_btc_adapter::{
@@ -72,9 +72,7 @@ fn prepare(
 // Performance metrics are captured from the sending of the deserialised request through
 // to receiving the response and its deserialisation.
 fn e2e(criterion: &mut Criterion) {
-    let network = bitcoin::Network::Regtest;
-    let mut config = Config::default_with(network.into());
-
+    let network = Network::Regtest;
     let mut processed_block_hashes = vec![];
     let genesis = network.genesis_block_header();
 
@@ -84,11 +82,14 @@ fn e2e(criterion: &mut Criterion) {
 
     let (client, _temp) = Builder::new()
         .make(|uds_path| {
-            Ok(rt.block_on(async {
-                config.incoming_source = IncomingSource::Path(uds_path.to_path_buf());
-                start_server(no_op_logger(), MetricsRegistry::default(), config.clone()).await;
-                start_client(uds_path).await
-            }))
+            let mut config = Config::default_with(network.into());
+            config.incoming_source = IncomingSource::Path(uds_path.to_path_buf());
+            rt.spawn(start_server(
+                no_op_logger(),
+                MetricsRegistry::default(),
+                config,
+            ));
+            Ok(rt.block_on(async { start_client(uds_path).await }))
         })
         .unwrap()
         .into_parts();

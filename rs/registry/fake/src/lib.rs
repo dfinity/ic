@@ -83,7 +83,7 @@ impl FakeRegistryClient {
     fn check_version(
         &self,
         version: RegistryVersion,
-    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
+    ) -> Result<RwLockReadGuard<'_, CacheState>, RegistryClientError> {
         let cache_state = self.cache.read().unwrap();
         let (latest_version, _, _) = &*cache_state;
         if &version > latest_version {
