@@ -128,7 +128,7 @@ impl NodeRewardsCanister {
     }
 
     fn validate_reward_period(from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
-        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
+        let today: DayUtc = current_time().into();
         if from_day > to_day {
             return Err("from_day must be before to_day".to_string());
         }
@@ -143,8 +143,8 @@ impl NodeRewardsCanister {
         request: GetNodeProvidersRewardsRequest,
         provider_filter: Option<PrincipalId>,
     ) -> Result<RewardsCalculatorResults, String> {
-        let start_day = DayUtc::from(request.from_day_timestamp_nanos);
-        let end_day = DayUtc::from(request.to_day_timestamp_nanos);
+        let start_day = request.from_day.into();
+        let end_day = request.to_day.into();
         Self::validate_reward_period(&start_day, &end_day)?;
 
         RewardsCalculationV1::calculate_rewards(&start_day, &end_day, provider_filter, self)
@@ -157,7 +157,7 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier
-            .version_for_timestamp(day.unix_ts_at_day_end_nanoseconds())
+            .version_for_timestamp(day.unix_timestamp_at_day_end_nanoseconds())
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
         Ok(registry_querier.get_rewards_table(version))
     }
@@ -168,7 +168,10 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
     ) -> Result<BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>, String> {
         let metrics = self.metrics_manager.metrics_by_subnet(day);
         if metrics.is_empty() {
-            return Err(format!("No metrics found for day {}", day.get()));
+            return Err(format!(
+                "No metrics found for day {}",
+                day.unix_timestamp_at_day_end_nanoseconds()
+            ));
         }
         Ok(metrics)
     }
@@ -304,8 +307,8 @@ impl NodeRewardsCanister {
     ) -> GetNodeProviderRewardsCalculationResponse {
         let provider_id = PrincipalId::from(request.provider_id);
         let request_inner = GetNodeProvidersRewardsRequest {
-            from_day_timestamp_nanos: request.from_day_timestamp_nanos,
-            to_day_timestamp_nanos: request.to_day_timestamp_nanos,
+            from_day: request.from_day,
+            to_day: request.to_day,
         };
         let result = canister
             .with_borrow(|canister| canister.calculate_rewards(request_inner, Some(provider_id)))?;
