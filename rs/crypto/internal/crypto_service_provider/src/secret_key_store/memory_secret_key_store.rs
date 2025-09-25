@@ -4,6 +4,7 @@ use crate::secret_key_store::{
 };
 use crate::types::CspSecretKey;
 use ic_crypto_internal_types::scope::Scope;
+use ic_logger::info;
 use ic_logger::{ReplicaLogger, debug, replica_logger::no_op_logger};
 use std::collections::HashMap;
 
@@ -84,11 +85,19 @@ impl SecretKeyStore for InMemorySecretKeyStore {
         core::mem::swap(&mut all_keys, &mut self.keys);
         for (key_id, (csp_key, maybe_scope)) in all_keys.drain() {
             if maybe_scope != Some(scope) || filter(&key_id, &csp_key) {
+                info!(
+                    self.logger,
+                    "PIERUGO | Memory store: Keeping key with ID {} with scope {:?}",
+                    key_id,
+                    maybe_scope
+                );
                 self.keys.insert(key_id, (csp_key, maybe_scope));
             } else {
                 debug!(
                     self.logger,
-                    "Deleting key with ID {} with scope {}", key_id, scope
+                    "PIERUGO (log already there) | Memory store: Deleting key with ID {} with scope {}",
+                    key_id,
+                    scope
                 );
             }
         }
@@ -102,7 +111,20 @@ impl SecretKeyStore for InMemorySecretKeyStore {
         for (key_id, (csp_key, maybe_scope)) in self.keys.iter() {
             if maybe_scope == &Some(scope) && !filter(key_id, csp_key) {
                 // Key is to be deleted, i.e., the keystore will be modified.
+                info!(
+                    self.logger,
+                    "PIERUGO | Memory store: Key with ID {} would be deleted with scope {}",
+                    key_id,
+                    scope
+                );
                 return true;
+            } else {
+                info!(
+                    self.logger,
+                    "PIERUGO | Memory store: Key with ID {} would be kept with scope {:?}",
+                    key_id,
+                    maybe_scope
+                );
             }
         }
         false

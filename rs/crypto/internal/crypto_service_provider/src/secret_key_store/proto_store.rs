@@ -488,11 +488,19 @@ impl SecretKeyStore for ProtoSecretKeyStore {
             let orig_keys_count = all_keys.len();
             for (key_id, (csp_key, maybe_scope)) in all_keys.drain() {
                 if maybe_scope != Some(scope) || filter(&key_id, &csp_key) {
+                    info!(
+                        self.logger,
+                        "PIERUGO | Proto store: Keeping key with ID {} with scope {:?}",
+                        key_id,
+                        maybe_scope
+                    );
                     keys.insert(key_id, (csp_key, maybe_scope));
                 } else {
                     info!(
                         self.logger,
-                        "Deleting key with ID {} with scope {}", key_id, scope
+                        "PIERUGO (log already there) | Proto store: Deleting key with ID {} with scope {}",
+                        key_id,
+                        scope
                     );
                 }
             }
@@ -510,7 +518,20 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         for (key_id, (csp_key, maybe_scope)) in self.keys.read().iter() {
             if maybe_scope == &Some(scope) && !filter(key_id, csp_key) {
                 // Key is to be deleted, i.e., the keystore will be modified.
+                info!(
+                    self.logger,
+                    "PIERUGO | Proto store: Key with ID {} would be deleted with scope {}",
+                    key_id,
+                    scope
+                );
                 return true;
+            } else {
+                info!(
+                    self.logger,
+                    "PIERUGO | Proto store: Key with ID {} would be kept with scope {:?}",
+                    key_id,
+                    maybe_scope
+                );
             }
         }
         false

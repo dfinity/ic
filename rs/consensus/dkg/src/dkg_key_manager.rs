@@ -205,9 +205,17 @@ impl DkgKeyManager {
         // load its transcripts and update the latest seen height.
         let cup = cache.catch_up_package();
         let cup_height = Some(cup.height());
+        info!(
+            self.logger,
+            "PIERUGO | Last CUP height: {:?}, CUP height: {:?}", self.last_cup_height, cup_height
+        );
         if self.last_cup_height < cup_height {
             let block = cup.content.block.into_inner();
             let summary = block.payload.as_ref().as_summary();
+            info!(
+                self.logger,
+                "PIERUGO | Loading transcripts from CUP at height {:?}", summary.dkg.height
+            );
             self.load_transcripts_from_summary(&summary.dkg);
             self.last_cup_height = cup_height;
         }
@@ -216,6 +224,12 @@ impl DkgKeyManager {
         // have seen before, we update the metrics, load the transcripts and update the
         // last seen height.
         let summary_block = cache.summary_block();
+        info!(
+            self.logger,
+            "PIERUGO | Last DKG summary height: {:?}, summary block height: {:?}",
+            self.last_dkg_summary_height,
+            summary_block.height
+        );
         if self.last_dkg_summary_height < Some(summary_block.height) {
             let summary = summary_block.payload.as_ref().as_summary();
             self.update_dkg_metrics(&summary.dkg);
@@ -230,7 +244,15 @@ impl DkgKeyManager {
             // parallel with the previous removal and theoretically we could finish loading
             // the next transcript before the previous removal (which would consider the
             // next transcript key irrelevant and remove it).
+            info!(
+                self.logger,
+                "PIERUGO | Deleting inactive keys at summary height {:?}", summary.dkg.height
+            );
             self.delete_inactive_keys(pool_reader);
+            info!(
+                self.logger,
+                "PIERUGO | Loading transcripts from DKG summary at height {:?}", summary.dkg.height
+            );
             self.load_transcripts_from_summary(&summary.dkg);
             self.last_dkg_summary_height = Some(summary_block.height);
         }
@@ -272,6 +294,11 @@ impl DkgKeyManager {
         );
 
         for (id, (_, handle)) in expired {
+            info!(
+                self.logger,
+                "PIERUGO | Waiting on transcript {} to be loaded",
+                dkg_id_log_msg(&id)
+            );
             match handle.recv() {
                 Err(err) => panic!(
                     "Couldn't finish loading transcript {}: {:?}",
@@ -303,6 +330,26 @@ impl DkgKeyManager {
     /// that CSP does not reload transcripts, which were successfully loaded
     /// before.
     fn load_transcripts_from_summary(&mut self, summary: &DkgSummary) {
+        info!(
+            self.logger,
+            "PIERUGO | Loading current transcripts IDs: {:?}",
+            summary
+                .current_transcripts()
+                .values()
+                .map(|t| dkg_id_log_msg(&t.dkg_id))
+                .collect::<Vec<_>>()
+        );
+
+        info!(
+            self.logger,
+            "PIERUGO | Loading next transcripts IDs: {:?}",
+            summary
+                .next_transcripts()
+                .values()
+                .map(|t| dkg_id_log_msg(&t.dkg_id))
+                .collect::<Vec<_>>()
+        );
+
         let transcripts_to_load: Vec<_> = {
             let current_interval_start = summary.height;
             let next_interval_start = summary.get_next_start_height();
@@ -326,6 +373,11 @@ impl DkgKeyManager {
                 .collect()
         };
 
+        info!(
+            self.logger,
+            "PIERUGO | Transcripts to load: {:?}", transcripts_to_load,
+        );
+
         for (deadline, dkg_id) in transcripts_to_load.into_iter() {
             let since = Instant::now();
 
@@ -346,6 +398,8 @@ impl DkgKeyManager {
                     .1;
 
                 let result = loop {
+                    info!(logger, "PIERUGO | Loading transcript: {:?}", transcript);
+
                     let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
                     let elapsed = since.elapsed().as_secs_f64();
 
@@ -448,6 +502,11 @@ impl DkgKeyManager {
         while let Some(summary) = dkg_summary {
             let next_summary_height = summary.dkg.get_next_start_height();
             for transcript in summary.dkg.into_transcripts() {
+                info!(
+                    self.logger,
+                    "PIERUGO | Retaining DKG transcript {} from summary",
+                    dkg_id_log_msg(&transcript.dkg_id),
+                );
                 transcripts_to_retain.insert(transcript);
             }
 
@@ -455,6 +514,11 @@ impl DkgKeyManager {
                 .get_finalized_block(next_summary_height)
                 .map(|b| b.payload.as_ref().as_summary().clone());
         }
+
+        info!(
+            self.logger,
+            "PIERUGO | Retaining DKG transcripts {:?}", transcripts_to_retain
+        );
 
         let crypto = self.crypto.clone();
         let logger = self.logger.clone();
