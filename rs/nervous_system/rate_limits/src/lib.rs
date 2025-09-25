@@ -288,8 +288,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
         }
     }
 
-    pub fn commit(&mut self, reservation: Reservation<K>) {
-        let now = SystemTime::now();
+    pub fn commit(&mut self, now: SystemTime, reservation: Reservation<K>) {
         let default_usage = UsageRecord {
             last_capacity_drip: now,
             capacity_used: 0,
@@ -357,7 +356,6 @@ fn update_capacity(
     let elapsed = now
         .duration_since(usage_record.last_capacity_drip)
         .unwrap_or(Duration::ZERO);
-
     // Calculate how many complete intervals have passed
     let complete_intervals = elapsed.as_secs() / add_frequency.as_secs();
 
@@ -469,7 +467,7 @@ mod tests {
 
         // Use up 8 capacity
         let reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 8).unwrap();
-        rate_limiter.commit(reservation1);
+        rate_limiter.commit(now, reservation1);
 
         // Should only have 2 capacity left
         let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 3);
@@ -480,7 +478,7 @@ mod tests {
 
         // Can still reserve 2
         let reservation2 = rate_limiter.try_reserve(now, "Foo".to_string(), 2).unwrap();
-        rate_limiter.commit(reservation2);
+        rate_limiter.commit(now, reservation2);
 
         // Now we're at full capacity (10/10 used), nothing more should work
         let fully_used = rate_limiter.try_reserve(now, "Foo".to_string(), 1);
@@ -548,8 +546,8 @@ mod tests {
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1); // Only the new reservation
 
         // Try committing old reservations - should have no effect
-        rate_limiter.commit(reservation1);
-        rate_limiter.commit(reservation2);
+        rate_limiter.commit(later, reservation1);
+        rate_limiter.commit(later, reservation2);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
         assert_eq!(
             rate_limiter
@@ -592,7 +590,7 @@ mod tests {
         assert_eq!(reservation1.key, "stable_key".to_string());
 
         // Commit the reservation
-        rate_limiter.commit(reservation1);
+        rate_limiter.commit(now, reservation1);
 
         // Verify the usage is stored
         let usage = rate_limiter
@@ -655,7 +653,7 @@ mod tests {
         let reservation1 = rate_limiter
             .try_reserve(now, "test_key".to_string(), 8)
             .unwrap();
-        rate_limiter.commit(reservation1);
+        rate_limiter.commit(now, reservation1);
 
         // Verify capacity is used
         let usage = rate_limiter
