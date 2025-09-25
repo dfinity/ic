@@ -2,21 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:serde",
-]
-
-MACRO_DEPENDENCIES = [
-]
-
-DEV_DEPENDENCIES = [
-]
-
-MACRO_DEV_DEPENDENCIES = [
-]
-
 LIB_SRCS = glob(
     ["src/**/*.rs"],
     # Ensures that we do not need to rebuild just because a _test.rs file
@@ -28,14 +13,20 @@ rust_library(
     name = "rate_limits",
     srcs = LIB_SRCS,
     crate_name = "ic_nervous_system_rate_limits",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test(
     name = "rate_limits_test",
     srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:serde",
+    ],
 )
