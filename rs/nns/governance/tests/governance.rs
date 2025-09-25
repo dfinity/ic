@@ -5164,7 +5164,7 @@ fn test_rate_limiting_neuron_creation() {
     }
 
     // Advance time by just enough to reset the rate limit
-    driver.advance_time_by(minimum_wait_for_capacity_increase * 10);
+    driver.advance_time_by(minimum_wait_for_capacity_increase + 1);
 
     // Now we should be able to again claim a neuron.
     // NOTE: IT IS ESSENTIAL that something is different about these parameters, or the call
@@ -5198,7 +5198,19 @@ fn test_rate_limiting_neuron_creation() {
     }]);
 
     let result: ManageNeuronResponse = claim_neuron_by_memo(&mut gov, controller, nonce);
-    result.panic_if_error(&format!("Could not claim neuron with nonce: {nonce}!"));
+    match result.command {
+        Some(CommandResponse::Error(e)) => {
+            assert_eq!(
+                e,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::Unavailable,
+                    "Reached maximum number of neurons that can be created in this hour. \
+                        Please wait and try again later."
+                )
+            )
+        }
+        r => panic!("We did not get a rate limited response!, {r:?}"),
+    }
 }
 
 #[test]
