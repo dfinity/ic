@@ -524,24 +524,11 @@ impl Recovery {
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step + use<> {
-        self.get_upload_and_restart_step_with_data_src(
-            upload_method,
-            self.work_dir.join(IC_STATE_DIR),
-        )
-    }
-
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
-    pub fn get_upload_and_restart_step_with_data_src(
-        &self,
-        upload_method: DataLocation,
-        data_src: PathBuf,
-    ) -> impl Step + use<> {
         UploadAndRestartStep {
             logger: self.logger.clone(),
             upload_method,
             work_dir: self.work_dir.clone(),
-            data_src,
+            data_src: self.work_dir.join(IC_STATE_DIR),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
             check_ic_replay_height: true,

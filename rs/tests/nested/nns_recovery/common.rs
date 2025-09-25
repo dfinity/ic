@@ -312,6 +312,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         download_state_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        keep_downloaded_state: Some(false),
         upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_priv_key_path),
@@ -605,6 +606,11 @@ fn local_recovery(
         .download_pool_node
         .map(|n| format!("--download-pool-node {n} "))
         .unwrap_or_default();
+    let maybe_keep_downloaded_state = subnet_recovery_tool
+        .params
+        .keep_downloaded_state
+        .map(|b| format!("--keep-downloaded-state {b} "))
+        .unwrap_or_default();
     let maybe_skips = subnet_recovery_tool
         .params
         .skip
@@ -630,6 +636,7 @@ fn local_recovery(
         {maybe_upgrade_image_hash}\
         {maybe_download_pool_node}\
         --download-state-method local \
+        {maybe_keep_downloaded_state}\
         --upload-method local \
         --wait-for-cup-node {node_ip} \
         {maybe_backup_key_file}\
