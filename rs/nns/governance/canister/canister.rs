@@ -27,14 +27,14 @@ use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
     GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
-    ProposalInfo, RestoreAgingSummary, RewardEvent, SettleCommunityFundParticipation,
-    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-    UpdateNodeProvider, Vote,
+    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse,
+    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
+    ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
+    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
@@ -550,6 +550,11 @@ fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
 fn get_restore_aging_summary() -> RestoreAgingSummary {
     let response = governance().get_restore_aging_summary().unwrap_or_default();
     RestoreAgingSummary::from(response)
+}
+
+#[query]
+fn list_neuron_votes(request: ListNeuronVotesRequest) -> ListNeuronVotesResponse {
+    with_governance(|governance| governance.list_neuron_votes(request))
 }
 
 #[query(
