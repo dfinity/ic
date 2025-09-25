@@ -68,7 +68,13 @@ lvs /dev/store/shared-backup >/dev/null 2>&1 || (
 )
 
 # TODO(NODE-1722): remove once every GuestOS has been upgraded after the LV resize
-retry lvresize --yes -L "$LV_SIZE_MB"M -n shared-backup store
+# We use sectors because lvs outputs MB in ##.00 format which is annoying to compare since we don't
+# have bc in GuestOS.
+SECTORS_PER_MB=2048
+if (( $(lvs --noheadings --nosuffix --units 's' -o lv_size /dev/mapper/store-shared--backup) < (LV_SIZE_MB * SECTORS_PER_MB) )); then
+    echo "Resizing logical volume 'shared-backup' to ${LV_SIZE_MB}MB."
+    retry lvresize --yes -L "$LV_SIZE_MB"M -n /dev/mapper/store-shared--backup
+fi
 
 # Set up swap space if it does not exist yet.
 lvs /dev/store/shared-swap >/dev/null 2>&1 || (
