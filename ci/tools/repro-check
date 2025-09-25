@@ -317,7 +317,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     args = parser.parse_args()
-    # If user didn't specify any OS flags, check all three
+    # If user didn't specify any OS flags, check all four
     if not args.guestos and not args.hostos and not args.setupos and not args.recovery:
         args.guestos = True
         args.hostos = True
