@@ -184,21 +184,28 @@ impl<
 
             let child_token = cancellation_token.child_token();
             let child_token_clone = child_token.clone();
-            let payload = Self::get_transmit_payload(
-                self.current_commit_id,
-                used_slot.slot_number(),
-                ArtifactWithOpt {
-                    artifact: wire_artifact,
-                    is_latency_sensitive: new_artifact.is_latency_sensitive,
-                },
-                wire_artifact_id,
-            );
+
+            // Don't perform payload serialization in the main event loop
+            let commit_id = self.current_commit_id;
+            let slot_number = used_slot.slot_number();
+            let build_payload = move || {
+                Self::get_transmit_payload(
+                    commit_id,
+                    slot_number,
+                    ArtifactWithOpt {
+                        artifact: wire_artifact,
+                        is_latency_sensitive: new_artifact.is_latency_sensitive,
+                    },
+                    wire_artifact_id,
+                )
+            };
+
             let route = uri_prefix::<WireArtifact>();
             let send_future = send_transmit_to_all_peers(
                 self.rt_handle.clone(),
                 self.metrics.clone(),
                 self.transport.clone(),
-                payload,
+                build_payload,
                 route,
                 child_token_clone,
             );
@@ -238,14 +245,21 @@ impl<
     }
 }
 #[instrument(skip_all)]
-async fn send_transmit_to_all_peers(
+async fn send_transmit_to_all_peers<F>(
     rt_handle: Handle,
     metrics: ConsensusManagerMetrics,
     transport: Arc<dyn Transport>,
-    body: Bytes,
+    build_payload: F,
     route: String,
     cancellation_token: CancellationToken,
-) {
+)
+where
+    F: FnOnce() -> Bytes + Send + 'static,
+{
+    // Run payload serialization in a blocking task to avoid blocking the async runtime.
+    let result = tokio::task::spawn_blocking(build_payload).await;
+    let body = panic_on_join_err(result);
+    
     let mut in_progress_transmissions = JoinSet::new();
     // Stores the connection ID and the [`CancellationToken`] of the last successful transmission task to a peer.
     let mut initiated_transmissions: HashMap<NodeId, (ConnId, CancellationToken)> = HashMap::new();
