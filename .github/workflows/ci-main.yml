@@ -53,15 +53,6 @@ jobs:
         name: Generate Bazel invocation IDs
         id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }, {
-              "name": "Test",
-              "output_id": "test_id",
-            }]
       - &python-setup
         name: Set up Python
         uses: actions/setup-python@v5
@@ -288,7 +279,9 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - *checkout
-      - <<: *generate-bazel-invocation-ids
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
             [{
