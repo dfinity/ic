@@ -29,7 +29,7 @@ use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status,
     cycles_reserved_for_app_and_verified_app_subnets, expect_canister_did_not_reply, get_reply,
-    wasm_compilation_cost, wat_compilation_cost,
+    logging_charge_bytes, wasm_compilation_cost, wat_compilation_cost,
 };
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_histogram_vec_stats, fetch_int_counter, metric_vec,
@@ -4297,16 +4297,6 @@ fn cannot_execute_query_on_stopped_canister() {
         format!("Canister {canister_id} is not running"),
         err.description()
     );
-}
-
-/// Helper function to compute the cost of logging during `debug_print` and `trap`.
-fn logging_charge_bytes(message_num_bytes: u64) -> u64 {
-    let capacity = 4 * 1024; // 4 KiB
-    let remaining_space = capacity;
-    let allocated_num_bytes = message_num_bytes.min(capacity as u64);
-    let transmitted_num_bytes = message_num_bytes.min(remaining_space as u64);
-    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
-    2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes
 }
 
 #[test]

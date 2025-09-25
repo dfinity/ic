@@ -17,6 +17,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_execution_environment::logging_charge_bytes;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
@@ -647,16 +648,6 @@ mod tests {
             payload.extend(&w.bytes);
         }
         payload
-    }
-
-    /// Helper function to compute the cost of logging during `debug_print` and `trap`.
-    fn logging_charge_bytes(message_num_bytes: u64) -> u64 {
-        let capacity = 4 * 1024; // 4 KiB
-        let remaining_space = capacity;
-        let allocated_num_bytes = message_num_bytes.min(capacity as u64);
-        let transmitted_num_bytes = message_num_bytes.min(remaining_space as u64);
-        const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
-        2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes
     }
 
     #[test]
