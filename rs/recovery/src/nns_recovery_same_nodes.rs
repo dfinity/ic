@@ -225,7 +225,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.output_dir.is_none() {
                     self.params.output_dir = read_optional(
                         &self.logger,
-                        "Enter output directory for recovery artifacts (must be in a shared mount if doing local recovery):",
+                        &format!(
+                            "Enter output directory for recovery artifacts (must be in a shared mount if doing local recovery, default: {}):",
+                            self.recovery.recovery_dir.join("output").display()
+                        ),
                     );
                 }
             }
