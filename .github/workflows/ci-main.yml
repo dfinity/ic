@@ -164,7 +164,7 @@ jobs:
 
   bazel-test-all:
     name: Bazel Test All
-    needs: [ config ]
+    needs: [config]
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 150
@@ -173,7 +173,18 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - *generate-bazel-invocation-ids
+      - name: Generate Bazel invocation IDs
+        id: gen-uuids
+        uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }, {
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
@@ -271,7 +282,7 @@ jobs:
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    needs: [ config ]
+    needs: [config]
     timeout-minutes: 180
     runs-on:
       labels: macOS
@@ -510,7 +521,7 @@ jobs:
           REPO_NAME: ${{ github.repository }}
 
   build-ic:
-    needs: [ config ]
+    needs: [config]
     name: Build IC
     runs-on: *dind-small-setup
     container: *container-setup
