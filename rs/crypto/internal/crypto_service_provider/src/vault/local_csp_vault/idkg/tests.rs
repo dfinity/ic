@@ -1358,8 +1358,7 @@ mod idkg_load_transcript {
                 let internal_dealing_raw = self.internal_dealing_raw(dealing_bytes, rng);
                 BTreeMap::from([(
                     DEALER_RECEIVER_INDEX,
-                    IDkgDealingInternal::deserialize(&internal_dealing_raw)
-                        .expect("failed to deserialize internal dealing"),
+                    IDkgDealingInternalBytes::from(internal_dealing_raw),
                 )])
             };
 

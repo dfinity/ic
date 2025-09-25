@@ -143,20 +143,21 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_dealings = idkg_internal_dealings_from_bytes(&dealings)?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
                 internal_error: format!("failed to deserialize internal transcript: {:?}", e.0),
             })?;
         let result = self.idkg_load_transcript_internal(
             algorithm_id,
-            &dealings,
+            &internal_dealings,
             &context_data,
             receiver_index,
             &key_id,
@@ -890,6 +891,23 @@ fn idkg_internal_dealings_from_verified_dealings(
                     internal_error: format!("failed to deserialize internal dealing: {e:?}"),
                 }
             })?;
+            Ok((*index, dealing))
+        })
+        .collect()
+}
+
+fn idkg_internal_dealings_from_bytes(
+    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
+) -> Result<BTreeMap<NodeIndex, IDkgDealingInternal>, IDkgLoadTranscriptError> {
+    verified_dealings
+        .iter()
+        .map(|(index, signed_dealing)| {
+            let dealing =
+                IDkgDealingInternal::deserialize(signed_dealing.as_ref()).map_err(|e| {
+                    IDkgLoadTranscriptError::SerializationError {
+                        internal_error: format!("failed to deserialize internal dealing: {e:?}"),
+                    }
+                })?;
             Ok((*index, dealing))
         })
         .collect()

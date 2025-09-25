@@ -24,8 +24,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -384,7 +383,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,

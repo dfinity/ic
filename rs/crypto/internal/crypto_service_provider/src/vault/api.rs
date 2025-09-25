@@ -6,8 +6,7 @@ use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -770,7 +769,7 @@ pub trait IDkgProtocolCspVault {
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
@@ -867,7 +866,7 @@ impl AsRef<[u8]> for IDkgTranscriptInternalBytes {
 }
 
 /// Type-safe serialization of [`IDkgDealingInternalBytes`].
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IDkgDealingInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl IDkgDealingInternalBytes {
