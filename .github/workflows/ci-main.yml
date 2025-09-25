@@ -519,9 +519,9 @@ jobs:
   build-ic:
     needs: [config]
     name: Build IC
-    runs-on: *dind-small-setup
+    runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 30
+    timeout-minutes: 90
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
@@ -671,6 +671,12 @@ jobs:
       - name: Generate Bazel invocation IDs
         id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
+        with:
+          targets: |
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }]
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
