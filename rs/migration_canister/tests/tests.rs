@@ -356,6 +356,10 @@ async fn validation_succeeds() {
     ]));
 }
 
+// validation_fails_source_not_found
+// validation_fails_target_not_found
+// validation_fails_same_subnet
+
 #[tokio::test]
 async fn validation_fails_caller_not_controller() {
     let Setup {
@@ -636,7 +640,7 @@ async fn status_correct() {
 }
 
 #[tokio::test]
-async fn after_validation_not_stopped() {
+async fn after_validation_source_not_stopped() {
     let Setup {
         pic,
         source,
@@ -653,6 +657,68 @@ async fn after_validation_not_stopped() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    println!("{}", status[0]); //MigrationStatus::Failed { reason: Source is not stopped., time: 1620328633000000042 }
-    // panic!();
+    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+        panic!()
+    };
+    assert_eq!(reason, &"Source is not stopped.".to_string());
+}
+
+#[tokio::test]
+async fn after_validation_target_not_stopped() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    // validation succeeded. now we break migration by interfering.
+    pic.start_canister(target, Some(sender)).await.unwrap();
+    advance(&pic).await;
+    advance(&pic).await;
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+        panic!()
+    };
+    assert_eq!(reason, &"Target is not stopped.".to_string());
+}
+
+#[tokio::test]
+async fn after_validation_target_has_snapshot() {
+    let Setup {
+        pic,
+        source,
+        target,
+        target_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = target_controllers[0];
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    // validation succeeded. now we break migration by interfering.
+    // install a minimal Wasm module
+    pic.install_canister(
+        target,
+        b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
+        vec![],
+        Some(sender),
+    )
+    .await;
+    let _ = pic
+        .take_canister_snapshot(target, Some(sender), None)
+        .await
+        .unwrap();
+
+    advance(&pic).await;
+    advance(&pic).await;
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+        panic!()
+    };
+    assert_eq!(reason, &"Target has snapshots.".to_string());
 }
