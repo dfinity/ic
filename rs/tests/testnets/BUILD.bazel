@@ -328,6 +328,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
+    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
