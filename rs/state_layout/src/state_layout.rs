@@ -64,6 +64,10 @@ pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
 pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
+pub const OVERLAY: &str = "overlay";
+pub const VMEMORY_0: &str = "vmemory_0";
+pub const STABLE_MEMORY: &str = "stable_memory";
+pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -2030,7 +2034,7 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
         self.root.join(format!(
-            "{:016x}_{:04x}_{}.overlay",
+            "{:016x}_{:04x}_{}.{OVERLAY}",
             height.get(),
             shard.get(),
             self.name_stem,
@@ -2172,7 +2176,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "vmemory_0".into(),
+            name_stem: VMEMORY_0.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2181,7 +2185,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "stable_memory".into(),
+            name_stem: STABLE_MEMORY.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2190,7 +2194,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
+            name_stem: WASM_CHUNK_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2262,7 +2266,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "vmemory_0".into(),
+            name_stem: VMEMORY_0.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2271,7 +2275,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "stable_memory".into(),
+            name_stem: STABLE_MEMORY.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
