@@ -149,7 +149,7 @@ pub struct TempDevice {
 impl TempDevice {
     pub fn new(len: Sectors) -> Result<Self> {
         let temp_file =
-            NamedTempFile::new().context("Could not create temporary file for COW device")?;
+            NamedTempFile::with_prefix("temp_device").context("Could not create temporary file for COW device")?;
 
         temp_file
             .as_file()
