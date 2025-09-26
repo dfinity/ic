@@ -4,7 +4,7 @@
 //! process several requests concurrently.
 
 use crate::{
-    EventType, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, EventType, RequestState, ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -158,7 +158,15 @@ pub async fn process_controllers_changed(
         }
     }
 
-    // TODO: target has enough cycles
+    if source_status.cycles < CYCLES_COST_PER_MIGRATION {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: format!(
+                "Source does not have sufficient cycles: {} < {}.",
+                source_status.cycles, CYCLES_COST_PER_MIGRATION
+            ),
+        });
+    }
 
     // Determine history length of source
     get_canister_info(request.source)

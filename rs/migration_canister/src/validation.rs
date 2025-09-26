@@ -12,7 +12,7 @@ use candid::Principal;
 use ic_cdk::api::canister_self;
 
 use crate::{
-    Request, ValidationError,
+    CYCLES_COST_PER_MIGRATION, Request, ValidationError,
     canister_state::requests::list_by,
     external_interfaces::{
         management::{CanisterStatusType, assert_no_snapshots, canister_status},
@@ -75,8 +75,10 @@ pub async fn validate_request(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
 
-    // n. Does the source have sufficient cycles for the migration?
-    // TODO
+    // 11. Does the source have sufficient cycles for the migration?
+    if source_status.cycles < CYCLES_COST_PER_MIGRATION {
+        return Err(ValidationError::SourceInsufficientCycles);
+    }
 
     let mut source_original_controllers = source_status.settings.controllers;
     source_original_controllers.retain(|e| *e != canister_self());

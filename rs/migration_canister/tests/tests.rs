@@ -41,7 +41,7 @@ pub enum ValidationError {
     SourceNotReady,
     TargetNotStopped,
     TargetHasSnapshots,
-    TargetInsufficientCycles,
+    SourceInsufficientCycles,
     CallFailed { reason: String },
 }
 
@@ -172,6 +172,8 @@ async fn setup(
     }
     if enough_cycles {
         pic.add_cycles(source, u128::MAX / 2).await;
+    } else {
+        pic.add_cycles(source, 2_000_000).await;
     }
     pic.stop_canister(source, Some(c1)).await.unwrap();
     // target canister
@@ -202,6 +204,8 @@ async fn setup(
     }
     if enough_cycles {
         pic.add_cycles(target, u128::MAX / 2).await;
+    } else {
+        pic.add_cycles(target, 2_000_000).await;
     }
     pic.stop_canister(target, Some(c1)).await.unwrap();
     println!("Source canister id: {}", source.to_text());
@@ -549,6 +553,27 @@ async fn validation_fails_snapshot() {
     assert!(matches!(
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
         Err(ValidationError::TargetHasSnapshots)
+    ));
+}
+
+#[tokio::test]
+async fn validation_fails_insufficient_cycles() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings {
+        enough_cycles: false,
+        ..Default::default()
+    })
+    .await;
+    let sender = source_controllers[0];
+
+    assert!(matches!(
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        Err(ValidationError::SourceInsufficientCycles)
     ));
 }
 

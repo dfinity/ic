@@ -29,6 +29,8 @@ mod tests;
 mod validation;
 
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
+/// 10 Trillion Cycles
+const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 
 #[derive(Clone, Display, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
@@ -55,7 +57,7 @@ pub enum ValidationError {
     SourceNotReady,
     TargetNotStopped,
     TargetHasSnapshots,
-    TargetInsufficientCycles,
+    SourceInsufficientCycles,
     #[strum(to_string = "ValidationError::CallFailed {{ reason: {reason} }}")]
     CallFailed {
         reason: String,
