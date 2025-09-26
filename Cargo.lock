@@ -12885,6 +12885,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-cup-utils",
  "ic-consensus-dkg",
  "ic-crypto",
  "ic-crypto-sha2",
