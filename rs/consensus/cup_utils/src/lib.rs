@@ -243,7 +243,8 @@ fn bootstrap_idkg_summary(
 
 #[cfg(test)]
 mod tests {
-    use crate::cup_utils::make_registry_cup;
+    use super::*;
+
     use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
     use ic_interfaces_registry::{RegistryClient, RegistryVersionedRecord};
     use ic_logger::no_op_logger;
