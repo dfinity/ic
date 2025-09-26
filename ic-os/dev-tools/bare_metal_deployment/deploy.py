@@ -472,15 +472,9 @@ def deploy_server(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
 
-        # If guestos ipv6 address is present, loop on checking connectivity.
-        # Otherwise, just wait.
         timeout_secs = 5
-
-        def wait_func() -> bool:
-            wait(timeout_secs)
-            return False
-
         def check_connectivity_func() -> bool:
+            log.info(f"Checking guestos ({bmc_info.guestos_ipv6_address}) connectivity...")
             assert bmc_info.guestos_ipv6_address is not None, "Logic error"
 
             result = check_guestos_ping_connectivity(bmc_info.guestos_ipv6_address, timeout_secs)
@@ -491,13 +485,11 @@ def deploy_server(
 
             return result
 
-        iterate_func = check_connectivity_func if bmc_info.guestos_ipv6_address else wait_func
-
         log.info(f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}")
         start_time = time.time()
         end_time = start_time + wait_time_mins * 60
         while time.time() < end_time:
-            if iterate_func():
+            if check_connectivity_func():
                 log.info("*** Deployment SUCCESS!")
                 return OperationResult(bmc_info, success=True)
             time.sleep(timeout_secs)
