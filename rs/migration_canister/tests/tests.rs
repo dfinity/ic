@@ -747,3 +747,40 @@ async fn after_validation_target_has_snapshot() {
     };
     assert_eq!(reason, &"Target has snapshots.".to_string());
 }
+
+#[tokio::test]
+async fn after_validation_insufficient_cycles() {
+    let Setup {
+        pic,
+        source,
+        target,
+        target_controllers,
+        ..
+    } = setup(Settings {
+        enough_cycles: false,
+        ..Default::default()
+    })
+    .await;
+    let sender = target_controllers[0];
+    // top up just enough to pass validation
+    pic.add_cycles(source, 10_000_000_000_000).await;
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    // but then burn some cycles by reinstalling to get under the required amount
+    pic.reinstall_canister(
+        source,
+        b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
+        vec![],
+        Some(sender),
+    )
+    .await
+    .unwrap();
+    advance(&pic).await;
+    advance(&pic).await;
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+        panic!()
+    };
+    assert!(reason.contains("Source does not have sufficient cycles"));
+}
