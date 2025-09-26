@@ -98,7 +98,6 @@ def get_mainnet_guestos_images(versions, extract_guestos):
         )
 
 _DEFS_CONTENTS = '''\
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 def extract_image(name, extract_guestos, **kwargs):
     native.genrule(
         name = name,
