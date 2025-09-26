@@ -1,0 +1,18 @@
+[package]
+name = "remote_attestation_server"
+edition.workspace = true
+
+[[bin]]
+name = "remote_attestation_server"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tonic = { workspace = true }
+attestation = { path = "../../attestation" }
+remote_attestation_shared = { path = "../shared" }
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+ic_sev = { path = "../../sev" }
+sev = { workspace = true }
