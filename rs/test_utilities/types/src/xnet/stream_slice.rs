@@ -1,12 +1,12 @@
 use crate::messages::RequestBuilder;
 use ic_types::{
     CanisterId,
-    messages::{Request, RequestOrResponse},
+    messages::{Request, StreamMessage},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
 };
 
 pub struct StreamSliceBuilder {
-    messages: StreamIndexedQueue<RequestOrResponse>,
+    messages: StreamIndexedQueue<StreamMessage>,
     header: StreamHeader,
 }
 
@@ -28,7 +28,7 @@ impl StreamSliceBuilder {
     }
 
     /// Sets the `messages` in the stream.
-    pub fn messages(mut self, messages: StreamIndexedQueue<RequestOrResponse>) -> Self {
+    pub fn messages(mut self, messages: StreamIndexedQueue<StreamMessage>) -> Self {
         self.messages = messages;
         self
     }

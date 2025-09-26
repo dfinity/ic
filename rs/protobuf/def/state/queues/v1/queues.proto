@@ -40,7 +40,7 @@ message StreamFlags {
 
 message Stream {
   uint64 messages_begin = 1;
-  repeated RequestOrResponse messages = 2;
+  repeated StreamMessage messages = 2;
   uint64 signals_end = 5;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;

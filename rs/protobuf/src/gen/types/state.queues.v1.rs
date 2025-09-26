@@ -28,7 +28,7 @@ pub struct Stream {
     #[prost(uint64, tag = "1")]
     pub messages_begin: u64,
     #[prost(message, repeated, tag = "2")]
-    pub messages: ::prost::alloc::vec::Vec<RequestOrResponse>,
+    pub messages: ::prost::alloc::vec::Vec<StreamMessage>,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
     #[prost(message, repeated, tag = "8")]

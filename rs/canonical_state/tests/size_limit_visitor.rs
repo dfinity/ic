@@ -130,9 +130,9 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
     // Sanity check MessageSpyVisitor.
     if let (Some(tbegin), Some(tend)) = (tbegin, tend) {
         assert_eq!((begin, end), (tbegin, tend));
-        // Messages should be at least 35 bytes.
+        // Messages should be at least 25 bytes.
         assert!(
-            size as u64 > (end - begin) * 35,
+            size as u64 > (end - begin) * 25,
             "size {size}, begin {begin}, end {end}"
         );
     } else {
