@@ -19,9 +19,6 @@ use strum::Display;
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
-// TODO:
-// - test all conditions of validation after the MC is unique controller and fail there.
-
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct MigrateCanisterArgs {
     pub source: Principal,
@@ -363,6 +360,48 @@ async fn validation_succeeds() {
 // validation_fails_source_not_found
 // validation_fails_target_not_found
 // validation_fails_same_subnet
+
+#[tokio::test]
+async fn validation_fails_not_found() {
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let nonexistent_canister = Principal::from_text("222ay-6aaaa-aaaah-alvrq-cai").unwrap();
+    let Err(ValidationError::CanisterNotFound { canister }) = migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            source: nonexistent_canister,
+            target,
+        },
+    )
+    .await
+    else {
+        panic!()
+    };
+    assert_eq!(canister, nonexistent_canister);
+
+    // sender not controller of target
+    let bad_sender = source_controllers[1];
+    let Err(ValidationError::CanisterNotFound { canister }) = migrate_canister(
+        &pic,
+        bad_sender,
+        &MigrateCanisterArgs {
+            source,
+            target: nonexistent_canister,
+        },
+    )
+    .await
+    else {
+        panic!()
+    };
+    assert_eq!(canister, nonexistent_canister);
+}
 
 #[tokio::test]
 async fn validation_fails_caller_not_controller() {

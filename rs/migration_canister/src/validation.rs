@@ -33,13 +33,9 @@ pub async fn validate_request(
         }
     }
     // 2. Does the source canister exist?
-    let source_subnet = get_subnet_for_canister(source).await.into_result(
-        "Call to registry canister (`get_subnet_for_canister`) failed. Try again later.",
-    )?;
+    let source_subnet = get_subnet_for_canister(source).await?;
     // 3. Does the target canister exist?
-    let target_subnet = get_subnet_for_canister(target).await.into_result(
-        "Call to registry canister (`get_subnet_for_canister`) failed. Try again later.",
-    )?;
+    let target_subnet = get_subnet_for_canister(target).await?;
     // 4. Are they on the same subnet?
     if source_subnet == target_subnet {
         return Err(ValidationError::SameSubnet);
