@@ -3233,6 +3233,7 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 #[strum(serialize_all = "snake_case")]
 pub enum QueryMethod {
     FetchCanisterLogs,
+    CanisterStatus,
 }
 
 /// `CandidType` for `SubnetInfoArgs`
