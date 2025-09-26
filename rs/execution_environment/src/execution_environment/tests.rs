@@ -1109,7 +1109,7 @@ fn get_canister_metadata_no_execution_state_fails() {
     let caller = test.universal_canister().unwrap();
 
     let canister_metadata_args =
-        CanisterMetadataRequest::new(canister, "my_private_section".to_string()).encode();
+        CanisterMetadataRequest::new(canister, "my_public_section".to_string()).encode();
     let get_canister_metadata = wasm()
         .call_simple(
             ic00::IC_00,

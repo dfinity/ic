@@ -752,12 +752,12 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "".to_string(),
             },
             CanisterManagerError::CanisterMetadataNoWasmModule { .. } => ErrorHelp::UserError {
-                suggestion: "The canister has no Wasm module.".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-no-wasm-module".to_string(),
             },
             CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
                 suggestion: "The canister has no metadata section with the given name.".to_string(),
-                doc_link: "".to_string(),
+                doc_link: "canister-metadata-section-not-found".to_string(),
             },
         }
     }
@@ -1133,13 +1133,13 @@ impl From<CanisterManagerError> for UserError {
                     "Environment variable value \"{value}\" exceeds the maximum allowed length of {max_value_length}."
                 ),
             ),
-            CanisterManagerError::CanisterMetadataNoWasmModule { canister_id } => Self::new(
+            CanisterMetadataNoWasmModule { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister {canister_id} has no Wasm module and hence no metadata is available."
                 ),
             ),
-            CanisterManagerError::CanisterMetadataSectionNotFound {
+            CanisterMetadataSectionNotFound {
                 canister_id,
                 section_name,
             } => Self::new(
