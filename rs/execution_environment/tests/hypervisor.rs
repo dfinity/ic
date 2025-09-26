@@ -356,13 +356,19 @@ fn ic0_stable64_grow_works() {
                     (then (unreachable))
                 )
 
+                ;; Grow the memory by 1 more page and verify that the return value
+                ;; is the previous number of pages, which should be 65537.
+                (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 65537))
+                    (then (unreachable))
+                )
+
                 ;; Grow the memory by 2^64-1 more pages. This should fail.
                 (if (i64.ne (call $stable64_grow (i64.const 18446744073709551615)) (i64.const -1))
                     (then (unreachable))
                 )
 
-                ;; Stable memory size now should be 65537.
-                (if (i64.ne (call $stable64_size) (i64.const 65537))
+                ;; Stable memory size now should be 65538.
+                (if (i64.ne (call $stable64_size) (i64.const 65538))
                     (then (unreachable))
                 )
             )
@@ -527,7 +533,7 @@ fn ic0_stable_write_traps_if_memory_exceeds_4gb() {
 }
 
 #[test]
-fn ic0_stable_grow_traps_if_stable_memory_exceeds_4gb() {
+fn ic0_stable_grow_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
         .with_initial_canister_cycles(3_000_000_000_000)
         .build();
@@ -1032,8 +1038,11 @@ fn ic0_stable64_read_and_write_work() {
                 ;; Grow stable memory by 65537 pages (strictly more than 4GiB).
                 (drop (call $stable64_grow (i64.const 65537)))
 
-                ;; Stable memory size now should be 65537
-                (if (i64.ne (call $stable64_size) (i64.const 65537))
+                ;; Grow stable memory by 1 more page.
+                (drop (call $stable64_grow (i64.const 1)))
+
+                ;; Stable memory size now should be 65538
+                (if (i64.ne (call $stable64_size) (i64.const 65538))
                     (then (unreachable))
                 )
             )
@@ -10061,28 +10070,31 @@ fn mix_stable_memory_apis() {
 
     // `ic0.stable_write` followed by successful `ic0.stable64_read`
     let data = [1, 2, 3, 4];
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().stable_grow(1).stable_write(0, &data).reply().build(),
+    )
+    .unwrap();
     let res = test.ingress(
         canister_id,
         "update",
-        wasm()
-            .stable_grow(1)
-            .stable_write(0, &data)
-            .stable64_read(0, 4)
-            .append_and_reply()
-            .build(),
+        wasm().stable64_read(0, 4).append_and_reply().build(),
     );
     assert_eq!(get_reply(res), data);
 
     // `ic0.stable64_write` followed by successful `ic0.stable_read`
     let data = [42, 43, 44, 45];
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().stable64_write(0, &data).reply().build(),
+    )
+    .unwrap();
     let res = test.ingress(
         canister_id,
         "update",
-        wasm()
-            .stable64_write(0, &data)
-            .stable_read(0, 4)
-            .append_and_reply()
-            .build(),
+        wasm().stable_read(0, 4).append_and_reply().build(),
     );
     assert_eq!(get_reply(res), data);
 }
