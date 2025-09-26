@@ -74,7 +74,7 @@ lvs /dev/store/shared-swap >/dev/null 2>&1 || (
     LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 100))
     LV_SIZE_LIMIT_MB=128000
     if [ "${LV_SIZE_MB}" -gt "${LV_SIZE_LIMIT_MB}" ]; then
-        LV_SIZE="${LV_SIZE_LIMIT_MB}"
+        LV_SIZE_MB="${LV_SIZE_LIMIT_MB}"
     fi
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-swap store
 )

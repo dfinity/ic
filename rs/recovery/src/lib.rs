@@ -76,6 +76,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     // page deltas. We do not need to copy page deltas when nodes are re-assigned.
     "page_deltas",
     "node_operator_private_key.pem",
+    "ic_adapter",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";
@@ -887,9 +888,7 @@ impl Recovery {
         CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
             work_dir: self.work_dir.clone(),
-            // If no output directory is specified, save the files in a directory that will
-            // not be deleted by the cleanup step (i.e., not `self.work_dir`).
-            output_dir: output_dir.unwrap_or(PathBuf::from("/tmp/recovery_artifacts")),
+            output_dir: output_dir.unwrap_or(self.recovery_dir.join("output")),
         }
     }
 

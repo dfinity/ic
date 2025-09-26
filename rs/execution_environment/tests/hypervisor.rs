@@ -27,7 +27,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    ExecutionTest, ExecutionTestBuilder, check_ingress_status,
+    ExecutionTest, ExecutionTestBuilder, bytes_and_logging_cost, check_ingress_status,
     cycles_reserved_for_app_and_verified_app_subnets, expect_canister_did_not_reply, get_reply,
     wasm_compilation_cost, wat_compilation_cost,
 };
@@ -4325,7 +4325,7 @@ fn ic0_trap_preserves_some_cycles() {
         instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
             + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
-            + 12 /* trap data */
+            + bytes_and_logging_cost(12) as u64 /* trap data */
             + 1, // Function is 1 instruction.
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);

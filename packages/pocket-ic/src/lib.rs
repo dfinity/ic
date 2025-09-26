@@ -1897,6 +1897,13 @@ pub struct StartServerParams {
     pub server_binary: Option<PathBuf>,
     /// Reuse an existing PocketIC server spawned by this process.
     pub reuse: bool,
+    /// TTL for the PocketIC server.
+    /// The server stops if no request has been received during its TTL
+    /// and if there are no more pending requests.
+    /// A default value of TTL is used if no `ttl` is specified here.
+    /// Note: The TTL might not be overriden if the same process sets `reuse` to `true`
+    /// and passes different values of `ttl`.
+    pub ttl: Option<Duration>,
 }
 
 /// Attempt to start a new PocketIC server.
@@ -1973,16 +1980,19 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
     let mut cmd = pocket_ic_server_cmd(&bin_path);
+    if let Some(ttl) = params.ttl {
+        cmd.arg("--ttl").arg(ttl.as_secs().to_string());
+    }
     cmd.arg("--port-file");
     #[cfg(windows)]
     cmd.arg(wsl_path(&port_file_path, "PocketIC port file"));
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
-    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
-        if !mute_server.is_empty() {
-            cmd.stdout(std::process::Stdio::null());
-            cmd.stderr(std::process::Stdio::null());
-        }
+    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER")
+        && !mute_server.is_empty()
+    {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
     }
 
     // Start the server in the background so that it doesn't receive signals such as CTRL^C
@@ -2000,17 +2010,17 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
 
     loop {
-        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
-            if port_string.contains("\n") {
-                let port: u16 = port_string
-                    .trim_end()
-                    .parse()
-                    .expect("Failed to parse port to number");
-                break (
-                    child,
-                    Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap(),
-                );
-            }
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
+            && port_string.contains("\n")
+        {
+            let port: u16 = port_string
+                .trim_end()
+                .parse()
+                .expect("Failed to parse port to number");
+            break (
+                child,
+                Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap(),
+            );
         }
         std::thread::sleep(Duration::from_millis(20));
     }

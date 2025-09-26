@@ -3,7 +3,7 @@ use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Principal};
-use clap::{Args, Parser, ValueEnum};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use create_subnet::ProposeToCreateSubnetCmd;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
@@ -191,7 +191,6 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 
 /// Common command-line options for `ic-admin`.
 #[derive(Parser)]
-#[clap(version = "1.0")]
 struct Opts {
     #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app"
     )]
@@ -3718,7 +3717,8 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
-    let opts: Opts = Opts::parse();
+    let matches = Opts::command().version(env!("VERSION")).get_matches();
+    let opts = Opts::from_arg_matches(&matches).unwrap();
 
     let reachable_nns_urls = find_reachable_nns_urls(opts.nns_urls.clone()).await;
 
@@ -5616,6 +5616,7 @@ async fn get_node_list_since(
     let result: IndexMap<PrincipalId, NodeDetails> = node_map
         .into_iter()
         .map(|(node_id, node_record): (PrincipalId, NodeRecord)| {
+            let node_reward_type = node_record.node_reward_type();
             let node_operator_id =
                 PrincipalId::try_from(node_record.node_operator_id).unwrap_or_default();
             let (node_provider_id, dc_id) = match node_operator_map.get(&node_operator_id) {
@@ -5643,6 +5644,7 @@ async fn get_node_list_since(
                     dc_id,
                     hostos_version_id: node_record.hostos_version_id,
                     domain: node_record.domain,
+                    node_reward_type,
                 },
             )
         })
