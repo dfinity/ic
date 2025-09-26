@@ -65,6 +65,7 @@ members = [
     "rs/config",
     "rs/consensus",
     "rs/consensus/certification",
+    "rs/consensus/cup_utils",
     "rs/consensus/dkg",
     "rs/consensus/idkg",
     "rs/consensus/mocks",
@@ -901,4 +902,3 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
-

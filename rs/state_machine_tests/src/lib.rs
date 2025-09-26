@@ -13,10 +13,8 @@ use ic_config::{
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
 };
-use ic_consensus::{
-    consensus::payload_builder::PayloadBuilderImpl, make_registry_cup,
-    make_registry_cup_from_cup_contents,
-};
+use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
+use ic_consensus_cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,

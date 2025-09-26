@@ -7660,6 +7660,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-consensus-cup-utils"
+version = "0.9.0"
+dependencies = [
+ "ic-consensus-dkg",
+ "ic-consensus-idkg",
+ "ic-crypto-test-utils-ni-dkg",
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-types",
+ "ic-types-test-utils",
+ "phantom_newtype",
+ "prost 0.13.4",
+ "slog",
+]
+
+[[package]]
 name = "ic-consensus-dkg"
 version = "0.9.0"
 dependencies = [
@@ -12797,6 +12815,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-cup-utils",
  "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
@@ -14009,6 +14028,7 @@ dependencies = [
  "ic-btc-consensus",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-cup-utils",
  "ic-consensus-utils",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
@@ -18517,7 +18537,7 @@ dependencies = [
  "hyper-util",
  "ic-agent",
  "ic-config",
- "ic-consensus",
+ "ic-consensus-cup-utils",
  "ic-consensus-dkg",
  "ic-crypto",
  "ic-crypto-node-key-generation",
