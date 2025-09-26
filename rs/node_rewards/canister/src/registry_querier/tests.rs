@@ -45,7 +45,12 @@ fn add_record_helper(
     datetime_str: &str,
 ) {
     let ts = DayUtc::try_from(datetime_str).unwrap();
-    add_record_helper_ts(key, version, value, ts.unix_ts_at_day_end_nanoseconds());
+    add_record_helper_ts(
+        key,
+        version,
+        value,
+        ts.unix_timestamp_at_day_end_nanoseconds(),
+    );
 }
 
 fn add_record_helper_ts(key: &str, version: u64, value: Option<impl ::prost::Message>, ts: u64) {
@@ -143,7 +148,7 @@ fn add_dummy_data() {
     // Removed and re-added node_3 same day
     let ts_removed = DayUtc::try_from("2025-07-16")
         .unwrap()
-        .unix_ts_at_day_start_nanoseconds()
+        .unix_timestamp_at_day_start_nanoseconds()
         + 1;
     add_record_helper_ts(&node_3_k, 39676, None::<NodeRecord>, ts_removed);
     let ts_readded = ts_removed + 1;
