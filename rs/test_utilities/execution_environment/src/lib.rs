@@ -2695,11 +2695,11 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
 // rs/embedders/src/wasmtime_embedder/linker.rs.
 fn logging_charge_bytes(message_num_bytes: usize) -> usize {
     const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
     let capacity = MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
     let remaining_space = capacity;
-    let allocated_num_bytes = message_num_bytes.min(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
-    let transmitted_num_bytes = message_num_bytes.min(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
-    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let allocated_num_bytes = message_num_bytes.min(capacity);
+    let transmitted_num_bytes = message_num_bytes.min(remaining_space);
     2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
 }
 
