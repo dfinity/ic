@@ -106,8 +106,10 @@ impl ExecutionServices {
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
         temp_dir: &Path,
     ) -> ExecutionServices {
+        let scheduler_config = subnet_config.scheduler_config;
+
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
+            scheduler_config.max_instructions_per_message,
             own_subnet_type,
             own_subnet_id,
             subnet_config.cycles_account_manager_config,
@@ -119,7 +121,7 @@ impl ExecutionServices {
             own_subnet_id,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
-            subnet_config.scheduler_config.dirty_page_overhead,
+            scheduler_config.dirty_page_overhead,
             Arc::clone(&fd_factory),
             Arc::clone(&state_reader),
             temp_dir,
@@ -145,21 +147,15 @@ impl ExecutionServices {
             metrics_registry,
             own_subnet_id,
             own_subnet_type,
-            RoundSchedule::compute_capacity_percent(subnet_config.scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
-            subnet_config.scheduler_config.scheduler_cores,
+            scheduler_config.scheduler_cores,
             Arc::clone(&fd_factory),
-            subnet_config.scheduler_config.heap_delta_rate_limit,
-            subnet_config
-                .scheduler_config
-                .upload_wasm_chunk_instructions,
-            subnet_config
-                .scheduler_config
-                .canister_snapshot_baseline_instructions,
-            subnet_config
-                .scheduler_config
-                .canister_snapshot_data_baseline_instructions,
+            scheduler_config.heap_delta_rate_limit,
+            scheduler_config.upload_wasm_chunk_instructions,
+            scheduler_config.canister_snapshot_baseline_instructions,
+            scheduler_config.canister_snapshot_data_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
@@ -167,9 +163,7 @@ impl ExecutionServices {
             own_subnet_type,
             config.clone(),
             metrics_registry,
-            subnet_config
-                .scheduler_config
-                .max_instructions_per_message_without_dts,
+            scheduler_config.max_instructions_per_message_without_dts,
             Arc::clone(&cycles_account_manager),
             query_stats_collector,
         ));
@@ -208,7 +202,7 @@ impl ExecutionServices {
         );
 
         let scheduler = Box::new(SchedulerImpl::new(
-            subnet_config.scheduler_config,
+            scheduler_config,
             config.embedders_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
