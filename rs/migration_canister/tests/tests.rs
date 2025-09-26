@@ -903,3 +903,166 @@ async fn failure_controllers_restored() {
 // }
 
 // parallel processing
+
+#[tokio::test]
+async fn parallel_migrations() {
+    const NUM_MIGRATIONS: usize = 20;
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(IcpFeatures {
+            registry: Some(IcpFeaturesConfig::DefaultConfig),
+            ..Default::default()
+        })
+        .with_application_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+
+    let system_controller = Principal::anonymous();
+    let c1 = Principal::self_authenticating(vec![1]);
+    let c2 = Principal::self_authenticating(vec![2]);
+    let c3 = Principal::self_authenticating(vec![3]);
+    // Setup a unique controller each, and a shared one.
+    let source_controllers = vec![c1, c2];
+    let target_controllers = vec![c1, c3];
+
+    // install fresh version of registry canister:
+    let registry_wasm = Project::cargo_bin_maybe_from_env("registry-canister", &[]);
+    pic.upgrade_canister(
+        REGISTRY_CANISTER_ID.into(),
+        registry_wasm.bytes(),
+        vec![],
+        Some(Principal::from_text("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap()), /* root canister */
+    )
+    .await
+    .unwrap();
+
+    let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
+
+    pic.create_canister_with_id(
+        Some(system_controller),
+        Some(CanisterSettings {
+            controllers: Some(vec![system_controller]),
+            ..Default::default()
+        }),
+        MIGRATION_CANISTER_ID.into(),
+    )
+    .await
+    .unwrap();
+    pic.install_canister(
+        MIGRATION_CANISTER_ID.into(),
+        migration_canister_wasm.bytes(),
+        Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
+        Some(system_controller),
+    )
+    .await;
+
+    let subnets = pic.topology().await.get_app_subnets();
+    let source_subnet = subnets[0];
+    let target_subnet = subnets[1];
+
+    // source canisters
+    let mut sources = vec![];
+    for _ in 0..NUM_MIGRATIONS {
+        let source = pic
+            .create_canister_on_subnet(
+                Some(c1),
+                Some(CanisterSettings {
+                    controllers: Some(source_controllers.clone()),
+                    ..Default::default()
+                }),
+                source_subnet,
+            )
+            .await;
+
+        // make migration canister controller of source
+        let mut new_controllers = source_controllers.clone();
+        new_controllers.push(MIGRATION_CANISTER_ID.into());
+        pic.update_canister_settings(
+            source,
+            Some(c1),
+            CanisterSettings {
+                controllers: Some(new_controllers.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        pic.add_cycles(source, u128::MAX / 2).await;
+        pic.stop_canister(source, Some(c1)).await.unwrap();
+        sources.push(source);
+    }
+    // target canisters
+    let mut targets = vec![];
+    for _ in 0..NUM_MIGRATIONS {
+        let target = pic
+            .create_canister_on_subnet(
+                Some(c1),
+                Some(CanisterSettings {
+                    controllers: Some(target_controllers.clone()),
+                    ..Default::default()
+                }),
+                target_subnet,
+            )
+            .await;
+        // make migration canister controller of target
+        let mut new_controllers = target_controllers.clone();
+        new_controllers.push(MIGRATION_CANISTER_ID.into());
+        pic.update_canister_settings(
+            target,
+            Some(c1),
+            CanisterSettings {
+                controllers: Some(new_controllers),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        pic.add_cycles(target, u128::MAX / 2).await;
+        pic.stop_canister(target, Some(c1)).await.unwrap();
+        targets.push(target);
+    }
+    // --------------------------------------------------------------------- //
+    // setup done
+    for i in 0..NUM_MIGRATIONS / 2 {
+        migrate_canister(
+            &pic,
+            source_controllers[0],
+            &MigrateCanisterArgs {
+                source: sources[i],
+                target: targets[i],
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    for i in (NUM_MIGRATIONS / 2)..NUM_MIGRATIONS {
+        advance(&pic).await;
+        migrate_canister(
+            &pic,
+            source_controllers[0],
+            &MigrateCanisterArgs {
+                source: sources[i],
+                target: targets[i],
+            },
+        )
+        .await
+        .unwrap();
+    }
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    for i in 0..NUM_MIGRATIONS {
+        let status = get_status(
+            &pic,
+            source_controllers[0],
+            &MigrateCanisterArgs {
+                source: sources[i],
+                target: targets[i],
+            },
+        )
+        .await;
+        // TODO: should be Succeeded in the end.
+        assert!(matches!(status[0], MigrationStatus::InProgress { .. }));
+    }
+}
