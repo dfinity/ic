@@ -1,6 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    BaseRewards as BaseRewardsCandid, BaseRewardsType3 as BaseRewardsType3Candid, DayUtc,
+    BaseRewards as BaseRewardsCandid, BaseRewardsType3 as BaseRewardsType3Candid,
     GetNodeProviderRewardsCalculationResponse, NodeMetricsDaily as NodeMetricsDailyCandid,
     NodeProviderRewards as NodeProviderRewardsCandid, NodeProviderRewardsDaily,
     NodeResults as NodeResultsCandid, NodeStatus as NodeStatusCandid,
@@ -88,9 +88,7 @@ pub fn into_rewards_calculation_results(
         };
 
         daily_rewards.push(NodeProviderRewardsDaily {
-            day_utc: Some(DayUtc {
-                value: Some(day.unix_ts_at_day_end_nanoseconds()),
-            }),
+            day_utc: Some(day.into()),
             node_provider_rewards: Some(node_provider_rewards),
         });
     }

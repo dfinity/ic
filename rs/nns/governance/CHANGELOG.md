@@ -10,6 +10,14 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+# 2025-09-19: Proposal 138583
+
+https://dashboard.internetcomputer.org/proposal/138583
+
+## Added
+
+* Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
+  proposal.
 
 # 2025-09-05: Proposal 138369
 

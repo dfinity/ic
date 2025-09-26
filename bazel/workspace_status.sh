@@ -7,6 +7,7 @@ set -euo pipefail
 if [ "$#" == "0" ]; then
     echo "STABLE_VERSION 0000000000000000000000000000000000000000"
     echo "STABLE_COMMIT_TIMESTAMP 4000000000" # arbitrary (constant) timestamp
+    echo "STABLE_COMMIT_DATE_ISO_8601 0000-00-00T00:00:00+00:00"
 elif [ "$#" == "1" ] && [ "$1" == "--stamp" ]; then
     version="$(git rev-parse HEAD)"
     # If the checkout is not clean, mark the version as dirty
@@ -15,6 +16,7 @@ elif [ "$#" == "1" ] && [ "$1" == "--stamp" ]; then
     fi
     echo "STABLE_VERSION $version"
     echo "STABLE_COMMIT_TIMESTAMP $(git show -s --format=%ct)"
+    echo "STABLE_COMMIT_DATE_ISO_8601 $(git show -s --format=%cI)"
 else
     exit 1
 fi
