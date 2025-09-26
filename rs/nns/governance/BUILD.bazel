@@ -57,6 +57,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/long_message",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
+    "//rs/nervous_system/rate_limits",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/temporary",
