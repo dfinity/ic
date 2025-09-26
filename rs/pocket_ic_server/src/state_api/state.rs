@@ -1067,7 +1067,7 @@ impl ApiState {
                                 .insert(op_id.clone(), (new_state_label, result.clone()));
 
                             // Prune the result of the previous computation.
-                            graph_guard.remove(old_state_label);
+                            graph_guard.remove(&old_state_label);
 
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
