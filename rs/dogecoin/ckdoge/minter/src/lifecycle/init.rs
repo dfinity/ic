@@ -1,6 +1,8 @@
 use candid::{CandidType, Deserialize, Principal};
-use ic_ckbtc_minter::{lifecycle::init::InitArgs as CkbtcMinterInitArgs, state::Mode};
+use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
 use serde::Serialize;
+
+pub use ic_ckbtc_minter::state::Mode;
 
 #[derive(CandidType, serde::Deserialize)]
 pub enum MinterArg {
@@ -17,7 +19,7 @@ pub struct InitArgs {
     /// a testing key for testnet and mainnet
     pub ecdsa_key_name: String,
 
-    /// Minimum amount of bitcoin that can be retrieved
+    /// Minimum amount of dogecoin that can be retrieved
     pub retrieve_doge_min_amount: u64,
 
     /// The CanisterId of the ckDOGE Ledger

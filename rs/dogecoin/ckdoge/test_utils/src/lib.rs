@@ -1,12 +1,16 @@
 use candid::{Encode, Principal};
+use ic_ckdoge_minter::lifecycle::init::Mode;
+use ic_ckdoge_minter::lifecycle::init::{InitArgs, MinterArg, Network};
 use ic_icrc1_ledger::ArchiveOptions;
 use ic_management_canister_types::{CanisterId, CanisterSettings};
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use std::sync::Arc;
+use std::time::Duration;
 
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
-pub const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
+pub const DOGECOIN_CANISTER: Principal =
+    Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
 
 pub struct Setup {
     env: Arc<PocketIc>,
@@ -22,30 +26,48 @@ impl Setup {
                 .with_fiduciary_subnet()
                 .build(),
         );
-        let minter = env
-            .create_canister_with_id(
-                None,
-                Some(CanisterSettings {
-                    controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
-                    ..Default::default()
-                }),
-                MINTER_PRINCIPAL,
-            )
-            .unwrap();
+        let fiduciary_subnet = env.topology().get_fiduciary().unwrap();
+        let minter = env.create_canister_on_subnet(
+            None,
+            Some(CanisterSettings {
+                controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
+                ..Default::default()
+            }),
+            fiduciary_subnet,
+        );
+        env.add_cycles(minter, u128::MAX);
         let ledger = env.create_canister_on_subnet(
             None,
             Some(CanisterSettings {
                 controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
                 ..Default::default()
             }),
-            env.topology().get_fiduciary().unwrap(),
+            fiduciary_subnet,
         );
         env.add_cycles(ledger, u128::MAX);
+        {
+            let minter_init_args = MinterArg::Init(InitArgs {
+                doge_network: Network::Mainnet,
+                ecdsa_key_name: "master_ecdsa_public_key".into(),
+                retrieve_doge_min_amount: 100_000_000,
+                ledger_id: ledger,
+                max_time_in_queue_nanos: Duration::from_secs(10).as_nanos() as u64,
+                min_confirmations: Some(60),
+                mode: Mode::GeneralAvailability,
+                get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
+            });
+            env.install_canister(
+                minter,
+                minter_wasm(),
+                Encode!(&minter_init_args).unwrap(),
+                Some(NNS_ROOT_PRINCIPAL),
+            );
+        }
         {
             let ledger_init_args = ic_icrc1_ledger::InitArgs {
                 minting_account: minter.into(),
                 fee_collector_account: Some(Account {
-                    owner: MINTER_PRINCIPAL,
+                    owner: DOGECOIN_CANISTER,
                     subaccount: Some([
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0x0f, 0xee,
@@ -105,10 +127,10 @@ fn ledger_wasm() -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::MINTER_PRINCIPAL;
+    use crate::DOGECOIN_CANISTER;
 
     #[test]
-    fn should_have_correct_minter_principal() {
-        assert_eq!(MINTER_PRINCIPAL.to_string(), "gordg-fyaaa-aaaan-aaadq-cai");
+    fn should_have_correct_principal() {
+        assert_eq!(DOGECOIN_CANISTER.to_string(), "gordg-fyaaa-aaaan-aaadq-cai");
     }
 }

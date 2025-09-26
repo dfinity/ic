@@ -7469,6 +7469,7 @@ name = "ic-ckdoge-minter-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-ckdoge-minter",
  "ic-icrc1-ledger",
  "ic-management-canister-types",
  "icrc-ledger-types",
