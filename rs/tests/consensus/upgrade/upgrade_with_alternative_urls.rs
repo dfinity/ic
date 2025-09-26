@@ -87,7 +87,7 @@ fn test(env: TestEnv) {
         &target_version,
         release_package_urls,
         get_guestos_update_img_sha256(),
-        get_guestos_launch_measurements(),
+        Some(get_guestos_launch_measurements()),
         &logger,
     ));
 
