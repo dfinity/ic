@@ -368,9 +368,12 @@ fn encode_dissolve_delay_buckets<W, T>(
     T: Metric + Copy,
 {
     for (k, v) in half_year_buckets.iter() {
-        // @todo
-        let lower_bound_months = k * 6;
-        let upper_bound_months = (1 + k) * 6;
+        // In principal, the dissolve delay must never overflow when multiplied by 6.
+        // Otherwise, it is malformed data, and we skip it.
+        let Some(lower_bound_months) = k.checked_mul(6) else {
+            continue;
+        };
+        let upper_bound_months = lower_bound_months.saturating_add(6);
         builder = builder
             .value(
                 &[
