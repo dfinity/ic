@@ -16,16 +16,16 @@ pub struct GetDiskEncryptionKeyTokenCustomData<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use attestation::custom_data::EncodeSevCustomData;
+    use attestation::custom_data::{DerEncodedCustomData, EncodeSevCustomData};
 
     #[test]
     fn test_get_disk_encryption_key_token_custom_data_is_stable() {
         let client_tls_public_key = OctetStringRef::new(&[1, 2, 3, 4]).unwrap();
         let server_tls_public_key = OctetStringRef::new(&[5, 6, 7, 8]).unwrap();
-        let custom_data = GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key,
             server_tls_public_key,
-        };
+        });
 
         assert_eq!(
             &custom_data.encode_for_sev().unwrap().as_slice(),

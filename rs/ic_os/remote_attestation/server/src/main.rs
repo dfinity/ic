@@ -65,7 +65,7 @@ impl RemoteAttestationService for RemoteAttestationServiceImpl {
         let mut guard = firmware.lock().expect("Failed to lock firmware mutex");
         let attestation_package = generate_attestation_package(
             guard.as_mut(),
-            &trusted_execution_config,
+            trusted_execution_config,
             &RawCustomData(custom_data),
         )
         .map_err(|e| Status::internal(format!("failed to generate attestation package: {e}")))?;
