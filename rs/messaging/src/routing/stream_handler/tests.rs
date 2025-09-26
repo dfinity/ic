@@ -2715,7 +2715,7 @@ fn induct_stream_slices_with_refunds() {
             else {
                 panic!("Expected a refund message");
             };
-            expected_state.credit_refund(&refund43);
+            expected_state.credit_refund(refund43);
 
             // Cycles in refund @44 are lost
             let refund44 = message_in_slice(slices.get(&REMOTE_SUBNET), 44);
