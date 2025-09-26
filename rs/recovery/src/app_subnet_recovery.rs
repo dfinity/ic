@@ -259,7 +259,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     );
                 }
 
-                if let Some(&DataLocation::Remote(_)) = self.params.download_method.as_ref() {
+                if self.params.keep_downloaded_state.is_none()
+                    && let Some(&DataLocation::Remote(_)) = self.params.download_method.as_ref()
+                {
                     self.params.keep_downloaded_state = Some(consent_given(
                         &self.logger,
                         "Preserve original downloaded state locally?",
