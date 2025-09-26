@@ -109,7 +109,7 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
 
 // Signature parameters
 const PRE_SIGNATURES_TO_CREATE: u32 = 30;
-const MAX_QUEUE_SIZE: u32 = 20;
+const MAX_QUEUE_SIZE: u32 = 10;
 const CANISTER_COUNT: usize = 4;
 const SIGNATURE_REQUESTS_PER_SECOND: f64 = 3.5;
 
