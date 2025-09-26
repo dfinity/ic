@@ -7,7 +7,6 @@ load("setupos.bzl", setupos_component_files = "component_files")
 package(default_visibility = ["//ic-os:__subpackages__"])
 
 PUBLIC_GUESTOS_EXPORTS = [
-    "guestos/generate-ic-config/ic.json5.template",
     "networking/dev-certs/canister_http_test_ca.cert",
     "networking/dev-certs/canister_http_test_ca.key",
 ]
