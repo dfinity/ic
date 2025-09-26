@@ -357,10 +357,6 @@ async fn validation_succeeds() {
     ]));
 }
 
-// validation_fails_source_not_found
-// validation_fails_target_not_found
-// validation_fails_same_subnet
-
 #[tokio::test]
 async fn validation_fails_not_found() {
     let Setup {
@@ -401,6 +397,26 @@ async fn validation_fails_not_found() {
         panic!()
     };
     assert_eq!(canister, nonexistent_canister);
+}
+
+#[tokio::test]
+async fn validation_fails_same_subnet() {
+    let Setup {
+        pic,
+        source,
+        source_subnet,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let target = pic
+        .create_canister_on_subnet(Some(sender), None, source_subnet)
+        .await;
+    let Err(ValidationError::SameSubnet) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
 }
 
 #[tokio::test]
