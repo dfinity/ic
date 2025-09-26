@@ -745,7 +745,6 @@ pub struct IncompleteStateReader {
     chunks: HashSet<ChunkId>,
 }
 
-// TODO rename IncompleteStateReader
 impl IncompleteStateReader {
     pub fn empty(
         root_hash: CryptoHashOfState,
