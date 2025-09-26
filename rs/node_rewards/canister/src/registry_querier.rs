@@ -87,7 +87,7 @@ impl RegistryQuerier {
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let registry_version = self
-            .version_for_timestamp(day_utc.unix_ts_at_day_end_nanoseconds())
+            .version_for_timestamp(day_utc.unix_timestamp_at_day_end_nanoseconds())
             .unwrap();
         let nodes = self.nodes_in_version(registry_version)?;
 
