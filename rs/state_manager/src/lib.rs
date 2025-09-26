@@ -775,8 +775,7 @@ pub struct StateSyncRefs {
     /// can take chunks from the cache instead of fetching them from other nodes
     /// when possible.
     cache: Arc<parking_lot::RwLock<StateSyncCache>>,
-    // TODO rename
-    incomplete_state_reader: Arc<parking_lot::RwLock<BTreeMap<Height, IncompleteStateReader>>>,
+    incomplete_state_readers: Arc<parking_lot::RwLock<BTreeMap<Height, IncompleteStateReader>>>,
 }
 
 impl StateSyncRefs {
@@ -784,7 +783,7 @@ impl StateSyncRefs {
         Self {
             active: Arc::new(parking_lot::RwLock::new(None)),
             cache: Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log))),
-            incomplete_state_reader: Arc::new(parking_lot::RwLock::new(BTreeMap::new())),
+            incomplete_state_readers: Arc::new(parking_lot::RwLock::new(BTreeMap::new())),
         }
     }
 }

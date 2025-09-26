@@ -829,31 +829,7 @@ impl IncompleteState {
         metrics.remaining.sub(1);
     }
 
-    // pub(crate) fn get_chunk(
-    //     log: &ReplicaLogger,
-    //     metrics: &StateSyncMetrics,
-    //     root: &Path,
-    //     ix: usize,
-    //     manifest: &Manifest,
-    // ) -> Vec<u8> {
-    //     let chunk = &manifest.chunk_table[ix];
-    //     let file_index = chunk.file_index as usize;
-    //     let path = root.join(&mainfest.file_table[file_index].relative_path);
-
-    //     let f = std::fs::OpenOptions::new()
-    //         .open(&path)
-    //         .unwrap_or_else(|err| {
-    //             fatal!(
-    //                 log,
-    //                 "Failed to open file {} for reading: {}",
-    //                 path.display(),
-    //                 err
-    //             )
-    //         });
-    //     f.read_at(chunk.size_bytes, chunk.offset).unwrap()
-    // }
-
-    // Return wether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
+    // Return whether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
     #[must_use]
     fn make_checkpoint(
         log: &ReplicaLogger,
@@ -1478,15 +1454,18 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             fetch_chunks,
                             copied_chunks_from_file_group,
                         };
-                        self.state_sync_refs.incomplete_state_reader.write().insert(
-                            self.height,
-                            IncompleteStateReader::empty(
-                                self.root_hash.clone(),
-                                meta_manifest,
-                                manifest,
-                                state_sync_file_group,
-                            ),
-                        );
+                        self.state_sync_refs
+                            .incomplete_state_readers
+                            .write()
+                            .insert(
+                                self.height,
+                                IncompleteStateReader::empty(
+                                    self.root_hash.clone(),
+                                    meta_manifest,
+                                    manifest,
+                                    state_sync_file_group,
+                                ),
+                            );
                         self.fetch_started_at = Some(Instant::now());
                         info!(
                             self.log,
@@ -1595,7 +1574,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                 fetch_chunks.remove(&(ix as usize));
                 self.state_sync_refs
-                    .incomplete_state_reader
+                    .incomplete_state_readers
                     .write()
                     .get_mut(&self.height)
                     .unwrap()

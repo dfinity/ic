@@ -117,12 +117,13 @@ impl StateSync {
             .state_layout
             .state_sync_scratchpad(msg_id.height);
 
-        let incomplete_states = self.state_sync_refs.incomplete_state_reader.read();
-        let incomplete_state = incomplete_states.get(&msg_id.height)?;
-        if incomplete_state.root_hash == msg_id.hash.clone().into() {
-            let manifest = incomplete_state.manifest.clone();
-            let meta_manifest = Arc::new(incomplete_state.meta_manifest.clone());
-            let state_sync_file_group = Arc::new(incomplete_state.state_sync_file_group.clone());
+        let incomplete_state_readers = self.state_sync_refs.incomplete_state_readers.read();
+        let incomplete_state_reader = incomplete_state_readers.get(&msg_id.height)?;
+        if incomplete_state_reader.root_hash == msg_id.hash.clone().into() {
+            let manifest = incomplete_state_reader.manifest.clone();
+            let meta_manifest = Arc::new(incomplete_state_reader.meta_manifest.clone());
+            let state_sync_file_group =
+                Arc::new(incomplete_state_reader.state_sync_file_group.clone());
 
             Some(StateSyncMessage {
                 height: msg_id.height,
