@@ -272,86 +272,91 @@ impl IDkgPreSignerImpl {
         for transcript_params_ref in block_reader.source_subnet_xnet_transcripts() {
             source_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
-        let mut validated_dealing_supports = self.validated_dealing_supports.write().unwrap();
 
-        idkg_pool
-            .validated()
-            .signed_dealings()
-            .filter(|(id, signed_dealing)| {
-                id.dealing_hash().map_or_else(
-                    || {
+        let dealings: Vec<_> = idkg_pool.validated().signed_dealings().collect();
+
+        let results = self.thread_pool.install(|| {
+            dealings
+                .into_par_iter()
+                .filter(|(id, signed_dealing)| {
+                    id.dealing_hash().map_or_else(
+                        || {
+                            self.metrics
+                                .pre_sign_errors_inc("create_support_id_dealing_hash");
+                            warn!(
+                                self.log,
+                                "send_dealing_support(): Failed to get dealing hash: {:?}", id
+                            );
+                            false
+                        },
+                        |dealing_hash| {
+                            !self.has_node_issued_dealing_support(
+                                idkg_pool,
+                                &signed_dealing.idkg_dealing().transcript_id,
+                                &signed_dealing.dealer_id(),
+                                &self.node_id,
+                                &dealing_hash,
+                            )
+                        },
+                    )
+                })
+                .filter_map(|(id, signed_dealing)| {
+                    let dealing = signed_dealing.idkg_dealing();
+                    // Look up the transcript params for the dealing
+                    let Some(transcript_params_ref) =
+                        transcript_param_map.get(&dealing.transcript_id)
+                    else {
                         self.metrics
-                            .pre_sign_errors_inc("create_support_id_dealing_hash");
+                            .pre_sign_errors_inc("create_support_missing_transcript_params");
+                        warn!(
+                            every_n_seconds => 15,
+                            self.log,
+                            "Dealing support creation: transcript_param not found: {}",
+                            signed_dealing
+                        );
+                        return None;
+                    };
+
+                    // Check if we are a receiver for this dealing
+                    if !transcript_params_ref.receivers.contains(&self.node_id) {
+                        return None;
+                    }
+
+                    let transcript_params = self.resolve_ref(
+                        transcript_params_ref,
+                        block_reader,
+                        "send_dealing_support",
+                    )?;
+
+                    if source_subnet_xnet_transcripts.contains(&dealing.transcript_id) {
+                        self.metrics
+                            .pre_sign_errors_inc("create_support_for_xnet_transcript");
                         warn!(
                             self.log,
-                            "send_dealing_support(): Failed to get dealing hash: {:?}", id
+                            "Dealing support creation: support for target xnet dealing: {}",
+                            signed_dealing,
                         );
-                        false
-                    },
-                    |dealing_hash| {
-                        !self.has_node_issued_dealing_support(
-                            idkg_pool,
-                            &signed_dealing.idkg_dealing().transcript_id,
-                            &signed_dealing.dealer_id(),
-                            &self.node_id,
-                            &dealing_hash,
-                        )
-                    },
-                )
-            })
-            .filter_map(|(id, signed_dealing)| {
-                let dealing = signed_dealing.idkg_dealing();
-                // Look up the transcript params for the dealing, and check if we
-                // are a receiver for this dealing
-                if let Some(transcript_params_ref) =
-                    transcript_param_map.get(&dealing.transcript_id)
-                {
-                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealing_support")
-                        .and_then(|transcript_params| {
-                            transcript_params
-                                .receiver_index(self.node_id)
-                                .map(|_| (id, transcript_params, signed_dealing))
-                        })
-                } else {
-                    self.metrics
-                        .pre_sign_errors_inc("create_support_missing_transcript_params");
-                    warn!(
-                        every_n_seconds => 15,
-                        self.log,
-                        "Dealing support creation: transcript_param not found: {}",
-                        signed_dealing
-                    );
-                    None
-                }
-            })
-            .filter_map(|(id, transcript_params, signed_dealing)| {
-                let dealing = signed_dealing.idkg_dealing();
-                if source_subnet_xnet_transcripts.contains(&dealing.transcript_id) {
-                    self.metrics
-                        .pre_sign_errors_inc("create_support_for_xnet_transcript");
-                    warn!(
-                        self.log,
-                        "Dealing support creation: support for target xnet dealing: {}",
-                        signed_dealing,
-                    );
-                }
-                let action =
-                    self.crypto_create_dealing_support(&id, &transcript_params, &signed_dealing);
+                    }
 
-                if let Some(IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(
-                    ref support,
-                ))) = action
-                {
-                    // Record our share in the map of validated dealing supports
-                    validated_dealing_supports
-                        .entry(IDkgValidatedDealingSupportIdentifier::from(support))
-                        .or_default()
-                        .insert(support.sig_share.signer);
-                }
+                    self.crypto_create_dealing_support(&id, &transcript_params, &signed_dealing)
+                })
+                .collect()
+        });
 
+        let mut validated_dealing_supports = self.validated_dealing_supports.write().unwrap();
+        for action in &results {
+            if let &IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(ref support)) =
                 action
-            })
-            .collect()
+            {
+                // Record our share in the map of validated dealing supports
+                validated_dealing_supports
+                    .entry(IDkgValidatedDealingSupportIdentifier::from(support))
+                    .or_default()
+                    .insert(support.sig_share.signer);
+            }
+        }
+
+        results
     }
 
     /// Processes the received dealing support messages
