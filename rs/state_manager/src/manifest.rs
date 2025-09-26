@@ -239,7 +239,7 @@ pub(crate) const FILE_TYPES_TO_OBSERVE_SIZE: &[&str] = &[
     WASM_FILE,
 ];
 
-/// Records file size metrics for all files in the new manifest and new files only.
+/// Records file size metrics by file types.
 /// This helps evaluate whether the current grouping selection and threshold is optimal.
 pub(crate) fn observe_file_sizes(
     new_manifest: &Manifest,
@@ -1295,6 +1295,47 @@ pub fn validate_meta_manifest(
     Ok(())
 }
 
+fn zeros_hash() -> [u8; 32] {
+    let mut hasher = chunk_hasher();
+    let mut bytes_left = DEFAULT_CHUNK_SIZE as i64;
+    let zeros_1kib: [u8; 1024] = [0; 1024];
+    while bytes_left > 0 {
+        let n = 1024.min(bytes_left);
+        hasher.write(&zeros_1kib[0..n as usize]);
+        bytes_left -= n;
+    }
+    hasher.finish()
+}
+
+pub fn observe_duplicated_chunks(manifest: &Manifest, metrics: &ManifestMetrics) {
+    let mut num_duplicated_chunks = 0;
+    let mut size_duplicated_chunks = 0;
+    let mut seen_hashes: HashSet<[u8; 32]> = HashSet::new();
+
+    let zeros_hash = zeros_hash();
+
+    // Single loop: track seen hashes and count duplicates in one pass
+    for chunk_info in manifest.chunk_table.iter() {
+        // Skip zero chunks
+        if chunk_info.hash == zeros_hash {
+            continue;
+        }
+
+        if !seen_hashes.insert(chunk_info.hash) {
+            // This is a duplicate - insert returned false
+            num_duplicated_chunks += 1;
+            size_duplicated_chunks += chunk_info.size_bytes as usize;
+        }
+    }
+
+    metrics
+        .duplicated_chunks_num
+        .set(num_duplicated_chunks as i64);
+    metrics
+        .duplicated_chunks_size_bytes
+        .set(size_duplicated_chunks as i64);
+}
+
 /// Computes diff between two manifests and get DiffScript.
 pub fn diff_manifest(
     manifest_old: &Manifest,
@@ -1311,17 +1352,7 @@ pub fn diff_manifest(
     let mut copy_chunks: HashMap<NewIndex, OldIndex> = Default::default();
     let mut fetch_chunks: HashSet<NewIndex> = Default::default();
 
-    let mut hasher = chunk_hasher();
-    let mut bytes_left = DEFAULT_CHUNK_SIZE as i64;
-    let zeros_1kib: [u8; 1024] = [0; 1024];
-
-    while bytes_left > 0 {
-        let n = 1024.min(bytes_left);
-        hasher.write(&zeros_1kib[0..n as usize]);
-        bytes_left -= n;
-    }
-    let zeros_hash = hasher.finish();
-
+    let zeros_hash = zeros_hash();
     let mut zeros_chunks: u32 = 0;
 
     let chunk_index_to_file_index = |chunk_index: &usize| {
@@ -1391,16 +1422,7 @@ pub fn diff_manifest(
 /// Filters out all-zero chunks in the manifest chunk table and returns the set
 /// of remaining chunks indices.
 pub fn filter_out_zero_chunks(manifest: &Manifest) -> HashSet<usize> {
-    let mut hasher = chunk_hasher();
-    let mut bytes_left = DEFAULT_CHUNK_SIZE as i64;
-    let zeros_1kib: [u8; 1024] = [0; 1024];
-
-    while bytes_left > 0 {
-        let n = 1024.min(bytes_left);
-        hasher.write(&zeros_1kib[0..n as usize]);
-        bytes_left -= n;
-    }
-    let zeros_hash = hasher.finish();
+    let zeros_hash = zeros_hash();
 
     let fetch_chunks: HashSet<usize> = manifest
         .chunk_table

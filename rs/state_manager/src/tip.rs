@@ -1543,6 +1543,7 @@ fn handle_compute_manifest_request(
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
 
+    crate::manifest::observe_duplicated_chunks(&manifest, &metrics.manifest_metrics);
     if let Some(manifest_delta) = &manifest_delta {
         crate::manifest::observe_file_sizes(
             &manifest,

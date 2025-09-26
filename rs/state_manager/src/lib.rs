@@ -178,6 +178,8 @@ pub struct ManifestMetrics {
     chunk_id_usage_nearing_limits_critical: IntCounter,
     file_size_bytes: HistogramVec,
     new_file_sizes_bytes: HistogramVec,
+    duplicated_chunks_num: IntGauge,
+    duplicated_chunks_size_bytes: IntGauge,
 }
 
 #[derive(Clone)]
@@ -557,6 +559,16 @@ impl ManifestMetrics {
             new_file_sizes_bytes.with_label_values(&[*file_type]);
         }
 
+        let duplicated_chunks_num = metrics_registry.int_gauge(
+            "state_manager_duplicated_chunks_num",
+            "Number of all duplicated chunks in the manifest.",
+        );
+
+        let duplicated_chunks_size_bytes = metrics_registry.int_gauge(
+            "state_manager_duplicated_chunks_size_bytes",
+            "Size of all duplicated chunks in bytes in the manifest.",
+        );
+
         Self {
             // Number of bytes that are either reused, hashed, or hashed and compared during the
             // manifest computation
@@ -574,6 +586,8 @@ impl ManifestMetrics {
                 .error_counter(CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS),
             file_size_bytes,
             new_file_sizes_bytes,
+            duplicated_chunks_num,
+            duplicated_chunks_size_bytes,
         }
     }
 }
