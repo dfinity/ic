@@ -17,7 +17,7 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/types/types",
         "@crate_index//:slog",
-    ]
+    ],
 )
 
 rust_test(
@@ -27,5 +27,5 @@ rust_test(
         "//rs/crypto/test_utils/ni-dkg",
         "//rs/types/types_test_utils",
         "@crate_index//:prost",
-    ]
+    ],
 )
