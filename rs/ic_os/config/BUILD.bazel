@@ -1,9 +1,11 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    ":build_script",
     "//rs/config",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
@@ -11,6 +13,7 @@ DEPENDENCIES = [
     "//rs/ic_os/network",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
+    "@crate_index//:askama",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
     "@crate_index//:get_if_addrs",
@@ -34,6 +37,12 @@ DEV_DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    data = ["templates/ic.json5.template"],
+)
 
 BIN_SOURCES = [
     "src/main.rs",
@@ -71,9 +80,6 @@ rust_library(
 # bazel test //rs/ic_os/config:config_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
 rust_test(
     name = "config_lib_test_dev",
-    compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
-    ],
     crate = ":config_lib_dev",
     crate_features = ["dev"],
     data = glob(["golden/*"]),
@@ -83,9 +89,6 @@ rust_test(
 
 rust_test(
     name = "config_lib_test",
-    compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
-    ],
     crate = ":config_lib",
     deps = DEV_DEPENDENCIES,
 )
@@ -115,9 +118,6 @@ rust_binary(
 
 rust_test(
     name = "config_test",
-    compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
-    ],
     crate = ":config_dev",
     crate_features = ["dev"],
     deps = DEV_DEPENDENCIES,

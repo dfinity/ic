@@ -2605,6 +2605,7 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "askama",
  "clap 4.5.27",
  "config_types",
  "deterministic_ips",
@@ -7732,6 +7733,7 @@ dependencies = [
  "phantom_newtype",
  "prometheus 0.13.4",
  "rand 0.8.5",
+ "rayon",
  "slog",
  "strum 0.26.3",
 ]
@@ -12088,6 +12090,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-nervous-system-proto",
+ "rewards-calculation",
  "serde",
 ]
 
@@ -17701,7 +17704,6 @@ dependencies = [
  "regex",
  "reqwest 0.12.15",
  "slog",
- "url",
 ]
 
 [[package]]
@@ -20879,6 +20881,7 @@ dependencies = [
  "chrono",
  "ic-base-types",
  "ic-protobuf",
+ "ic-types",
  "itertools 0.12.1",
  "maplit",
  "rust_decimal",
