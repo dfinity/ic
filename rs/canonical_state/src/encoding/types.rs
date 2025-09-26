@@ -407,14 +407,11 @@ impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for Stream
                 response: Some((response.as_ref(), certification_version).into()),
                 refund: None,
             },
-            Refund(refund) => {
-                assert!(certification_version >= CertificationVersion::V22);
-                Self {
-                    request: None,
-                    response: None,
-                    refund: Some((refund.as_ref(), certification_version).into()),
-                }
-            }
+            Refund(refund) => Self {
+                request: None,
+                response: None,
+                refund: Some((refund.as_ref(), certification_version).into()),
+            },
         }
     }
 }
