@@ -281,6 +281,10 @@ pub fn temporarily_disable_deregister_known_neuron() -> Temporary {
     Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, false)
 }
 
+pub fn is_neuron_indexes_enabled() -> bool {
+    ENABLE_NEURON_INDEXES.get()
+}
+
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
