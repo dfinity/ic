@@ -5,6 +5,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 rust_binary(
     name = "server",
     srcs = ["src/main.rs"],
+    target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//rs/ic_os/attestation",
         "//rs/ic_os/config:config_lib",
