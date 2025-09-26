@@ -55,6 +55,13 @@ pub fn create_dealing<C: CspSigner>(
         })
         .collect::<Result<Vec<_>, MegaKeyFromRegistryError>>()?;
 
+    let transcript_operation_internal =
+        IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
+            IDkgCreateDealingError::SerializationError {
+                internal_error: format!("{e:?}"),
+            }
+        })?;
+
     let internal_dealing = vault
         .idkg_create_dealing(
             params.algorithm_id(),
@@ -62,7 +69,7 @@ pub fn create_dealing<C: CspSigner>(
             self_index,
             params.reconstruction_threshold(),
             key_protos,
-            params.operation_type().clone(),
+            transcript_operation_internal,
         )
         .map_err(|e| {
             idkg_create_dealing_vault_error_into_idkg_create_dealing_error(e, params.receivers())

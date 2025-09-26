@@ -11,7 +11,8 @@ use crate::vault::api::{
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -27,9 +28,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -165,7 +164,7 @@ pub trait TarpcCspVault {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_verify_dealing_private`
