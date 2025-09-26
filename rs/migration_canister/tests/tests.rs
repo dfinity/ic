@@ -817,11 +817,11 @@ async fn after_validation_insufficient_cycles() {
     })
     .await;
     let sender = target_controllers[0];
-    // top up just enough to pass validation
+    // Top up just enough to pass validation..
     pic.add_cycles(source, 10_000_000_000_000).await;
     let args = MigrateCanisterArgs { source, target };
     migrate_canister(&pic, sender, &args).await.unwrap();
-    // but then burn some cycles by reinstalling to get under the required amount
+    // ..but then burn some cycles by reinstalling to get under the required amount.
     pic.reinstall_canister(
         source,
         b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
@@ -839,3 +839,67 @@ async fn after_validation_insufficient_cycles() {
     };
     assert!(reason.contains("Source does not have sufficient cycles"));
 }
+
+#[tokio::test]
+async fn failure_controllers_restored() {
+    let Setup {
+        pic,
+        source,
+        target,
+        mut source_controllers,
+        mut target_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    // Validation succeeded. Now we break migration by interfering.
+    pic.start_canister(source, Some(sender)).await.unwrap();
+    advance(&pic).await;
+    advance(&pic).await;
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Failed { .. } = status[0] else {
+        panic!()
+    };
+    let mut source_controllers_after = pic.get_controllers(source).await;
+    let mut target_controllers_after = pic.get_controllers(target).await;
+    source_controllers_after.sort();
+    target_controllers_after.sort();
+    source_controllers.sort();
+    target_controllers.sort();
+    // On failure, the MC should remain controller such that user can retry.
+    assert_eq!(source_controllers, source_controllers_after);
+    assert_eq!(target_controllers, target_controllers_after);
+}
+
+// TODO: Depends on a PocketIC change
+
+// #[tokio::test]
+// async fn success_controllers_restored() {
+//     let Setup {
+//         pic,
+//         source,
+//         target,
+//         mut source_controllers,
+//         ..
+//     } = setup(Settings::default()).await;
+//     let sender = source_controllers[0];
+//     let args = MigrateCanisterArgs { source, target };
+//     migrate_canister(&pic, sender, &args).await.unwrap();
+//     for _ in 0..10 {
+//         advance(&pic).await;
+//     }
+//     let status = get_status(&pic, sender, &args).await;
+//     let MigrationStatus::Succeeded { .. } = status[0] else {
+//         panic!()
+//     };
+//     let mut source_controllers_after = pic.get_controllers(source).await;
+//     source_controllers_after.sort();
+//     // On success, the MC should have removed itself from the controllers.
+//     source_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
+//     source_controllers.sort();
+//     assert_eq!(source_controllers, source_controllers_after);
+// }
+
+// parallel processing
