@@ -37,7 +37,6 @@ use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
-use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME};
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -70,11 +69,6 @@ fn setup(env: TestEnv) {
             dkg_interval,
         },
     );
-
-    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 }
 
 fn log_instructions(env: TestEnv) {
@@ -86,6 +80,8 @@ fn log_instructions(env: TestEnv) {
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
     grant_backup_access_to_all_nns_nodes(&env, &ssh_priv_key_path, &ssh_pub_key_path);
+
+    env.sync_with_prometheus();
 
     let logger = env.logger();
 
