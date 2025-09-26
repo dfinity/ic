@@ -606,7 +606,7 @@ icTests my_sub other_sub conf =
                                                                                                      .+ #compute_allocation
                                                                                                      .== Nothing
                                                                                                      .+ #memory_allocation
-                                                                                                     .== Just (2 ^ 48 + 1)
+                                                                                                     .== Just (2 ^ 64 + 1)
                                                                                                      .+ #freezing_threshold
                                                                                                      .== Nothing
                                                                                                      .+ #reserved_cycles_limit
