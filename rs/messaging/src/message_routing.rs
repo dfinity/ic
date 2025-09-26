@@ -1221,13 +1221,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             let ipv4_address = node_record
                 .public_ipv4_config
                 .map(|ipv4_config| ipv4_config.ip_addr);
-            if let Some(ref ipv4) = ipv4_address {
-                if ipv4.parse::<Ipv4Addr>().is_err() {
-                    raise_critical_error_for_api_boundary_nodes(&format!(
-                        "failed to parse ipv4 address of node {api_bn_id}",
-                    ));
-                    continue;
-                }
+            if let Some(ref ipv4) = ipv4_address
+                && ipv4.parse::<Ipv4Addr>().is_err()
+            {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "failed to parse ipv4 address of node {api_bn_id}",
+                ));
+                continue;
             }
 
             api_boundary_nodes.insert(
