@@ -1476,8 +1476,6 @@ fn handle_compute_manifest_request(
         checkpoint_layout.height(),
     );
 
-    let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
-
     let bundled_manifest = compute_bundled_manifest(manifest.clone());
 
     #[cfg(feature = "malicious_code")]
@@ -1492,27 +1490,6 @@ fn handle_compute_manifest_request(
         bundled_manifest.root_hash,
         checkpoint_layout.height()
     );
-
-    metrics
-        .manifest_metrics
-        .file_group_chunks
-        .set(num_file_group_chunks as i64);
-
-    let file_group_chunk_id_range_length =
-        (MANIFEST_CHUNK_ID_OFFSET - FILE_GROUP_CHUNK_ID_OFFSET) as usize;
-    if num_file_group_chunks > file_group_chunk_id_range_length / 2 {
-        error!(
-            log,
-            "{}: The number of file group chunks is greater than half of the available ID space in state sync. Number of file group chunks: {}, file group chunk ID range length: {}",
-            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-            num_file_group_chunks,
-            file_group_chunk_id_range_length,
-        );
-        metrics
-            .manifest_metrics
-            .chunk_id_usage_nearing_limits_critical
-            .inc();
-    }
 
     let num_sub_manifest_chunks = bundled_manifest.meta_manifest.sub_manifest_hashes.len();
     metrics
@@ -1542,6 +1519,28 @@ fn handle_compute_manifest_request(
     }
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
+
+    let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
+    metrics
+        .manifest_metrics
+        .file_group_chunks
+        .set(num_file_group_chunks as i64);
+
+    let file_group_chunk_id_range_length =
+        (MANIFEST_CHUNK_ID_OFFSET - FILE_GROUP_CHUNK_ID_OFFSET) as usize;
+    if num_file_group_chunks > file_group_chunk_id_range_length / 2 {
+        error!(
+            log,
+            "{}: The number of file group chunks is greater than half of the available ID space in state sync. Number of file group chunks: {}, file group chunk ID range length: {}",
+            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+            num_file_group_chunks,
+            file_group_chunk_id_range_length,
+        );
+        metrics
+            .manifest_metrics
+            .chunk_id_usage_nearing_limits_critical
+            .inc();
+    }
 
     crate::manifest::observe_duplicated_chunks(&manifest, &metrics.manifest_metrics);
     if let Some(manifest_delta) = &manifest_delta {
