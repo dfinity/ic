@@ -86,6 +86,12 @@ system_test_nns(
     uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
@@ -104,6 +110,12 @@ system_test_nns(
     uses_guestos_update = True,
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 rust_binary(
@@ -131,6 +143,12 @@ system_test_nns(
     uses_hostos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
@@ -149,6 +167,12 @@ system_test_nns(
     uses_hostos_update = True,
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 # Tests the recovery-upgrader component by upgrading the GuestOS to the mainnet update image
