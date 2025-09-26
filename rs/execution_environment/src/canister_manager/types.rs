@@ -657,7 +657,7 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterSnapshotNotController { .. } => {
                 ErrorHelp::UserError {
-                    suggestion: "Only a controller of the canister that the snapshot belongs to can load it."
+                    suggestion: "Make sure you are a controller of the canister that the snapshot belongs to."
                         .to_string(),
                     doc_link: "canister-snapshot-not-controller".to_string(),
                 }

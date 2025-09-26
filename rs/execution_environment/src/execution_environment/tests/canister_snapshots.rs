@@ -1984,7 +1984,6 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let args: LoadCanisterSnapshotArgs =
         LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     let result = test.subnet_message("load_canister_snapshot", args.encode());
-    println!("LoadCanisterSnapshotResult: {:?}", result);
     assert!(result.is_ok());
     assert!(
         test.canister_state(canister_id).system_state.balance() < initial_balance - expected_charge
