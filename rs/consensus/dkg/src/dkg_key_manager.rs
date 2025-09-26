@@ -288,7 +288,7 @@ impl DkgKeyManager {
         let number_of_transcripts = expired.len();
         info!(
             self.logger,
-            "Waiting on {} transcripts to be loaded for height {}",
+            "PIERUGO (log already there) | Waiting on {} transcripts to be loaded for height {}",
             number_of_transcripts,
             next_random_beacon_height
         );
@@ -316,7 +316,7 @@ impl DkgKeyManager {
 
         info!(
             self.logger,
-            "Finished waiting on {} transcripts to be loaded for height {}",
+            "PIERUGO (log already there) | Finished waiting on {} transcripts to be loaded for height {}",
             number_of_transcripts,
             next_random_beacon_height,
         );
