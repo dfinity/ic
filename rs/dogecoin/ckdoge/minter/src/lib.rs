@@ -1,3 +1,6 @@
+pub mod candid_api;
+pub mod lifecycle;
+
 use async_trait::async_trait;
 use candid::Principal;
 use ic_ckbtc_minter::{
@@ -6,7 +9,7 @@ use ic_ckbtc_minter::{
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 
-pub mod candid_api;
+pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
 #[derive(Copy, Clone)]
 pub struct DogeCanisterRuntime {}

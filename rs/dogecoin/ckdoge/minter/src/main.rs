@@ -1,16 +1,38 @@
 use ic_cdk::{init, post_upgrade, update};
-use ic_ckdoge_minter::candid_api::{
-    RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+use ic_ckbtc_minter::state::eventlog::EventType;
+use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
+use ic_ckdoge_minter::{
+    DOGECOIN_CANISTER_RUNTIME,
+    candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
+    lifecycle::init::MinterArg,
 };
 
 #[init]
-fn init() {
-    todo!()
+fn init(args: MinterArg) {
+    match args {
+        MinterArg::Init(args) => {
+            let args = ic_ckbtc_minter::lifecycle::init::InitArgs::from(args);
+            ic_ckbtc_minter::storage::record_event(
+                EventType::Init(args.clone()),
+                &DOGECOIN_CANISTER_RUNTIME,
+            );
+            ic_ckbtc_minter::lifecycle::init::init(args);
+            setup_tasks();
+
+            #[cfg(feature = "self_check")]
+            ok_or_die(check_invariants())
+        }
+    }
+}
+
+fn setup_tasks() {
+    schedule_now(TaskType::ProcessLogic(true), &DOGECOIN_CANISTER_RUNTIME);
+    schedule_now(TaskType::RefreshFeePercentiles, &DOGECOIN_CANISTER_RUNTIME);
 }
 
 #[post_upgrade]
 fn post_upgrade() {
-    todo!()
+    todo!("XC-495")
 }
 
 #[update]
