@@ -327,6 +327,7 @@ impl CanisterControllersChangeRecord {
 ///         taken_from_canister : reserved;
 ///         metadata_upload : reserved;
 ///    };
+///    from_canister_id : opt principal;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -335,6 +336,7 @@ pub struct CanisterLoadSnapshotRecord {
     snapshot_id: SnapshotId,
     taken_at_timestamp: u64,
     source: SnapshotSource,
+    from_canister_id: Option<CanisterId>,
 }
 
 impl CanisterLoadSnapshotRecord {
@@ -343,12 +345,14 @@ impl CanisterLoadSnapshotRecord {
         snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
         source: SnapshotSource,
+        from_canister_id: Option<CanisterId>,
     ) -> Self {
         Self {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
             source,
+            from_canister_id,
         }
     }
 
@@ -366,6 +370,10 @@ impl CanisterLoadSnapshotRecord {
 
     pub fn source(&self) -> SnapshotSource {
         self.source
+    }
+
+    pub fn from_canister_id(&self) -> Option<CanisterId> {
+        self.from_canister_id
     }
 }
 
@@ -437,6 +445,11 @@ pub struct RenameToRecord {
 ///     canister_version: nat64;
 ///     snapshot_id: blob;
 ///     taken_at_timestamp: nat64;
+///     source : variant {
+///       taken_from_canister : reserved;
+///       metadata_upload : reserved;
+///     };
+///     from_canister_id: opt principal;
 ///   };
 ///   settings_change : record {
 ///     controllers : opt vec principal;
@@ -494,12 +507,14 @@ impl CanisterChangeDetails {
         snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
         source: SnapshotSource,
+        from_canister_id: Option<CanisterId>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
             source,
+            from_canister_id,
         })
     }
 
@@ -799,6 +814,9 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             canister_load_snapshot.source,
                         )
                         .into(),
+                        from_canister_id: canister_load_snapshot
+                            .from_canister_id
+                            .map(|x| x.get().into()),
                     },
                 )
             }
@@ -913,11 +931,18 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                             ))
                         })?,
                 )?;
+
+                let from_canister_id = match canister_load_snapshot.from_canister_id {
+                    Some(id) => Some(CanisterId::unchecked_from_principal(id.try_into()?)),
+                    None => None,
+                };
+
                 Ok(CanisterChangeDetails::load_snapshot(
                     canister_load_snapshot.canister_version,
                     snapshot_id,
                     canister_load_snapshot.taken_at_timestamp,
                     source,
+                    from_canister_id,
                 ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(

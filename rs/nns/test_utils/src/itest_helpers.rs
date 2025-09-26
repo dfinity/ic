@@ -627,7 +627,7 @@ pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerCa
     install_rust_canister(
         canister,
         "ledger-canister",
-        &["notify-method"],
+        &[],
         Some(CandidOne(args).into_bytes().unwrap()),
     )
     .await

@@ -453,6 +453,15 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    CanisterSnapshotNotController {
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
+    CanisterSnapshotNotLoadable {
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
     CanisterSnapshotExecutionStateNotFound {
         canister_id: CanisterId,
     },
@@ -646,6 +655,20 @@ impl AsErrorHelp for CanisterManagerError {
                         .to_string(),
                 doc_link: doc_ref("canister-snapshot-invalid-ownership"),
             },
+            CanisterManagerError::CanisterSnapshotNotController { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Make sure you are a controller of the canister that the snapshot belongs to."
+                        .to_string(),
+                    doc_link: "canister-snapshot-not-controller".to_string(),
+                }
+            }
+            CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Snapshot is not currently loadable on the specified canister. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes)."
+                        .to_string(),
+                    doc_link: "canister-snapshot-not-loadable".to_string(),
+                }
+            }
             CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "".to_string(),
@@ -1006,6 +1029,27 @@ impl From<CanisterManagerError> for UserError {
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,
                 "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+            ),
+            CanisterSnapshotNotController {
+                sender,
+                canister_id,
+                snapshot_id,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}.{additional_help}",
+                    snapshot_id, canister_id, sender,
+                ),
+            ),
+            CanisterSnapshotNotLoadable {
+                canister_id,
+                snapshot_id,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Snapshot {} is not currently loadable on the specified canister {}. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes).",
+                    snapshot_id, canister_id,
+                ),
             ),
             LongExecutionAlreadyInProgress { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
