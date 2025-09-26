@@ -35,7 +35,7 @@ fn init(args: MinterArg) {
     match args {
         MinterArg::Init(args) => {
             storage::record_event(EventType::Init(args.clone()), &IC_CANISTER_RUNTIME);
-            lifecycle::init::init(args);
+            lifecycle::init::init(args, &IC_CANISTER_RUNTIME);
             setup_tasks();
 
             #[cfg(feature = "self_check")]
@@ -131,7 +131,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
             MinterArg::Init(_) => panic!("expected Option<UpgradeArgs> got InitArgs."),
         };
     }
-    lifecycle::upgrade::post_upgrade(upgrade_arg);
+    lifecycle::upgrade::post_upgrade(upgrade_arg, &IC_CANISTER_RUNTIME);
     setup_tasks();
 }
 

@@ -248,7 +248,7 @@ pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     let start_time = runtime.time();
 
     let result = runtime
-        .sign_with_ecdsa(key_name, derivation_path, message_hash)
+        .sign_with_ecdsa(key_name, derivation_path.into_inner(), message_hash)
         .await;
 
     observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
