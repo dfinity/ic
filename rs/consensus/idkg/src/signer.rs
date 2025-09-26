@@ -257,16 +257,15 @@ impl ThresholdSignerImpl {
         let mut validated_sig_shares = BTreeSet::new();
         for (maybe_key, action) in results {
             if let (Some((id, key)), IDkgChangeAction::MoveToValidated(msg)) = (maybe_key, &action)
+                && !validated_sig_shares.insert(key)
             {
-                if !validated_sig_shares.insert(key) {
-                    self.metrics
-                        .sign_errors_inc("duplicate_sig_shares_in_batch");
-                    ret.push(IDkgChangeAction::HandleInvalid(
-                        id,
-                        format!("Duplicate share in unvalidated batch: {msg:?}"),
-                    ));
-                    continue;
-                }
+                self.metrics
+                    .sign_errors_inc("duplicate_sig_shares_in_batch");
+                ret.push(IDkgChangeAction::HandleInvalid(
+                    id,
+                    format!("Duplicate share in unvalidated batch: {msg:?}"),
+                ));
+                continue;
             }
             ret.push(action);
         }
