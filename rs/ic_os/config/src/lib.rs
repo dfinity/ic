@@ -1,4 +1,3 @@
-pub mod generate_testnet_config;
 pub mod guestos;
 pub mod hostos;
 pub mod setupos;
