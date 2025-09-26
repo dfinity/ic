@@ -345,7 +345,7 @@ fn ic0_stable64_grow_works() {
                     (then (unreachable))
                 )
 
-                ;; Stable memory size now should be 65537.
+                ;; Stable memory size now should be 1.
                 (if (i64.ne (call $stable64_size) (i64.const 1))
                     (then (unreachable))
                 )
