@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    fs::File,
     hash::{DefaultHasher, Hash, Hasher},
     net::{IpAddr, SocketAddr},
     path::Path,
@@ -10,18 +9,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use slog::{Logger, debug, info, warn};
 
-use crate::{
-    driver::{
-        farm::HostFeature,
-        log_events::LogEvent,
-        nested::HasNestedVms,
-        prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
-        test_env::TestEnvAttribute,
-        test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession},
-        test_setup::GroupSetup,
-        universal_vm::UniversalVms,
-    },
-    retry_with_msg,
+use crate::driver::{
+    farm::HostFeature,
+    log_events::LogEvent,
+    nested::HasNestedVms,
+    test_env::TestEnvAttribute,
+    test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession, scp_send_to},
+    test_setup::GroupSetup,
+    universal_vm::UniversalVms,
 };
 
 use super::{
@@ -133,44 +128,61 @@ impl VectorVm {
 
         let log = env.logger();
         info!(log, "Syncing vector targets.");
-        let snapshot = env.topology_snapshot();
-        let nodes = snapshot
-            .subnets()
-            .flat_map(|s| s.nodes())
-            .chain(snapshot.unassigned_nodes())
-            .chain(snapshot.api_boundary_nodes());
 
-        for node in nodes {
-            let node_id = node.node_id.get();
-            let ip = node.get_ip_addr();
+        match env.safe_topology_snapshot() {
+            Err(e) => warn!(
+                log,
+                "Skipping adding IC nodes as vector targets for now because could not fetch topology snapshot because: {e:?}"
+            ),
+            Ok(snapshot) => {
+                let nodes = snapshot
+                    .subnets()
+                    .flat_map(|s| s.nodes())
+                    .chain(snapshot.unassigned_nodes())
+                    .chain(snapshot.api_boundary_nodes());
 
-            let labels = [
-                // We don't have host os in these tests so this is the only job.
-                // It is here to keep consistency between mainnet and testnet logs.
-                (JOB, "node_exporter".to_string()),
-                (IS_API_BN, node.is_api_boundary_node().to_string()),
-                (IS_MALICIOUS, node.is_malicious().to_string()),
-            ]
-            .into_iter()
-            .chain(match node.subnet_id() {
-                None => vec![],
-                Some(s) => vec![(IC_SUBNET, s.get().to_string())],
-            })
-            .map(|(key, val)| (key.to_string(), val))
-            .collect();
+                for node in nodes {
+                    let node_id = node.node_id.get();
+                    let ip = node.get_ip_addr();
 
-            add_vector_target(
-                &mut sources,
-                &mut transforms,
-                node_id.to_string(),
-                ip,
-                Some(labels),
-            );
+                    let labels = [
+                        // We don't have host os in these tests so this is the only job.
+                        // It is here to keep consistency between mainnet and testnet logs.
+                        (JOB, "node_exporter".to_string()),
+                        (IS_API_BN, node.is_api_boundary_node().to_string()),
+                        (IS_MALICIOUS, node.is_malicious().to_string()),
+                    ]
+                    .into_iter()
+                    .chain(match node.subnet_id() {
+                        None => vec![],
+                        Some(s) => vec![(IC_SUBNET, s.get().to_string())],
+                    })
+                    .map(|(key, val)| (key.to_string(), val))
+                    .collect();
+
+                    add_vector_target(
+                        &mut sources,
+                        &mut transforms,
+                        node_id.to_string(),
+                        ip,
+                        Some(labels),
+                    );
+                }
+            }
         }
 
         for vm in env.get_all_nested_vms()? {
             let vm_name = vm.vm_name();
-            let network = vm.get_nested_network().unwrap();
+            let network = match vm.get_nested_network() {
+                Ok(network) => network,
+                Err(e) => {
+                    warn!(
+                        log,
+                        "Skipping adding vector target for {vm_name} because: {e:?}"
+                    );
+                    continue;
+                }
+            };
 
             for (job, ip) in [
                 ("node_exporter", network.guest_ip),
@@ -259,20 +271,7 @@ impl VectorVm {
 
             let from = file.path();
             let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
-            let size = std::fs::metadata(&from).unwrap().len();
-            retry_with_msg!(
-                format!("scp {from:?} to vector:{to:?}"),
-                env.logger(),
-                SCP_RETRY_TIMEOUT,
-                SCP_RETRY_BACKOFF,
-                || {
-                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-                    let mut from_file = File::open(&from)?;
-                    std::io::copy(&mut from_file, &mut remote_file)?;
-                    Ok(())
-                }
-            )
-            .unwrap_or_else(|e| panic!("Failed to scp {from:?} to vector:{to:?} because: {e:?}!",));
+            scp_send_to(env.logger(), &session, &from, &to, 0o644);
         }
 
         if !self.container_running {

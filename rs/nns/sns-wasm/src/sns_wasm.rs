@@ -2104,10 +2104,10 @@ mod test {
             _wasm_memory_limit: u64,
         ) -> Result<CanisterId, String> {
             let mut errors = self.errors_on_create_canister.lock().unwrap();
-            if !errors.is_empty() {
-                if let Some(message) = errors.remove(0) {
-                    return Err(message);
-                }
+            if !errors.is_empty()
+                && let Some(message) = errors.remove(0)
+            {
+                return Err(message);
             }
 
             let mut data = self.canisters_created.lock().unwrap();
@@ -2120,10 +2120,10 @@ mod test {
             self.canisters_deleted.lock().unwrap().push(canister);
 
             let mut errors = self.errors_on_delete_canister.lock().unwrap();
-            if !errors.is_empty() {
-                if let Some(message) = errors.remove(0) {
-                    return Err(message);
-                }
+            if !errors.is_empty()
+                && let Some(message) = errors.remove(0)
+            {
+                return Err(message);
             }
 
             Ok(())
@@ -2141,10 +2141,10 @@ mod test {
                 .push((target_canister, wasm, init_payload));
 
             let mut errors = self.errors_on_install_wasms.lock().unwrap();
-            if !errors.is_empty() {
-                if let Some(message) = errors.remove(0) {
-                    return Err(message);
-                }
+            if !errors.is_empty()
+                && let Some(message) = errors.remove(0)
+            {
+                return Err(message);
             }
 
             Ok(())
@@ -2161,10 +2161,10 @@ mod test {
                 .push((canister, controllers));
 
             let mut errors = self.errors_on_set_controller.lock().unwrap();
-            if !errors.is_empty() {
-                if let Some(message) = errors.remove(0) {
-                    return Err(message);
-                }
+            if !errors.is_empty()
+                && let Some(message) = errors.remove(0)
+            {
+                return Err(message);
             }
 
             Ok(())

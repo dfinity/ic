@@ -3,10 +3,7 @@
 use crate::common::HeaderValidator;
 use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
-    header_cache::{
-        AddHeaderCacheError, AddHeaderResult, HeaderCache, HeaderNode, InMemoryHeaderCache,
-        LMDBHeaderCache, Tip,
-    },
+    header_cache::{AddHeaderCacheError, AddHeaderResult, HeaderNode, HybridHeaderCache, Tip},
     metrics::BlockchainStateMetrics,
 };
 use bitcoin::{BlockHash, block::Header, consensus::Encodable, dogecoin::Header as DogecoinHeader};
@@ -60,7 +57,7 @@ pub type SerializedBlock = Vec<u8>;
 /// The BlockChainState also maintains the child relationhips between the headers.
 pub struct BlockchainState<Network: BlockchainNetwork> {
     /// This field stores all the Bitcoin headers using a HashMap containing BlockHash and the corresponding header.
-    header_cache: Arc<dyn HeaderCache<Header = Network::Header> + Send>,
+    pub(crate) header_cache: Arc<HybridHeaderCache<Network::Header>>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
     block_cache: RwLock<HashMap<BlockHash, Arc<SerializedBlock>>>,
@@ -99,30 +96,18 @@ impl<Network: BlockchainNetwork> BlockchainState<Network>
 where
     Network::Header: Send + Sync,
 {
-    /// Create a new BlockChainState object with in-memory cache.
-    pub fn new(network: Network, metrics_registry: &MetricsRegistry) -> Self {
-        let genesis_block_header = network.genesis_block_header();
-        let header_cache = Arc::new(InMemoryHeaderCache::new(genesis_block_header));
-        let block_cache = RwLock::new(HashMap::new());
-        BlockchainState {
-            header_cache,
-            block_cache,
-            network,
-            metrics: BlockchainStateMetrics::new(metrics_registry),
-        }
-    }
-
-    /// Create a new BlockChainState with on-disk cache.
-    pub fn new_with_cache_dir(
+    /// Create a new BlockChainState with an optional on-disk cache if cache_dir is specified.
+    pub fn new(
         network: Network,
-        cache_dir: PathBuf,
+        cache_dir: Option<PathBuf>,
         metrics_registry: &MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         let genesis_block_header = network.genesis_block_header();
-        let header_cache = Arc::new(LMDBHeaderCache::new(
+        let header_cache = Arc::new(HybridHeaderCache::new(
             genesis_block_header,
             cache_dir,
+            metrics_registry,
             logger,
         ));
         let block_cache = RwLock::new(HashMap::new());
@@ -209,17 +194,26 @@ where
             .map_err(|err| AddHeaderError::InvalidHeader(block_hash, err))?;
 
         let header_cache = self.header_cache.clone();
-        let metrics = self.metrics.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            header_cache.add_header(block_hash, header).inspect(|_| {
-                metrics.header_cache_size.inc();
-            })
-        })
-        .await
-        .map_err(|err: tokio::task::JoinError| {
-            AddHeaderCacheError::Internal(format!("{}", err))
-        })??;
+        let result =
+            tokio::task::spawn_blocking(move || header_cache.add_header(block_hash, header))
+                .await
+                .map_err(|err: tokio::task::JoinError| {
+                    AddHeaderCacheError::Internal(format!("{}", err))
+                })??;
         Ok(result)
+    }
+
+    /// Background task to ersist headers below the anchor (as headers) and the anchor (as tip) on to disk, and
+    /// prune headers below the anchor from the in-memory cache.
+    pub fn persist_and_prune_headers_below_anchor(
+        &self,
+        anchor: BlockHash,
+    ) -> tokio::task::JoinHandle<()> {
+        let header_cache = self.header_cache.clone();
+        tokio::task::spawn_blocking(move || {
+            // Error is ignored, since it is a background task
+            let _ = header_cache.persist_and_prune_headers_below_anchor(anchor);
+        })
     }
 
     /// This method adds a new block to the `block_cache`
@@ -352,6 +346,18 @@ where
             .map(|block| block.len())
             .sum()
     }
+
+    /// Number of headers stored.
+    ///
+    /// Return a pair where
+    /// 1. Number of headers stored on disk
+    /// 2. Number of headers stored in memory
+    pub fn num_headers(&self) -> Result<(usize, usize), String> {
+        self.header_cache
+            .get_num_headers()
+            // do not expose internal error type
+            .map_err(|e| e.to_string())
+    }
 }
 
 impl<Network: BlockchainNetwork> HeaderStore for BlockchainState<Network> {
@@ -387,7 +393,12 @@ mod test {
     use std::collections::HashSet;
 
     fn run_in_memory<R>(network: Network, test_fn: impl Fn(BlockchainState<Network>) -> R) -> R {
-        test_fn(BlockchainState::new(network, &MetricsRegistry::default()))
+        test_fn(BlockchainState::new(
+            network,
+            None,
+            &MetricsRegistry::default(),
+            no_op_logger(),
+        ))
     }
 
     fn run_with_cache_dir<R>(
@@ -395,9 +406,9 @@ mod test {
         test_fn: impl Fn(BlockchainState<Network>) -> R,
     ) -> R {
         let dir = tempdir().unwrap();
-        test_fn(BlockchainState::new_with_cache_dir(
+        test_fn(BlockchainState::new(
             network,
-            dir.path().to_path_buf(),
+            Some(dir.path().to_path_buf()),
             &MetricsRegistry::default(),
             no_op_logger(),
         ))
@@ -555,7 +566,7 @@ mod test {
             "unsuccessfully added fork chain: {maybe_err:?}"
         );
 
-        let mut tips = state.header_cache.get_tips();
+        let mut tips = crate::header_cache::test::get_tips(&state.header_cache);
         tips.sort_by(|x, y| y.work.cmp(&x.work));
         assert_eq!(tips.len(), 2);
         assert_eq!(tips[0].header.block_hash(), *last_fork_hash);

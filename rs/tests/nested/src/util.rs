@@ -79,7 +79,7 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
 }
 
 /// Use an SSH channel to check the version on the running HostOS.
-pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
+pub fn check_hostos_version(node: &NestedVm) -> String {
     let session = node
         .block_on_ssh_session()
         .expect("Could not reach HostOS VM.");
@@ -100,7 +100,7 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
 }
 
 /// Submit a proposal to elect a new GuestOS version
-pub(crate) async fn elect_guestos_version(
+pub async fn elect_guestos_version(
     nns_node: &IcNodeSnapshot,
     target_version: &ReplicaVersion,
     sha256: String,
@@ -127,7 +127,7 @@ pub(crate) async fn elect_guestos_version(
 }
 
 /// Get the current unassigned nodes configuration from the NNS registry.
-pub(crate) async fn get_unassigned_nodes_config(
+pub async fn get_unassigned_nodes_config(
     nns_node: &IcNodeSnapshot,
 ) -> Option<UnassignedNodesConfigRecord> {
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
@@ -150,9 +150,7 @@ pub(crate) async fn get_unassigned_nodes_config(
 }
 
 /// Get the blessed guestOS version from the NNS registry.
-pub(crate) async fn get_blessed_guestos_versions(
-    nns_node: &IcNodeSnapshot,
-) -> BlessedReplicaVersions {
+pub async fn get_blessed_guestos_versions(nns_node: &IcNodeSnapshot) -> BlessedReplicaVersions {
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
     let blessed_vers_result = registry_canister
         .get_value(
@@ -165,10 +163,7 @@ pub(crate) async fn get_blessed_guestos_versions(
 }
 
 /// Get the blessed guestOS version from the NNS registry.
-pub(crate) async fn update_unassigned_nodes(
-    nns_node: &IcNodeSnapshot,
-    target_version: &ReplicaVersion,
-) {
+pub async fn update_unassigned_nodes(nns_node: &IcNodeSnapshot, target_version: &ReplicaVersion) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
@@ -214,7 +209,7 @@ pub async fn check_guestos_version(
 }
 
 /// Submit a proposal to elect a new HostOS version
-pub(crate) async fn elect_hostos_version(
+pub async fn elect_hostos_version(
     nns_node: &IcNodeSnapshot,
     target_version: &HostosVersion,
     sha256: &str,
@@ -239,7 +234,7 @@ pub(crate) async fn elect_hostos_version(
 }
 
 /// Submit a proposal to update the HostOS version on a node
-pub(crate) async fn update_nodes_hostos_version(
+pub async fn update_nodes_hostos_version(
     nns_node: &IcNodeSnapshot,
     new_hostos_version: &HostosVersion,
     node_ids: Vec<NodeId>,

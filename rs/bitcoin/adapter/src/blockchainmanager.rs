@@ -801,7 +801,8 @@ pub mod test {
     where
         BlockchainState<Network>: HeaderValidator<Network>,
     {
-        let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+        let blockchain_state =
+            BlockchainState::new(network, None, &MetricsRegistry::default(), no_op_logger());
         (
             blockchain_state.genesis(),
             BlockchainManager::new(

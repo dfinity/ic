@@ -177,6 +177,10 @@ members = [
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
     "rs/ic_os/grub",
+    "rs/ic_os/guest_upgrade/client",
+    "rs/ic_os/guest_upgrade/server",
+    "rs/ic_os/guest_upgrade/shared",
+    "rs/ic_os/guest_upgrade/tests",
     "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
@@ -220,6 +224,8 @@ members = [
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",
     "rs/ledger_suite/tests/sm-tests/constants",
+    "rs/ledger_suite/test_utils/in_memory_ledger",
+    "rs/ledger_suite/test_utils/state_machine_helpers",
     "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
@@ -853,6 +859,7 @@ tonic = "0.12.3"
 tonic-build = "0.12.3"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
+    "add-extension",
     "cors",
     "limit",
     "trace",

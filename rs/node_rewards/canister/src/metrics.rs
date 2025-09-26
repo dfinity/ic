@@ -187,13 +187,15 @@ where
         day_utc: &DayUtc,
     ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
         let mut metrics_by_subnet = BTreeMap::new();
-        let previous_day_ts = day_utc.previous_day().unix_ts_at_day_start_nanoseconds();
+        let previous_day_ts = day_utc
+            .previous_day()
+            .unix_timestamp_at_day_start_nanoseconds();
         let first_key = SubnetMetricsKey {
             timestamp_nanos: previous_day_ts,
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
-            timestamp_nanos: day_utc.get(),
+            timestamp_nanos: day_utc.unix_timestamp_at_day_end_nanoseconds(),
             ..SubnetMetricsKey::max_key()
         };
 
@@ -201,31 +203,31 @@ where
             .subnets_metrics
             .borrow()
             .range(first_key..=last_key)
-            .into_group_map_by(|(k, _)| k.timestamp_nanos.into())
+            .into_group_map_by(|(k, _)| DayUtc::from_nanos(k.timestamp_nanos))
             .into_iter()
             .collect();
 
         let mut initial_total_metrics: HashMap<_, _> = HashMap::new();
-        if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value() {
-            if timestamp_nanos < day_utc {
-                initial_total_metrics = subnets_metrics_by_day
-                    .pop_first()
-                    .unwrap()
-                    .1
-                    .into_iter()
-                    .flat_map(|(k, v)| {
-                        v.nodes_metrics.into_iter().map(move |node_metrics| {
+        if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value()
+            && timestamp_nanos < day_utc
+        {
+            initial_total_metrics = subnets_metrics_by_day
+                .pop_first()
+                .unwrap()
+                .1
+                .into_iter()
+                .flat_map(|(k, v)| {
+                    v.nodes_metrics.into_iter().map(move |node_metrics| {
+                        (
+                            (k.subnet_id, node_metrics.node_id),
                             (
-                                (k.subnet_id, node_metrics.node_id),
-                                (
-                                    node_metrics.num_blocks_proposed_total,
-                                    node_metrics.num_blocks_failed_total,
-                                ),
-                            )
-                        })
+                                node_metrics.num_blocks_proposed_total,
+                                node_metrics.num_blocks_failed_total,
+                            ),
+                        )
                     })
-                    .collect();
-            }
+                })
+                .collect();
         };
 
         for (_, subnets_metrics) in subnets_metrics_by_day {

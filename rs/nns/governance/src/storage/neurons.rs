@@ -12,7 +12,6 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use maplit::hashmap;
 use prost::Message;
 use std::{
@@ -899,20 +898,6 @@ where
     }
 
     result
-}
-
-// This is copied from candid/src. Seems like their definition should be public,
-// but it's not. Seems to be an oversight.
-const PRINCIPAL_MAX_LENGTH_IN_BYTES: usize = 29;
-
-// For range scanning.
-lazy_static! {
-    static ref MIN_PRINCIPAL_ID: PrincipalId =
-        PrincipalId(Principal::try_from(vec![]).expect("Unable to construct MIN_PRINCIPAL_ID."));
-    static ref MAX_PRINCIPAL_ID: PrincipalId = PrincipalId(
-        Principal::try_from(vec![0xFF_u8; PRINCIPAL_MAX_LENGTH_IN_BYTES])
-            .expect("Unable to construct MAX_PRINCIPAL_ID.")
-    );
 }
 
 /// Replaces values in a StableBTreeMap corresponding to a repeated field in a Neuron.
