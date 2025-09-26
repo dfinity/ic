@@ -165,7 +165,7 @@ impl PrometheusVm {
             &std::env::var("IC_DASHBOARDS_DIR")
                 .context("Failed to load `IC_DASHBOARDS_DIR` env variable")?,
         )
-            .context("Failed to create PathBuf from the content of `IC_DASHBOARDS_DIR` env variable")?;
+        .context("Failed to create PathBuf from the content of `IC_DASHBOARDS_DIR` env variable")?;
 
         for directory in dashboards_root.read_dir().map_err(|e| {
             anyhow::anyhow!(
@@ -415,15 +415,15 @@ impl HasPrometheus for TestEnv {
             self.topology_snapshot_by_name(name),
             &playnet_domain,
         )
-            .expect("Failed to synchronize prometheus config with the latest IC topology!");
+        .expect("Failed to synchronize prometheus config with the latest IC topology!");
         sync_prometheus_config_dir_with_ic_gateways(
             self,
             prometheus_config_dir.clone(),
             group_name,
         )
-            .expect(
-                "Failed to synchronize prometheus config with the last deployments of the ic-gateways",
-            );
+        .expect(
+            "Failed to synchronize prometheus config with the last deployments of the ic-gateways",
+        );
         // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
         let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
         let session = deployed_prometheus_vm
@@ -535,10 +535,10 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let bitcoin_watchdog_testnet_canister_scraping_target_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
             .join(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
-    let dogecoin_mainnet_canister_scraping_target_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
-    let dogecoin_testnet_canister_scraping_target_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
+    let dogecoin_mainnet_canister_scraping_target_path = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+        .join(DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
+    let dogecoin_testnet_canister_scraping_target_path = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+        .join(DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
     let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
@@ -669,9 +669,9 @@ fn sync_prometheus_config_dir_with_ic_gateways(
             ("ic".to_string(), group_name.clone()),
             ("gateways".to_string(), name.to_string()),
         ]
-            .iter()
-            .cloned()
-            .collect();
+        .iter()
+        .cloned()
+        .collect();
         ic_gateways_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![format!("[{:?}]:{:?}", ipv6, IC_GATEWAY_METRICS_PORT)],
             labels: labels.clone(),
@@ -703,9 +703,9 @@ fn sync_prometheus_config_dir(
                 ("ic_node".to_string(), node.node_id.to_string()),
                 ("ic_subnet".to_string(), subnet.subnet_id.to_string()),
             ]
-                .iter()
-                .cloned()
-                .collect();
+            .iter()
+            .cloned()
+            .collect();
             replica_p8s_static_configs.push(PrometheusStaticConfig {
                 targets: vec![scraping_target_url(&node, REPLICA_METRICS_PORT)],
                 labels: labels.clone(),
@@ -725,9 +725,9 @@ fn sync_prometheus_config_dir(
             ("ic".to_string(), group_name.clone()),
             ("ic_node".to_string(), node.node_id.to_string()),
         ]
-            .iter()
-            .cloned()
-            .collect();
+        .iter()
+        .cloned()
+        .collect();
         orchestrator_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![scraping_target_url(&node, ORCHESTRATOR_METRICS_PORT)],
             labels: labels.clone(),
@@ -744,9 +744,9 @@ fn sync_prometheus_config_dir(
             ("ic_node".to_string(), node.node_id.to_string()),
             ("ic_api_bn".to_string(), "1".to_string()),
         ]
-            .iter()
-            .cloned()
-            .collect();
+        .iter()
+        .cloned()
+        .collect();
         orchestrator_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![scraping_target_url(&node, ORCHESTRATOR_METRICS_PORT)],
             labels: labels.clone(),
