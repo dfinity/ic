@@ -79,7 +79,7 @@ impl RemoteAttestationService for RemoteAttestationServiceImpl {
 #[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let service_impl = if is_sev_active() {
+    let service_impl = if is_sev_active()? {
         let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
             .context("Failed to read GuestOS config")?;
 
