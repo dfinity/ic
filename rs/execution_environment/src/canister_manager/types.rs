@@ -508,6 +508,13 @@ pub(crate) enum CanisterManagerError {
         value: String,
         max_value_length: usize,
     },
+    CanisterMetadataNoWasmModule {
+        canister_id: CanisterId,
+    },
+    CanisterMetadataSectionNotFound {
+        canister_id: CanisterId,
+        section_name: String,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -743,6 +750,14 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
                 suggestion: "Shorten the environment variable value to fit within the allowed limit.".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataNoWasmModule { .. } => ErrorHelp::UserError {
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-no-wasm-module".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
+                suggestion: "The canister has no metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-section-not-found".to_string(),
             },
         }
     }
@@ -1116,6 +1131,21 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::InvalidManagementPayload,
                 format!(
                     "Environment variable value \"{value}\" exceeds the maximum allowed length of {max_value_length}."
+                ),
+            ),
+            CanisterMetadataNoWasmModule { canister_id } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no Wasm module and hence no metadata is available."
+                ),
+            ),
+            CanisterMetadataSectionNotFound {
+                canister_id,
+                section_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no metadata section with the name {section_name}."
                 ),
             ),
         }
