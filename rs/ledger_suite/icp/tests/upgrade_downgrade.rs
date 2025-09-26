@@ -10,8 +10,9 @@ use ic_ledger_test_utils::pocket_ic_helpers::index::{
 };
 use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
-    LEDGER_CANISTER_ID, account_balance, archives, query_blocks, query_encoded_blocks, transfer,
+    account_balance, archives, query_blocks, query_encoded_blocks, transfer,
 };
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
     AccountIdentifier, CandidBlock, CandidTransaction, DEFAULT_TRANSFER_FEE,

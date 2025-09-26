@@ -1,5 +1,7 @@
 use super::*;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
+use ic_types::PrincipalId;
 use pretty_assertions::assert_eq;
 
 #[test]
