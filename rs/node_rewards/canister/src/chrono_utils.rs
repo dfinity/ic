@@ -18,6 +18,7 @@ pub fn last_unix_timestamp_nanoseconds(naive_date: &NaiveDate) -> u64 {
         .unwrap() as u64
 }
 
+#[cfg(test)]
 pub fn to_native_date(date: &str) -> NaiveDate {
     NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap()
 }
