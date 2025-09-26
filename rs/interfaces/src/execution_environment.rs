@@ -653,6 +653,9 @@ pub trait SystemApi {
     /// Returns the instruction limit for the current execution slice.
     fn slice_instruction_limit(&self) -> NumInstructions;
 
+    /// Returns the instruction limit for the interim execution slice.
+    fn interim_slice_instruction_limit(&self) -> NumInstructions;
+
     /// Returns the number of instructions executed in the current slice.
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions;
 

@@ -622,8 +622,11 @@ pub fn process(
         logger,
     );
 
-    let first_slice_instruction_limit = system_api.slice_instruction_limit();
     let message_instruction_limit = system_api.message_instruction_limit();
+    let slice_instruction_limit = system_api.slice_instruction_limit().get() as i64;
+    let interim_slice_instruction_limit = system_api.interim_slice_instruction_limit().get() as i64;
+    let interim_slice_instruction_limit =
+        interim_slice_instruction_limit.min(slice_instruction_limit);
 
     let mut instance = match embedder.new_instance(
         canister_id,
@@ -655,7 +658,7 @@ pub fn process(
     };
 
     // Set the instruction limit for the first slice.
-    instance.set_instruction_counter(first_slice_instruction_limit.get() as i64);
+    instance.set_instruction_counter(interim_slice_instruction_limit);
 
     // Execute Wasm code until it finishes or exceeds the message instruction
     // limit. With deterministic time slicing, this call may execute multiple
