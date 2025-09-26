@@ -550,11 +550,11 @@ impl StreamHandlerImpl {
     ///   If the reject response can not be inducted due to a canister migration, it is treated
     ///   as a rejected response (see below).
     /// - If the message is a response or refund, it is rerouted according to the routing table
-    ///   into the correspoding stream.
+    ///   into the appropriate stream.
     ///
     /// Error cases:
-    /// - A response with a `RejectReason` other than `CanisterMigrating`: guaranteed response
-    ///   delivery requires that the response be rerouted; an error counter is incremented.
+    /// - A response or refund with a `RejectReason` other than `CanisterMigrating`: guaranteed
+    ///   response delivery requires responses to be rerouted; an error counter is incremented.
     ///
     /// Returns the amount of cycles that were attached to duplicate reject responses that were
     /// silently dropped.
@@ -567,7 +567,7 @@ impl StreamHandlerImpl {
         streams: &mut StreamMap,
         available_guaranteed_response_memory: &mut i64,
     ) -> Cycles {
-        fn reroute_response(
+        fn reroute_message(
             response: StreamMessage,
             state: &ReplicatedState,
             streams: &mut StreamMap,
@@ -637,7 +637,7 @@ impl StreamHandlerImpl {
                         }
                         Reject(RejectReason::CanisterMigrating, reject_response) => {
                             // Canister is being migrated, reroute reject response.
-                            reroute_response(reject_response.into(), state, streams, &self.log);
+                            reroute_message(reject_response.into(), state, streams, &self.log);
                         }
                         Reject(..) => {
                             unreachable!(
@@ -646,13 +646,15 @@ impl StreamHandlerImpl {
                         }
                     }
                 }
-                StreamMessage::Response(_) => {
+
+                // Refunds are treated the same as responses for rerouting purposes.
+                StreamMessage::Response(_) | StreamMessage::Refund(_) => {
                     if reason != RejectReason::CanisterMigrating {
                         // Signals other than `CanisterMigrating` shouldn't be possible for
-                        // responses.
+                        // responses or refunds.
                         error!(
                             self.log,
-                            "{}: Received unsupported reject reason {:?} from {} for response: {:?}",
+                            "{}: Received unsupported reject reason {:?} from {} for {:?}",
                             CRITICAL_ERROR_BAD_REJECT_SIGNAL_FOR_RESPONSE,
                             reason,
                             remote_subnet_id,
@@ -664,11 +666,7 @@ impl StreamHandlerImpl {
                     }
                     // The policy for guaranteed responses enforces rerouting all responses
                     // regardless of signal/response pairing.
-                    reroute_response(msg, state, streams, &self.log);
-                }
-                StreamMessage::Refund(_) => {
-                    // Refunds are treated like responses for rerouting purposes.
-                    reroute_response(msg, state, streams, &self.log);
+                    reroute_message(msg, state, streams, &self.log);
                 }
             }
         }
@@ -1008,7 +1006,7 @@ impl StreamHandlerImpl {
     /// Credits the cycles attached to a refund message to its respective receiver.
     ///
     /// Returns the amount of attached cycles that were lost iff the recipient was
-    /// deleted (i.e. it should be hosted by this subnet but does not exist).
+    /// deleted (i.e. should have been hosted by this subnet but does not exist).
     fn induct_refund(
         &self,
         refund: &Refund,

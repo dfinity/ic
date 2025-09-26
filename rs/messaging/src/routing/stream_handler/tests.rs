@@ -1425,6 +1425,75 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
     );
 }
 
+/// Tests that an incoming reject signal for a refund results in its induction
+/// when the recipient is on this subnet; and in its rerouting otherwise.
+#[test]
+fn garbage_collect_local_state_with_reject_signals_for_misrouted_refunds() {
+    with_test_setup(
+        // An outgoing stream with two refund, @21 and @22.
+        btreemap![REMOTE_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![Refund(*LOCAL_CANISTER), Refund(*OTHER_REMOTE_CANISTER)],
+            ..StreamConfig::default()
+        }],
+        // An incoming stream slice with reject signals for the refunds @21 and @22.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            signals_end: 23,
+            reject_signals: vec![RejectSignal::new(RejectReason::CanisterMigrating, 21.into()), RejectSignal::new(RejectReason::CanisterMigrating, 22.into())],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            // Have `OTHER_REMOTE_CANISTER` be hosted by `CANISTER_MIGRATION_SUBNET`
+            let state = simulate_manual_canister_migration(
+                state,
+                *OTHER_REMOTE_CANISTER,
+                CANISTER_MIGRATION_SUBNET,
+            );
+
+            let refund21 = message_in_stream(state.get_stream(&REMOTE_SUBNET), 21).clone();
+            let refund22 = message_in_stream(state.get_stream(&REMOTE_SUBNET), 22).clone();
+
+            let mut expected_state = state.clone();
+            expected_state.with_streams(btreemap![
+                // Expect the stream to `REMOTE_SUBNET` to be empty with `begin` advanced.
+                REMOTE_SUBNET => stream_from_config(StreamConfig {
+                    begin: 23,
+                    ..StreamConfig::default()
+                }),
+                // The stream to `CANISTER_MIGRATION_SUBNET` now holds refund @22.
+                CANISTER_MIGRATION_SUBNET => stream_from_config(StreamConfig {
+                    begin: 0,
+                    messages: vec![refund22],
+                    ..StreamConfig::default()
+                }),
+                // And the loopback stream holds the refund @21.
+                LOCAL_SUBNET => stream_from_config(StreamConfig {
+                    begin: 0,
+                    messages: vec![refund21],
+                    ..StreamConfig::default()
+                }),
+            ]);
+
+            // Act and compare to expected.
+            let inducted_state =
+                stream_handler.garbage_collect_local_state(state, &mut (i64::MAX / 2), &slices);
+            assert_eq!(expected_state, inducted_state);
+
+            // No messages inducted.
+            metrics.assert_inducted_xnet_messages_eq(&[]);
+
+            // 2 messages were GC-ed.
+            assert_eq!(
+                Some(2),
+                metrics.fetch_int_counter(METRIC_GCED_XNET_MESSAGES),
+            );
+
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
 /// Calls `induct_stream_slices()` with one stream slice coming from `CANISTER_MIGRATION_SUBNET`
 /// as input containing 3 messages:
 /// - a reject response for a request sent to `REMOTE_CANISTER` from `LOCAL_CANISTER`,
@@ -2581,6 +2650,111 @@ fn induct_stream_slices_with_subnet_message_memory_limit() {
 #[test]
 fn system_subnet_induct_stream_slices_with_subnet_message_memory_limit() {
     induct_stream_slices_with_memory_limit_impl(SubnetType::System);
+}
+
+/// Tests refund induction: refunds to existent and nonexistent local canisters;
+/// and refunds to explicitly and implicitly migrated canisters.
+#[test]
+fn induct_stream_slices_with_refunds() {
+    with_test_setup(
+        // An empty outgoing stream.
+        btreemap![REMOTE_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![],
+            signals_end: 43,
+            ..StreamConfig::default()
+        }],
+        // An incoming stream slice with refunds to existent and nonexistent local
+        // canisters; and to explicitly and implicitly migrated canisters.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages_begin: 43,
+            messages: vec![
+                // Existing local canister.
+                Refund(*LOCAL_CANISTER),
+                // Deleted local canister.
+                Refund(*OTHER_LOCAL_CANISTER),
+                // Remote canister (implicitly assumed to be migrated).
+                Refund(*REMOTE_CANISTER),
+                // Canister migrated from `LOCAL_SUBNET` to `REMOTE_SUBNET`.
+                Refund(*OTHER_REMOTE_CANISTER),
+                // Canister with unknown host subnet.
+                Refund(*UNKNOWN_CANISTER),
+            ],
+            signals_end: 21,
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            // Make it look like `OTHER_REMOTE_CANISTER` has migrated to `REMOTE_SUBNET`,
+            // with a `canister_migrations` entry still in place.
+            let state = prepare_canister_migration(
+                state,
+                *OTHER_REMOTE_CANISTER,
+                LOCAL_SUBNET,
+                REMOTE_SUBNET,
+            );
+
+            let mut expected_state = state.clone();
+            // Expecting a stream with...
+            let expected_stream = stream_from_config(StreamConfig {
+                begin: 21,
+                messages: vec![],
+                // ...signals for all 5 refunds...
+                signals_end: 48,
+                // ...and reject signals for refunds @45, @46, and @47.
+                reject_signals: vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 45.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 46.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
+                ],
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            // Refund to `LOCAL_CANISTER` (@43) was applied.
+            let StreamMessage::Refund(refund43) = message_in_slice(slices.get(&REMOTE_SUBNET), 43)
+            else {
+                panic!("Expected a refund message");
+            };
+            expected_state.credit_refund(&refund43);
+
+            // Cycles in refund @44 are lost
+            let refund44 = message_in_slice(slices.get(&REMOTE_SUBNET), 44);
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, refund44.cycles().into());
+
+            // Act.
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
+            );
+
+            // Assert.
+            assert_eq!(expected_state, inducted_state);
+
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_SUCCESS, 1),
+                (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_DROPPED, 1),
+                (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_RECEIVER_MIGRATED, 1),
+                (
+                    LABEL_VALUE_TYPE_REFUND,
+                    LABEL_VALUE_RECEIVER_LIKELY_MIGRATED,
+                    2,
+                ),
+            ]);
+            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
 }
 
 /// Tests that messages in the loopback stream and incoming slices are inducted
