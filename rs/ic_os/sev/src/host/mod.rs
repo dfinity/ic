@@ -148,7 +148,7 @@ impl HostSevCertificateProviderImpl {
             .context("Failed to create certificate cache directory")?;
 
         // Save to temp file and rename to prevent race conditions
-        let temp_file = NamedTempFile::new_in(&self.certificate_cache_dir)
+        let temp_file = NamedTempFile::with_prefix_in("vcek", &self.certificate_cache_dir)
             .context("Failed to create temporary file")?;
         fs::write(&temp_file, vcek_der).context("Failed to write VCEK")?;
         temp_file
