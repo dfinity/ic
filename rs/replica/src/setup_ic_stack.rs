@@ -7,7 +7,6 @@ use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
@@ -180,27 +179,21 @@ pub fn construct_ic_stack(
         config.malicious_behavior.malicious_flags.clone(),
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
-    let subnet_config = SubnetConfig::new(subnet_type);
-    let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-        subnet_config.scheduler_config.max_instructions_per_message,
-        subnet_type,
-        subnet_id,
-        subnet_config.cycles_account_manager_config,
-    ));
 
     let (completed_execution_messages_tx, finalized_ingress_height_rx) =
         channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
     let max_canister_http_requests_in_flight =
         config.hypervisor.max_canister_http_requests_in_flight;
 
+    let subnet_config = SubnetConfig::new(subnet_type);
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
         metrics_registry,
         subnet_id,
         subnet_type,
-        subnet_config.scheduler_config,
         config.hypervisor.clone(),
-        cycles_account_manager.clone(),
+        subnet_config.clone(),
         state_manager.clone(),
         state_manager.get_fd_factory(),
         completed_execution_messages_tx,
@@ -227,7 +220,7 @@ pub fn construct_ic_stack(
             execution_services.ingress_history_writer,
             execution_services.scheduler,
             config.hypervisor,
-            Arc::clone(&cycles_account_manager),
+            Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
             metrics_registry,
             log.clone(),
@@ -339,7 +332,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
         execution_services.ingress_history_reader,
-        cycles_account_manager,
+        execution_services.cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
         max_certified_height_tx,
