@@ -626,7 +626,7 @@ fn local_recovery(
         r#"/opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         {maybe_admin_key_file}\
-        --test --skip-prompts --use-local-binaries \
+        --test --skip-prompts \
         nns-recovery-same-nodes \
         --subnet-id {subnet_id} \
         {maybe_upgrade_version}\
