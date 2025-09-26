@@ -10,9 +10,7 @@ use ic_management_canister_types_private::{
     InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::{
-    CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
-};
+use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, ingress::WasmResult};
 use ic_types_test_utils::ids::user_test_id;
@@ -50,15 +48,6 @@ fn universal_canister_payload(
             cycles,
         )
         .build()
-}
-
-fn get_canister_history(env: &StateMachine, canister_id: CanisterId) -> CanisterHistory {
-    env.get_latest_state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .system_state
-        .get_canister_history()
-        .clone()
 }
 
 fn get_canister_info(
@@ -157,7 +146,7 @@ fn canister_history_tracks_create_install_reinstall() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -187,7 +176,7 @@ fn canister_history_tracks_create_install_reinstall() {
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -223,7 +212,7 @@ fn canister_history_tracks_create_install_reinstall() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::code_deployment(Reinstall, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -320,7 +309,7 @@ fn canister_history_tracks_upgrade() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -412,7 +401,7 @@ fn canister_history_tracks_uninstall() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::CanisterCodeUninstall,
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -520,7 +509,7 @@ fn canister_history_tracks_controllers_change(environment_variables_flag: FlagSt
             CanisterChangeOrigin::from_user(user_id2),
             CanisterChangeDetails::controllers_change(vec![user_id1, user_id2]),
         ));
-        let history = get_canister_history(&env, canister_id);
+        let history = env.get_canister_history(canister_id);
         assert_eq!(history.get_total_num_changes(), i + 1);
         while reference_change_entries.len() > (MAX_CANISTER_HISTORY_CHANGES as usize) {
             reference_change_entries.remove(0);
@@ -630,7 +619,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     // check canister history
     let total_num_change_entries = reference_change_entries.len();
     reference_change_entries.clear();
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         total_num_change_entries as u64
@@ -699,7 +688,7 @@ fn canister_history_tracks_changes_from_canister() {
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2], None),
     )];
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -729,7 +718,7 @@ fn canister_history_tracks_changes_from_canister() {
         CanisterChangeOrigin::from_canister(ucan.into(), None),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -824,7 +813,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     };
     assert!(env.module_hash(canister_id).is_none());
     // check canister history
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -1118,7 +1107,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         CanisterChangeOrigin::from_user(ucan.into()),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -1173,7 +1162,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     };
 
     // Check canister history is unchanged.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -1264,7 +1253,7 @@ fn check_environment_variables_for_create_canister_history(
     };
 
     // Verify canister history is updated.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)
@@ -1368,7 +1357,7 @@ fn canister_history_tracking_env_vars_update_settings() {
     */
 
     // Verify canister history is not updated.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)
@@ -1428,7 +1417,7 @@ fn canister_history_no_change_during_update_settings() {
     .unwrap();
 
     // Verify canister history contains only the canister creation change.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)
@@ -1587,7 +1576,7 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
     .unwrap();
 
     // Check canister history: should still only have one entry.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)

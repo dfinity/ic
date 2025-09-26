@@ -6,6 +6,7 @@ use ic_certification::{
 };
 use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc3_test_ledger::AddBlockResult;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{
@@ -168,6 +169,16 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
             }
         })
     })
+}
+
+#[query]
+fn icrc1_metadata() -> Vec<(String, MetadataValue)> {
+    vec![
+        MetadataValue::entry("icrc1:decimals", 0u64),
+        MetadataValue::entry("icrc1:name", ""),
+        MetadataValue::entry("icrc1:symbol", "XTST"),
+        MetadataValue::entry("icrc1:fee", 0u64),
+    ]
 }
 
 #[init]

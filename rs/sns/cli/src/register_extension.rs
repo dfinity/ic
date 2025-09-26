@@ -50,6 +50,7 @@ pub struct RegisterExtensionArgs {
     pub sns_neuron_id: Option<ParsedSnsNeuron>,
 
     /// The Root canister ID of the SNS to which the extension is being registered.
+    #[clap(long)]
     pub sns_root_canister_id: CanisterId,
 
     /// The ID of the subnet on which the extension canister will be created.
@@ -57,6 +58,7 @@ pub struct RegisterExtensionArgs {
     /// Some extensions may require a specific subnet to operate correctly.
     ///
     /// The default is the fiduciary subnet.
+    #[clap(long)]
     pub subnet_id: Option<PrincipalId>,
 
     /// Path to a ICP WASM module file (may be gzipped).
@@ -74,6 +76,13 @@ pub struct RegisterExtensionArgs {
     /// JSON-encoded initialization arguments for the extension.
     #[clap(long, value_parser = parse_precise_value)]
     pub extension_init: Option<PreciseValue>,
+
+    /// The name of the dfx network to use.
+    /// TODO[NNS1-4150]: This is currently used because of bad handling
+    /// of the input arguments in the dfx. Once that is fixed,
+    /// this should be removed.
+    #[clap(long)]
+    pub network: Option<String>,
 }
 
 pub struct Wasm {
@@ -298,6 +307,7 @@ pub async fn exec<C: CallCanisters>(
         proposal_url,
         summary,
         extension_init,
+        network: _,
     } = args;
 
     let caller_principal = PrincipalId(agent.caller()?);
