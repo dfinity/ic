@@ -17703,7 +17703,6 @@ dependencies = [
  "regex",
  "reqwest 0.12.15",
  "slog",
- "url",
 ]
 
 [[package]]

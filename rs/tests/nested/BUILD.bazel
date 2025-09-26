@@ -29,7 +29,6 @@ rust_library(
         "@crate_index//:regex",
         "@crate_index//:reqwest",
         "@crate_index//:slog",
-        "@crate_index//:url",
     ],
 )
 
@@ -68,8 +67,11 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":nested",
+        "//rs/registry/nns_data_provider",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
     ],
 )
 
@@ -111,8 +113,10 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":nested",
+        "//rs/registry/nns_data_provider",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 
@@ -167,5 +171,7 @@ system_test_nns(
         ":nested",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
     ],
 )
