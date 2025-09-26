@@ -1,8 +1,8 @@
 use crate::{
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, IncompleteStateReader, LABEL_COPY_CHUNKS,
-    LABEL_COPY_FILES, LABEL_FETCH, LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK,
-    LABEL_FETCH_STATE_CHUNK, LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
-    StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
+    LABEL_FETCH, LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK,
+    LABEL_FETCH_STATE_CHUNK, LABEL_HARDLINK_FILES, LABEL_PREALLOCATE,
+    LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
     state_sync::StateSync,
     state_sync::types::{
@@ -14,7 +14,6 @@ use crate::{
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, trace, warn};
-use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{CheckpointLayout, ReadOnly, RwPolicy, StateLayout, error::LayoutError};
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};

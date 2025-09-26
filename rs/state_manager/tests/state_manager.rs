@@ -3354,8 +3354,7 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
 
                 let state_sync_root = dst_state_manager
                     .state_layout()
-                    .state_sync_scratchpad(height(2))
-                    .expect("failed to create directory for state sync scratchpad");
+                    .state_sync_scratchpad(height(2));
 
                 let scratchpad_layout =
                     CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_root, height(2))
@@ -3415,8 +3414,7 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
 
                 let scratchpad_root = dst_state_manager
                     .state_layout()
-                    .state_sync_scratchpad(height(2))
-                    .expect("failed to get directory for state sync scratchpad");
+                    .state_sync_scratchpad(height(2));
 
                 let scratchpad_layout =
                     CheckpointLayout::<RwPolicy<()>>::new_untracked(scratchpad_root, height(2))
@@ -3507,8 +3505,7 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
                 // for example, wasm file of the first canister.
                 let scratchpad_root = dst_state_manager
                     .state_layout()
-                    .state_sync_scratchpad(height(3))
-                    .expect("failed to get directory for state sync scratchpad");
+                    .state_sync_scratchpad(height(3));
 
                 let scratchpad_layout =
                     CheckpointLayout::<RwPolicy<()>>::new_untracked(scratchpad_root, height(3))

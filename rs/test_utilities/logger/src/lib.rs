@@ -6,7 +6,6 @@ struct SyncBuf(Arc<Mutex<Vec<u8>>>);
 
 impl io::Write for SyncBuf {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        //eprintln!("LOG: {}", String::from_utf8_lossy(buf));
         self.0.lock().unwrap().extend_from_slice(buf);
         Ok(buf.len())
     }

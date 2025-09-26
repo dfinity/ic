@@ -3,15 +3,15 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
+    EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
     manifest::build_file_group_chunks,
     state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
-    StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::p2p::state_sync::{
     Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, fatal, info, warn};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
@@ -118,10 +118,7 @@ impl StateSync {
             .state_sync_scratchpad(msg_id.height);
 
         let incomplete_states = self.state_sync_refs.incomplete_state_reader.read();
-        let incomplete_state = match incomplete_states.get(&msg_id.height) {
-            Some(incomplete_state) => incomplete_state,
-            None => return None,
-        };
+        let incomplete_state = incomplete_states.get(&msg_id.height)?;
         if incomplete_state.root_hash == msg_id.hash.clone().into() {
             let manifest = incomplete_state.manifest.clone();
             let meta_manifest = Arc::new(incomplete_state.meta_manifest.clone());

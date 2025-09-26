@@ -31,7 +31,7 @@ impl TestEnvironment {
         let state_sync_refs = StateSyncRefs {
             active: Arc::new(parking_lot::RwLock::new(Default::default())),
             cache: Arc::clone(&cache),
-            incomplete_state: Arc::new(parking_lot::RwLock::new(Default::default())),
+            incomplete_state_reader: Arc::new(parking_lot::RwLock::new(Default::default())),
         };
 
         let config = Config::new(root_dir.path().into());
