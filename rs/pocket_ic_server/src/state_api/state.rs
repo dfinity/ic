@@ -70,8 +70,6 @@ const AUTO_PROGRESS_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
 const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive attempts to read the graph in auto progress mode.
 const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
-// Max graph entries recorded in the state and rest are pruned.
-const MAX_GRAPH_SIZE: usize = 500;
 
 // Produced by the HTTP gateway upon HTTP errors from the backend.
 const UPSTREAM_ERROR: &str = "error: upstream_error";
@@ -92,12 +90,6 @@ impl StateLabel {
     pub fn bump(&mut self) {
         let mut seq_no: u128 = u128::from_le_bytes(self.0);
         seq_no += 1;
-        self.0 = seq_no.to_le_bytes();
-    }
-
-    pub fn reduce_by(&mut self, n: usize) {
-        let mut seq_no: u128 = u128::from_le_bytes(self.0);
-        seq_no -= n as u128;
         self.0 = seq_no.to_le_bytes();
     }
 }
@@ -1074,16 +1066,9 @@ impl ApiState {
                             cached_computations
                                 .insert(op_id.clone(), (new_state_label, result.clone()));
 
-                            // Prune the graph if needed
-                            let graph_size = graph_guard.len();
-                            if graph_size > MAX_GRAPH_SIZE {
-                                let mut purge_state = old_state_label;
-                                purge_state.reduce_by(MAX_GRAPH_SIZE);
-                                for _ in 0..graph_size - (MAX_GRAPH_SIZE + 1) {
-                                    graph_guard.remove(&purge_state);
-                                    purge_state.reduce_by(1);
-                                }
-                            }
+                            // Prune the result of the previous computation.
+                            graph_guard.remove(old_state_label);
+
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &instance.state {
