@@ -19,6 +19,7 @@ use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
+use crate::state::CkBtcMinterState;
 pub use ic_btc_checker::CheckTransactionResponse;
 pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 
@@ -1431,6 +1432,11 @@ pub trait CanisterRuntime {
     /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
     fn global_timer_set(&self, timestamp: u64) {
         ic_cdk::api::global_timer_set(timestamp);
+    }
+
+    /// Validate the minter's state.
+    fn validate_config(&self, state: &CkBtcMinterState) {
+        state.validate_config()
     }
 
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.

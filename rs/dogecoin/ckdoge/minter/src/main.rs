@@ -16,7 +16,7 @@ fn init(args: MinterArg) {
                 EventType::Init(args.clone()),
                 &DOGECOIN_CANISTER_RUNTIME,
             );
-            ic_ckbtc_minter::lifecycle::init::init(args);
+            ic_ckbtc_minter::lifecycle::init::init(args, &DOGECOIN_CANISTER_RUNTIME);
             setup_tasks();
 
             #[cfg(feature = "self_check")]

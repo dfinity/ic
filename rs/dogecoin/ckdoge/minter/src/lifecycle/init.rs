@@ -69,7 +69,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
             max_time_in_queue_nanos: args.max_time_in_queue_nanos,
             min_confirmations: args.min_confirmations,
             mode: args.mode,
-            check_fee: None,
+            check_fee: Some(0),
             kyt_fee: None,
             btc_checker_principal: None,
             kyt_principal: None,

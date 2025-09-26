@@ -3,6 +3,7 @@ pub mod lifecycle;
 
 use async_trait::async_trait;
 use candid::Principal;
+use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse, Network, Utxo,
     management::CallError, tx, updates::update_balance::UpdateBalanceError,
@@ -58,5 +59,17 @@ impl CanisterRuntime for DogeCanisterRuntime {
         _network: Network,
     ) -> Result<(), CallError> {
         todo!()
+    }
+
+    fn validate_config(&self, state: &CkBtcMinterState) {
+        if state.check_fee > state.retrieve_btc_min_amount {
+            ic_cdk::trap("check_fee cannot be greater than retrieve_btc_min_amount");
+        }
+        if state.check_fee != 0 {
+            ic_cdk::trap("check_fee is non-zero but Dogecoin transactions are not checked");
+        }
+        if state.ecdsa_key_name.is_empty() {
+            ic_cdk::trap("ecdsa_key_name is not set");
+        }
     }
 }
