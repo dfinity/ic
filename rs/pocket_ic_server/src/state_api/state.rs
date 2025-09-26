@@ -1056,6 +1056,7 @@ impl ApiState {
                                 instance_id, old_state_label, op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            pocket_ic.sync_registry_from_canister();
                             pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
