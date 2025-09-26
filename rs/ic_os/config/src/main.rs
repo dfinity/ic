@@ -39,8 +39,6 @@ pub enum Commands {
     GenerateICConfig {
         #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
         guestos_config_json_path: PathBuf,
-        #[arg(long, default_value = config::DEFAULT_IC_JSON5_TEMPLATE_PATH, value_name = "ic.json5.template")]
-        template_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
     },
@@ -200,17 +198,13 @@ pub fn main() -> Result<()> {
         }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
-            template_path,
             output_path,
         }) => {
-            println!(
-                "Generating IC configuration from template: {}",
-                template_path.display()
-            );
+            println!("Generating IC configuration");
             let guestos_config: GuestOSConfig =
                 config::deserialize_config(&guestos_config_json_path)?;
 
-            generate_ic_config::generate_ic_config(&guestos_config, &template_path, &output_path)
+            generate_ic_config::generate_ic_config(&guestos_config, &output_path)
         }
         None => {
             println!("No command provided. Use --help for usage information.");
