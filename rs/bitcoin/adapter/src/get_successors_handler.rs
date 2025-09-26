@@ -127,14 +127,16 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
 
         // Spawn persist-to-disk task without waiting for it to finish, and make sure there
         // is only one task running at a time.
-        let state = self.state.clone();
         let mut handle = self.pruning_task_handle.lock().unwrap();
         let is_finished = handle
             .as_ref()
             .map(|handle| handle.is_finished())
             .unwrap_or(true);
         if is_finished {
-            *handle = Some(state.persist_and_prune_headers_below_anchor(request.anchor));
+            *handle = Some(
+                self.state
+                    .persist_and_prune_headers_below_anchor(request.anchor),
+            );
         }
 
         let (blocks, next, obsolete_blocks) = {
