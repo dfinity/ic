@@ -293,6 +293,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--guestos", action="store_true", help="Verify only GuestOS images.")
     parser.add_argument("--hostos", action="store_true", help="Verify only HostOS images.")
     parser.add_argument("--setupos", action="store_true", help="Verify only SetupOS images.")
+    parser.add_argument("--recovery", action="store_true", help="Verify only recovery-guestos images.")
     parser.add_argument(
         "-p",
         "--proposal-id",
@@ -316,11 +317,12 @@ def parse_args() -> argparse.Namespace:
     )
 
     args = parser.parse_args()
-    # If user didn't specify any OS flags, check all three
-    if not args.guestos and not args.hostos and not args.setupos:
+    # If user didn't specify any OS flags, check all four
+    if not args.guestos and not args.hostos and not args.setupos and not args.recovery:
         args.guestos = True
         args.hostos = True
         args.setupos = True
+        args.recovery = True
 
     return args
 
@@ -351,6 +353,7 @@ class ReproducibilityVerifier:
         verify_guestos: bool,
         verify_hostos: bool,
         verify_setupos: bool,
+        verify_recovery: bool,
         proposal_id: str,
         git_commit: str,
         download_source_mode: str,
@@ -361,6 +364,7 @@ class ReproducibilityVerifier:
         self.verify_guestos = verify_guestos
         self.verify_hostos = verify_hostos
         self.verify_setupos = verify_setupos
+        self.verify_recovery = verify_recovery
         self.proposal_id = proposal_id
         self.git_commit = git_commit
 
@@ -584,15 +588,23 @@ class ReproducibilityVerifier:
     def start_cdn_downloads_for_os(self, os_type: str, storage: Dirs) -> list[Download]:
         """Queues downloading of the OS artifact and sums file from the selected CDNs."""
         if os_type == "setup-os":
+            path_component = "setup-os"
             artifact = "disk-img"
-        else:
+            subdir_name = "disk-img"
+        elif os_type == "recovery-guestos":
+            path_component = "guest-os"
             artifact = "update-img"
+            subdir_name = "update-img-recovery"
+        else:
+            path_component = os_type
+            artifact = "update-img"
+            subdir_name = artifact
 
         tar_name = f"{artifact}.tar.zst"
         downloads: list[Download] = []
         for cdn_domain in self.cdn_domains:
-            artifact_url = f"https://{cdn_domain}/ic/{self.git_hash}/{os_type}/{artifact}/{tar_name}"
-            sums_url = f"https://{cdn_domain}/ic/{self.git_hash}/{os_type}/{artifact}/SHA256SUMS"
+            artifact_url = f"https://{cdn_domain}/ic/{self.git_hash}/{path_component}/{subdir_name}/{tar_name}"
+            sums_url = f"https://{cdn_domain}/ic/{self.git_hash}/{path_component}/{subdir_name}/SHA256SUMS"
 
             subdir = storage.cdn_out / cdn_domain / os_type
             local_artifact_path = subdir / tar_name
@@ -747,6 +759,12 @@ class ReproducibilityVerifier:
             )
         os.chdir(ic_clone_path)
 
+        logger.info(f"Fetching {self.git_hash} from origin.")
+        try:
+            subprocess.run(["git", "fetch", "--quiet", "origin", self.git_hash], check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Could not fetch commit {self.git_hash} from the remote repository.")
+
         if self.git_commit:
             self.check_git_repo()
             self.check_ic_repo()
@@ -758,7 +776,6 @@ class ReproducibilityVerifier:
                 )
 
         logger.info(f"Checking out {self.git_hash}.")
-        subprocess.run(["git", "fetch", "--quiet", "origin", self.git_hash], check=True)
         subprocess.run(["git", "checkout", "--quiet", self.git_hash], check=True)
 
         shutil.rmtree(ic_clone_path_cache, ignore_errors=True)
@@ -796,6 +813,8 @@ class ReproducibilityVerifier:
             move_artifact("hostos/update/update-img.tar.zst")
         if self.verify_setupos:
             move_artifact("setupos/disk-img.tar.zst")
+        if self.verify_recovery:
+            move_artifact("guestos/update-img-recovery/update-img.tar.zst")
 
     def compare_with_local_build(
         self,
@@ -804,6 +823,7 @@ class ReproducibilityVerifier:
         guest_os_downloads: list[Download],
         host_os_downloads: list[Download],
         setup_os_downloads: list[Download],
+        recovery_downloads: list[Download],
     ) -> None:
         compile_future.result()
         logger.info("Verifying locally built artifacts against remote CDN artifacts.")
@@ -828,6 +848,13 @@ class ReproducibilityVerifier:
             cdn_hash = self.compare_cdn_hash("setup-os", storage)
             compare_hashes(local_hash, cdn_hash, "SetupOS")
 
+        if recovery_downloads:
+            [f.result() for f in concurrent.futures.as_completed(recovery_downloads)]
+            local_path = storage.dev_out / "guestos" / "update-img-recovery" / "update-img.tar.zst"
+            local_hash = compute_sha256(local_path)
+            cdn_hash = self.compare_cdn_hash("recovery-guestos", storage)
+            compare_hashes(local_hash, cdn_hash, "Recovery-GuestOS")
+
     # --------------------------------------------------------------------------
     # MAIN RUN
     # --------------------------------------------------------------------------
@@ -844,6 +871,7 @@ class ReproducibilityVerifier:
             guest_os_downloads = self.start_cdn_downloads_for_os("guest-os", dirs) if self.verify_guestos else []
             host_os_downloads = self.start_cdn_downloads_for_os("host-os", dirs) if self.verify_hostos else []
             setup_os_downloads = self.start_cdn_downloads_for_os("setup-os", dirs) if self.verify_setupos else []
+            recovery_downloads = self.start_cdn_downloads_for_os("recovery-guestos", dirs) if self.verify_recovery else []
             build = self.download_executor.submit(self.build_locally, dirs)
 
             # Environment checks can happen while downloads progress
@@ -852,7 +880,7 @@ class ReproducibilityVerifier:
             # Verifications after downloads.  They take futures and await for them to be finished.
             self.verify_proposal_artifacts(downloads_for_proposal)
             self.compare_proposal_vs_cdn(dirs, guest_os_hash, guest_os_downloads, host_os_hash, host_os_downloads)
-            self.compare_with_local_build(dirs, build, guest_os_downloads, host_os_downloads, setup_os_downloads)
+            self.compare_with_local_build(dirs, build, guest_os_downloads, host_os_downloads, setup_os_downloads, recovery_downloads)
 
         elapsed = time.time() - start_time
         h, rem = divmod(elapsed, 3600)
@@ -871,6 +899,7 @@ def main() -> None:
         verify_guestos=args.guestos,
         verify_hostos=args.hostos,
         verify_setupos=args.setupos,
+        verify_recovery=args.recovery,
         proposal_id=args.proposal_id,
         git_commit=args.commit,
         download_source_mode=args.download_source,
