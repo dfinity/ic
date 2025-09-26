@@ -212,23 +212,21 @@ impl ThresholdSignerImpl {
         idkg_pool: &dyn IDkgPool,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> IDkgChangeSet {
-        let sig_inputs_map = self.thread_pool.install(|| {
-            state_snapshot
-                .get_state()
-                .signature_request_contexts()
-                .into_par_iter()
-                .map(|(id, c)| {
-                    let inputs = build_signature_inputs(*id, c).map_err(|err| if err.is_fatal() {
-                        warn!(every_n_seconds => 15, self.log,
-                            "validate_signature_shares(): failed to build signatures inputs: {:?}",
-                            err
-                        );
-                        self.metrics.sign_errors_inc("signature_inputs_malformed");
-                    }).ok();
-                    (*id, inputs)
-                })
-                .collect::<BTreeMap<_, _>>()
-        });
+        let sig_inputs_map = state_snapshot
+            .get_state()
+            .signature_request_contexts()
+            .iter()
+            .map(|(id, c)| {
+                let inputs = build_signature_inputs(*id, c).map_err(|err| if err.is_fatal() {
+                    warn!(every_n_seconds => 15, self.log,
+                        "validate_signature_shares(): failed to build signatures inputs: {:?}",
+                        err
+                    );
+                    self.metrics.sign_errors_inc("signature_inputs_malformed");
+                }).ok();
+                (*id, inputs)
+            })
+            .collect::<BTreeMap<_, _>>();
 
         let shares: Vec<_> = idkg_pool.unvalidated().signature_shares().collect();
 
