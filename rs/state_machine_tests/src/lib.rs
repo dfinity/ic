@@ -724,6 +724,10 @@ impl PocketXNetImpl {
             }
         }
     }
+
+    fn subnets(&self) -> Arc<dyn Subnets> {
+        self.subnets.clone()
+    }
 }
 
 /// A custom `QueryStatsPayloadBuilderImpl` that uses a single
@@ -3081,6 +3085,89 @@ impl StateMachine {
         Err(format!("No canister state for canister id {canister_id}."))
     }
 
+    /// Simulates a subnet split where the provided `canister_range` is assigned to a new subnet.
+    ///
+    /// The process has the following steps:
+    /// - Write a checkpoint on `self`.
+    /// - Clone its enire state directory into a new `state_dir`.
+    /// - Create a new `StateMachine` using this `state_dir` and the provided `seed`.
+    /// - Adapt the registry to reflect the split, then reload it on both state machines.
+    /// - Perform the split on the latest state on both state machines respectively.
+    ///
+    /// Returns an error if there is no XNet layer or if splitting the state fails.
+    pub fn split(
+        &self,
+        seed: [u8; 32],
+        canister_range: std::ops::RangeInclusive<CanisterId>,
+    ) -> Result<Arc<StateMachine>, String> {
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+
+        // Write a checkpoint.
+        self.checkpointed_tick();
+        self.state_manager.flush_tip_channel();
+
+        // Create a state dir for the new env; then clone the contents of the entire state directory.
+        let state_dir = Box::new(TempDir::new().expect("failed to create a temporary directory"));
+        fs_extra::dir::copy(
+            self.state_manager.state_layout().raw_path(),
+            state_dir.path(),
+            &fs_extra::dir::CopyOptions {
+                content_only: true,
+                ..fs_extra::dir::CopyOptions::new()
+            },
+        )
+        .expect("failed to clone state directory.");
+
+        // Create a new `StateMachine` using the same XNet pool.
+        let env = StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(self.nonce.load(Ordering::Relaxed))
+            .with_time(Time::from_nanos_since_unix_epoch(
+                self.time.load(Ordering::Relaxed),
+            ))
+            .with_checkpoint_interval_length(
+                self.checkpoint_interval_length.load(Ordering::Relaxed),
+            )
+            .with_subnet_seed(seed)
+            .with_registry_data_provider(self.registry_data_provider.clone())
+            .build_with_subnets(
+                (*self.pocket_xnet.read().unwrap())
+                    .as_ref()
+                    .ok_or("no XNet layer found")?
+                    .subnets(),
+            );
+
+        // Adapt the registry.
+        self.reroute_canister_range(canister_range, env.get_subnet_id());
+        self.add_subnet_to_subnets_list(env.get_subnet_id());
+
+        // Reload registry to ensure on both state machines have a consistent view of the registry.
+        self.reload_registry();
+        env.reload_registry();
+
+        // Perform the split.
+        let last_version = self.registry_client.get_latest_version();
+        let routing_table = self
+            .registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table");
+        for env in [self, &env] {
+            let (height, state) = env.state_manager.take_tip();
+            let mut state = state.split(env.get_subnet_id(), &routing_table, None)?;
+            state.after_split();
+
+            env.state_manager.commit_and_certify(
+                state,
+                height.increment(),
+                CertificationScope::Full,
+                None,
+            );
+        }
+
+        Ok(env)
+    }
+
     /// Returns the controllers of a canister or `None` if the canister does not exist.
     pub fn get_controllers(&self, canister_id: CanisterId) -> Option<Vec<PrincipalId>> {
         let state = self.state_manager.get_latest_state().take();
@@ -4055,6 +4142,26 @@ impl StateMachine {
         assert_eq!(next_version, self.registry_client.get_latest_version());
     }
 
+    /// Adds a `subnet_id` to the subnet list record.
+    pub fn add_subnet_to_subnets_list(&self, subnet_id: SubnetId) {
+        use ic_registry_client_helpers::subnet::SubnetListRegistry;
+
+        let last_version = self.registry_client.get_latest_version();
+        let next_version = last_version.increment();
+
+        let mut subnet_ids = self
+            .registry_client
+            .get_subnet_ids(last_version)
+            .expect("malformed subnet list")
+            .unwrap_or_default();
+
+        subnet_ids.push(subnet_id);
+        subnet_ids.sort();
+        subnet_ids.dedup();
+
+        add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
+    }
+
     /// Returns the subnet type of this state machine.
     pub fn get_subnet_type(&self) -> SubnetType {
         self.subnet_type
@@ -4647,7 +4754,7 @@ impl Subnets for SubnetsImpl {
 }
 
 fn multi_subnet_setup(
-    subnets: Arc<SubnetsImpl>,
+    subnets: Arc<dyn Subnets>,
     subnet_seed: u8,
     subnet_type: SubnetType,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
