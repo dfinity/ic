@@ -554,7 +554,7 @@ impl StreamHandlerImpl {
     ///
     /// Error cases:
     /// - A response or refund with a `RejectReason` other than `CanisterMigrating`: guaranteed
-    ///   response delivery requires responses to be rerouted; an error counter is incremented.
+    ///   delivery requires rerouting; an error counter is incremented.
     ///
     /// Returns the amount of cycles that were attached to duplicate reject responses that were
     /// silently dropped.
