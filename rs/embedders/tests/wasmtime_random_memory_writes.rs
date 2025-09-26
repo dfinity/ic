@@ -17,6 +17,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_execution_environment::bytes_and_logging_cost;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
@@ -718,7 +719,8 @@ mod tests {
                 + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32);
             assert_eq!(
                 instructions_executed.get(),
-                expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
+                expected_instructions
+                    + (bytes_and_logging_cost(num_bytes) / BYTES_PER_INSTRUCTION) as u64
             )
         });
     }
