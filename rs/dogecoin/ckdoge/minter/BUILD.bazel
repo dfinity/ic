@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 rust_library(
     name = "ckdoge_minter_lib",
@@ -60,7 +61,7 @@ rust_library(
 ]
 
 rust_test(
-    name = "ckbtc_candid_api_tests",
+    name = "ckdoge_candid_api_tests",
     crate = ":_wasm_ckdoge_minter",
     data = [":ckdoge_minter.did"],
     env = {
@@ -69,5 +70,24 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:candid_parser",
+    ],
+)
+
+rust_ic_test(
+    name = "integration_tests",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":ckdoge_minter_debug.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/dogecoin/ckdoge/minter",
+        "IC_CKDOGE_MINTER_WASM_PATH": "$(rootpath :ckdoge_minter_debug.wasm.gz)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    },
+    deps = [
+        # Keep sorted.
+        ":ckdoge_minter_lib",
+        "//rs/dogecoin/ckdoge/test_utils"
     ],
 )

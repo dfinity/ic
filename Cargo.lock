@@ -7459,8 +7459,20 @@ dependencies = [
  "candid_parser",
  "ic-cdk",
  "ic-ckbtc-minter",
+ "ic-ckdoge-minter-test-utils",
  "icrc-ledger-types",
  "serde",
+]
+
+[[package]]
+name = "ic-ckdoge-minter-test-utils"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-icrc1-ledger",
+ "ic-management-canister-types",
+ "icrc-ledger-types",
+ "pocket-ic",
 ]
 
 [[package]]

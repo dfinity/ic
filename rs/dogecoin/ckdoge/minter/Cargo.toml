@@ -19,5 +19,8 @@ ic-ckbtc-minter = { path = "../../../bitcoin/ckbtc/minter" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 serde = { workspace = true }
 
+[dev-dependencies]
+ic-ckdoge-minter-test-utils = { path = "../test_utils" }
+
 [features]
 self_check = []

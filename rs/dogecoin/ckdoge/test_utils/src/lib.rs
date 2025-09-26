@@ -1,0 +1,114 @@
+use candid::{Encode, Principal};
+use ic_icrc1_ledger::ArchiveOptions;
+use ic_management_canister_types::{CanisterId, CanisterSettings};
+use icrc_ledger_types::icrc1::account::Account;
+use pocket_ic::{PocketIc, PocketIcBuilder};
+use std::sync::Arc;
+
+pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
+pub const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
+
+pub struct Setup {
+    env: Arc<PocketIc>,
+    minter: CanisterId,
+    ledger: CanisterId,
+}
+
+impl Setup {
+    pub fn new() -> Self {
+        let env = Arc::new(
+            PocketIcBuilder::new()
+                .with_bitcoin_subnet()
+                .with_fiduciary_subnet()
+                .build(),
+        );
+        let minter = env
+            .create_canister_with_id(
+                None,
+                Some(CanisterSettings {
+                    controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
+                    ..Default::default()
+                }),
+                MINTER_PRINCIPAL,
+            )
+            .unwrap();
+        let ledger = env.create_canister_on_subnet(
+            None,
+            Some(CanisterSettings {
+                controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
+                ..Default::default()
+            }),
+            env.topology().get_fiduciary().unwrap(),
+        );
+        env.add_cycles(ledger, u128::MAX);
+        {
+            let ledger_init_args = ic_icrc1_ledger::InitArgs {
+                minting_account: minter.into(),
+                fee_collector_account: Some(Account {
+                    owner: MINTER_PRINCIPAL,
+                    subaccount: Some([
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0x0f, 0xee,
+                    ]),
+                }),
+                initial_balances: vec![],
+                // 0.1 DOGE, ca 0.02 USD (2025.09.06)
+                transfer_fee: 10_000_000_u32.into(),
+                decimals: Some(8),
+                token_name: "ckDOGE".to_string(),
+                token_symbol: "ckDOGE".to_string(),
+                metadata: vec![],
+                archive_options: ArchiveOptions {
+                    trigger_threshold: 2_000,
+                    num_blocks_to_archive: 1_0000,
+                    node_max_memory_size_bytes: Some(3_221_225_472),
+                    max_message_size_bytes: None,
+                    controller_id: NNS_ROOT_PRINCIPAL.into(),
+                    more_controller_ids: None,
+                    cycles_for_archive_creation: Some(100_000_000_000_000),
+                    max_transactions_per_response: None,
+                },
+                max_memo_length: None,
+                feature_flags: None,
+                index_principal: None,
+            };
+            env.install_canister(
+                ledger,
+                ledger_wasm(),
+                Encode!(&ic_icrc1_ledger::LedgerArgument::Init(ledger_init_args)).unwrap(),
+                Some(NNS_ROOT_PRINCIPAL),
+            );
+        }
+        Self {
+            env,
+            minter,
+            ledger,
+        }
+    }
+}
+
+impl Default for Setup {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn minter_wasm() -> Vec<u8> {
+    let wasm_path = std::env::var("IC_CKDOGE_MINTER_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
+}
+
+fn ledger_wasm() -> Vec<u8> {
+    let wasm_path = std::env::var("IC_ICRC1_LEDGER_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::MINTER_PRINCIPAL;
+
+    #[test]
+    fn should_have_correct_minter_principal() {
+        assert_eq!(MINTER_PRINCIPAL.to_string(), "gordg-fyaaa-aaaan-aaadq-cai");
+    }
+}
