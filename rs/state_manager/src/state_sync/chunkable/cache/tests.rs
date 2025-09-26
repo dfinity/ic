@@ -31,7 +31,7 @@ impl TestEnvironment {
         let state_sync_refs = StateSyncRefs {
             active: Arc::new(parking_lot::RwLock::new(Default::default())),
             cache: Arc::clone(&cache),
-            chunks_of_incomplete_state: Arc::new(parking_lot::RwLock::new(Default::default())),
+            incomplete_state: Arc::new(parking_lot::RwLock::new(Default::default())),
         };
 
         let config = Config::new(root_dir.path().into());
@@ -132,7 +132,7 @@ fn incomplete_state_for_tests(
     // a manifest (in production), or later in this function (in tests)
     assert!(!result.root.exists());
 
-    result.state = Arc::new(Mutex::new(state));
+    result.state = state;
     // if Loading, populate the scratchpad with a file named after the seed
     // contained in manifest
     if let DownloadState::Loading {
@@ -141,7 +141,7 @@ fn incomplete_state_for_tests(
         state_sync_file_group: _,
         fetch_chunks: _,
         copied_chunks_from_file_group: _,
-    } = &*result.state.lock().unwrap()
+    } = &result.state
     {
         std::fs::create_dir(&result.root).unwrap();
         let mut _file =

@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::state_manager::{Config, LsmtConfig, lsmt_config_default};
+use ic_config::state_manager::{lsmt_config_default, Config, LsmtConfig};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
@@ -12,12 +12,11 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
-use ic_replicated_state::{ReplicatedState, Stream, testing::ReplicatedStateTesting};
+use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
 use ic_state_manager::{
-    StateManagerImpl,
+    state_sync::types::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
     state_sync::StateSync,
-    state_sync::types::{MANIFEST_CHUNK_ID_OFFSET, StateSyncMessage},
-    stream_encoding,
+    stream_encoding, StateManagerImpl,
 };
 use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -25,11 +24,11 @@ use ic_test_utilities_state::{initial_execution_state, new_canister_state};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::{
-    CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
+    CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
@@ -501,15 +500,14 @@ pub fn pipe_partial_state_sync(
 ) -> Result<bool, StateSyncErrorCode> {
     loop {
         let ids: Vec<_> = dst.chunks_to_download().collect();
-
         if ids.is_empty() {
             break;
         }
 
-        let mut omitted_chunks = false;
+        let mut omitted_chunks = HashSet::new();
         for (index, id) in ids.iter().enumerate() {
             if omit.contains(id) {
-                omitted_chunks = true;
+                omitted_chunks.insert(id);
                 continue;
             }
             let mut chunk = src
@@ -530,7 +528,7 @@ pub fn pipe_partial_state_sync(
                 Err(_) => return Err(StateSyncErrorCode::OtherChunkVerificationFailed),
             }
         }
-        if omitted_chunks {
+        if !omit.is_empty() && omitted_chunks.len() == omit.len() {
             return Ok(false);
         }
     }

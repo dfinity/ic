@@ -116,9 +116,11 @@ impl StateSyncCache {
             }
         }
 
-        debug_assert!(missing_chunks
-            .iter()
-            .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize));
+        debug_assert!(
+            missing_chunks
+                .iter()
+                .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize)
+        );
 
         // We rename the folder to decouple the cache from active state syncs a bit.
         // Otherwise we'd have to assume that there won't be an active state sync at
@@ -163,12 +165,11 @@ impl StateSyncCache {
     /// be called in the `drop` function of `sync`, so changing the state is
     /// safe.
     pub fn push(&mut self, sync: &mut IncompleteState) {
-        let mut sync_state = sync.state.lock().unwrap();
         // We start by clearing the old entry
         // This avoids any edge cases where we replace the cache with a new entry at the
         // same height (and path)
         if let Some(ref entry) = self.entry {
-            match *sync_state {
+            match sync.state {
                 // Retain the existing cache entry if the state is Blank or Prep.
                 // The cache is only populated after `initialize_state_on_disk()` is called,
                 // as it incorporates actual state data from previous checkpoints or syncs at that point.
@@ -183,7 +184,7 @@ impl StateSyncCache {
             };
         }
 
-        match std::mem::replace(&mut *sync_state, DownloadState::Blank) {
+        match std::mem::replace(&mut sync.state, DownloadState::Blank) {
             DownloadState::Loading {
                 meta_manifest: _,
                 manifest,

@@ -3,15 +3,15 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
     manifest::build_file_group_chunks,
     state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
+    StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::p2p::state_sync::{
     Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, fatal, info, warn};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
@@ -108,6 +108,36 @@ impl StateSync {
         let ids = self.get_all_validated_ids_by_height(height);
         if let Some(ids) = ids.last() {
             self.state_manager.states.write().last_advertised = ids.height;
+        }
+    }
+
+    fn get_from_incomplete_state(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
+        let path = self
+            .state_manager
+            .state_layout
+            .state_sync_scratchpad(msg_id.height);
+
+        let incomplete_states = self.state_sync_refs.incomplete_state_reader.read();
+        let incomplete_state = match incomplete_states.get(&msg_id.height) {
+            Some(incomplete_state) => incomplete_state,
+            None => return None,
+        };
+        if incomplete_state.root_hash == msg_id.hash.clone().into() {
+            let manifest = incomplete_state.manifest.clone();
+            let meta_manifest = Arc::new(incomplete_state.meta_manifest.clone());
+            let state_sync_file_group = Arc::new(incomplete_state.state_sync_file_group.clone());
+
+            Some(StateSyncMessage {
+                height: msg_id.height,
+                root_hash: CryptoHashOfState::from(msg_id.hash.clone()),
+                checkpoint_root: path,
+                meta_manifest,
+                manifest,
+                state_sync_file_group,
+                malicious_flags: self.state_manager.malicious_flags.clone(),
+            })
+        } else {
+            None
         }
     }
 
@@ -328,7 +358,7 @@ impl StateSyncClient for StateSync {
 
     /// Blocking. Makes synchronous file system calls.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
-        let msg = self.get(id)?;
+        let msg = self.get_from_incomplete_state(id).or(self.get(id))?;
         msg.get_chunk(chunk_id)
     }
 }

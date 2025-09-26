@@ -1,35 +1,35 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_logger::{ReplicaLogger, error, info, warn};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
 };
-use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::state::{
     canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
     canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
     queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
 };
 use ic_replicated_state::{
-    CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{
-            CanisterHistory, CyclesUseCase, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
+            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase, TaskQueue,
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
+    CanisterStatus, ExportedFunctions, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles,
-    ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId,
-    SnapshotId, Time, batch::TotalQueryStats, nominal_cycles::NominalCycles,
+    batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, Height,
+    LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::{From, TryFrom, identity};
+use std::convert::{identity, From, TryFrom};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::{Error, Write};
@@ -42,7 +42,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::error::LayoutError;
 use crate::utils::do_copy;
 
-use crossbeam_channel::{Sender, bounded, unbounded};
+use crossbeam_channel::{bounded, unbounded, Sender};
 use ic_utils_thread::JoinOnDrop;
 
 pub mod proto;
@@ -706,10 +706,9 @@ impl StateLayout {
     }
 
     /// Returns scratchpad used during statesync
-    pub fn state_sync_scratchpad(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        Ok(self
-            .tmp()
-            .join(format!("state_sync_scratchpad_{:016x}", height.get())))
+    pub fn state_sync_scratchpad(&self, height: Height) -> PathBuf {
+        self.tmp()
+            .join(format!("state_sync_scratchpad_{:016x}", height.get()))
     }
 
     /// Returns the path to cache an unfinished statesync at `height`
