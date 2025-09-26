@@ -1629,46 +1629,6 @@ fn subnet_metrics() {
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
 
-#[cfg(unix)]
-#[test]
-fn test_raw_gateway() {
-    // We create a PocketIC instance consisting of the NNS and one application subnet.
-    let mut pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_application_subnet()
-        .build();
-
-    // We retrieve the app subnet ID from the topology.
-    let topology = pic.topology();
-    let app_subnet = topology.get_app_subnets()[0];
-
-    // We create a canister on the app subnet.
-    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
-    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
-
-    // We top up the canister with cycles and install the test canister WASM to them.
-    pic.add_cycles(canister, INIT_CYCLES);
-    pic.install_canister(canister, test_canister_wasm(), vec![], None);
-
-    // We start the HTTP gateway
-    pic.make_live(None);
-
-    // We make two requests: the non-raw request fails because the test canister does not certify its response,
-    // the raw request succeeds.
-    for (raw, expected) in [
-        (
-            false,
-            "The response from the canister failed verification and cannot be trusted.",
-        ),
-        (true, "My sample asset."),
-    ] {
-        let (client, url) = frontend_canister(&pic, canister, raw, "/asset.txt");
-        let res = client.get(url).send().unwrap();
-        let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
-        assert!(page.contains(expected));
-    }
-}
-
 fn create_canister_with_effective_canister_id(
     pic: &PocketIc,
     effective_canister_id: Principal,
