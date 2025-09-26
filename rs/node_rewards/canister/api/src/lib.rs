@@ -2,7 +2,8 @@ pub mod monthly_rewards;
 pub mod provider_rewards_calculation;
 pub mod providers_rewards;
 
-use rewards_calculation::types as native_types;
+use chrono::{DateTime, Datelike, NaiveDate};
+use std::fmt::Display;
 
 // These are API-facing types with all fields wrapped in `Option`
 // to ensure deserialization always works
@@ -11,33 +12,55 @@ use rewards_calculation::types as native_types;
     PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, Debug,
 )]
 pub struct DayUtc {
-    last_ts_nanoseconds: Option<u64>,
+    pub day: Option<u32>,
+    pub month: Option<u32>,
+    pub year: Option<u32>,
 }
 
-impl DayUtc {
-    pub fn from_nanos(nanos_since_unix_epoch: u64) -> Self {
-        Self::from(native_types::DayUtc::from_nanos(nanos_since_unix_epoch))
-    }
-
-    pub fn from_secs(secs_since_unix_epoch: u64) -> Self {
-        Self::from(native_types::DayUtc::from_secs(secs_since_unix_epoch))
+impl Display for DayUtc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}-{}-{} UTC",
+            self.year.expect("Year is missing"),
+            self.month.expect("Month is missing"),
+            self.day.expect("Day is missing")
+        )
     }
 }
 
-impl From<native_types::DayUtc> for DayUtc {
-    fn from(day_utc: native_types::DayUtc) -> Self {
+impl From<NaiveDate> for DayUtc {
+    fn from(value: NaiveDate) -> Self {
         Self {
-            last_ts_nanoseconds: Some(day_utc.unix_timestamp_at_day_end_nanoseconds()),
+            day: Some(value.day()),
+            month: Some(value.month()),
+            year: Some(value.year() as u32),
         }
     }
 }
 
-impl From<DayUtc> for native_types::DayUtc {
-    fn from(day_utc: DayUtc) -> Self {
-        native_types::DayUtc::from_nanos(
-            day_utc
-                .last_ts_nanoseconds
-                .expect("last_ts_nanoseconds is None"),
+impl TryFrom<DayUtc> for NaiveDate {
+    type Error = String;
+
+    fn try_from(value: DayUtc) -> Result<Self, Self::Error> {
+        NaiveDate::from_ymd_opt(
+            value.year.expect("Year is missing") as i32,
+            value.month.expect("Month is missing"),
+            value.day.expect("Day is missing"),
         )
+        .ok_or(format!("Invalid date: {:?}", value))
+    }
+}
+
+impl DayUtc {
+    pub fn from_unix_timestamp_nanoseconds(value: u64) -> Self {
+        let naive_date = DateTime::from_timestamp_nanos(value as i64).date_naive();
+        DayUtc::from(naive_date)
+    }
+    pub fn from_unix_timestamp_seconds(value: u64) -> Self {
+        let naive_date = DateTime::from_timestamp(value as i64, 0)
+            .unwrap()
+            .date_naive();
+        DayUtc::from(naive_date)
     }
 }

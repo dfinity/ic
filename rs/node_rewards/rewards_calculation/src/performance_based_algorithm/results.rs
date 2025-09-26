@@ -1,4 +1,4 @@
-use crate::types::DayUtc;
+use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
@@ -72,5 +72,5 @@ pub struct DailyResults {
 #[derive(Serialize, Deserialize)]
 pub struct RewardsCalculatorResults {
     pub total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64>,
-    pub daily_results: BTreeMap<DayUtc, DailyResults>,
+    pub daily_results: BTreeMap<NaiveDate, DailyResults>,
 }
