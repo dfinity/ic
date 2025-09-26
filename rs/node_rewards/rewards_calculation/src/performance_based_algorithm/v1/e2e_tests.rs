@@ -7,22 +7,83 @@ use crate::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
+use lazy_static::lazy_static;
 use maplit::btreemap;
 use rust_decimal_macros::dec;
 use std::collections::BTreeMap;
+
+lazy_static! {
+  static ref NODE_REWARDS_TABLE: NodeRewardsTable = {
+    let mut table = BTreeMap::new();
+
+        // Type1 nodes - Europe
+        table.insert(
+            "Europe,Switzerland".to_string(),
+            NodeRewardRates {
+                rates: btreemap! {
+                    NodeRewardType::Type1.to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 304375, // 10000/day
+                        reward_coefficient_percent: None,
+                    },
+                },
+            },
+        );
+
+        // Type3 nodes - North America
+        table.insert(
+            "North America,USA,California".to_string(),
+            NodeRewardRates {
+                rates: btreemap! {
+                    NodeRewardType::Type3.to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 913125, // 30000/day
+                        reward_coefficient_percent: Some(90),
+                    },
+                },
+            },
+        );
+
+        // Type3.1 nodes - North America
+        table.insert(
+            "North America,USA,Nevada".to_string(),
+            NodeRewardRates {
+                rates: btreemap! {
+                    NodeRewardType::Type3dot1.to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 1217500, // 40000/day
+                        reward_coefficient_percent: Some(70),
+                    },
+                },
+            },
+        );
+
+        // Type3 nodes - Asia
+        table.insert(
+            "Asia,Japan,Tokyo".to_string(),
+            NodeRewardRates {
+                rates: btreemap! {
+                    NodeRewardType::Type3.to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 1217500, // 40000/day
+                        reward_coefficient_percent: Some(80),
+                    },
+                },
+            },
+        );
+
+        NodeRewardsTable { table }
+  };
+}
 
 // ================================================================================================
 // Mock DataProvider
 // ================================================================================================
 
 #[derive(Default, Clone)]
-pub struct MockDataProvider {
+pub struct FakeDataProvider {
     rewards_tables: BTreeMap<DayUtc, NodeRewardsTable>,
     daily_metrics: BTreeMap<DayUtc, BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>>,
     rewardable_nodes: BTreeMap<DayUtc, BTreeMap<PrincipalId, Vec<RewardableNode>>>,
 }
 
-impl MockDataProvider {
+impl FakeDataProvider {
     pub fn new() -> Self {
         Self::default()
     }
@@ -117,7 +178,7 @@ impl MockDataProvider {
     }
 }
 
-impl DataProvider for MockDataProvider {
+impl DataProvider for FakeDataProvider {
     fn get_rewards_table(&self, day: &DayUtc) -> Result<NodeRewardsTable, String> {
         self.rewards_tables
             .get(day)
@@ -163,8 +224,8 @@ fn test_failure_rate_calculation_various_performance() {
     let provider_id = test_provider_id(1);
     let subnet_id = test_subnet_id(1);
 
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -300,8 +361,8 @@ fn test_type3_reduction_coefficient_logic() {
     let provider_id = test_provider_id(1);
     let subnet_id = test_subnet_id(1);
 
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -443,8 +504,8 @@ fn test_provider_filtering() {
     let provider2_id = test_provider_id(2);
     let subnet_id = test_subnet_id(1);
 
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -528,8 +589,8 @@ fn test_no_provider_filtering() {
     let provider2_id = test_provider_id(2);
     let subnet_id = test_subnet_id(1);
 
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -593,7 +654,7 @@ fn test_invalid_date_range() {
     let day1 = DayUtc::try_from("2024-01-02").unwrap();
     let day2 = DayUtc::try_from("2024-01-01").unwrap(); // Before day1
 
-    let data_provider = MockDataProvider::new();
+    let data_provider = FakeDataProvider::new();
 
     let result = RewardsCalculationV1::calculate_rewards(&day1, &day2, None, data_provider);
 
@@ -608,7 +669,7 @@ fn test_missing_rewards_table() {
     let day = DayUtc::try_from("2024-01-01").unwrap();
     let provider_id = test_provider_id(1);
 
-    let data_provider = MockDataProvider::new(); // No rewards table added
+    let data_provider = FakeDataProvider::new(); // No rewards table added
 
     let result =
         RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider);
@@ -625,7 +686,7 @@ fn test_missing_metrics() {
     let provider_id = test_provider_id(1);
 
     let data_provider =
-        MockDataProvider::new().add_rewards_table(day, MockDataProvider::create_rewards_table());
+        FakeDataProvider::new().add_rewards_table(day, FakeDataProvider::create_rewards_table());
     // No metrics added
 
     let result =
@@ -643,8 +704,8 @@ fn test_missing_rewardable_nodes() {
     let provider_id = test_provider_id(1);
     let subnet_id = test_subnet_id(1);
 
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -679,8 +740,8 @@ fn test_single_node_subnet() {
     let subnet_id = test_subnet_id(1);
 
     // Test with only one node in the subnet
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -725,8 +786,8 @@ fn test_empty_subnet_metrics() {
     let subnet_id = test_subnet_id(1);
 
     // Test with empty metrics for a subnet
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(day, subnet_id, vec![]) // Empty metrics
         .add_rewardable_nodes(
             day,
@@ -766,8 +827,8 @@ fn test_empty_rewardable_nodes() {
     let subnet_id = test_subnet_id(1);
 
     // Test with empty rewardable nodes
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -799,7 +860,7 @@ fn test_validation_errors() {
     // Test invalid date range (from_day > to_day)
     let day1 = DayUtc::try_from("2024-01-02").unwrap();
     let day2 = DayUtc::try_from("2024-01-01").unwrap();
-    let data_provider = MockDataProvider::new();
+    let data_provider = FakeDataProvider::new();
 
     let result =
         RewardsCalculationV1::calculate_rewards(&day1, &day2, Some(provider_id), data_provider);
@@ -809,7 +870,7 @@ fn test_validation_errors() {
     }
 
     // Test missing rewards table
-    let data_provider = MockDataProvider::new(); // No rewards table
+    let data_provider = FakeDataProvider::new(); // No rewards table
     let result =
         RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider);
     match result {
@@ -819,7 +880,7 @@ fn test_validation_errors() {
 
     // Test missing metrics
     let data_provider =
-        MockDataProvider::new().add_rewards_table(day, MockDataProvider::create_rewards_table());
+        FakeDataProvider::new().add_rewards_table(day, FakeDataProvider::create_rewards_table());
     let result =
         RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider);
     match result {
@@ -829,8 +890,8 @@ fn test_validation_errors() {
 
     // Test missing rewardable nodes
     let subnet_id = test_subnet_id(1);
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -858,8 +919,8 @@ fn test_zero_blocks_edge_cases() {
     let subnet_id = test_subnet_id(1);
 
     // Test various zero block scenarios
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_rewards_table())
+    let data_provider = FakeDataProvider::new()
+        .add_rewards_table(day, FakeDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,

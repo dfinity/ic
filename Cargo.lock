@@ -20787,6 +20787,7 @@ dependencies = [
  "ic-base-types",
  "ic-protobuf",
  "itertools 0.12.1",
+ "lazy_static",
  "maplit",
  "rust_decimal",
  "rust_decimal_macros",
