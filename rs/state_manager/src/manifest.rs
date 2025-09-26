@@ -1314,7 +1314,7 @@ pub fn observe_duplicated_chunks(manifest: &Manifest, metrics: &ManifestMetrics)
 
     let zeros_hash = zeros_hash();
 
-    // Single loop: track seen hashes and count duplicates in one pass
+    // Track seen hashes and count duplicates
     for chunk_info in manifest.chunk_table.iter() {
         // Skip zero chunks
         if chunk_info.hash == zeros_hash {
@@ -1322,7 +1322,6 @@ pub fn observe_duplicated_chunks(manifest: &Manifest, metrics: &ManifestMetrics)
         }
 
         if !seen_hashes.insert(chunk_info.hash) {
-            // This is a duplicate - insert returned false
             num_duplicated_chunks += 1;
             size_duplicated_chunks += chunk_info.size_bytes as usize;
         }
