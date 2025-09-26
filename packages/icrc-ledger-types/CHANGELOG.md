@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `try_from_subaccount_to_principal` that returns an error rather than panicking if the subaccount is not a valid Principal.
+
 ## 0.1.11
 
 ### Changed
