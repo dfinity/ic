@@ -126,7 +126,7 @@ impl IDkgPreSignerImpl {
                 .into_par_iter()
                 .filter(|transcript_params_ref| {
                     // Issue a dealing if we are in the dealer list and we haven't
-                    //already issued a dealing for this transcript
+                    // already issued a dealing for this transcript
                     transcript_params_ref.dealers.contains(&self.node_id)
                         && !self.has_dealer_issued_dealing(
                             idkg_pool,
