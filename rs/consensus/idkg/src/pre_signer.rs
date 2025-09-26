@@ -224,7 +224,7 @@ impl IDkgPreSignerImpl {
                             return Some(IDkgChangeAction::HandleInvalid(
                                 id,
                                 format!(
-                                     "validate_dealings(): failed to translate transcript_params_ref: {signed_dealing}"
+                                    "validate_dealings(): failed to translate transcript_params_ref: {signed_dealing}"
                                 ),
                             ));
                         };
