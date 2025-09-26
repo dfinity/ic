@@ -53,18 +53,28 @@ lvs /dev/store/shared-data >/dev/null 2>&1 || (
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-data store
 )
 
+TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512 / 1024 / 1024))
+# Limit to 500G or 25% of capacity, whichever is lower.
+LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 4))
+LV_SIZE_LIMIT_MB=500000
+if [ "${LV_SIZE_MB}" -gt "${LV_SIZE_LIMIT_MB}" ]; then
+    LV_SIZE_MB="${LV_SIZE_LIMIT_MB}"
+fi
+
 # Set up backup data store if it does not exist yet.
 lvs /dev/store/shared-backup >/dev/null 2>&1 || (
     echo "Logical volume 'shared-backup' does not exist yet (first boot?), creating it."
-    TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512 / 1024 / 1024))
-    # Limit to 180G or 25% of capacity, whichever is lower.
-    LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 4))
-    LV_SIZE_LIMIT_MB=180000
-    if [ "${LV_SIZE_MB}" -gt "${LV_SIZE_LIMIT_MB}" ]; then
-        LV_SIZE_MB="${LV_SIZE_LIMIT_MB}"
-    fi
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-backup store
 )
+
+# TODO(NODE-1722): remove once every GuestOS has been upgraded after the LV resize
+# We use sectors because lvs outputs MB in ##.00 format which is annoying to compare since we don't
+# have bc in GuestOS.
+SECTORS_PER_MB=2048
+if (($(lvs --noheadings --nosuffix --units 's' -o lv_size /dev/mapper/store-shared--backup) < (LV_SIZE_MB * SECTORS_PER_MB))); then
+    echo "Resizing logical volume 'shared-backup' to ${LV_SIZE_MB}MB."
+    retry lvresize --yes -L "$LV_SIZE_MB"M -n /dev/mapper/store-shared--backup
+fi
 
 # Set up swap space if it does not exist yet.
 lvs /dev/store/shared-swap >/dev/null 2>&1 || (
