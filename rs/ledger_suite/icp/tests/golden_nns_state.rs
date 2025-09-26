@@ -288,7 +288,7 @@ impl Setup {
 
         let master_wasms = Wasms {
             ledger: Wasm::from_bytes(
-                std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+                std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap())
                     .expect("Could not read ledger wasm"),
             ),
             index: Wasm::from_bytes(

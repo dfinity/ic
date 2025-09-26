@@ -1,10 +1,11 @@
+use crate::DayUtc;
 use candid::{CandidType, Deserialize, Principal};
 use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProvidersRewardsRequest {
-    pub from_day_timestamp_nanos: u64,
-    pub to_day_timestamp_nanos: u64,
+    pub from_day: DayUtc,
+    pub to_day: DayUtc,
 }
 pub type GetNodeProvidersRewardsResponse = Result<NodeProvidersRewards, String>;
 
