@@ -27,6 +27,7 @@ impl Setup {
                 .build(),
         );
         let fiduciary_subnet = env.topology().get_fiduciary().unwrap();
+
         let minter = env.create_canister_on_subnet(
             None,
             Some(CanisterSettings {
@@ -36,6 +37,7 @@ impl Setup {
             fiduciary_subnet,
         );
         env.add_cycles(minter, u128::MAX);
+
         let ledger = env.create_canister_on_subnet(
             None,
             Some(CanisterSettings {
@@ -45,6 +47,7 @@ impl Setup {
             fiduciary_subnet,
         );
         env.add_cycles(ledger, u128::MAX);
+
         {
             let minter_init_args = MinterArg::Init(InitArgs {
                 doge_network: Network::Mainnet,
@@ -63,6 +66,7 @@ impl Setup {
                 Some(NNS_ROOT_PRINCIPAL),
             );
         }
+
         {
             let ledger_init_args = ic_icrc1_ledger::InitArgs {
                 minting_account: minter.into(),
@@ -101,6 +105,7 @@ impl Setup {
                 Some(NNS_ROOT_PRINCIPAL),
             );
         }
+
         Self {
             env,
             minter,
