@@ -1,6 +1,8 @@
 use crate::common::local_replica;
 use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
-use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
+use crate::common::utils::{
+    get_rosetta_blocks_from_icrc1_ledger, metrics_gauge_value, wait_for_rosetta_block,
+};
 use crate::local_replica::create_and_install_custom_icrc_ledger;
 use candid::{Decode, Encode, Nat, Principal};
 use common::local_replica::get_custom_agent;
@@ -875,6 +877,99 @@ fn test_error_backoff() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
         assert!(found_backoff_message);
+    });
+}
+
+#[test]
+fn test_metrics_with_unrecognized_blocks() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+
+        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+
+        let block0 = BlockBuilder::new(0, 1000)
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(0u64));
+
+        let block_index =
+            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0)
+                .await
+                .unwrap();
+        assert_eq!(block_index, 0);
+
+        let metrics = env
+            .rosetta_client
+            .metrics()
+            .await
+            .expect("should return metrics");
+
+        let rosetta_synched_block_height =
+            metrics_gauge_value(&metrics, "rosetta_synched_block_height")
+                .expect("should export rosetta_synched_block_height metric");
+        assert_eq!(rosetta_synched_block_height as u64, block_index);
+        let rosetta_verified_block_height =
+            metrics_gauge_value(&metrics, "rosetta_verified_block_height")
+                .expect("should export rosetta_verified_block_height metric");
+        assert_eq!(rosetta_verified_block_height as u64, block_index);
+        let rosetta_target_block_height =
+            metrics_gauge_value(&metrics, "rosetta_target_block_height")
+                .expect("should export rosetta_target_block_height metric");
+        assert_eq!(rosetta_target_block_height as u64, block_index);
+
+        let block1 = ICRC3Value::Text("invalid block".to_string());
+        let bad_block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
+            .await
+            .expect("failed to add block");
+        assert_eq!(bad_block_index, Nat::from(1u64));
+
+        let await_updated_metrics = async || {
+            const MAX_RETRIES: usize = 10;
+            let mut retries = 0;
+            loop {
+                let metrics = env
+                    .rosetta_client
+                    .metrics()
+                    .await
+                    .expect("should return metrics");
+
+                let rosetta_target_block_height =
+                    metrics_gauge_value(&metrics, "rosetta_target_block_height")
+                        .expect("should export rosetta_target_block_height metric");
+
+                if rosetta_target_block_height as u64 == bad_block_index {
+                    return metrics;
+                } else {
+                    assert!(
+                        retries < MAX_RETRIES,
+                        "rosetta did not pick up the bad block after {MAX_RETRIES} retries"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    retries += 1;
+                }
+            }
+        };
+        let bad_metrics = await_updated_metrics().await;
+
+        // The synced block height is only updated when a block is retrieved successfully from the
+        // ledger, and added to the Rosetta DB. Unrecognized blocks are not stored to disk, so the
+        // following metrics will not be updated.
+        let rosetta_synched_block_height =
+            metrics_gauge_value(&bad_metrics, "rosetta_synched_block_height")
+                .expect("should export rosetta_synched_block_height metric");
+        assert_eq!(rosetta_synched_block_height as u64, block_index);
+        let rosetta_verified_block_height =
+            metrics_gauge_value(&bad_metrics, "rosetta_verified_block_height")
+                .expect("should export rosetta_verified_block_height metric");
+        assert_eq!(rosetta_verified_block_height as u64, block_index);
     });
 }
 

@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* The feature flag `SNS_EXTENSIONS_ENABLED` is turned on. Enabling it allows for deployment of SNS extensions.
-
 ## Changed
 
 ## Deprecated
