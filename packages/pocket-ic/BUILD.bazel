@@ -107,6 +107,8 @@ rust_test(
 
 rust_test(
     name = "unix",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
     timeout = "long",
     srcs = [
         "tests/common.rs",
