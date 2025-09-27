@@ -14,6 +14,7 @@ use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
 use ic_crypto_internal_csp::vault::api::IDkgDealingInternalBytes;
 use ic_crypto_internal_csp::vault::api::IDkgProtocolCspVault;
 use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
+use ic_crypto_internal_csp::vault::api::IDkgTranscriptOperationInternalBytes;
 use ic_crypto_internal_csp::vault::api::MultiSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::NiDkgCspVault;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
@@ -34,8 +35,7 @@ use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -141,7 +141,7 @@ mock! {
             dealer_index: NodeIndex,
             reconstruction_threshold: NumberOfNodes,
             receiver_keys: Vec<PublicKey>,
-            transcript_operation: IDkgTranscriptOperationInternal,
+            transcript_operation: IDkgTranscriptOperationInternalBytes,
         ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
         fn idkg_verify_dealing_private(

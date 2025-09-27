@@ -6,8 +6,7 @@ use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -24,7 +23,9 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
+};
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -749,7 +750,7 @@ pub trait IDkgProtocolCspVault {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperationInternal,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     /// See [`CspIDkgProtocol::idkg_verify_dealing_private`].
@@ -847,7 +848,7 @@ pub trait ThresholdEcdsaSignerCspVault {
 }
 
 /// Type-safe serialization of [`IDkgTranscriptInternal`].
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IDkgTranscriptInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl From<Vec<u8>> for IDkgTranscriptInternalBytes {
@@ -887,6 +888,40 @@ impl AsRef<[u8]> for IDkgDealingInternalBytes {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum IDkgTranscriptOperationInternalBytes {
+    Random,
+    RandomUnmasked,
+    ReshareOfMasked(IDkgTranscriptInternalBytes),
+    ReshareOfUnmasked(IDkgTranscriptInternalBytes),
+    UnmaskedTimesMasked(IDkgTranscriptInternalBytes, IDkgTranscriptInternalBytes),
+}
+
+impl From<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternalBytes {
+    fn from(idkm_transcript_op: &IDkgTranscriptOperation) -> Self {
+        match idkm_transcript_op {
+            IDkgTranscriptOperation::Random => Self::Random,
+            IDkgTranscriptOperation::RandomUnmasked => Self::RandomUnmasked,
+            IDkgTranscriptOperation::ReshareOfMasked(idkm_transcript) => Self::ReshareOfMasked(
+                IDkgTranscriptInternalBytes::from(idkm_transcript.internal_transcript_raw.clone()),
+            ),
+            IDkgTranscriptOperation::ReshareOfUnmasked(idkm_transcript) => Self::ReshareOfUnmasked(
+                IDkgTranscriptInternalBytes::from(idkm_transcript.internal_transcript_raw.clone()),
+            ),
+            IDkgTranscriptOperation::UnmaskedTimesMasked(idkm_transcript_1, idkm_transcript_2) => {
+                Self::UnmaskedTimesMasked(
+                    IDkgTranscriptInternalBytes::from(
+                        idkm_transcript_1.internal_transcript_raw.clone(),
+                    ),
+                    IDkgTranscriptInternalBytes::from(
+                        idkm_transcript_2.internal_transcript_raw.clone(),
+                    ),
+                )
+            }
+        }
     }
 }
 

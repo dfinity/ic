@@ -5,8 +5,8 @@ use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
-    CspTlsSignError, IDkgCreateDealingVaultError, PublicRandomSeedGeneratorError,
-    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    CspTlsSignError, IDkgCreateDealingVaultError, IDkgTranscriptOperationInternalBytes,
+    PublicRandomSeedGeneratorError, ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
     VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::api::{
@@ -24,8 +24,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -338,7 +337,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperationInternal,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         let vault = self.local_csp_vault;
         let job = move || {

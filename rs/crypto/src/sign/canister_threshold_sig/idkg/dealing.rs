@@ -9,6 +9,7 @@ use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
+    IDkgTranscriptOperationInternalBytes,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgDealingInternal, IDkgTranscriptOperationInternal, publicly_verify_dealing,
@@ -55,12 +56,8 @@ pub fn create_dealing<C: CspSigner>(
         })
         .collect::<Result<Vec<_>, MegaKeyFromRegistryError>>()?;
 
-    let transcript_operation_internal =
-        IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
-            IDkgCreateDealingError::SerializationError {
-                internal_error: format!("{e:?}"),
-            }
-        })?;
+    let transcript_operation_internal_bytes =
+        IDkgTranscriptOperationInternalBytes::from(params.operation_type());
 
     let internal_dealing = vault
         .idkg_create_dealing(
@@ -69,7 +66,7 @@ pub fn create_dealing<C: CspSigner>(
             self_index,
             params.reconstruction_threshold(),
             key_protos,
-            transcript_operation_internal,
+            transcript_operation_internal_bytes,
         )
         .map_err(|e| {
             idkg_create_dealing_vault_error_into_idkg_create_dealing_error(e, params.receivers())
