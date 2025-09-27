@@ -32,6 +32,19 @@ use crate::governance::RandomnessGenerator;
 use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;
 
+// All information about a neuron can be up to 6 KiB.
+// To avoid hitting the message size limit of 2 MiB, we limit the
+// number of neurons returned in a single page to 300.
+pub const MAX_NEURON_PAGE_SIZE: usize = 300;
+
+// As a message canister limit is 2 MiB and neuron ID is 8 bytes, we can return
+// at most 256 K neuron IDs in a single message. However, to be safe, we limit
+// the number of neuron ID to 200 K.
+// Please note that `MAX_NUMBER_OF_NEURONS` (defined in `rs/nns/governance/src/governance.rs`)
+// is 500_000, which is greater than this limit. This is acceptable because
+// pagination is supported when listing neuron IDs.
+pub const MAX_NEURON_ID_PAGE_SIZE: usize = 200_000;
+
 #[derive(Eq, PartialEq, Debug)]
 pub enum NeuronStoreError {
     NeuronNotFound {
@@ -445,6 +458,7 @@ impl NeuronStore {
     pub fn has_neuron_with_account_id(&self, account_id: &AccountIdentifier) -> bool {
         self.get_neuron_id_for_account_id(account_id).is_some()
     }
+
     pub fn with_active_neurons_iter<R>(
         &self,
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
@@ -530,6 +544,47 @@ impl NeuronStore {
     /// List all neuron ids of known neurons
     pub fn list_known_neuron_ids(&self) -> Vec<NeuronId> {
         with_stable_neuron_indexes(|indexes| indexes.known_neuron().list_known_neuron_ids())
+    }
+
+    // @todo Shah
+    pub fn list_all_neurons_paginated(
+        &self,
+        exclusive_start_id: Option<NeuronId>,
+        page_size: Option<usize>,
+    ) -> Vec<Neuron> {
+        // We can allow the user to determine if they want a more detailed
+        // neuron information. If so, then we have to return lower number of neurons
+        // per page.
+        let exclusive_start_id = exclusive_start_id.unwrap_or(NeuronId { id: 0 });
+        let page_size = page_size
+            .unwrap_or(MAX_NEURON_PAGE_SIZE)
+            .min(MAX_NEURON_PAGE_SIZE);
+
+        with_stable_neuron_store(|stable_store| {
+            stable_store
+                .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
+                .take(page_size)
+                .collect()
+        })
+    }
+
+    pub fn list_all_neuron_ids_paginated(
+        &self,
+        exclusive_start_id: Option<NeuronId>,
+        page_size: Option<usize>,
+    ) -> Vec<NeuronId> {
+        with_stable_neuron_store(|stable_store| {
+            let exclusive_start_id = exclusive_start_id.unwrap_or(NeuronId { id: 0 });
+            let page_size = page_size
+                .unwrap_or(MAX_NEURON_ID_PAGE_SIZE)
+                .min(MAX_NEURON_ID_PAGE_SIZE);
+
+            stable_store
+                .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
+                .take(page_size)
+                .map(|neuron| neuron.id())
+                .collect()
+        })
     }
 
     /// List all neurons that are spawning
