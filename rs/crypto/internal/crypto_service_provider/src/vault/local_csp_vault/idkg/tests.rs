@@ -1136,18 +1136,6 @@ mod idkg_load_transcript {
     }
 
     #[test]
-    fn should_fail_if_deserialization_of_internal_dealings_fails() {
-        let mut test = IDkgLoadTranscriptTest::new_with_valid_params();
-        test.additional_operation =
-            Some(IDkgLoadTranscriptTestAdditionalOperation::CorruptDealingEncodingInLoadArgs);
-        assert_matches!(
-            test.run(),
-            Err(IDkgLoadTranscriptError::SerializationError { internal_error })
-            if internal_error.contains("failed to deserialize internal dealing")
-        );
-    }
-
-    #[test]
     fn should_fail_if_deserialization_of_internal_transcript_fails() {
         let mut test = IDkgLoadTranscriptTest::new_with_valid_params();
         test.additional_operation =
@@ -1327,7 +1315,6 @@ mod idkg_load_transcript {
 
     #[derive(PartialEq)]
     enum IDkgLoadTranscriptTestAdditionalOperation {
-        CorruptDealingEncodingInLoadArgs,
         CorruptInternalDealingForComplaint,
         CorruptInternalDealingCiphertext,
         CorruptTranscriptEncodingInLoadArgs,
@@ -1371,9 +1358,8 @@ mod idkg_load_transcript {
                 let internal_dealing_raw = self.internal_dealing_raw(dealing_bytes, rng);
                 BTreeMap::from([(
                     DEALER_RECEIVER_INDEX,
-                    // the signature is not verified here, so we just need some
-                    // signature that contains the required content
-                    dummy_batch_signed_dealing_with(internal_dealing_raw, node_id(456)),
+                    IDkgDealingInternal::deserialize(&internal_dealing_raw)
+                        .expect("failed to deserialize internal dealing"),
                 )])
             };
 
@@ -1450,10 +1436,6 @@ mod idkg_load_transcript {
             rng: &mut R,
         ) -> Vec<u8> {
             if self.additional_operation
-                == Some(IDkgLoadTranscriptTestAdditionalOperation::CorruptDealingEncodingInLoadArgs)
-            {
-                vec![0xFF; 100]
-            } else if self.additional_operation
                 == Some(
                     IDkgLoadTranscriptTestAdditionalOperation::CorruptInternalDealingForComplaint,
                 )
