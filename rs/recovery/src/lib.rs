@@ -320,7 +320,7 @@ impl Recovery {
         &self,
         subnet_id: SubnetId,
         ssh_user: SshUser,
-        alt_key_file: Option<PathBuf>,
+        key_file: Option<PathBuf>,
         auto_retry: bool,
     ) -> impl Step + use<> {
         DownloadCertificationsStep {
@@ -329,7 +329,7 @@ impl Recovery {
             registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: alt_key_file.or(self.key_file.clone()),
+            key_file,
             auto_retry,
             ssh_user,
         }
@@ -350,6 +350,7 @@ impl Recovery {
         &self,
         node_ip: IpAddr,
         ssh_user: SshUser,
+        key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
         additional_excludes: Vec<&str>,
     ) -> impl Step + use<> {
@@ -361,7 +362,7 @@ impl Recovery {
             keep_downloaded_state,
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file,
             additional_excludes: additional_excludes
                 .iter()
                 .map(std::string::ToString::to_string)
@@ -524,24 +525,11 @@ impl Recovery {
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step + use<> {
-        self.get_upload_and_restart_step_with_data_src(
-            upload_method,
-            self.work_dir.join(IC_STATE_DIR),
-        )
-    }
-
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
-    pub fn get_upload_and_restart_step_with_data_src(
-        &self,
-        upload_method: DataLocation,
-        data_src: PathBuf,
-    ) -> impl Step + use<> {
         UploadAndRestartStep {
             logger: self.logger.clone(),
             upload_method,
             work_dir: self.work_dir.clone(),
-            data_src,
+            data_src: self.work_dir.join(IC_STATE_DIR),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
             check_ic_replay_height: true,

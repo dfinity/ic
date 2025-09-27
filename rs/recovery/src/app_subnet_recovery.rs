@@ -259,7 +259,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     );
                 }
 
-                if let Some(&DataLocation::Remote(_)) = self.params.download_method.as_ref() {
+                if self.params.keep_downloaded_state.is_none()
+                    && let Some(&DataLocation::Remote(_)) = self.params.download_method.as_ref()
+                {
                     self.params.keep_downloaded_state = Some(consent_given(
                         &self.logger,
                         "Preserve original downloaded state locally?",
@@ -306,13 +308,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::WaitForCUP => {
-                if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
-                    self.params.wait_for_cup_node = Some(ip);
-                } else {
-                    self.params.wait_for_cup_node = read_optional(
-                        &self.logger,
-                        "Enter IP of the node to be polled for the recovery CUP:",
-                    );
+                if self.params.wait_for_cup_node.is_none() {
+                    if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
+                        self.params.wait_for_cup_node = Some(ip);
+                    } else {
+                        self.params.wait_for_cup_node = read_optional(
+                            &self.logger,
+                            "Enter IP of the node to be polled for the recovery CUP:",
+                        );
+                    }
                 }
             }
 
@@ -340,7 +344,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     Ok(Box::new(self.recovery.get_download_certs_step(
                         self.params.subnet_id,
                         SshUser::Readonly,
-                        /*alt_key_file=*/ None,
+                        self.recovery.key_file.clone(),
                         !self.interactive(),
                     )))
                 } else {
@@ -369,6 +373,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                             } else {
                                 SshUser::Admin
                             },
+                            self.recovery.key_file.clone(),
                             self.params.keep_downloaded_state == Some(true),
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))
