@@ -1128,6 +1128,8 @@ fn test_invalid_ip(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
+                // `2001:db8::1` is a reserved ipv6 address used in documentation and example source code. 
+                // See https://www.rfc-editor.org/rfc/rfc3849
                 url: "https://[2001:db8::1]".to_string(),
                 headers: vec![],
                 method: HttpMethod::GET,
