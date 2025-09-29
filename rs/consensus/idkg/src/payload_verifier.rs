@@ -553,7 +553,7 @@ fn validate_transcript_refs(
         }
     }
 
-    let results: Vec<_> = thread_pool
+    let results = thread_pool
         .install(|| {
             verify_transcript_args
                 .into_par_iter()
@@ -563,7 +563,7 @@ fn validate_transcript_refs(
                     Ok(())
                 })
         })
-        .collect::<Result<_, IDkgValidationError>>()?;
+        .collect::<Result<Vec<()>, IDkgValidationError>>()?;
 
     if results.len() != idkg_transcripts.len() {
         return Err(NewTranscriptMiscount(results.len() as u64).into());
