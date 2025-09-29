@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_agent::Agent;
@@ -179,7 +181,7 @@ async fn test_async(env: TestEnv) {
     info!(logger, "Calling migration_status");
     let status = nns_agent
         .update(&migration_canister_id, "migration_status")
-        .with_arg(args)
+        .with_arg(args.clone())
         .call_and_wait()
         .await
         .expect("Failed to call migration_status.");
@@ -192,4 +194,20 @@ async fn test_async(env: TestEnv) {
             status: "Accepted".into()
         }]
     );
+    std::thread::sleep(Duration::from_secs(360));
+
+    let status = nns_agent
+        .update(&migration_canister_id, "migration_status")
+        .with_arg(args.clone())
+        .call_and_wait()
+        .await
+        .expect("Failed to call migration_status.");
+    let decoded_status = Decode!(&status, Vec<MigrationStatus>)
+        .expect("Failed to decode response from migration_status.");
+    println!("status: {:?}", decoded_status);
+
+    assert!(matches!(
+        decoded_status[0],
+        MigrationStatus::Succeeded { .. }
+    ));
 }

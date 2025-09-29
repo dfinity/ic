@@ -260,7 +260,10 @@ pub async fn process_updated(
         "Registry version: {} {} {}",
         registry_version, source_subnet_version, target_subnet_version
     );
-    if source_subnet_version < registry_version || target_subnet_version < registry_version {
+    // TODO: the -1 is a mitigation for a bug in the registry.
+    // Once https://github.com/dfinity/ic/pull/6999 is merged and rolled out, remove both -1s.
+    if source_subnet_version < registry_version - 1 || target_subnet_version < registry_version - 1
+    {
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
