@@ -555,30 +555,40 @@ fn run_fetch_canister_logs_with_filtering_test(
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_without_any_filters() {
-    let expected_indices = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(None, None);
-    let expected = expected_indices
-        .iter()
-        .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
-        .collect::<Vec<_>>();
-    assert_eq!(readable_logs_without_backtraces(result), expected);
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (0, timestamps[0], "message".to_string()),
+            (1, timestamps[1], "message".to_string()),
+            (2, timestamps[2], "message".to_string()),
+            (3, timestamps[3], "message".to_string()),
+            (4, timestamps[4], "message".to_string()),
+            (5, timestamps[5], "message".to_string()),
+            (6, timestamps[6], "message".to_string()),
+            (7, timestamps[7], "message".to_string()),
+            (8, timestamps[8], "message".to_string()),
+            (9, timestamps[9], "message".to_string()),
+        ]
+    );
 }
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_by_idx() {
-    let expected_indices = vec![3, 4, 5];
     let (result, timestamps) =
         run_fetch_canister_logs_with_filtering_test(Some(IndexRange { start: 3, end: 5 }), None);
-    let expected = expected_indices
-        .iter()
-        .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
-        .collect::<Vec<_>>();
-    assert_eq!(readable_logs_without_backtraces(result), expected);
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (3, timestamps[3], "message".to_string()),
+            (4, timestamps[4], "message".to_string()),
+            (5, timestamps[5], "message".to_string()),
+        ]
+    );
 }
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_by_timestamp() {
-    let expected_indices = vec![2, 3];
     let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
     let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(
         None,
@@ -587,11 +597,13 @@ fn test_fetch_canister_logs_with_filtering_by_timestamp() {
             end: sec_and_nanosec(1620328634, 2),
         }),
     );
-    let expected = expected_indices
-        .iter()
-        .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
-        .collect::<Vec<_>>();
-    assert_eq!(readable_logs_without_backtraces(result), expected);
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (2, timestamps[2], "message".to_string()),
+            (3, timestamps[3], "message".to_string()),
+        ]
+    );
 }
 
 #[test]
