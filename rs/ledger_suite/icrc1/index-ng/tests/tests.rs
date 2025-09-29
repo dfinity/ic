@@ -1,7 +1,7 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    index_ng_wasm, install_index_ng, install_ledger, ledger_get_all_blocks, ledger_wasm,
-    wait_until_sync_is_completed,
+    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
+    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
@@ -11,12 +11,16 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
     InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+use ic_icrc1_ledger::{
+    ChangeFeeCollector, LedgerArgument, Tokens, UpgradeArgs as LedgerUpgradeArgs,
+};
 use ic_icrc1_test_utils::{
-    ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
+    ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
+    valid_transactions_strategy,
 };
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -220,6 +224,22 @@ fn transfer(
         memo: None,
     };
     icrc1_transfer(env, ledger_id, owner.into(), req)
+}
+
+fn add_block(env: &StateMachine, ledger_id: CanisterId, block: &ICRC3Value) -> BlockIndex {
+    let req = Encode!(block).expect("Failed to encode block");
+    let res = env
+        .execute_ingress_as(
+            ic_base_types::PrincipalId(Principal::anonymous()),
+            ledger_id,
+            "add_block",
+            req,
+        )
+        .unwrap_or_else(|e| panic!("Failed to add block. arg:{:?} error:{}", block, e))
+        .bytes();
+    Decode!(&res, Result<Nat, String>)
+        .expect("Failed to decode Result<Nat, String>")
+        .unwrap_or_else(|e| panic!("Failed to add block. arg:{:?} error:{}", block, e))
 }
 
 fn icrc2_approve(
@@ -452,6 +472,72 @@ fn test_ledger_growing() {
         icrc1_balance_of(env, ledger_id, account(1, 0)),
         icrc1_balance_of(env, index_id, account(1, 0))
     );
+}
+
+#[test]
+fn test_unknown_block() {
+    // check that the index canister can incrementally get the blocks from the ledger.
+
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    // Test initial mint block.
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+
+    // Test first transfer block.
+
+    const TEST_ACCOUNT: Account = Account {
+        owner: PrincipalId::new_user_test_id(44).0,
+        subaccount: None,
+    };
+
+    const TA1: Account = Account {
+        owner: PrincipalId::new_user_test_id(55).0,
+        subaccount: None,
+    };
+
+    const TA2: Account = Account {
+        owner: PrincipalId::new_user_test_id(66).0,
+        subaccount: None,
+    };
+
+    let block0 = BlockBuilder::new(0, 1000)
+        .with_fee(Tokens::from(50u64))
+        .mint(TEST_ACCOUNT, Tokens::from(1_000u64))
+        .build();
+    let block1 = BlockBuilder::new(1, 2000)
+        .with_parent_hash(block0.clone().hash().to_vec())
+        .mint(TA1, Tokens::from(1_000u64))
+        .build();
+    let block2 = BlockBuilder::new(2, 3000)
+        .with_parent_hash(block1.clone().hash().to_vec())
+        .with_fee(Tokens::from(50u64))
+        .transfer(TEST_ACCOUNT, TA2, Tokens::from(50u64))
+        .build();
+    let mut block2_map = match block2 {
+        ICRC3Value::Map(btree_map) => btree_map,
+        _ => panic!("block should be a map"),
+    };
+    block2_map.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+    let block2 = ICRC3Value::Map(block2_map);
+
+    add_block(env, ledger_id, &block0);
+    add_block(env, ledger_id, &block1);
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+
+    add_block(env, ledger_id, &block2);
+
+    for _i in 0..3 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
+    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
+    let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
+    assert_eq!(ledger_blocks.chain_length, index_blocks.chain_length + 1);
 }
 
 #[test]

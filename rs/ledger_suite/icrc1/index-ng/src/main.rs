@@ -584,6 +584,10 @@ pub async fn build_index() -> Option<()> {
         num_indexed,
         retrieve_blocks_from_ledger_interval
     );
+    // Schedule the next index timer
+    set_build_index_timer(with_state(|state| {
+        state.retrieve_blocks_from_ledger_interval()
+    }));
     Some(())
 }
 
@@ -684,7 +688,7 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
 }
 
 fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer_interval(after, || {
+    ic_cdk_timers::set_timer(after, || {
         ic_cdk::spawn(async {
             let _ = build_index().await;
         })
@@ -693,6 +697,7 @@ fn set_build_index_timer(after: Duration) -> TimerId {
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) {
     measure_span(&PROFILING_DATA, "append_blocks", move || {
+        let original_hash = block.hash();
         let block = generic_block_to_encoded_block_or_trap(block_index, block);
 
         // append the encoded block to the block log
@@ -703,6 +708,10 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) {
         });
 
         let decoded_block = decode_encoded_block_or_trap(block_index, block);
+        let decoded_hash = Block::<Tokens>::block_hash(&decoded_block.clone().encode());
+        if original_hash != decoded_hash.as_slice() {
+            trap(format!("Unknown block at index {block_index}."));
+        }
 
         // add the block idx to the indices
         with_account_block_ids(|account_block_ids| {

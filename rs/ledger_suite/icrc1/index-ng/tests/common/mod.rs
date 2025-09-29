@@ -97,6 +97,20 @@ pub fn install_ledger(
     .unwrap()
 }
 
+fn icrc3_test_ledger() -> Vec<u8> {
+    std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
+}
+
+pub fn install_icrc3_test_ledger(env: &StateMachine) -> CanisterId {
+    env.install_canister_with_cycles(
+        icrc3_test_ledger(),
+        Encode!(&()).unwrap(),
+        None,
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+    )
+    .unwrap()
+}
+
 #[allow(dead_code)]
 pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
     let args = IndexArg::Init(init_arg);
