@@ -1,3 +1,5 @@
+mod minter;
+
 use candid::{Encode, Principal};
 use ic_ckdoge_minter::lifecycle::init::Mode;
 use ic_ckdoge_minter::lifecycle::init::{InitArgs, MinterArg, Network};
@@ -8,9 +10,12 @@ use pocket_ic::{PocketIc, PocketIcBuilder};
 use std::sync::Arc;
 use std::time::Duration;
 
+pub use crate::minter::MinterCanister;
+
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
 pub const DOGECOIN_CANISTER: Principal =
     Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
+pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
 
 pub struct Setup {
     env: Arc<PocketIc>,
@@ -110,6 +115,13 @@ impl Setup {
             env,
             minter,
             ledger,
+        }
+    }
+
+    pub fn minter(&self) -> MinterCanister {
+        MinterCanister {
+            env: self.env.clone(),
+            id: self.minter,
         }
     }
 }

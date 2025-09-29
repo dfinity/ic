@@ -91,6 +91,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckdoge_minter_lib",
-        "//rs/dogecoin/ckdoge/test_utils"
+        "//rs/dogecoin/ckdoge/test_utils",
+        "@crate_index//:candid",
     ],
 )
