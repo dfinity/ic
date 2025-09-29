@@ -20756,6 +20756,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "remote_attestation_server"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "attestation",
+ "config",
+ "config_types",
+ "ic_sev",
+ "remote_attestation_shared",
+ "sev",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
+name = "remote_attestation_shared"
+version = "0.0.0"
+dependencies = [
+ "attestation",
+ "prost 0.13.4",
+ "prost-build 0.13.4",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "rend"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
