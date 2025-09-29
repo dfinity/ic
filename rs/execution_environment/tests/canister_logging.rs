@@ -497,71 +497,80 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
     );
 }
 
-#[test]
-fn test_fetch_canister_logs_with_filtering() {
-    let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
-    // Test fetch_canister_logs API call with filtering by record index and/or timestamp range.
-    let test_cases = vec![
-        (Some(IndexRange { start: 3, end: 5 }), None, vec![3, 4, 5]),
-        (
-            None,
-            Some(TimestampNanosRange {
-                start: sec_and_nanosec(1620328633, 2),
-                end: sec_and_nanosec(1620328634, 2),
-            }),
-            vec![2, 3],
-        ),
-    ];
-
-    for (index_range, timestamp_range, expected_indices) in test_cases {
-        let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
-        let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
-        let fetch_canister_logs_filter = FlagStatus::Enabled;
-        let env = setup_env_with(
-            replicated_inter_canister_log_fetch,
-            fetch_canister_logs_filter,
-        );
-        let canister_a = create_and_install_canister(
-            &env,
-            CanisterSettingsArgsBuilder::new()
-                .with_log_visibility(log_visibility)
-                .build(),
-            wat_canister()
-                .update("test", wat_fn().debug_print(b"message"))
-                .build_wasm(),
-        );
-        // Record some logs.
-        let mut timestamps = vec![];
-        for _ in 0..10 {
-            env.advance_time(Duration::from_secs(1));
-            timestamps.push(env.time());
-            let _ = env.execute_ingress(canister_a, "test", vec![]);
-        }
-
-        let method_payload = match (index_range, timestamp_range) {
-            (Some(index_range), None) => {
-                FetchCanisterLogsRequest::new_with_filter_by_index(canister_a, index_range)
-            }
-            (None, Some(timestamp_range)) => {
-                FetchCanisterLogsRequest::new_with_filter_by_timestamp_nanos(
-                    canister_a,
-                    timestamp_range,
-                )
-            }
-            _ => panic!("Only one of filters can be set"),
-        };
-        let result = env.query_as(
-            user,
-            CanisterId::ic_00(),
-            "fetch_canister_logs",
-            method_payload.encode(),
-        );
-        let expected_records = expected_indices
-            .iter()
-            .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
-            .collect::<Vec<_>>();
-        assert_eq!(readable_logs_without_backtraces(result), expected_records);
+fn run_fetch_canister_logs_with_filtering_test(
+    index_range: Option<IndexRange>,
+    timestamp_range: Option<TimestampNanosRange>,
+    expected_indices: Vec<u64>,
+) {
+    let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
+    let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
+    let fetch_canister_logs_filter = FlagStatus::Enabled;
+    let env = setup_env_with(
+        replicated_inter_canister_log_fetch,
+        fetch_canister_logs_filter,
+    );
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility)
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs.
+    let mut timestamps = vec![];
+    for _ in 0..10 {
+        env.advance_time(Duration::from_secs(1));
+        timestamps.push(env.time());
+        let _ = env.execute_ingress(canister_a, "test", vec![]);
     }
+
+    let method_payload = match (index_range, timestamp_range) {
+        (Some(index_range), None) => {
+            FetchCanisterLogsRequest::new_with_filter_by_index(canister_a, index_range)
+        }
+        (None, Some(timestamp_range)) => {
+            FetchCanisterLogsRequest::new_with_filter_by_timestamp_nanos(
+                canister_a,
+                timestamp_range,
+            )
+        }
+        _ => panic!("Only one of filters can be set"),
+    };
+    let result = env.query_as(
+        user,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        method_payload.encode(),
+    );
+    let expected_records = expected_indices
+        .iter()
+        .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
+        .collect::<Vec<_>>();
+    assert_eq!(readable_logs_without_backtraces(result), expected_records);
+}
+
+#[test]
+fn test_fetch_canister_logs_with_filtering_by_idx() {
+    run_fetch_canister_logs_with_filtering_test(
+        Some(IndexRange { start: 3, end: 5 }),
+        None,
+        vec![3, 4, 5],
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_with_filtering_by_timestamp() {
+    let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
+    run_fetch_canister_logs_with_filtering_test(
+        None,
+        Some(TimestampNanosRange {
+            start: sec_and_nanosec(1620328633, 2),
+            end: sec_and_nanosec(1620328634, 2),
+        }),
+        vec![2, 3],
+    );
 }
 
 #[test]
