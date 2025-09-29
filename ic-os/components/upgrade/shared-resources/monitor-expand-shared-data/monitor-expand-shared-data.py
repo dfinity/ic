@@ -135,7 +135,7 @@ def main():
         available = MAX_LV_SIZE - lv_size
 
         # Only run if we have space to expand into.
-        if available > 0:
+        if available > 0 and vg_free > 0:
             fs_free = get_fsfree(MOUNT_POINT)
 
             # Consider the VG in "chunks" of 10%.
