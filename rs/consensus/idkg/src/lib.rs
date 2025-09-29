@@ -185,7 +185,7 @@ use crate::{
     metrics::{CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS, IDkgClientMetrics, timed_call},
     pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
     signer::{ThresholdSigner, ThresholdSignerImpl},
-    utils::IDkgBlockReaderImpl,
+    utils::{IDkgBlockReaderImpl, build_thread_pool},
 };
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
@@ -234,6 +234,9 @@ pub use payload_verifier::{
 };
 pub use stats::IDkgStatsImpl;
 
+/// The maximum number of threads used to process IDkg artifacts in parallel.
+pub(crate) const MAX_IDKG_THREADS: usize = 8;
+
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
 
@@ -271,10 +274,12 @@ impl IDkgImpl {
         logger: ReplicaLogger,
         malicious_flags: MaliciousFlags,
     ) -> Self {
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         let pre_signer = Box::new(IDkgPreSignerImpl::new(
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
+            thread_pool,
             metrics_registry.clone(),
             logger.clone(),
         ));

@@ -278,6 +278,7 @@ message CanisterLoadSnapshot {
   uint64 taken_at_timestamp = 2;
   bytes snapshot_id = 3;
   SnapshotSource source = 4;
+  types.v1.PrincipalId from_canister_id = 5;
 }
 
 message CanisterControllers {

@@ -146,6 +146,9 @@ pub trait HeaderCache: Send + Sync {
     /// Return the number of tips.
     fn get_num_tips(&self) -> usize;
 
+    /// Return the number of headers.
+    fn get_num_headers(&self) -> usize;
+
     /// Return the ancestor from the given block hash to the current anchor in the
     /// in-memory cache as a chain of headers, where each element is the only child
     /// of the next, and the first element (tip) has no child.
@@ -225,6 +228,10 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
 
     fn get_num_tips(&self) -> usize {
         self.read().unwrap().tips.len()
+    }
+
+    fn get_num_headers(&self) -> usize {
+        self.read().unwrap().cache.len()
     }
 
     fn get_ancestor_chain(&self, from: BlockHash) -> Vec<(BlockHash, HeaderNode<Header>)> {
@@ -360,6 +367,18 @@ impl LMDBHeaderCache {
         let mut bytes = tx.get(self.headers, &hash)?;
         let node = <HeaderNode<Header>>::consensus_decode(&mut bytes)?;
         Ok(node)
+    }
+
+    fn tx_get_num_headers<Tx: Transaction>(&self, tx: &Tx) -> Result<usize, LMDBCacheError> {
+        let num = tx
+            .stat(self.headers)
+            .map(|stat| stat.entries())
+            .map_err(LMDBCacheError::Lmdb)?;
+        assert!(
+            num > 0,
+            "BUG: LMDBHeaderCache::new_with_genesis adds the tip header key '{TIP_KEY}'"
+        );
+        Ok(num - 1)
     }
 
     fn tx_add_header<Header: BlockchainHeader>(
@@ -526,6 +545,27 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
                 format!("tx_get_header({hash})")
             )
         })
+    }
+
+    /// Number of headers stored.
+    ///
+    /// Return a pair where
+    /// 1. Number of headers stored on disk
+    /// 2. Number of headers stored in memory
+    pub fn get_num_headers(&self) -> Result<(usize, usize), LMDBCacheError> {
+        let num_headers_in_memory = self.in_memory.get_num_headers();
+        if self.on_disk.is_none() {
+            return Ok((0, num_headers_in_memory));
+        }
+
+        let cache = self.on_disk.as_ref().unwrap();
+        let num_headers_on_disk = log_err!(
+            cache.run_ro_txn(|tx| cache.tx_get_num_headers(tx)),
+            cache.log,
+            "get_num_headers"
+        )?;
+
+        Ok((num_headers_on_disk, num_headers_in_memory))
     }
 
     /// Get a header by hash.

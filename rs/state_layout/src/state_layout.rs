@@ -709,10 +709,9 @@ impl StateLayout {
     }
 
     /// Returns scratchpad used during statesync
-    pub fn state_sync_scratchpad(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        Ok(self
-            .tmp()
-            .join(format!("state_sync_scratchpad_{:016x}", height.get())))
+    pub fn state_sync_scratchpad(&self, height: Height) -> PathBuf {
+        self.tmp()
+            .join(format!("state_sync_scratchpad_{:016x}", height.get()))
     }
 
     /// Returns the path to cache an unfinished statesync at `height`
