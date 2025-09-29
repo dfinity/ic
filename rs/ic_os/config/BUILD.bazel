@@ -127,12 +127,3 @@ rust_test(
     crate_features = ["dev"],
     deps = TEST_DEPENDENCIES,
 )
-
-rust_test(
-    name = "config_test_prod",
-    compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
-    ],
-    crate = ":config",
-    deps = TEST_DEPENDENCIES,
-)
