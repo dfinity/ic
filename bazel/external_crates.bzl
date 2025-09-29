@@ -1202,6 +1202,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "ring",
                     "std",
                     "brotli",
+                    "tls12",
                 ],
             ),
             "rustls-pemfile": crate.spec(
@@ -1488,6 +1489,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "tower-http": crate.spec(
                 version = "^0.6.4",
                 features = [
+                    "add-extension",
                     "cors",
                     "limit",
                     "trace",

@@ -77,6 +77,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { workspace = true }
 ic-utils-thread = { path = "../utils/thread" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
+icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 libc = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
