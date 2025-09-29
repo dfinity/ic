@@ -49,7 +49,7 @@ pub fn seed_rng(env: &StateMachine, canister: CanisterId, seed: u64) {
 }
 
 #[test]
-fn chrigi() {
+fn split_test() {
     use crate::common::install_canister;
     use canister_test::Project;
 
