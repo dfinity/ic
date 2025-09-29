@@ -1520,6 +1520,7 @@ fn handle_compute_manifest_request(
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
 
+    let timer = request_timer(metrics, "observe_build_file_group_chunks");
     let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
     metrics
         .manifest_metrics
@@ -1541,8 +1542,13 @@ fn handle_compute_manifest_request(
             .chunk_id_usage_nearing_limits_critical
             .inc();
     }
+    drop(timer);
 
+    let timer = request_timer(metrics, "observe_duplicated_chunks");
     crate::manifest::observe_duplicated_chunks(&manifest, &metrics.manifest_metrics);
+    drop(timer);
+
+    let timer = request_timer(metrics, "observe_file_sizes");
     if let Some(manifest_delta) = &manifest_delta {
         crate::manifest::observe_file_sizes(
             &manifest,
@@ -1550,6 +1556,7 @@ fn handle_compute_manifest_request(
             &metrics.manifest_metrics,
         );
     }
+    drop(timer);
 
     if !manifest_is_incremental {
         *rehash_divergence = false;
