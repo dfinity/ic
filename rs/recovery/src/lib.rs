@@ -889,6 +889,8 @@ impl Recovery {
         &self,
         download_node: IpAddr,
         original_nns_id: SubnetId,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
     ) -> impl Step + use<> {
         DownloadRegistryStoreStep {
             logger: self.logger.clone(),
@@ -896,7 +898,8 @@ impl Recovery {
             original_nns_id,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.admin_key_file.clone(),
+            ssh_user,
+            key_file,
         }
     }
 

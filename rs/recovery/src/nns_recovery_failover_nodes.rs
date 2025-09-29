@@ -306,6 +306,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     Ok(Box::new(self.recovery.get_download_registry_store_step(
                         ip,
                         self.params.subnet_id,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)

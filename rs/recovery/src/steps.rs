@@ -1157,6 +1157,7 @@ pub struct DownloadRegistryStoreStep {
     pub original_nns_id: SubnetId,
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
+    pub ssh_user: SshUser,
     pub key_file: Option<PathBuf>,
 }
 
@@ -1171,10 +1172,9 @@ impl Step for DownloadRegistryStoreStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let account = SshUser::Admin.to_string();
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            account,
+            self.ssh_user.to_string(),
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -1208,7 +1208,7 @@ impl Step for DownloadRegistryStoreStep {
 
         let data_src = format!(
             "{}@[{}]:{}/{}",
-            ssh_helper.account, self.node_ip, IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE
+            self.ssh_user, self.node_ip, IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE
         );
 
         rsync(
