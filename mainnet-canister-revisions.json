@@ -100,16 +100,16 @@
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
   "nns_dapp_test": {
-    "sha256": "5373ffeea060282cac73f34d3b12d64b52989b3a8bc261a6286c4043d76fca10",
-    "tag": "proposal-138593"
+    "sha256": "c756d558f75ed039837e0c9d7d660d0ea5676acca085cd89e48a05cc3714bf2f",
+    "tag": "proposal-138714"
   },
   "node-rewards": {
     "rev": "ca959ab71539b277af5f9880e6a4c5779e135cad",
     "sha256": "095d056ef137d3a9b6c387756de2e9701c81dda43bfac94b2be628c8ebe43baa"
   },
   "registry": {
-    "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",
-    "sha256": "c878860a0b3c9026e0b47af4a159c3fb05e66894db96d582daa7ff6bb7dc5027"
+    "rev": "62b938b04d78fabc2bcef6404e2c40c06b88addd",
+    "sha256": "bc058c77bd2a8b3776c18a01faae529a90922b402a9641188cba0d6d5212638e"
   },
   "root": {
     "rev": "2407385056dbcd1d5eb15b84a9c0cd5f511ff997",
