@@ -39,7 +39,7 @@ jobs:
         name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch }}
 
   ci-main:
     name: CI Main
