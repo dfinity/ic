@@ -31,13 +31,14 @@ pub(crate) fn fetch_canister_logs(
         args.filter_by_idx,
         args.filter_by_timestamp_nanos,
     ) {
-        // Filtering enabled, filter present — apply it.
+        // Filtering enabled, both filters present — error.
         (FlagStatus::Enabled, Some(_), Some(_)) => {
             return Err(UserError::new(
                 ErrorCode::CanisterContractViolation,
                 "Only one of filters can be set".to_string(),
             ));
         }
+        // Filtering enabled, filter present — apply it.
         (FlagStatus::Enabled, Some(IndexRange { start, end }), None) => {
             if start > end {
                 Vec::new()
@@ -60,6 +61,7 @@ pub(crate) fn fetch_canister_logs(
                     .collect()
             }
         }
+        // No filtering or filtering disabled — return all records.
         (FlagStatus::Enabled, None, None) | (FlagStatus::Disabled, _, _) => {
             records.iter().cloned().collect()
         }
