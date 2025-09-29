@@ -1,8 +1,7 @@
-use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
-use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    neuron::{DissolveStateAndAge, NeuronBuilder},
+    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{
@@ -44,9 +43,7 @@ fn test_list_neurons_with_paging() {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     let mut request = ListNeurons {
@@ -140,9 +137,7 @@ fn test_list_neurons_by_subaccounts_and_ids() {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     let request = ListNeurons {

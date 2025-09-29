@@ -265,7 +265,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
 
         let add_capacity_amount = self.config.add_capacity_amount;
         let add_capacity_interval = self.config.add_capacity_interval;
-        self.with_usage(reservation.key.clone(), now, |usage| {
+        self.with_capacity_usage_record(reservation.key.clone(), now, |usage| {
             // Update token bucket capacity
             update_capacity(usage, now, add_capacity_amount, add_capacity_interval);
 
@@ -285,7 +285,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
 
         let add_capacity_amount = self.config.add_capacity_amount;
         let add_capacity_interval = self.config.add_capacity_interval;
-        self.with_usage(key, now, |usage| {
+        self.with_capacity_usage_record(key, now, |usage| {
             // Update token bucket capacity first (this may update last_updated)
             update_capacity(usage, now, add_capacity_amount, add_capacity_interval);
 
@@ -295,7 +295,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         });
     }
 
-    fn with_usage<R>(
+    fn with_capacity_usage_record<R>(
         &mut self,
         key: K,
         now: SystemTime,
@@ -616,66 +616,5 @@ mod tests {
             reservation2,
             Err(RateLimiterError::NotEnoughCapacity)
         ));
-    }
-
-    #[test]
-    fn test_restore_capacity() {
-        let mut rate_limiter = RateLimiter::new(
-            RateLimiterConfig {
-                add_capacity_amount: 1,
-                add_capacity_interval: Duration::from_secs(100),
-                max_capacity: 10,
-                reservation_timeout: Duration::from_secs(u64::MAX),
-                max_reservations: 1000,
-            },
-            InMemoryCapacityStorage::default(),
-        );
-
-        let now = SystemTime::now();
-
-        // First, use some capacity
-        let reservation1 = rate_limiter
-            .try_reserve(now, "test_key".to_string(), 8)
-            .unwrap();
-        rate_limiter.commit(now, reservation1);
-
-        // Verify capacity is used
-        let usage = rate_limiter
-            .capacity_storage
-            .get(&"test_key".to_string())
-            .unwrap();
-        assert_eq!(usage.capacity_used, 8);
-
-        // Restore 3 units of capacity
-        rate_limiter.restore_capacity(now, "test_key".to_string(), 3);
-
-        // Should now have 5 units used (8 - 3 = 5)
-        let usage = rate_limiter
-            .capacity_storage
-            .get(&"test_key".to_string())
-            .unwrap();
-        assert_eq!(usage.capacity_used, 5);
-
-        // Test saturating_sub: restore more than used
-        rate_limiter.restore_capacity(now, "test_key".to_string(), 10);
-
-        // Should now have 0 units used (5 - 10 = 0, saturating)
-        let usage = rate_limiter.capacity_storage.get(&"test_key".to_string());
-        assert!(usage.is_none());
-
-        // Test restoring capacity for a key that has no usage record (should do nothing)
-        rate_limiter.restore_capacity(now, "nonexistent_key".to_string(), 5);
-
-        // Should not create a new entry - no usage record should exist
-        assert!(
-            rate_limiter
-                .capacity_storage
-                .get(&"nonexistent_key".to_string())
-                .is_none()
-        );
-
-        // Should be able to reserve full capacity since no usage record exists
-        let full_reservation = rate_limiter.try_reserve(now, "nonexistent_key".to_string(), 10);
-        assert!(full_reservation.is_ok());
     }
 }

@@ -1,17 +1,17 @@
-use crate::governance::{Governance, LOG_PREFIX};
-use crate::neuron_store::NeuronStore;
-use crate::pb::v1::RewardsDistributionInProgress;
-use crate::storage::with_rewards_distribution_state_machine_mut;
 #[cfg(not(feature = "canbench-rs"))]
 use crate::timer_tasks::run_distribute_rewards_periodic_task;
+use crate::{
+    governance::{Governance, LOG_PREFIX},
+    neuron_store::NeuronStore,
+    pb::v1::RewardsDistributionInProgress,
+    storage::with_rewards_distribution_state_machine_mut,
+};
 use ic_cdk::println;
 use ic_nervous_system_long_message::is_message_over_threshold;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{StableBTreeMap, Storable};
+use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use prost::Message;
-use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap};
 
 const BILLION: u64 = 1_000_000_000;
 const DISTRIBUTION_MESSAGE_LIMIT: u64 = BILLION;
@@ -230,11 +230,13 @@ impl From<RewardsDistributionInProgress> for RewardsDistribution {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::governance::Governance;
-    use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
-    use crate::pb::v1::VotingPowerEconomics;
-    use crate::test_utils::{
-        MockEnvironment, MockRandomness, StubCMC, StubIcpLedger, test_subaccount_for_neuron_id,
+    use crate::{
+        governance::Governance,
+        neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+        pb::v1::VotingPowerEconomics,
+        test_utils::{
+            MockEnvironment, MockRandomness, StubCMC, StubIcpLedger, test_subaccount_for_neuron_id,
+        },
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
@@ -406,13 +408,13 @@ mod test {
 
         for i in 1..=5 {
             governance
-                .add_neuron(i, make_neuron(i, 1000, 1000), false)
+                .add_neuron(i, make_neuron(i, 1000, 1000))
                 .unwrap();
         }
         for i in 6..=10 {
             let mut neuron = make_neuron(i, 1000, 1000);
             neuron.auto_stake_maturity = Some(true);
-            governance.add_neuron(i, neuron, false).unwrap();
+            governance.add_neuron(i, neuron).unwrap();
         }
 
         let mut distribution = RewardsDistribution::new();

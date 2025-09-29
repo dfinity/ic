@@ -1,20 +1,17 @@
-use crate::benches_util::check_projected_instructions;
-use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
-use crate::pb::v1::{Motion, VotingPowerEconomics};
-use crate::test_utils::MockRandomness;
 use crate::{
+    benches_util::check_projected_instructions,
     governance::{
-        Governance, MAX_NUMBER_OF_NEURONS,
+        Governance, MAX_NUMBER_OF_NEURONS, REWARD_DISTRIBUTION_PERIOD_SECONDS,
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{
         Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
-        KnownNeuron, ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
-        install_code::CanisterInstallMode, proposal::Action,
+        KnownNeuron, ListProposalInfo, Motion, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        VotingPowerEconomics, install_code::CanisterInstallMode, proposal::Action,
     },
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
 use canbench_rs::{BenchResult, bench, bench_fn};
 use futures::FutureExt;
@@ -32,8 +29,7 @@ use icp_ledger::Subaccount;
 use maplit::{btreemap, hashmap};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 enum SetUpStrategy {
     // Every neuron follows a single neuron.
@@ -459,7 +455,6 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 ),
-                false,
             )
             .unwrap();
     }
@@ -552,9 +547,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     bench_fn(|| {
@@ -580,7 +573,7 @@ fn list_neurons() -> BenchResult {
             hashmap! {}, // get the default followees
         );
         neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
-        governance.add_neuron(id, neuron, false).unwrap();
+        governance.add_neuron(id, neuron).unwrap();
     }
 
     let request = api::ListNeurons {
@@ -630,9 +623,7 @@ fn list_neurons_by_subaccount() -> BenchResult {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     let request = api::ListNeurons {
@@ -685,7 +676,6 @@ fn list_proposals_benchmark() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 ),
-                false,
             )
             .unwrap();
     }

@@ -4,7 +4,7 @@ use crate::temporarily_enable_known_neuron_voting_history;
 use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
@@ -855,12 +855,11 @@ mod metrics_tests {
     use ic_nns_common::pb::v1::ProposalId;
     use std::sync::Arc;
 
-    use crate::test_utils::MockRandomness;
     use crate::{
         encode_metrics,
         governance::Governance,
         pb::v1::{Motion, Proposal, ProposalData, Tally, Topic, proposal},
-        test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+        test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
     };
 
     #[test]
@@ -1173,7 +1172,7 @@ fn test_pre_and_post_upgrade_first_time() {
         },
     )
     .build();
-    governance.add_neuron(1, neuron, false).unwrap();
+    governance.add_neuron(1, neuron).unwrap();
 
     // Simulate seeding the randomness in a running governance canister.
     governance.randomness.seed_rng([12; 32]);
@@ -1565,7 +1564,7 @@ fn test_update_neuron_errors_out_expectedly() {
     );
     let neuron = new_neuron(vec![1; 32]);
     let neuron_subaccount = neuron.subaccount();
-    governance.add_neuron(1, neuron, false).unwrap();
+    governance.add_neuron(1, neuron).unwrap();
 
     assert_eq!(
         governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default())),
@@ -1616,12 +1615,12 @@ fn test_compute_ballots_for_new_proposal() {
         Box::new(MockRandomness::new()),
     );
 
-    governance.add_neuron(10, neuron_10, false).unwrap();
+    governance.add_neuron(10, neuron_10).unwrap();
     governance
-        .add_neuron(200, new_neuron_builder(200).build(), false)
+        .add_neuron(200, new_neuron_builder(200).build())
         .unwrap();
     governance
-        .add_neuron(3_000, new_neuron_builder(3_000).build(), false)
+        .add_neuron(3_000, new_neuron_builder(3_000).build())
         .unwrap();
 
     let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
