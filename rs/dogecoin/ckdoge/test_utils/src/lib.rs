@@ -25,7 +25,6 @@ pub struct Setup {
     ledger: CanisterId,
 }
 
-
 impl Setup {
     pub fn new() -> Self {
         let env = Arc::new(

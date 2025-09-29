@@ -15,10 +15,10 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//packages/pocket-ic",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/ledger_suite/icrc1/ledger",
+        "//packages/pocket-ic",
         "//rs/dogecoin/ckdoge/minter:ckdoge_minter_lib",
+        "//rs/ledger_suite/icrc1/ledger",
         "@crate_index//:candid",
         "@crate_index//:ic-management-canister-types",
     ],
