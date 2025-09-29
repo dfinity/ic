@@ -1540,8 +1540,11 @@ fn new_rate_limiter() -> InMemoryRateLimiter<String> {
             add_capacity_interval: Duration::from_secs(MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE),
             max_capacity: MAX_NEURON_CREATION_SPIKE,
             reservation_timeout: Duration::from_secs(10 * 60),
+            // It should not be possible to have more than MAX_NEURON_CREATION_SPIKE_RESERVATIONS
+            // because there is only one reservation space being used.
+            max_reservations: MAX_NEURON_CREATION_SPIKE,
         },
-        InMemoryCapacityStorage::new(),
+        InMemoryCapacityStorage::default(),
     )
 }
 

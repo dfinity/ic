@@ -50,7 +50,7 @@ where
     capacity_usage_info: StableBTreeMap<K, (u64 /*time*/, u64 /*capacity used*/), Memory>,
 }
 
-type InMemoryCapacityStorage<K> = StableMemoryCapacityStorage<K, VectorMemory>;
+pub type InMemoryCapacityStorage<K> = StableMemoryCapacityStorage<K, VectorMemory>;
 
 impl<K: Storable + Ord + Clone> Default for InMemoryCapacityStorage<K> {
     fn default() -> Self {
@@ -133,16 +133,25 @@ struct ReservationData {
     capacity: u64,
 }
 
+// Configureation for RateLimiter.
 pub struct RateLimiterConfig {
+    // How much capacity is restored after each add_capacity_interval.
     pub add_capacity_amount: u64,
+    // How frequently capacity is restored after usage.
     pub add_capacity_interval: Duration,
+    // Max capacity per item being rate limited.  If there are many items
+    // then each would have its own limit, but they would all be max_capacity.
     pub max_capacity: u64,
+    // How long a reservation can be held for.
     pub reservation_timeout: Duration,
+    // Max reservations across entire space
+    pub max_reservations: u64,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum RateLimiterError {
     NotEnoughCapacity,
+    InvalidArguments(String),
 }
 
 impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
@@ -178,6 +187,13 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
         key: K,
         requested_capacity: u64,
     ) -> Result<Reservation<K>, RateLimiterError> {
+        // validate
+        if requested_capacity < 1 {
+            return Err(RateLimiterError::InvalidArguments(
+                "To make a rate-limit reservation, requested_capacity must be at least 1"
+                    .to_string(),
+            ));
+        }
         // Clean up expired reservations first
         self.cleanup_expired_reservations(&key, now);
 
@@ -342,11 +358,21 @@ mod tests {
                 add_capacity_interval: Duration::from_secs(10),
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(u64::MAX),
+                max_reservations: 1000,
             },
             InMemoryCapacityStorage::default(),
         );
 
         let now = SystemTime::now();
+
+        let invalid_amount = rate_limiter.try_reserve(now, "Foo".to_string(), 0);
+        assert_eq!(
+            invalid_amount,
+            Err(RateLimiterError::InvalidArguments(
+                "To make a rate-limit reservation, requested_capacity must be at least 1"
+                    .to_string(),
+            ))
+        );
 
         let too_much = rate_limiter.try_reserve(now, "Foo".to_string(), 11);
         assert!(matches!(too_much, Err(RateLimiterError::NotEnoughCapacity)));
@@ -400,6 +426,7 @@ mod tests {
                 add_capacity_interval: Duration::from_secs(10),
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(u64::MAX),
+                max_reservations: 1000,
             },
             InMemoryCapacityStorage::default(),
         );
@@ -456,6 +483,7 @@ mod tests {
                 add_capacity_interval: Duration::from_secs(100),
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(5), // 5 second timeout
+                max_reservations: 1000,
             },
             InMemoryCapacityStorage::default(),
         );
@@ -517,6 +545,7 @@ mod tests {
                 add_capacity_interval: Duration::from_secs(100),
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(u64::MAX),
+                max_reservations: 1000,
             },
             capacity_storage,
         );
@@ -556,6 +585,7 @@ mod tests {
                 add_capacity_interval: Duration::from_secs(100),
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(u64::MAX),
+                max_reservations: 1000,
             },
             InMemoryCapacityStorage::default(),
         );
