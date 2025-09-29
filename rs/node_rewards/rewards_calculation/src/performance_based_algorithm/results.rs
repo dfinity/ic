@@ -69,7 +69,6 @@ pub struct DailyResults {
     pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
 
-#[derive(Serialize, Deserialize)]
 pub struct RewardsCalculatorResults {
     pub total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64>,
     pub daily_results: BTreeMap<NaiveDate, DailyResults>,

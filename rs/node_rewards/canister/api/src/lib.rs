@@ -11,13 +11,13 @@ use std::fmt::Display;
 #[derive(
     PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, Debug,
 )]
-pub struct DayUtc {
+pub struct DateUtc {
     pub day: Option<u32>,
     pub month: Option<u32>,
     pub year: Option<u32>,
 }
 
-impl Display for DayUtc {
+impl Display for DateUtc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -29,7 +29,7 @@ impl Display for DayUtc {
     }
 }
 
-impl From<NaiveDate> for DayUtc {
+impl From<NaiveDate> for DateUtc {
     fn from(value: NaiveDate) -> Self {
         Self {
             day: Some(value.day()),
@@ -39,10 +39,10 @@ impl From<NaiveDate> for DayUtc {
     }
 }
 
-impl TryFrom<DayUtc> for NaiveDate {
+impl TryFrom<DateUtc> for NaiveDate {
     type Error = String;
 
-    fn try_from(value: DayUtc) -> Result<Self, Self::Error> {
+    fn try_from(value: DateUtc) -> Result<Self, Self::Error> {
         NaiveDate::from_ymd_opt(
             value.year.expect("Year is missing") as i32,
             value.month.expect("Month is missing"),
@@ -52,15 +52,15 @@ impl TryFrom<DayUtc> for NaiveDate {
     }
 }
 
-impl DayUtc {
+impl DateUtc {
     pub fn from_unix_timestamp_nanoseconds(value: u64) -> Self {
         let naive_date = DateTime::from_timestamp_nanos(value as i64).date_naive();
-        DayUtc::from(naive_date)
+        DateUtc::from(naive_date)
     }
     pub fn from_unix_timestamp_seconds(value: u64) -> Self {
         let naive_date = DateTime::from_timestamp(value as i64, 0)
             .unwrap()
             .date_naive();
-        DayUtc::from(naive_date)
+        DateUtc::from(naive_date)
     }
 }
