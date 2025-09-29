@@ -333,6 +333,7 @@ system_test_nns(
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/recovery",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",

@@ -23301,6 +23301,7 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-base-types",
+ "ic-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
