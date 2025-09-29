@@ -19,25 +19,14 @@ pub struct CapacityUsageRecord {
 
 /// Trait for storing and retrieving capacity usage records.
 /// This allows different storage backends (in-memory, persistent, etc.)
-pub trait CapacityStorage<K> {
+pub trait CapacityUsageRecordStorage<K> {
     /// Get usage record for a key
-    fn get_usage(&self, key: &K) -> Option<CapacityUsageRecord>;
+    fn get(&self, key: &K) -> Option<CapacityUsageRecord>;
 
     /// Insert or update usage record for a key  
-    fn upsert_usage(&mut self, key: K, record: CapacityUsageRecord);
+    fn upsert(&mut self, key: K, record: CapacityUsageRecord);
 
-    /// Atomic update operation
-    fn with_usage<R>(
-        &mut self,
-        key: K,
-        default: CapacityUsageRecord,
-        f: impl FnOnce(&mut CapacityUsageRecord) -> R,
-    ) -> R {
-        let mut usage = self.get_usage(&key).unwrap_or(default);
-        let result = f(&mut usage);
-        self.upsert_usage(key, usage);
-        result
-    }
+    fn remove(&mut self, key: &K) -> Option<CapacityUsageRecord>;
 }
 
 /// Persistent capacity storage implementation using StableBTreeMap.
@@ -70,26 +59,22 @@ where
     }
 }
 
-impl<K, Memory> CapacityStorage<K> for StableMemoryCapacityStorage<K, Memory>
-where
-    K: Ord + Clone + Storable,
-    Memory: ic_stable_structures::Memory,
-{
-    fn get_usage(&self, key: &K) -> Option<CapacityUsageRecord> {
-        self.capacity_usage_info
-            .get(key)
-            .map(|(last_drip_nanoseconds, capacity_used)| {
-                let last_capacity_drip =
-                    SystemTime::UNIX_EPOCH + Duration::from_nanos(last_drip_nanoseconds);
-                CapacityUsageRecord {
-                    last_capacity_drip,
-                    capacity_used,
-                }
-            })
-    }
+impl From<(u64, u64)> for CapacityUsageRecord {
+    fn from(value: (u64, u64)) -> Self {
+        let (last_drip_nanoseconds, capacity_used) = value;
 
-    fn upsert_usage(&mut self, key: K, record: CapacityUsageRecord) {
-        let last_capacity_drip = record
+        let last_capacity_drip =
+            SystemTime::UNIX_EPOCH + Duration::from_nanos(last_drip_nanoseconds);
+        CapacityUsageRecord {
+            last_capacity_drip,
+            capacity_used,
+        }
+    }
+}
+
+impl From<CapacityUsageRecord> for (u64, u64) {
+    fn from(value: CapacityUsageRecord) -> Self {
+        let last_capacity_drip = value
             .last_capacity_drip
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
@@ -97,20 +82,30 @@ where
             .try_into()
             .expect("Nanos from Unix Epoch should be under u64::MAX for hundreds of years...");
 
+        (last_capacity_drip, value.capacity_used)
+    }
+}
+
+impl<K, Memory> CapacityUsageRecordStorage<K> for StableMemoryCapacityStorage<K, Memory>
+where
+    K: Ord + Clone + Storable,
+    Memory: ic_stable_structures::Memory,
+{
+    fn get(&self, key: &K) -> Option<CapacityUsageRecord> {
         self.capacity_usage_info
-            .insert(key, (last_capacity_drip, record.capacity_used));
+            .get(key)
+            .map(CapacityUsageRecord::from)
     }
 
-    fn with_usage<R>(
-        &mut self,
-        key: K,
-        default: CapacityUsageRecord,
-        f: impl FnOnce(&mut CapacityUsageRecord) -> R,
-    ) -> R {
-        let mut usage = self.get_usage(&key).unwrap_or(default);
-        let result = f(&mut usage);
-        self.upsert_usage(key, usage);
-        result
+    fn upsert(&mut self, key: K, record: CapacityUsageRecord) {
+        self.capacity_usage_info
+            .insert(key, <(u64, u64)>::from(record));
+    }
+
+    fn remove(&mut self, key: &K) -> Option<CapacityUsageRecord> {
+        self.capacity_usage_info
+            .remove(key)
+            .map(CapacityUsageRecord::from)
     }
 }
 
@@ -155,7 +150,7 @@ pub enum RateLimiterError {
     MaxReservationsReached,
 }
 
-impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
+impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S> {
     pub fn new(config: RateLimiterConfig, capacity_storage: S) -> Self {
         Self {
             config,
@@ -217,7 +212,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
             .sum();
 
         // Update token bucket capacity and get current committed usage
-        let committed_capacity = if let Some(usage_record) = self.capacity_storage.get_usage(&key) {
+        let committed_capacity = if let Some(usage_record) = self.capacity_storage.get(&key) {
             let mut usage = usage_record;
             update_capacity(
                 &mut usage,
@@ -226,8 +221,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
                 self.config.add_capacity_interval,
             );
             // Update the storage with the modified usage
-            self.capacity_storage
-                .upsert_usage(key.clone(), usage.clone());
+            self.capacity_storage.upsert(key.clone(), usage.clone());
             usage.capacity_used
         } else {
             0
@@ -257,60 +251,70 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
     }
 
     pub fn commit(&mut self, now: SystemTime, reservation: Reservation<K>) {
-        let default_usage = CapacityUsageRecord {
-            last_capacity_drip: now,
-            capacity_used: 0,
+        let reservation_data = if let Ok(mut reservations) = self.reservations.lock() {
+            if let Some(reservation_data) =
+                reservations.remove(&(reservation.key.clone(), reservation.index))
+            {
+                reservation_data
+            } else {
+                return;
+            }
+        } else {
+            return;
         };
 
-        self.capacity_storage
-            .with_usage(reservation.key.clone(), default_usage, |usage| {
-                // Update token bucket capacity
-                update_capacity(
-                    usage,
-                    now,
-                    self.config.add_capacity_amount,
-                    self.config.add_capacity_interval,
-                );
+        let add_capacity_amount = self.config.add_capacity_amount;
+        let add_capacity_interval = self.config.add_capacity_interval;
+        self.with_usage(reservation.key.clone(), now, |usage| {
+            // Update token bucket capacity
+            update_capacity(usage, now, add_capacity_amount, add_capacity_interval);
 
-                // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
-                // How do we handle that?
-                if let Ok(mut reservations) = self.reservations.lock() {
-                    if let Some(reservation_data) =
-                        reservations.remove(&(reservation.key.clone(), reservation.index))
-                    {
-                        usage.capacity_used = usage
-                            .capacity_used
-                            .saturating_add(reservation_data.capacity);
-                    }
-                }
-            });
+            // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
+            // How do we handle that?
+            usage.capacity_used = usage
+                .capacity_used
+                .saturating_add(reservation_data.capacity);
+        });
     }
 
     pub fn restore_capacity(&mut self, now: SystemTime, key: K, capacity_to_restore: u64) {
         // If there's no usage record, do nothing (already at max capacity)
-        if self.capacity_storage.get_usage(&key).is_none() {
+        if self.capacity_storage.get(&key).is_none() {
             return;
         }
 
-        let default_usage = CapacityUsageRecord {
-            last_capacity_drip: now,
-            capacity_used: 0,
-        };
+        let add_capacity_amount = self.config.add_capacity_amount;
+        let add_capacity_interval = self.config.add_capacity_interval;
+        self.with_usage(key, now, |usage| {
+            // Update token bucket capacity first (this may update last_updated)
+            update_capacity(usage, now, add_capacity_amount, add_capacity_interval);
 
-        self.capacity_storage
-            .with_usage(key, default_usage, |usage| {
-                // Update token bucket capacity first (this may update last_updated)
-                update_capacity(
-                    usage,
-                    now,
-                    self.config.add_capacity_amount,
-                    self.config.add_capacity_interval,
-                );
+            // Restore capacity (subtract from used capacity, cannot go below 0)
+            // Don't update last_updated - let the natural token bucket drip continue
+            usage.capacity_used = usage.capacity_used.saturating_sub(capacity_to_restore);
+        });
+    }
 
-                // Restore capacity (subtract from used capacity, cannot go below 0)
-                // Don't update last_updated - let the natural token bucket drip continue
-                usage.capacity_used = usage.capacity_used.saturating_sub(capacity_to_restore);
+    fn with_usage<R>(
+        &mut self,
+        key: K,
+        now: SystemTime,
+        f: impl FnOnce(&mut CapacityUsageRecord) -> R,
+    ) -> R {
+        let mut usage = self
+            .capacity_storage
+            .get(&key)
+            .unwrap_or_else(|| CapacityUsageRecord {
+                last_capacity_drip: now,
+                capacity_used: 0,
             });
+        let result = f(&mut usage);
+        if usage.capacity_used > 0 {
+            self.capacity_storage.upsert(key, usage);
+        } else {
+            self.capacity_storage.remove(&key);
+        }
+        result
     }
 }
 
@@ -557,13 +561,12 @@ mod tests {
         rate_limiter.commit(later, reservation1);
         rate_limiter.commit(later, reservation2);
         assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
-        assert_eq!(
+        // Capacity record should be cleaned up when it's empty.
+        assert!(
             rate_limiter
                 .capacity_storage
-                .get_usage(&"Foo".to_string())
-                .unwrap()
-                .capacity_used,
-            0
+                .get(&"Foo".to_string())
+                .is_none()
         );
     }
 
@@ -602,9 +605,7 @@ mod tests {
         rate_limiter.commit(now, reservation1);
 
         // Verify the usage is stored
-        let usage = rate_limiter
-            .capacity_storage
-            .get_usage(&"stable_key".to_string());
+        let usage = rate_limiter.capacity_storage.get(&"stable_key".to_string());
         assert!(usage.is_some());
         assert_eq!(usage.unwrap().capacity_used, 5);
 
@@ -640,7 +641,7 @@ mod tests {
         // Verify capacity is used
         let usage = rate_limiter
             .capacity_storage
-            .get_usage(&"test_key".to_string())
+            .get(&"test_key".to_string())
             .unwrap();
         assert_eq!(usage.capacity_used, 8);
 
@@ -650,7 +651,7 @@ mod tests {
         // Should now have 5 units used (8 - 3 = 5)
         let usage = rate_limiter
             .capacity_storage
-            .get_usage(&"test_key".to_string())
+            .get(&"test_key".to_string())
             .unwrap();
         assert_eq!(usage.capacity_used, 5);
 
@@ -658,11 +659,8 @@ mod tests {
         rate_limiter.restore_capacity(now, "test_key".to_string(), 10);
 
         // Should now have 0 units used (5 - 10 = 0, saturating)
-        let usage = rate_limiter
-            .capacity_storage
-            .get_usage(&"test_key".to_string())
-            .unwrap();
-        assert_eq!(usage.capacity_used, 0);
+        let usage = rate_limiter.capacity_storage.get(&"test_key".to_string());
+        assert!(usage.is_none());
 
         // Test restoring capacity for a key that has no usage record (should do nothing)
         rate_limiter.restore_capacity(now, "nonexistent_key".to_string(), 5);
@@ -671,7 +669,7 @@ mod tests {
         assert!(
             rate_limiter
                 .capacity_storage
-                .get_usage(&"nonexistent_key".to_string())
+                .get(&"nonexistent_key".to_string())
                 .is_none()
         );
 
