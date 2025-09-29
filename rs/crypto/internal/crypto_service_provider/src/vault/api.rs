@@ -6,7 +6,7 @@ use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CanisterThresholdSerializationResult, CommitmentOpening, IDkgComplaintInternal,
+    CanisterThresholdSerializationError, CommitmentOpening, IDkgComplaintInternal,
     IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
     ThresholdEcdsaSigShareInternal,
 };
@@ -928,7 +928,7 @@ impl From<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternalBytes {
 }
 
 impl TryFrom<&IDkgTranscriptOperationInternalBytes> for IDkgTranscriptOperationInternal {
-    type Error = CanisterThresholdSerializationResult;
+    type Error = CanisterThresholdSerializationError;
 
     fn try_from(
         transcript_operation_internal_bytes: &IDkgTranscriptOperationInternalBytes,
