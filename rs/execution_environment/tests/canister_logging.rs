@@ -500,8 +500,7 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
 fn run_fetch_canister_logs_with_filtering_test(
     index_range: Option<IndexRange>,
     timestamp_range: Option<TimestampNanosRange>,
-    expected_indices: Vec<u64>,
-) {
+) -> (Result<WasmResult, UserError>, Vec<SystemTime>) {
     let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
     let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
     let fetch_canister_logs_filter = FlagStatus::Enabled;
@@ -536,7 +535,13 @@ fn run_fetch_canister_logs_with_filtering_test(
                 timestamp_range,
             )
         }
-        _ => panic!("Only one of filters can be set"),
+        (None, None) => FetchCanisterLogsRequest::new(canister_a),
+        (Some(index_range), Some(timestamp_range)) => FetchCanisterLogsRequest {
+            canister_id: canister_a.into(),
+            filter_by_idx: Some(index_range),
+            filter_by_timestamp_nanos: Some(timestamp_range),
+            ..Default::default()
+        },
     };
     let result = env.query_as(
         user,
@@ -544,33 +549,60 @@ fn run_fetch_canister_logs_with_filtering_test(
         "fetch_canister_logs",
         method_payload.encode(),
     );
-    let expected_records = expected_indices
+
+    (result, timestamps)
+}
+
+#[test]
+fn test_fetch_canister_logs_with_filtering_without_any_filters() {
+    let expected_indices = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(None, None);
+    let expected = expected_indices
         .iter()
         .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
         .collect::<Vec<_>>();
-    assert_eq!(readable_logs_without_backtraces(result), expected_records);
+    assert_eq!(readable_logs_without_backtraces(result), expected);
 }
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_by_idx() {
-    run_fetch_canister_logs_with_filtering_test(
-        Some(IndexRange { start: 3, end: 5 }),
-        None,
-        vec![3, 4, 5],
-    );
+    let expected_indices = vec![3, 4, 5];
+    let (result, timestamps) =
+        run_fetch_canister_logs_with_filtering_test(Some(IndexRange { start: 3, end: 5 }), None);
+    let expected = expected_indices
+        .iter()
+        .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
+        .collect::<Vec<_>>();
+    assert_eq!(readable_logs_without_backtraces(result), expected);
 }
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_by_timestamp() {
+    let expected_indices = vec![2, 3];
     let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
-    run_fetch_canister_logs_with_filtering_test(
+    let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(
         None,
         Some(TimestampNanosRange {
             start: sec_and_nanosec(1620328633, 2),
             end: sec_and_nanosec(1620328634, 2),
         }),
-        vec![2, 3],
     );
+    let expected = expected_indices
+        .iter()
+        .map(|&i| (i as u64, timestamps[i as usize], "message".to_string()))
+        .collect::<Vec<_>>();
+    assert_eq!(readable_logs_without_backtraces(result), expected);
+}
+
+#[test]
+fn test_fetch_canister_logs_with_filtering_fails_with_more_than_one_filters_enabled() {
+    let (result, _timestamps) = run_fetch_canister_logs_with_filtering_test(
+        Some(IndexRange { start: 0, end: 1 }),
+        Some(TimestampNanosRange { start: 2, end: 3 }),
+    );
+    let err = result.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(err.description(), "Only one of filters can be set");
 }
 
 #[test]
