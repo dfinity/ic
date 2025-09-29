@@ -301,18 +301,19 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         now: SystemTime,
         f: impl FnOnce(&mut CapacityUsageRecord) -> R,
     ) -> R {
+        // Get mutable record
         let mut usage = self
             .capacity_storage
-            .get(&key)
+            .remove(&key)
             .unwrap_or_else(|| CapacityUsageRecord {
                 last_capacity_drip: now,
                 capacity_used: 0,
             });
+
         let result = f(&mut usage);
+        // We only insert the record if there's something in it.
         if usage.capacity_used > 0 {
             self.capacity_storage.upsert(key, usage);
-        } else {
-            self.capacity_storage.remove(&key);
         }
         result
     }
