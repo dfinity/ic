@@ -85,6 +85,31 @@ jobs:
           cd "${GITHUB_WORKSPACE}"/bin/fuzzing/
           ./build-all-fuzzers.sh --zip
 
+  cargo-clippy-linux:
+    name: Cargo Clippy Linux
+    runs-on: *dind-small-setup
+    container: *container-setup
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - name: Filter Rust Files [*.{rs,toml,lock}]
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            cargo:
+              - "**/*.rs"
+              - "**/*.toml"
+              - "**/*.lock"
+      - name: Run Cargo Clippy Linux
+        id: cargo-clippy-linux
+        if: steps.filter.outputs.cargo == 'true'
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          export CARGO_TERM_COLOR=always # ensure output has colors
+          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+
   lock-generate:
     name: Lock Generate
     runs-on: *dind-small-setup

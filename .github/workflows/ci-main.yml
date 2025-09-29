@@ -681,38 +681,6 @@ jobs:
           run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  cargo-clippy-linux:
-    name: Cargo Clippy Linux
-    runs-on: *dind-small-setup
-    container: *container-setup
-    timeout-minutes: 30
-    steps:
-      - *checkout
-      - name: Filter Rust Files [*.{rs,toml,lock}]
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        if: |
-          github.event_name == 'pull_request' ||
-          github.event_name == 'merge_group'
-        with:
-          filters: |
-            cargo:
-              - "**/*.rs"
-              - "**/*.toml"
-              - "**/*.lock"
-      - name: Run Cargo Clippy Linux
-        id: cargo-clippy-linux
-        if: |
-          steps.filter.outputs.cargo == 'true' ||
-          github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'workflow_call'
-        shell: bash
-        run: |
-          set -eExuo pipefail
-          export CARGO_TERM_COLOR=always # ensure output has colors
-          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
-
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on: *dind-small-setup
