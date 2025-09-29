@@ -88,7 +88,9 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
-use ic_nervous_system_rate_limits::{InMemoryCapacityStorage, InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError};
+use ic_nervous_system_rate_limits::{
+    InMemoryCapacityStorage, InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError,
+};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
@@ -305,20 +307,15 @@ impl From<RateLimiterError> for GovernanceError {
         let message = match value {
             RateLimiterError::NotEnoughCapacity => {
                 "Reached maximum number of neurons that can be created in this hour. \
-                    Please wait and try again later.",
+                    Please wait and try again later."
             }
-            RateLimiterError::InvalidArguments(e) => {
-              "Rate Limit Error: {e}"
-            },
+            RateLimiterError::InvalidArguments(e) => "Rate Limit Error: {e}",
             RateLimiterError::MaxReservationsReached => {
                 "Reached maximum number of neuron creation reservations.  This should not happen."
             }
         };
 
-        GovernanceError::new_with_message(
-            ErrorType::Unavailable,
-            message
-        )
+        GovernanceError::new_with_message(ErrorType::Unavailable, message)
     }
 }
 
@@ -2547,7 +2544,8 @@ impl Governance {
         }
 
         // Commit the usage from reservation now that we are not going to remove the neuron
-        self.rate_limiter.commit(self.env.now_system_time(), neuron_limit_reservation);
+        self.rate_limiter
+            .commit(self.env.now_system_time(), neuron_limit_reservation);
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
         let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
@@ -2614,7 +2612,6 @@ impl Governance {
             };
         })
         .expect("Expected the child neuron to exist");
-
 
         Ok(child_nid)
     }
@@ -3080,7 +3077,6 @@ impl Governance {
         caller: &PrincipalId,
         disburse_to_neuron: &manage_neuron::DisburseToNeuron,
     ) -> Result<NeuronId, GovernanceError> {
-
         let neuron_limit_reservation = self.rate_limiter.try_reserve(
             self.env.now_system_time(),
             NEURON_RATE_LIMITER_KEY.clone(),
@@ -3279,7 +3275,8 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        self.rate_limiter.commit(self.env.now_system_time(), neuron_limit_reservation);
+        self.rate_limiter
+            .commit(self.env.now_system_time(), neuron_limit_reservation);
 
         // Get the neurons again, but this time mutable references.
         self.with_neuron_mut(id, |parent_neuron| {
@@ -6140,7 +6137,6 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
-
         let neuron_limit_reservation = self.rate_limiter.try_reserve(
             self.env.now_system_time(),
             NEURON_RATE_LIMITER_KEY.clone(),
@@ -6198,7 +6194,8 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        self.rate_limiter.commit(self.env.now_system_time(), neuron_limit_reservation);
+        self.rate_limiter
+            .commit(self.env.now_system_time(), neuron_limit_reservation);
 
         let result = self.with_neuron_mut(&nid, |neuron| {
             // Adjust the stake.
