@@ -19,6 +19,7 @@ ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-limits = { path = "../limits" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }

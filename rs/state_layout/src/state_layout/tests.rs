@@ -499,7 +499,7 @@ fn test_can_remove_unverified_marker_file_twice() {
         let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
 
         let height = Height::new(1);
-        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height).unwrap();
+        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height);
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
                 .expect("failed to create checkpoint layout");

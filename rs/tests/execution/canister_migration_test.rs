@@ -68,15 +68,15 @@ pub enum ValidationError {
     SourceNotReady,
     TargetNotStopped,
     TargetHasSnapshots,
-    TargetInsufficientCycles,
+    SourceInsufficientCycles,
     CallFailed { reason: String },
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 enum MigrationStatus {
     InProgress { status: String },
-    Failed { reason: String },
-    Succeeded,
+    Failed { reason: String, time: u64 },
+    Succeeded { time: u64 },
 }
 
 /// Install a stopped canister with the migration canister as one of the controllers.
