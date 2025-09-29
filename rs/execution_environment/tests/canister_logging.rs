@@ -499,15 +499,15 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
 
 #[test]
 fn test_fetch_canister_logs_with_filtering() {
+    let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
     // Test fetch_canister_logs API call with filtering by record index and/or timestamp range.
     let test_cases = vec![
         (Some(IndexRange { start: 3, end: 5 }), None, vec![3, 4, 5]),
         (
             None,
             Some(TimestampNanosRange {
-                // Seconds_NanoSeconds
-                start: 1620328633_000000002,
-                end: 1620328634_000000002,
+                start: sec_and_nanosec(1620328633, 2),
+                end: sec_and_nanosec(1620328634, 2),
             }),
             vec![2, 3],
         ),
