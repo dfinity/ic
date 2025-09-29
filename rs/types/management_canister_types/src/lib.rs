@@ -3318,6 +3318,14 @@ pub struct IndexRange {
 
 impl Payload<'_> for IndexRange {}
 
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct TimestampNanosRange {
+    pub start: u64,
+    pub end: u64,
+}
+
+impl Payload<'_> for TimestampNanosRange {}
+
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text
 /// record {
@@ -3332,6 +3340,7 @@ impl Payload<'_> for IndexRange {}
 pub struct FetchCanisterLogsRequest {
     pub canister_id: PrincipalId,
     pub filter_by_idx: Option<IndexRange>,
+    pub filter_by_timestamp_nanos: Option<TimestampNanosRange>,
 }
 
 impl Payload<'_> for FetchCanisterLogsRequest {}
@@ -3341,13 +3350,26 @@ impl FetchCanisterLogsRequest {
         Self {
             canister_id: canister_id.into(),
             filter_by_idx: None,
+            filter_by_timestamp_nanos: None,
         }
     }
 
-    pub fn new_with_filter(canister_id: CanisterId, filter: IndexRange) -> Self {
+    pub fn new_with_filter_by_index(canister_id: CanisterId, filter: IndexRange) -> Self {
         Self {
             canister_id: canister_id.into(),
             filter_by_idx: Some(filter),
+            filter_by_timestamp_nanos: None,
+        }
+    }
+
+    pub fn new_with_filter_by_timestamp_nanos(
+        canister_id: CanisterId,
+        filter: TimestampNanosRange,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.into(),
+            filter_by_idx: None,
+            filter_by_timestamp_nanos: Some(filter),
         }
     }
 

@@ -528,7 +528,7 @@ fn test_fetch_canister_logs_with_filtering() {
         user,
         CanisterId::ic_00(),
         "fetch_canister_logs",
-        FetchCanisterLogsRequest::new_with_filter(canister_a, filter).encode(),
+        FetchCanisterLogsRequest::new_with_filter_by_index(canister_a, filter).encode(),
     );
     assert_eq!(
         readable_logs_without_backtraces(result),

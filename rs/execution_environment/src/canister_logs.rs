@@ -2,6 +2,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, IndexRange, LogVisibilityV2,
+    TimestampNanosRange,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::PrincipalId;
@@ -25,9 +26,19 @@ pub(crate) fn fetch_canister_logs(
 
     let records = canister.system_state.canister_log.records();
 
-    let canister_log_records = match (fetch_canister_logs_filter_by_idx, args.filter_by_idx) {
+    let canister_log_records = match (
+        fetch_canister_logs_filter_by_idx,
+        args.filter_by_idx,
+        args.filter_by_timestamp_nanos,
+    ) {
         // Filtering enabled, filter present — apply it.
-        (FlagStatus::Enabled, Some(IndexRange { start, end })) => {
+        (FlagStatus::Enabled, Some(_), Some(_)) => {
+            return Err(UserError::new(
+                ErrorCode::CanisterContractViolation,
+                "Only one of filters can be set".to_string(),
+            ));
+        }
+        (FlagStatus::Enabled, Some(IndexRange { start, end }), None) => {
             if start > end {
                 Vec::new()
             } else {
@@ -38,7 +49,18 @@ pub(crate) fn fetch_canister_logs(
                     .collect()
             }
         }
-        (FlagStatus::Enabled, None) | (FlagStatus::Disabled, _) => {
+        (FlagStatus::Enabled, None, Some(TimestampNanosRange { start, end })) => {
+            if start > end {
+                Vec::new()
+            } else {
+                records
+                    .iter()
+                    .filter(|r| start <= r.timestamp_nanos && r.timestamp_nanos <= end)
+                    .cloned()
+                    .collect()
+            }
+        }
+        (FlagStatus::Enabled, None, None) | (FlagStatus::Disabled, _, _) => {
             records.iter().cloned().collect()
         }
     };
