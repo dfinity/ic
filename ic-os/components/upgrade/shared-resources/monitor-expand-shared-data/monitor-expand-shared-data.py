@@ -64,7 +64,7 @@ def get_lv_size(vg_name, lv_name):
     """
     lvs_data = json.loads(
         subprocess.Popen(
-            ["lvs", "--units", "k", "-o", "lv_free", "--reportformat", "json", "{0}/{1}".format(vg_name, lv_name)],
+            ["lvs", "--units", "k", "-o", "lv_size", "--reportformat", "json", "{0}/{1}".format(vg_name, lv_name)],
             stdout=subprocess.PIPE,
         ).stdout.read()
     )
