@@ -231,6 +231,9 @@ pub struct ManifestDelta {
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
 }
 
+/// File types for which we collect size metrics.
+/// Files that don't match any of these types will be categorized as "other" as a fallback.
+/// This helps evaluate whether the current file grouping selection and threshold is optimal.
 pub(crate) const FILE_TYPES_TO_OBSERVE_SIZE: &[&str] = &[
     CANISTER_FILE,
     BIN_FILE,
