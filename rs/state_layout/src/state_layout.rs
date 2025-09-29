@@ -68,6 +68,7 @@ pub const OVERLAY: &str = "overlay";
 pub const VMEMORY_0: &str = "vmemory_0";
 pub const STABLE_MEMORY: &str = "stable_memory";
 pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
+pub const BIN_FILE: &str = "bin";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -2028,7 +2029,7 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
 impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     // The path to the base file.
     fn base(&self) -> PathBuf {
-        self.root.join(format!("{}.bin", self.name_stem))
+        self.root.join(format!("{}.{BIN_FILE}", self.name_stem))
     }
 
     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
@@ -2284,7 +2285,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
+            name_stem: WASM_CHUNK_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }

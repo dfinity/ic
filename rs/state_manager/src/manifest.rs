@@ -25,7 +25,7 @@ use ic_crypto_sha2::Sha256;
 use ic_logger::{ReplicaLogger, error, fatal, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{
-    CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
+    BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
     UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
 };
 use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
@@ -233,6 +233,7 @@ pub struct ManifestDelta {
 
 pub(crate) const FILE_TYPES_TO_OBSERVE_SIZE: &[&str] = &[
     CANISTER_FILE,
+    BIN_FILE,
     OVERLAY,
     QUEUES_FILE,
     SNAPSHOT_FILE,
@@ -253,22 +254,22 @@ pub(crate) fn observe_file_sizes(
         .collect();
 
     for file_info in new_manifest.file_table.iter() {
-        if let Some(file_type) = FILE_TYPES_TO_OBSERVE_SIZE
+        let file_type = FILE_TYPES_TO_OBSERVE_SIZE
             .iter()
             .find(|&&file_type| file_info.relative_path.ends_with(file_type))
-        {
+            .unwrap_or(&"other");
+
+        metrics
+            .file_size_bytes
+            .with_label_values(&[file_type])
+            .observe(file_info.size_bytes as f64);
+
+        // Also observe new files separately
+        if !old_file_hash_set.contains(&file_info.hash) {
             metrics
-                .file_size_bytes
+                .new_file_sizes_bytes
                 .with_label_values(&[file_type])
                 .observe(file_info.size_bytes as f64);
-
-            // Also observe new files separately
-            if !old_file_hash_set.contains(&file_info.hash) {
-                metrics
-                    .new_file_sizes_bytes
-                    .with_label_values(&[file_type])
-                    .observe(file_info.size_bytes as f64);
-            }
         }
     }
 }

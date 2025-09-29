@@ -539,8 +539,8 @@ impl ManifestMetrics {
             "state_manager_file_size_bytes",
             "File sizes in bytes by file type (canister.pbuf, overlay, queues.pbuf, snapshot.pbuf, software.wasm).",
             // 1KiB, 2KiB, 4KiB, 8KiB(current limit for grouping), 16KiB, …,
-            // 1MiB(state manager chunk size), 2MiB, 4MiB, 8MiB(p2p chunk size)
-            exponential_buckets(1024.0, 2.0, 14),
+            // 1MiB(state manager chunk size), 2MiB, …, 1GiB
+            exponential_buckets(1024.0, 2.0, 21),
             &["file_type"],
         );
 
@@ -548,13 +548,16 @@ impl ManifestMetrics {
             "state_manager_new_file_sizes_bytes",
             "File sizes in bytes for files that are new since the previous manifest, by file type.",
             // 1KiB, 2KiB, 4KiB, 8KiB(current limit for grouping), 16KiB, …,
-            // 1MiB(state manager chunk size), 2MiB, 4MiB, 8MiB(p2p chunk size)
-            exponential_buckets(1024.0, 2.0, 14),
+            // 1MiB(state manager chunk size), 2MiB, …, 1GiB
+            exponential_buckets(1024.0, 2.0, 21),
             &["file_type"],
         );
 
         // Note [Metrics preallocation]
-        for file_type in crate::manifest::FILE_TYPES_TO_OBSERVE_SIZE {
+        for file_type in crate::manifest::FILE_TYPES_TO_OBSERVE_SIZE
+            .iter()
+            .chain(std::iter::once("other"))
+        {
             file_size_bytes.with_label_values(&[*file_type]);
             new_file_sizes_bytes.with_label_values(&[*file_type]);
         }
