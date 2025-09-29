@@ -704,7 +704,7 @@ jobs:
         if: |
           steps.filter.outputs.cargo == 'true' ||
           env.BRANCH_NAME == 'master' ||
-          env.BRANCH_NAME =~ '^rc--'
+          startsWith(env.BRANCH_NAME, 'rc--')
         shell: bash
         run: |
           set -eExuo pipefail
