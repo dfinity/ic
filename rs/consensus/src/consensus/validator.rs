@@ -46,7 +46,7 @@ use ic_types::{
     state_manager::StateManagerError,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
-use rayon::ThreadPool;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},

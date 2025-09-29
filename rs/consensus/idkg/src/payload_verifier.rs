@@ -699,6 +699,7 @@ mod test {
         utils::build_thread_pool,
     };
     use assert_matches::assert_matches;
+    use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, dummy_values::dummy_dealings,
     };
@@ -797,6 +798,23 @@ mod test {
             height_100,
         );
         assert!(res.is_ok());
+
+        let real_crypto = TempCryptoComponent::builder().build_arc();
+
+        // Error because of real crypto should not verify the transcript
+        assert_matches!(
+            validate_transcript_refs(
+                real_crypto.as_ref(),
+                thread_pool.as_ref(),
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                height_100,
+            ),
+            Err(ValidationError::InvalidArtifact(
+                InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(_)
+            ))
+        );
 
         // Error because of height mismatch
         assert_matches!(
