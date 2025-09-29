@@ -614,7 +614,7 @@ impl<T: Ord + Copy> IDkgSchedule<T> {
 }
 
 /// Builds a rayon thread pool with the given number of threads.
-pub fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+pub(crate) fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
     Arc::new(
         ThreadPoolBuilder::new()
             .num_threads(num_threads)

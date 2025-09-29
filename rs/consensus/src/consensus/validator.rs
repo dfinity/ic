@@ -7,7 +7,7 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg as dkg;
-use ic_consensus_idkg::{self as idkg, MAX_IDKG_THREADS, utils::build_thread_pool};
+use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
     RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -65,6 +65,9 @@ const LOG_EVERY_N_SECONDS: i32 = 60;
 /// The time, after which we will load a CUP even if we
 /// where holding it back before, to give recomputation a chance during catch up.
 const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
+
+/// The maximum number of threads used to validate payloads in parallel.
+const MAX_VALIDATION_THREADS: usize = 8;
 
 /// Possible transient validation failures.
 #[derive(Debug)]
@@ -671,6 +674,16 @@ impl RankMap {
     }
 }
 
+/// Builds a rayon thread pool with the given number of threads.
+fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
+}
+
 /// Validator holds references to components required for artifact validation.
 /// It implements validation functions for all consensus artifacts which are
 /// called by `on_state_change` in round-robin manner.
@@ -715,7 +728,7 @@ impl Validator {
             state_manager,
             message_routing,
             dkg_pool,
-            thread_pool: build_thread_pool(MAX_IDKG_THREADS),
+            thread_pool: build_thread_pool(MAX_VALIDATION_THREADS),
             log,
             metrics,
             schedule: RoundRobin::default(),
