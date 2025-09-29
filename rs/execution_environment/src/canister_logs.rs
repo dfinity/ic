@@ -1,8 +1,10 @@
+use std::collections::VecDeque;
+
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, IndexRange, LogVisibilityV2,
-    TimestampNanosRange,
+    CanisterLogRecord, FetchCanisterLogsRequest, FetchCanisterLogsResponse, IndexRange,
+    LogVisibilityV2, TimestampNanosRange,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::PrincipalId;
@@ -25,46 +27,9 @@ pub(crate) fn fetch_canister_logs(
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
     let records = canister.system_state.canister_log.records();
-
-    let canister_log_records = match (
-        fetch_canister_logs_filter,
-        args.filter_by_idx,
-        args.filter_by_timestamp_nanos,
-    ) {
-        // Filtering enabled, both filters present — error.
-        (FlagStatus::Enabled, Some(_), Some(_)) => {
-            return Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
-                "Only one of filters can be set".to_string(),
-            ));
-        }
-        // Filtering enabled, filter present — apply it.
-        (FlagStatus::Enabled, Some(IndexRange { start, end }), None) => {
-            if start > end {
-                Vec::new()
-            } else {
-                records
-                    .iter()
-                    .filter(|r| start <= r.idx && r.idx <= end)
-                    .cloned()
-                    .collect()
-            }
-        }
-        (FlagStatus::Enabled, None, Some(TimestampNanosRange { start, end })) => {
-            if start > end {
-                Vec::new()
-            } else {
-                records
-                    .iter()
-                    .filter(|r| start <= r.timestamp_nanos && r.timestamp_nanos <= end)
-                    .cloned()
-                    .collect()
-            }
-        }
-        // No filtering or filtering disabled — return all records.
-        (FlagStatus::Enabled, None, None) | (FlagStatus::Disabled, _, _) => {
-            records.iter().cloned().collect()
-        }
+    let canister_log_records = match fetch_canister_logs_filter {
+        FlagStatus::Disabled => records.iter().cloned().collect(),
+        FlagStatus::Enabled => filter_records(&args, records)?,
     };
 
     Ok(FetchCanisterLogsResponse {
@@ -94,4 +59,44 @@ pub(crate) fn check_log_visibility_permission(
             format!("Caller {caller} is not allowed to access canister logs"),
         ))
     }
+}
+
+fn filter_records(
+    args: &FetchCanisterLogsRequest,
+    records: &VecDeque<CanisterLogRecord>,
+) -> Result<Vec<CanisterLogRecord>, UserError> {
+    match (&args.filter_by_idx, &args.filter_by_timestamp_nanos) {
+        (Some(_), Some(_)) => Err(contract_violation("Only one of filters can be set")),
+        (Some(IndexRange { start, end }), None) => {
+            validate_range(start, end, "index")?;
+            Ok(records
+                .iter()
+                .filter(|r| start <= &r.idx && &r.idx <= end)
+                .cloned()
+                .collect())
+        }
+        (None, Some(TimestampNanosRange { start, end })) => {
+            validate_range(start, end, "timestamp")?;
+            Ok(records
+                .iter()
+                .filter(|r| start <= &r.timestamp_nanos && &r.timestamp_nanos <= end)
+                .cloned()
+                .collect())
+        }
+        (None, None) => Ok(records.iter().cloned().collect()),
+    }
+}
+
+fn validate_range<T: PartialOrd>(start: &T, end: &T, range_type: &str) -> Result<(), UserError> {
+    if start > end {
+        Err(contract_violation(&format!(
+            "Invalid {range_type} range: start is greater than end"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn contract_violation(msg: &str) -> UserError {
+    UserError::new(ErrorCode::CanisterContractViolation, msg.to_string())
 }
