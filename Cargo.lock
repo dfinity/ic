@@ -7454,6 +7454,7 @@ dependencies = [
 name = "ic-ckdoge-minter"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "candid",
  "candid_parser",
@@ -7461,6 +7462,7 @@ dependencies = [
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
  "icrc-ledger-types",
+ "pocket-ic",
  "serde",
 ]
 

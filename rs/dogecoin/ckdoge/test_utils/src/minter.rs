@@ -3,7 +3,7 @@ use ic_ckdoge_minter::candid_api::{
     RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
 };
 use ic_management_canister_types::CanisterId;
-use pocket_ic::PocketIc;
+use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
 
 pub struct MinterCanister {
@@ -12,19 +12,26 @@ pub struct MinterCanister {
 }
 
 impl MinterCanister {
+    pub fn update_call_retrieve_doge_with_approval(
+        &self,
+        sender: Principal,
+        args: &RetrieveDogeWithApprovalArgs,
+    ) -> Result<std::vec::Vec<u8>, RejectResponse> {
+        self.env.update_call(
+            self.id,
+            sender,
+            "retrieve_doge_with_approval",
+            Encode!(args).unwrap(),
+        )
+    }
+
     pub fn retrieve_doge_with_approval(
         &self,
         sender: Principal,
         args: &RetrieveDogeWithApprovalArgs,
     ) -> Result<RetrieveDogeOk, RetrieveDogeWithApprovalError> {
         let call_result = self
-            .env
-            .update_call(
-                self.id,
-                sender,
-                "retrieve_doge_with_approval",
-                Encode!(args).unwrap(),
-            )
+            .update_call_retrieve_doge_with_approval(sender, args)
             .expect("BUG: failed to call retrieve_doge_with_approval");
         Decode!(&call_result, Result<RetrieveDogeOk, RetrieveDogeWithApprovalError>).unwrap()
     }

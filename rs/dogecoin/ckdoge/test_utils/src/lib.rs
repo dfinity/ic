@@ -15,13 +15,16 @@ pub use crate::minter::MinterCanister;
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
 pub const DOGECOIN_CANISTER: Principal =
     Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
+pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
+pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
 
 pub struct Setup {
     env: Arc<PocketIc>,
     minter: CanisterId,
     ledger: CanisterId,
 }
+
 
 impl Setup {
     pub fn new() -> Self {
@@ -56,8 +59,8 @@ impl Setup {
         {
             let minter_init_args = MinterArg::Init(InitArgs {
                 doge_network: Network::Mainnet,
-                ecdsa_key_name: "master_ecdsa_public_key".into(),
-                retrieve_doge_min_amount: 100_000_000,
+                ecdsa_key_name: "key_1".into(),
+                retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
                 max_time_in_queue_nanos: Duration::from_secs(10).as_nanos() as u64,
                 min_confirmations: Some(60),

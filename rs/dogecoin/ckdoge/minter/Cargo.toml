@@ -20,7 +20,9 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 serde = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
+pocket-ic = {path = "../../../../packages/pocket-ic"}
 
 [features]
 self_check = []
