@@ -152,6 +152,7 @@ pub struct RateLimiterConfig {
 pub enum RateLimiterError {
     NotEnoughCapacity,
     InvalidArguments(String),
+    MaxReservationsReached,
 }
 
 impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
@@ -187,17 +188,27 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
         key: K,
         requested_capacity: u64,
     ) -> Result<Reservation<K>, RateLimiterError> {
-        // validate
+        // validate reservation for actual capacity.
         if requested_capacity < 1 {
             return Err(RateLimiterError::InvalidArguments(
                 "To make a rate-limit reservation, requested_capacity must be at least 1"
                     .to_string(),
             ));
         }
+
         // Clean up expired reservations first
         self.cleanup_expired_reservations(&key, now);
 
         let mut reservations = self.reservations.lock().unwrap();
+        // validate that system can handle more reservations
+        let used_reservations: u64 = reservations
+            .len()
+            .try_into()
+            .expect("usize should always safely convert to u64");
+
+        if used_reservations >= self.config.max_reservations {
+            return Err(RateLimiterError::MaxReservationsReached);
+        }
 
         // Get all reservations for this key to calculate current usage
         let reserved_capacity: u64 = reservations
@@ -365,13 +376,15 @@ mod tests {
 
         let now = SystemTime::now();
 
-        let invalid_amount = rate_limiter.try_reserve(now, "Foo".to_string(), 0);
+        let invalid_amount = rate_limiter
+            .try_reserve(now, "Foo".to_string(), 0)
+            .unwrap_err();
         assert_eq!(
             invalid_amount,
-            Err(RateLimiterError::InvalidArguments(
+            RateLimiterError::InvalidArguments(
                 "To make a rate-limit reservation, requested_capacity must be at least 1"
                     .to_string(),
-            ))
+            )
         );
 
         let too_much = rate_limiter.try_reserve(now, "Foo".to_string(), 11);
@@ -473,6 +486,32 @@ mod tests {
         let even_later = later + Duration::from_secs(9);
         let even_later_okay = rate_limiter.try_reserve(even_later, "Foo".to_string(), 4);
         assert!(even_later_okay.is_ok());
+    }
+
+    #[test]
+    fn test_max_reservations() {
+        let mut rate_limiter = RateLimiter::new(
+            RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(100),
+                max_capacity: 10,
+                reservation_timeout: Duration::from_secs(5), // 5 second timeout
+                max_reservations: 4,
+            },
+            InMemoryCapacityStorage::default(),
+        );
+
+        let now = SystemTime::now();
+
+        let _reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 1).unwrap();
+        let _reservation2 = rate_limiter.try_reserve(now, "Foo".to_string(), 1).unwrap();
+        let _reservation3 = rate_limiter.try_reserve(now, "Foo".to_string(), 1).unwrap();
+        let _reservation4 = rate_limiter.try_reserve(now, "Foo".to_string(), 1).unwrap();
+
+        let too_many = rate_limiter
+            .try_reserve(now, "Foo".to_string(), 1)
+            .unwrap_err();
+        assert_eq!(too_many, RateLimiterError::MaxReservationsReached);
     }
 
     #[test]
