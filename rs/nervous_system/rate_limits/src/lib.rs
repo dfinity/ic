@@ -13,8 +13,8 @@ use std::{
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CapacityUsageRecord {
-    pub last_capacity_drip: SystemTime,
-    pub capacity_used: u64,
+    last_capacity_drip: SystemTime,
+    capacity_used: u64,
 }
 
 /// Trait for storing and retrieving capacity usage records.
