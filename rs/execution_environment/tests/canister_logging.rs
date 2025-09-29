@@ -618,6 +618,32 @@ fn test_fetch_canister_logs_with_filtering_fails_with_more_than_one_filters_enab
 }
 
 #[test]
+fn test_fetch_canister_logs_with_filtering_fails_with_incorrect_idx_range() {
+    let (result, _timestamps) =
+        run_fetch_canister_logs_with_filtering_test(Some(IndexRange { start: 1, end: 0 }), None);
+    let err = result.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(
+        err.description(),
+        "Invalid index range: start is greater than end"
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_with_filtering_fails_with_incorrect_timestamp_range() {
+    let (result, _timestamps) = run_fetch_canister_logs_with_filtering_test(
+        None,
+        Some(TimestampNanosRange { start: 1, end: 0 }),
+    );
+    let err = result.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(
+        err.description(),
+        "Invalid timestamp range: start is greater than end"
+    );
+}
+
+#[test]
 fn test_log_visibility_of_fetch_canister_logs() {
     // Test combinations of log_visibility and sender for fetch_canister_logs API call.
     let controller = PrincipalId::new_user_test_id(1);
