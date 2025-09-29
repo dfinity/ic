@@ -968,7 +968,7 @@ mod idkg_create_dealing {
     }
 
     fn dummy_dealing(rng: &mut ReproducibleRng) -> IDkgDealingInternal {
-        let dummy_dealing = IDkgDealingInternal {
+        IDkgDealingInternal {
             ciphertext: MEGaCiphertext::Single(MEGaCiphertextSingle {
                 ephemeral_key: EccPoint::generator_g(EccCurveType::K256),
                 pop_public_key: EccPoint::generator_g(EccCurveType::K256),
@@ -988,11 +988,9 @@ mod idkg_create_dealing {
                 PolynomialCommitmentType::Simple,
                 EccCurveType::K256,
                 rng,
-            )
-            .into(),
+            ),
             proof: None,
-        };
-        dummy_dealing
+        }
     }
 
     #[test]
