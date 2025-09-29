@@ -277,24 +277,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         });
     }
 
-    pub fn restore_capacity(&mut self, now: SystemTime, key: K, capacity_to_restore: u64) {
-        // If there's no usage record, do nothing (already at max capacity)
-        if self.capacity_storage.get(&key).is_none() {
-            return;
-        }
-
-        let add_capacity_amount = self.config.add_capacity_amount;
-        let add_capacity_interval = self.config.add_capacity_interval;
-        self.with_capacity_usage_record(key, now, |usage| {
-            // Update token bucket capacity first (this may update last_updated)
-            update_capacity(usage, now, add_capacity_amount, add_capacity_interval);
-
-            // Restore capacity (subtract from used capacity, cannot go below 0)
-            // Don't update last_updated - let the natural token bucket drip continue
-            usage.capacity_used = usage.capacity_used.saturating_sub(capacity_to_restore);
-        });
-    }
-
+    // Internal helper to correctly deal with memory usage.
     fn with_capacity_usage_record<R>(
         &mut self,
         key: K,
