@@ -3087,8 +3087,9 @@ impl StateMachine {
     /// - Write a checkpoint on `self`.
     /// - Clone its enire state directory into a new `state_dir`.
     /// - Create a new `StateMachine` using this `state_dir` and the provided `seed`.
-    /// - Adapt the registry to reflect the split, then reload it on both state machines.
-    /// - Perform the split on the latest state on both state machines respectively.
+    /// - Generate a new routing table that reflects the split.
+    /// - Use this routing table to perform the split on both state machines respectively.
+    /// - Adapt the registry with the new routing tabler and append the subnet to the subnets list.
     ///
     /// Returns an error if there is no XNet layer or if splitting the state fails.
     pub fn split(
@@ -3124,6 +3125,7 @@ impl StateMachine {
             .with_checkpoint_interval_length(
                 self.checkpoint_interval_length.load(Ordering::Relaxed),
             )
+            .with_subnet_size(self.nodes.len())
             .with_subnet_seed(seed)
             .with_registry_data_provider(self.registry_data_provider.clone())
             .build_with_subnets(
@@ -3177,9 +3179,9 @@ impl StateMachine {
             )
             .unwrap();
         self.registry_client.update_to_latest_version();
-        self.add_subnet_to_subnets_list(env.get_subnet_id());
+        assert!(self.add_subnet_to_subnets_list(env.get_subnet_id()));
 
-        // Reload registry to ensure on both state machines have a consistent view of the registry.
+        // Reload registry to ensure consistency.
         self.reload_registry();
         env.reload_registry();
 
@@ -4161,7 +4163,9 @@ impl StateMachine {
     }
 
     /// Adds a `subnet_id` to the subnet list record.
-    pub fn add_subnet_to_subnets_list(&self, subnet_id: SubnetId) {
+    ///
+    /// Returns `true` if the `subnet_id` was added as a new entry.
+    pub fn add_subnet_to_subnets_list(&self, subnet_id: SubnetId) -> bool {
         use ic_registry_client_helpers::subnet::SubnetListRegistry;
 
         let last_version = self.registry_client.get_latest_version();
@@ -4173,11 +4177,17 @@ impl StateMachine {
             .expect("malformed subnet list")
             .unwrap_or_default();
 
+        let initial_len = subnet_ids.len();
         subnet_ids.push(subnet_id);
         subnet_ids.sort();
         subnet_ids.dedup();
 
-        add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
+        if subnet_ids.len() > initial_len {
+            add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
+            true
+        } else {
+            false
+        }
     }
 
     /// Returns the subnet type of this state machine.
@@ -4820,6 +4830,15 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     env2.reload_registry();
 
     (env1, env2)
+}
+
+/// Generates the subnet ID from `seed`.
+pub fn subnet_id_from(seed: [u8; 32]) -> SubnetId {
+    let (ni_dkg_transcript, _) =
+        dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
+    let public_key = (&ni_dkg_transcript).try_into().unwrap();
+    let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+    PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
 // This test should panic on a critical error due to non-monotone timestamps.

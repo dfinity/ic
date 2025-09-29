@@ -5,7 +5,7 @@ use common::{
     DebugInfo, KB, MB, SubnetPair, SubnetPairConfig, arb_canister_config,
     induct_from_head_of_stream, stream_snapshot,
 };
-use ic_state_machine_tests::{StateMachine, two_subnets_simple};
+use ic_state_machine_tests::{StateMachine, subnet_id_from, two_subnets_simple};
 use ic_types::{
     CanisterId,
     ingress::{IngressState, IngressStatus},
@@ -69,7 +69,7 @@ fn chrigi() {
         .collect::<Vec<_>>();
 
     let config = CanisterConfig {
-        receivers,
+        receivers: receivers.clone(),
         calls_per_heartbeat: 10,
         ..CanisterConfig::default()
     };
@@ -78,14 +78,23 @@ fn chrigi() {
     set_config(&local_env, local_canisters[1], config.clone());
     set_config(&remote_env, remote_canisters[0], config.clone());
 
-    for _ in 0..50 {
+    for _ in 0..10 {
         local_env.do_execute_round(None);
         remote_env.do_execute_round(None);
     }
 
-    let split_env = local_env
-        .split([123; 32], local_canisters[1]..=local_canisters[1])
-        .unwrap();
+    let seed = [123_u8; 32];
+    let range = local_canisters[1]..=local_canisters[1];
+    let split_subnet_id = subnet_id_from(seed);
+
+    local_env.prepare_canister_migrations(
+        range.clone(),
+        local_env.get_subnet_id(),
+        split_subnet_id,
+    );
+    remote_env.reload_registry();
+
+    let split_env = local_env.split(seed, range).unwrap();
 
     /*
     assert!(
@@ -97,11 +106,53 @@ fn chrigi() {
     );
     */
 
+    for _ in 0..10 {
+        local_env.do_execute_round(None);
+        remote_env.do_execute_round(None);
+        split_env.do_execute_round(None);
+    }
+
+    let config = CanisterConfig {
+        receivers,
+        calls_per_heartbeat: 0,
+        ..CanisterConfig::default()
+    };
+
+    set_config(&local_env, local_canisters[0], config.clone());
+    set_config(&split_env, local_canisters[1], config.clone());
+    set_config(&remote_env, remote_canisters[0], config.clone());
+
+    remote_env.reload_registry();
     for _ in 0..50 {
         local_env.do_execute_round(None);
         remote_env.do_execute_round(None);
         split_env.do_execute_round(None);
     }
+
+    assert!(
+        local_env
+            .get_latest_state()
+            .canister_states
+            .values()
+            .all(|canister| canister
+                .system_state
+                .call_context_manager()
+                .unwrap()
+                .call_contexts()
+                .is_empty())
+    );
+    assert!(
+        remote_env
+            .get_latest_state()
+            .canister_states
+            .values()
+            .all(|canister| canister
+                .system_state
+                .call_context_manager()
+                .unwrap()
+                .call_contexts()
+                .is_empty())
+    );
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
