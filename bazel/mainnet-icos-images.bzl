@@ -146,6 +146,8 @@ def _copy_attrs(repository_ctx, attrs):
 
     return result
 
+# Implementation based on https://github.com/bazelbuild/bazel/blob/a0bcf66154b37882d9ea2fd6be6137c949dea43b/tools/build_defs/repo/http.bzl#L524,
+# simplified, to allow multiple files in the same created repo.
 def _get_mainnet_guestos_image_impl(repository_ctx):
     download_info = repository_ctx.download(
         repository_ctx.attr.setupos_url,
