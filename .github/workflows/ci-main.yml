@@ -230,7 +230,7 @@ jobs:
               bazel_cmd="$1"
               invocation_id="$2"
 
-              "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
+              "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
 
               num_targets=$(wc <"$target_pattern_file" -l)
