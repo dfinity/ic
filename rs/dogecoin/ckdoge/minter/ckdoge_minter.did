@@ -1,3 +1,59 @@
+type MinterArg = variant {
+    Init : InitArgs;
+};
+
+// The initialization parameters of the minter canister.
+type InitArgs = record {
+    // The minter will interact with this Dogecoin network.
+    doge_network : Network;
+
+    // The principal of the ledger that handles ckDOGE transfers.
+    // The default account of the ckDOGE minter must be configured as
+    // the minting account of the ledger.
+    ledger_id : principal;
+
+    // The name of the ECDSA key to use.
+    // E.g., "dfx_test_key" on the local replica.
+    ecdsa_key_name : text;
+
+    // The minimal amount of ckDOGE that can be converted to DOGE.
+    retrieve_doge_min_amount : nat64;
+
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    max_time_in_queue_nanos : nat64;
+
+    /// The minimum number of confirmations required for the minter to
+    /// accept a Dogecoin transaction.
+    min_confirmations : opt nat32;
+
+    /// The minter's operation mode.
+    mode : Mode;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
+};
+
+type Network = variant {
+    // The public Dogecoin mainnet.
+    Mainnet;
+    // The public Dogecoin testnet.
+    Testnet;
+    // A local Dogecoin regtest installation.
+    Regtest;
+};
+
+type Mode = variant {
+    // The minter does not allow any state modifications.
+    ReadOnly;
+    // Only specified principals can modify minter's state.
+    RestrictedTo : vec principal;
+    // Only specified principals can convert DOGE to ckDOGE.
+    DepositsRestrictedTo : vec principal;
+    // Anyone can interact with the minter.
+    GeneralAvailability;
+};
+
 type RetrieveDogeWithApprovalArgs = record {
     // The address to which the ckDOGE minter should deposit DOGE.
     address : text;
@@ -33,7 +89,7 @@ type RetrieveDogeWithApprovalError = variant {
     GenericError : record { error_message : text; error_code : nat64 };
 };
 
-service : () -> {
+service : (minter_arg : MinterArg) -> {
     // Submits a request to convert ckDOGE to DOGE.
     //
     // # Note
