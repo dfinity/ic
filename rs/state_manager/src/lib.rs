@@ -556,7 +556,7 @@ impl ManifestMetrics {
         // Note [Metrics preallocation]
         for file_type in crate::manifest::FILE_TYPES_TO_OBSERVE_SIZE
             .iter()
-            .chain(std::iter::once("other"))
+            .chain(std::iter::once(&"other"))
         {
             file_size_bytes.with_label_values(&[*file_type]);
             new_file_sizes_bytes.with_label_values(&[*file_type]);
