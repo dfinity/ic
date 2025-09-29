@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/bitcoin/consensus",
     "//rs/config",
     "//rs/consensus/certification",
+    "//rs/consensus/cup_utils",
     "//rs/crypto",
     "//rs/crypto/sha2",
     "//rs/cycles_account_manager",
