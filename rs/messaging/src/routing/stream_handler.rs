@@ -554,7 +554,7 @@ impl StreamHandlerImpl {
     ///
     /// Error cases:
     /// - A response or refund with a `RejectReason` other than `CanisterMigrating`: guaranteed
-    ///   response delivery requires responses to be rerouted; an error counter is incremented.
+    ///   delivery requires rerouting; an error counter is incremented.
     ///
     /// Returns the amount of cycles that were attached to duplicate reject responses that were
     /// silently dropped.
@@ -722,32 +722,34 @@ impl StreamHandlerImpl {
         state
     }
 
-    /// Attempts to induct the given message at `stream_index` in the incoming
+    /// Attempts to induct the given message, at `stream_index` in the incoming
     /// stream from `remote_subnet_id` into `state`, producing a signal onto the
     /// provided reverse `stream`. The induction attempt will result in one of
     /// the following outcomes:
     ///
-    ///  * `Request` or `Response` successfully inducted: accept signal appended
-    ///    to the reverse stream;
-    ///  * `Request` not inducted (queue full, out of memory, canister not
-    ///    found, canister migrated): accept signal and reject response appended
-    ///    to the reverse stream;
-    ///  * `Response` not inducted (canister migrated): reject signal appended
-    ///    to loopback stream (canonical versions 9+ only).
-    ///  * `Request` or `Response` silently dropped and accept signal appended
-    ///    to loopback stream iff:
+    ///  * Message successfully inducted: accept signal appended to the reverse
+    ///    stream;
+    ///  * `Request` not inducted (queue full, out of memory, canister not found,
+    ///    canister migrated): reject signal appended to the reverse stream;
+    ///  * `Response` or `Refund` not inducted (canister migrated): reject signal
+    ///    appended to reverse stream.
+    ///  * `Request` or `Refund` not inducted (potential manual canister migration):
+    ///    reject signal appended to reverse stream.
+    ///  * `Response` or `Refund` not inducted (canister deleted): accept signal
+    ///    appended to reverse stream.
+    ///  * `Response` silently dropped, critical error raised and accept signal
+    ///    appended to reverse stream iff:
     ///     * the sender and source subnet do not match (according to the
     ///       routing table or canister migrations); or
     ///     * the receiver is not hosted by or being migrated off of this
-    ///       subnet; or
-    ///     * enqueuing a `Response` failed due to the canister having been
-    ///       removed.
+    ///       subnet.
     ///
     /// Updates `available_guaranteed_response_memory` to reflect any change in
     /// guaranteed response memory usage.
     ///
     /// Returns the amount of attached cycles that were lost iff `msg` was a
-    /// duplicate reject response that was silently dropped; or 0 otherwise.
+    /// silently dropped duplicate response or response or refund to a deleted
+    /// canister; 0 otherwise.
     #[must_use]
     fn induct_message(
         &self,
@@ -1080,9 +1082,9 @@ impl StreamHandlerImpl {
             // The actual originating subnet and the routing table entry for the sender are in agreement.
             Some(expected_subnet_id) if expected_subnet_id == actual_subnet_id => SenderSubnet::Valid,
 
-            // A message addressed to a canister on this subnet A comes from a subnet B, but the routing
-            // table claims it should come from a subnet C; but there is a migration trace for the sender
-            // from B to C or C to B.
+            // A message originating from a subnet B; with the routing table claiming it
+            // should be coming from a subnet C; and there is a migration trace for the
+            // sender from B to C or C to B.
             Some(expected_subnet_id)
                 if migration_trace(state, msg.sender()).is_some_and(|trace| {
                     trace.contains(&actual_subnet_id) && trace.contains(&expected_subnet_id)
@@ -1091,8 +1093,9 @@ impl StreamHandlerImpl {
                 SenderSubnet::CanisterMigrated
             }
 
-            // A reject response addressed to a canister on this subnet A, yet it comes from a subnet B;
-            // but there is a migration trace for the receiver from subnet B to subnet A.
+            // A reject response coming from a subnet B; with the routing table claiming it
+            // should be coming from a subnet C; but there is a migration trace for the
+            // receiver from subnet B to this subnet.
             _ if matches!(
                 msg,
                 RequestOrResponse::Response(response) if matches!(response.response_payload, Payload::Reject(_))
