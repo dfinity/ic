@@ -1,4 +1,5 @@
 use candid::{CandidType, Principal};
+use icrc_ledger_types::icrc1::account::Account;
 
 /* NNS dapp */
 
@@ -21,6 +22,7 @@ pub struct SnsAggregatorConfig {
 pub struct CyclesLedgerConfig {
     pub max_blocks_per_request: u64,
     pub index_id: Option<Principal>,
+    pub initial_balances: Option<Vec<(Account, u128)>>,
 }
 
 #[derive(CandidType)]

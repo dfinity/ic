@@ -20,7 +20,7 @@ rust_library(
         # Keep sorted.
         "//packages/ic-ed25519",
         "//rs/config",
-        "//rs/consensus",
+        "//rs/consensus/cup_utils",
         "//rs/consensus/dkg",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",

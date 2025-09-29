@@ -203,6 +203,19 @@ where
         Ok(result)
     }
 
+    /// Background task to ersist headers below the anchor (as headers) and the anchor (as tip) on to disk, and
+    /// prune headers below the anchor from the in-memory cache.
+    pub fn persist_and_prune_headers_below_anchor(
+        &self,
+        anchor: BlockHash,
+    ) -> tokio::task::JoinHandle<()> {
+        let header_cache = self.header_cache.clone();
+        tokio::task::spawn_blocking(move || {
+            // Error is ignored, since it is a background task
+            let _ = header_cache.persist_and_prune_headers_below_anchor(anchor);
+        })
+    }
+
     /// This method adds a new block to the `block_cache`
     pub async fn add_block(
         &self,
@@ -332,6 +345,18 @@ where
             .values()
             .map(|block| block.len())
             .sum()
+    }
+
+    /// Number of headers stored.
+    ///
+    /// Return a pair where
+    /// 1. Number of headers stored on disk
+    /// 2. Number of headers stored in memory
+    pub fn num_headers(&self) -> Result<(usize, usize), String> {
+        self.header_cache
+            .get_num_headers()
+            // do not expose internal error type
+            .map_err(|e| e.to_string())
     }
 }
 

@@ -226,9 +226,7 @@ impl IncompleteState {
         // Create the `IncompleteState` object while holding the write lock on the active state sync reference.
         Some(Self {
             log,
-            root: state_layout
-                .state_sync_scratchpad(height)
-                .expect("failed to create directory for state sync scratchpad"),
+            root: state_layout.state_sync_scratchpad(height),
             state_sync: state_sync.clone(),
             state_layout,
             height,

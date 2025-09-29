@@ -3977,7 +3977,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
-        const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
+        const MAX_ERROR_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
             let message = valid_subslice(
