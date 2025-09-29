@@ -8,8 +8,8 @@ type log_visibility = variant {
     allowed_viewers : vec principal;
 };
 
-type environment_variable = record { 
-    name: text; 
+type environment_variable = record {
+    name: text;
     value: text;
 };
 
@@ -51,7 +51,7 @@ type change_origin = variant {
 type change_details = variant {
     creation : record {
         controllers : vec principal;
-        environment_variables_hash : opt blob; 
+        environment_variables_hash : opt blob;
     };
     code_uninstall;
     code_deployment : record {
@@ -66,6 +66,7 @@ type change_details = variant {
         taken_from_canister : reserved;
         metadata_upload : reserved;
       };
+      from_canister_id : opt principal;
     };
     // Deprecated: `settings_change` is used instead.
     controllers_change : record {
@@ -665,7 +666,7 @@ service ic : {
     read_canister_snapshot_data : (read_canister_snapshot_data_args) -> (read_canister_snapshot_data_response);
     upload_canister_snapshot_metadata : (upload_canister_snapshot_metadata_args) -> (upload_canister_snapshot_metadata_response);
     upload_canister_snapshot_data : (upload_canister_snapshot_data_args) -> ();
-    
+
     // Canister migration
     rename_canister: (rename_canister_args) -> ();
 

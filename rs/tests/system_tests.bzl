@@ -412,7 +412,6 @@ def system_test(
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
-        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
     if uses_setupos_mainnet_latest_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
@@ -420,7 +419,6 @@ def system_test(
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
-        _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
 
     if uses_hostos_update:
         info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
@@ -506,7 +504,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
+def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -525,9 +523,12 @@ def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
     However it's still useful to see if the HEAD replica works against the HEAD NNS which is why this macro
     introduces the <name>_head_nns variant which only runs daily if not overriden.
 
+    Alternatively, if the mainnet variant should be tagged with ["manual"], then enable_mainnet_nns_variant can be disabled.
+
     Args:
         name: the name of the system-tests.
         enable_head_nns_variant: whether to run the head_nns variant daily.
+        enable_mainnet_nns_variant: whether to run the mainnet variant.
         **kwargs: the arguments of the system-tests.
 
     Returns:
@@ -537,14 +538,20 @@ def system_test_nns(name, enable_head_nns_variant = True, **kwargs):
     runtime_deps = kwargs.pop("runtime_deps", [])
     env = kwargs.pop("env", {})
 
+    original_tags = kwargs.pop("tags", [])
+
+    extra_mainnet_nns_tags = (
+        # Disable the mainnet variant if requested
+        ["manual"] if not enable_mainnet_nns_variant else []
+    )
+
     mainnet_nns_systest = system_test(
         name,
         env = env | MAINNET_NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + MAINNET_NNS_CANISTER_RUNTIME_DEPS,
+        tags = [tag for tag in original_tags if tag not in extra_mainnet_nns_tags] + extra_mainnet_nns_tags,
         **kwargs
     )
-
-    original_tags = kwargs.pop("tags", [])
 
     extra_head_nns_tags = (
         # Disable the head_nns variant if requested

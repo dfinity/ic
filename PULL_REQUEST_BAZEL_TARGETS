@@ -48,6 +48,11 @@
 *.proto     //pre-commit:protobuf-format-check
             //pre-commit:buf-breaking
 
+mainnet-icos-revisions.json
+  //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
+  //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
+  //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_colocate
+
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
 *ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test
             //rs/tests/nested:guestos_upgrade_from_latest_release_to_current
@@ -66,6 +71,13 @@
 
 rs/backup/*.rs //rs/tests/consensus/backup/...
 
+*guestos-recovery-engine* //rs/tests/consensus:guestos_recovery_engine_smoke_test
+                          //rs/tests/nested/nns_recovery/...
+
+*guestos-recovery-upgrader* //rs/tests/nested/nns_recovery/...
+# TODO(NODE-1707): re-enable this test after next weekly release
+# //rs/tests/nested:recovery_upgrader_test
+
 rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
                      //rs/tests/consensus:subnet_splitting_test_colocate
                      //rs/tests/nested/nns_recovery/...
@@ -77,6 +89,3 @@ rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
              //rs/tests/execution:btc_get_balance_test_colocate
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
-
-# Run all FI system tests only if the tests themselves are changed
-rs/tests/financial_integrations/* //rs/tests/financial_integrations/...

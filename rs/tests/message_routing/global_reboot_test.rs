@@ -35,16 +35,16 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-    IcNodeSnapshot, SubnetSnapshot,
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+    get_dependency_path,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
-    EndpointsStatus,
+    EndpointsStatus, assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on,
+    runtime_from_url,
 };
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::env;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -199,8 +199,7 @@ pub fn start_all_canisters(
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Starting canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                     )
                 });
         }
@@ -261,8 +260,7 @@ pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Collecting metrics for canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Collecting metrics for canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                     )
                 });
             metrics[subnet_idx].push(result);
@@ -276,7 +274,7 @@ pub fn install_canisters(
     subnets_count: usize,
     canisters_per_subnet: usize,
     wasm: Wasm,
-) -> Vec<Vec<Canister>> {
+) -> Vec<Vec<Canister<'_>>> {
     let mut canisters: Vec<Vec<Canister>> = Vec::new();
     block_on(async {
         for subnet_idx in 0..subnets_count {
@@ -288,8 +286,7 @@ pub fn install_canisters(
                     .await
                     .unwrap_or_else(|_| {
                         panic!(
-                            "Installation of the canister_idx={} on subnet_idx={} failed.",
-                            canister_idx, subnet_idx
+                            "Installation of the canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                         )
                     });
                 canisters[subnet_idx].push(canister);

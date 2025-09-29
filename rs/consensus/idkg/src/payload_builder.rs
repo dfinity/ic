@@ -1,9 +1,9 @@
 //! This module implements the IDKG payload builder.
 use crate::{
-    metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING},
+    metrics::{CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING, IDkgPayloadMetrics},
     pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl},
     signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
-    utils::{block_chain_reader, get_idkg_chain_key_config_if_enabled, InvalidChainCacheError},
+    utils::{InvalidChainCacheError, block_chain_reader, get_idkg_chain_key_config_if_enabled},
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
@@ -12,22 +12,22 @@ use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, metadata_state::subnet_call_context_manager::*};
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId, Time,
     batch::ValidationContext,
     consensus::{
+        Block, HasHeight,
         idkg::{
             self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgPayload,
-            MasterKeyTranscript, TranscriptAttributes, STORE_PRE_SIGNATURES_IN_STATE,
+            MasterKeyTranscript, STORE_PRE_SIGNATURES_IN_STATE, TranscriptAttributes,
         },
-        Block, HasHeight,
     },
     crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
     messages::CallbackId,
-    Height, NodeId, RegistryVersion, SubnetId, Time,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -732,10 +732,9 @@ pub(crate) fn create_data_payload_helper_2(
                 .matched_pre_signature
                 .as_ref()
                 .is_some_and(|(pid, _)| idkg_payload.available_pre_signatures.contains_key(pid))
+                && let Ok(key_id) = context.key_id().try_into()
             {
-                if let Ok(key_id) = context.key_id().try_into() {
-                    *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
-                }
+                *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
             }
         }
 
@@ -809,12 +808,13 @@ mod tests {
         utils::{block_chain_reader, generate_responses_to_signature_request_contexts},
     };
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_tecdsa_protocol_inputs,
-        generate_tschnorr_protocol_inputs, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_tschnorr_protocol_inputs,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
@@ -826,28 +826,28 @@ mod tests {
         fake::{Fake, FakeContentSigner},
         idkg::*,
     };
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
     use ic_types::{
+        Height, Randomness, RegistryVersion,
         batch::BatchPayload,
         consensus::{
+            BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
             dkg::{DkgDataPayload, DkgSummary},
             idkg::{
                 IDkgPayload, PreSigId, ReshareOfUnmaskedParams, TranscriptRef, UnmaskedTranscript,
                 UnmaskedTranscriptWithAttributes,
             },
-            BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
         },
         crypto::{
-            canister_threshold_sig::{
-                idkg::IDkgTranscript, ThresholdEcdsaCombinedSignature,
-                ThresholdSchnorrCombinedSignature,
-            },
             AlgorithmId, CryptoHash, CryptoHashOf, ExtendedDerivationPath,
+            canister_threshold_sig::{
+                ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
+                idkg::IDkgTranscript,
+            },
         },
         messages::CallbackId,
         time::UNIX_EPOCH,
-        Height, Randomness, RegistryVersion,
     };
     use idkg::common::CombinedSignature;
     use std::{collections::BTreeSet, convert::TryInto};
@@ -1024,12 +1024,16 @@ mod tests {
             // If pre-signatures are stored on the blockchain, then
             // the two initial pre-signature remain in available_pre_signatures.
             assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
-            assert!(idkg_payload
-                .available_pre_signatures
-                .contains_key(&pre_sig1));
-            assert!(idkg_payload
-                .available_pre_signatures
-                .contains_key(&pre_sig2));
+            assert!(
+                idkg_payload
+                    .available_pre_signatures
+                    .contains_key(&pre_sig1)
+            );
+            assert!(
+                idkg_payload
+                    .available_pre_signatures
+                    .contains_key(&pre_sig2)
+            );
 
             // The matched pre-signature is replenished, therefore
             // PRE_SIGNATURES_TO_CREATE_IN_ADVANCE new pre-signatures minus
@@ -1840,9 +1844,11 @@ mod tests {
                 });
             let summary_from_proto = IDkgPayload::try_from(&summary_proto).unwrap();
             // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
-            assert!(summary_from_proto
-                .signature_agreements
-                .contains_key(&[4; 32]));
+            assert!(
+                summary_from_proto
+                    .signature_agreements
+                    .contains_key(&[4; 32])
+            );
         })
     }
 
@@ -1951,7 +1957,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -1997,7 +2003,7 @@ mod tests {
 
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2151,7 +2157,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2203,7 +2209,7 @@ mod tests {
 
             let payload_2 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2266,7 +2272,7 @@ mod tests {
 
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(2),
@@ -2440,7 +2446,7 @@ mod tests {
             // set to Begin.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2489,7 +2495,7 @@ mod tests {
             // unfinished next_in_creation
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2527,7 +2533,7 @@ mod tests {
             );
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2623,7 +2629,7 @@ mod tests {
             // set to XnetReshareOfUnmaskedParams.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2737,7 +2743,7 @@ mod tests {
             // should be created successfully
             let payload_5 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(4),
@@ -2763,7 +2769,7 @@ mod tests {
             // should be created successfully
             let payload_6 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(5),

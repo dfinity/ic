@@ -17,8 +17,8 @@ mod util {
     use super::super::super::types::SecretKeyBytes;
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-    use ic_types::crypto::CryptoResult;
     use ic_types::NumberOfNodes;
+    use ic_types::crypto::CryptoResult;
 
     /// Shim for tests that use the old API that generated keys for all
     /// participants. The new API generates only select keys.

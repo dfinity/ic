@@ -18,12 +18,93 @@ RETRY_DELAY=5
 
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
 
+BASE_URLS=(
+    "https://download.dfinity.systems"
+    "https://download.dfinity.network"
+)
+
 source /opt/ic/bin/grub.sh
 
 # Helper function to extract a value from /proc/cmdline
 get_cmdline_var() {
     local var="$1"
     grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
+}
+
+verify_hash() {
+    local file_path="$1"
+    local expected_hash="$2"
+    local artifact_name="$3"
+
+    echo "Verifying ${artifact_name} hash..."
+    local actual_hash=$(sha256sum "$file_path" | cut -d' ' -f1)
+    if [ "$actual_hash" != "$expected_hash" ]; then
+        echo "ERROR: ${artifact_name} hash verification failed"
+        echo "Expected hash: $expected_hash"
+        echo "Got hash: $actual_hash"
+        return 1
+    fi
+    echo "${artifact_name} hash verification successful"
+    return 0
+}
+
+download_file() {
+    local url_path="$1"
+    local output_file="$2"
+    local artifact_name="$3"
+
+    local download_successful=false
+    for base_url in "${BASE_URLS[@]}"; do
+        local url="${base_url}${url_path}"
+        echo "Attempting to download ${artifact_name} from $url..."
+
+        if curl --proto '=https' --location --proto-redir '=https' --tlsv1.2 --silent --show-error --fail -o "$output_file" "$url"; then
+            echo "Download from $base_url completed successfully"
+            download_successful=true
+            break
+        else
+            echo "WARNING: Failed to download from $base_url"
+            # Remove partial download file if it exists
+            rm -f "$output_file"
+        fi
+    done
+
+    if [ "$download_successful" = false ]; then
+        echo "ERROR: Failed to download ${artifact_name} from all available URLs"
+        return 1
+    fi
+    return 0
+}
+
+retry_operation() {
+    local operation_name="$1"
+    local operation_function="$2"
+    shift 2
+    local operation_args=("$@")
+
+    echo "Starting ${operation_name} with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
+
+    local attempt=1
+    while [ $attempt -le $MAX_ATTEMPTS ]; do
+        echo "=== ${operation_name} attempt $attempt/$MAX_ATTEMPTS ==="
+
+        if "$operation_function" "${operation_args[@]}"; then
+            echo "✓ ${operation_name} completed successfully on attempt $attempt"
+            return 0
+        else
+            echo "✗ ${operation_name} failed on attempt $attempt"
+
+            if [ $attempt -lt $MAX_ATTEMPTS ]; then
+                echo "Waiting ${RETRY_DELAY} seconds before retry..."
+                sleep $RETRY_DELAY
+            fi
+        fi
+
+        ((attempt++))
+    done
+
+    echo "ERROR: Failed to complete ${operation_name} after $MAX_ATTEMPTS attempts"
+    return 1
 }
 
 get_upgrade_target_partitions() {
@@ -63,46 +144,20 @@ prepare_guestos_upgrade() {
 
 download_and_verify_upgrade() {
     local version="$1"
-    local short_hash="$2"
+    local expected_hash="$2"
     local tmpdir="$3"
 
-    local base_urls=(
-        "https://download.dfinity.systems"
-        "https://download.dfinity.network"
-    )
+    local url_path="/ic/${version}/guest-os/update-img-recovery/update-img.tar.zst"
+    local output_file="$tmpdir/upgrade.tar.zst"
 
-    local download_successful=false
-    for base_url in "${base_urls[@]}"; do
-        local url="${base_url}/ic/${version}/guest-os/update-img/update-img.tar.zst"
-        echo "Attempting to download upgrade from $url..."
-
-        if curl -L --fail -o "$tmpdir/upgrade.tar.zst" "$url"; then
-            echo "Download from $base_url completed successfully"
-            download_successful=true
-            break
-        else
-            echo "WARNING: Failed to download from $base_url"
-            # Remove partial download file if it exists
-            rm -f "$tmpdir/upgrade.tar.zst"
-        fi
-    done
-
-    if [ "$download_successful" = false ]; then
-        echo "ERROR: Failed to download upgrade file from all available URLs"
+    if ! download_file "$url_path" "$output_file" "upgrade file"; then
         return 1
     fi
 
-    echo "Verifying upgrade image hash..."
-    local actual_hash=$(sha256sum "$tmpdir/upgrade.tar.zst" | cut -d' ' -f1)
-    local actual_short_hash=${actual_hash:0:6}
-    if [ "$actual_short_hash" != "$short_hash" ]; then
-        echo "ERROR: Hash verification failed"
-        echo "Expected short 6-character hash: $short_hash"
-        echo "Got short 6-character hash: $actual_short_hash"
-        echo "Full hash: $actual_hash"
+    if ! verify_hash "$output_file" "$expected_hash" "upgrade image"; then
         return 1
     fi
-    echo "Hash verification successful"
+
     return 0
 }
 
@@ -160,6 +215,24 @@ install_upgrade() {
     echo "Upgrade installation complete"
 }
 
+download_and_verify_recovery() {
+    local expected_recovery_hash="$1"
+    local tmpdir="$2"
+
+    local url_path="/recovery/${expected_recovery_hash}/recovery.tar.zst"
+    local output_file="$tmpdir/recovery.tar.zst"
+
+    if ! download_file "$url_path" "$output_file" "recovery artifact"; then
+        return 1
+    fi
+
+    if ! verify_hash "$output_file" "$expected_recovery_hash" "recovery artifact"; then
+        return 1
+    fi
+
+    return 0
+}
+
 guestos_upgrade_cleanup() {
     echo "Starting cleanup"
     if [ -n "${grubdir}" ] && mountpoint -q "${grubdir}"; then
@@ -180,46 +253,38 @@ main() {
     echo "Starting GuestOS Recovery Upgrader"
 
     VERSION="$(get_cmdline_var version)"
-    SHORT_HASH="$(get_cmdline_var hash)"
+    VERSION_HASH="$(get_cmdline_var version-hash)"
+    RECOVERY_HASH="$(get_cmdline_var recovery-hash)"
 
-    if [ -z "$VERSION" ] || [ -z "$SHORT_HASH" ]; then
-        echo "ERROR: Both version and hash parameters are required"
-        echo "Usage: version=<commit-hash> hash=<first-6-chars-of-sha256>"
+    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
+        echo "ERROR: version and version-hash parameters are required"
+        echo "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
         exit 1
     fi
 
     echo "Version: $VERSION"
-    echo "Short hash: $SHORT_HASH"
+    echo "Version hash: $VERSION_HASH"
+    if [ -n "$RECOVERY_HASH" ]; then
+        echo "Recovery hash: $RECOVERY_HASH"
+    else
+        echo "Recovery hash not provided (optional)"
+    fi
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
 
     prepare_guestos_upgrade
 
-    echo "Starting download and verification with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
-
-    attempt=1
-    while [ $attempt -le $MAX_ATTEMPTS ]; do
-        echo "=== Download attempt $attempt/$MAX_ATTEMPTS ==="
-
-        if download_and_verify_upgrade "$VERSION" "$SHORT_HASH" "$TMPDIR"; then
-            echo "✓ Download and verification completed successfully on attempt $attempt"
-            break
-        else
-            echo "✗ Download and verification failed on attempt $attempt"
-
-            if [ $attempt -lt $MAX_ATTEMPTS ]; then
-                echo "Waiting ${RETRY_DELAY} seconds before retry..."
-                sleep $RETRY_DELAY
-            fi
-        fi
-
-        ((attempt++))
-    done
-
-    if [ $attempt -gt $MAX_ATTEMPTS ]; then
-        echo "ERROR: Failed to download and verify upgrade file after $MAX_ATTEMPTS attempts"
+    if ! retry_operation "recovery-GuestOS upgrade image download and verification" download_and_verify_upgrade "$VERSION" "$VERSION_HASH" "$TMPDIR"; then
         exit 1
+    fi
+
+    if [ -n "$RECOVERY_HASH" ]; then
+        if ! retry_operation "recovery artifact download and verification" download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
+            exit 1
+        fi
+    else
+        echo "Skipping recovery artifact download and verification (recovery-hash not provided)"
     fi
 
     extract_upgrade "$TMPDIR"

@@ -2,8 +2,8 @@ use candid::Principal;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_types::PrincipalId;
 use nix::sys::signal::Signal;
-use pocket_ic::common::rest::CanisterIdRange as RawCanisterIdRange;
 use pocket_ic::PocketIc;
+use pocket_ic::common::rest::CanisterIdRange as RawCanisterIdRange;
 use reqwest::Url;
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -35,7 +35,7 @@ pub fn start_server_helper(
 ) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
     let port_file_path = if let Some(test_driver_pid) = test_driver_pid {
-        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid))
+        std::env::temp_dir().join(format!("pocket_ic_{test_driver_pid}.port"))
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
@@ -56,14 +56,14 @@ pub fn start_server_helper(
     }
     let out = cmd.spawn().expect("Failed to start PocketIC binary");
     let url = loop {
-        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
-            if port_string.contains("\n") {
-                let port: u16 = port_string
-                    .trim_end()
-                    .parse()
-                    .expect("Failed to parse port to number");
-                break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
-            }
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
+            && port_string.contains("\n")
+        {
+            let port: u16 = port_string
+                .trim_end()
+                .parse()
+                .expect("Failed to parse port to number");
+            break Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap();
         }
         std::thread::sleep(Duration::from_millis(20));
     };

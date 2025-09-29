@@ -8,10 +8,9 @@
 use candid::Principal;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_management_canister_types::NodeMetrics;
-use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
+use ic_stable_structures::storable::Bound;
 use prost::Message;
-use rewards_calculation::types::SubnetMetricsDailyKey;
 use std::borrow::Cow;
 
 pub mod api_conversion;
@@ -56,7 +55,7 @@ impl KeyRange for pb::v1::SubnetMetricsKey {
 //------------ Storable Implementations ------------//
 
 impl Storable for pb::v1::SubnetIdKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
@@ -71,7 +70,7 @@ impl Storable for pb::v1::SubnetIdKey {
 }
 
 impl Storable for pb::v1::SubnetMetricsKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
@@ -86,7 +85,7 @@ impl Storable for pb::v1::SubnetMetricsKey {
 }
 
 impl Storable for pb::v1::SubnetMetricsValue {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
@@ -98,7 +97,7 @@ impl Storable for pb::v1::SubnetMetricsValue {
 }
 
 impl Storable for pb::v1::NodeMetrics {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
@@ -118,15 +117,6 @@ impl From<SubnetId> for pb::v1::SubnetIdKey {
 impl From<pb::v1::SubnetIdKey> for SubnetId {
     fn from(subnet_id: pb::v1::SubnetIdKey) -> Self {
         subnet_id.subnet_id.unwrap().into()
-    }
-}
-
-impl From<pb::v1::SubnetMetricsKey> for SubnetMetricsDailyKey {
-    fn from(key: pb::v1::SubnetMetricsKey) -> Self {
-        Self {
-            day: key.timestamp_nanos.into(),
-            subnet_id: SubnetId::from(key.subnet_id.unwrap()),
-        }
     }
 }
 

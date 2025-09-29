@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIcBuilder::with_initial_time` to specify the initial timestamp of the newly created PocketIC instance.
+- The parameter `ttl` to `StartServerParams` to specify the TTL of the PocketIC server.
+
+### Changed
+- Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
+
 
 
 ## 10.0.0 - 2025-09-12

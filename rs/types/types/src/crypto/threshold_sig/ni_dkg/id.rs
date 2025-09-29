@@ -28,17 +28,17 @@ impl NiDkgId {
         error_location: &str,
     ) -> Result<Self, String> {
         option_dkg_id
-            .ok_or(format!("{} missing dkg_id", error_location))
+            .ok_or(format!("{error_location} missing dkg_id"))
             .and_then(|dkg_id| {
                 NiDkgId::try_from(dkg_id)
-                    .map_err(|err| format!("Error loading dkg_id in {}: {:?}", error_location, err))
+                    .map_err(|err| format!("Error loading dkg_id in {error_location}: {err:?}"))
             })
     }
 }
 
 impl fmt::Display for NiDkgId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

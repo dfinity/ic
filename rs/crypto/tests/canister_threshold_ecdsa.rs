@@ -3,20 +3,20 @@ use ic_base_types::PrincipalId;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
     ecdsa::environment_with_sig_inputs, ecdsa_sig_share_from_each_receiver,
     generate_ecdsa_presig_quadruple, generate_key_transcript,
     random_crypto_component_not_in_receivers, random_node_id_excluding, random_receiver_id,
-    random_receiver_id_excluding, run_tecdsa_protocol, CanisterThresholdSigTestEnvironment,
-    IDkgParticipants, IntoBuilder,
+    random_receiver_id_excluding, run_tecdsa_protocol,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
-use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::{NodeId, Randomness};
 use maplit::hashset;
@@ -27,7 +27,7 @@ use std::sync::Arc;
 mod sign_share {
     use super::*;
     use proptest::array::uniform5;
-    use proptest::prelude::{any, Strategy};
+    use proptest::prelude::{Strategy, any};
     use rand_chacha::ChaCha20Rng;
     use std::collections::HashSet;
 
@@ -369,8 +369,8 @@ mod sign_share {
 mod verify_sig_share {
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytes;
-    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaVerifySigShareError;
     use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigShare;
+    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaVerifySigShareError;
 
     #[test]
     fn should_verify_sig_share_successfully() {
@@ -835,7 +835,7 @@ mod verify_combined_sig {
                     );
                 }
                 unexpected => {
-                    panic!("Unhandled ECDSA algorithm {}", unexpected)
+                    panic!("Unhandled ECDSA algorithm {unexpected}")
                 }
             }
         }
@@ -864,7 +864,7 @@ mod get_tecdsa_master_public_key {
                 AlgorithmId::ThresholdEcdsaSecp256r1 => (1 + 32, AlgorithmId::EcdsaP256),
                 AlgorithmId::ThresholdEcdsaSecp256k1 => (1 + 32, AlgorithmId::EcdsaSecp256k1),
                 unexpected => {
-                    panic!("Unexpected ECDSA algorithm {}", unexpected);
+                    panic!("Unexpected ECDSA algorithm {unexpected}");
                 }
             };
 
@@ -944,14 +944,12 @@ mod get_tecdsa_master_public_key {
                 let derived_pk = derive_threshold_public_key(&master_public_key, derivation_path)
                     .unwrap_or_else(|_| {
                         panic!(
-                            "Public key derivation failed for derivation path {:?}",
-                            derivation_path
+                            "Public key derivation failed for derivation path {derivation_path:?}"
                         )
                     });
                 assert!(
                     derived_keys.insert(derived_pk),
-                    "Duplicate derived key for derivation path {:?}",
-                    derivation_path
+                    "Duplicate derived key for derivation path {derivation_path:?}"
                 );
             }
             assert_eq!(

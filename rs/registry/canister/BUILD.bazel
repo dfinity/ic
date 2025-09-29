@@ -271,7 +271,6 @@ generated_files_check(
         ":protos",
         "//rs/nns/common:protos",
         "//rs/protobuf:protos",
-        "//rs/registry/transport:protos",
         "//rs/types/base_types:protos",
     ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/canister",

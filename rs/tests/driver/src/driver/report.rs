@@ -59,10 +59,10 @@ impl SystemGroupSummary {
         } else {
             self.test_name.clone()
         };
-        let title = format!(" Summary for {} ", test_name);
+        let title = format!(" Summary for {test_name} ");
         let mx_len = std::cmp::max(mx_len, title.len() + 10);
         let mx_len = std::cmp::min(mx_len, 200);
-        let start = format!("{:=^mx_len$}", title);
+        let start = format!("{title:=^mx_len$}");
         let end = format!("{:=^mx_len$}", "");
         let mut summary = vec![];
         summary.push(start);
@@ -113,7 +113,7 @@ impl TaskReport {
         let message = if let Some(msg) = &self.message {
             let msg = msg.replace("\\n", "\n");
             if !msg.contains('\n') {
-                format!(" -- {}", msg)
+                format!(" -- {msg}")
             } else {
                 report_lines.append(&mut msg.lines().map(|line| format!("     {line}")).collect());
                 "".to_owned()
@@ -157,15 +157,14 @@ impl Display for SystemTestGroupError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             SystemTestGroupError::TestDriverError { message } => {
-                write!(f, "Internal test driver error: {}", message)
+                write!(f, "Internal test driver error: {message}")
             }
             SystemTestGroupError::PreconditionViolation {
                 condition,
                 counterexample,
             } => write!(
                 f,
-                "Test driver precondition `{}` is violated, e.g.: {}",
-                condition, counterexample
+                "Test driver precondition `{condition}` is violated, e.g.: {counterexample}"
             ),
             SystemTestGroupError::ExternalSignalReceived { task_id, signal } => write!(
                 f,
@@ -173,11 +172,10 @@ impl Display for SystemTestGroupError {
                 task_id.name(),
                 signal
             ),
-            SystemTestGroupError::SystemTestFailure(report) => writeln!(
-                f,
-                "Test driver completed normally, but some tests failed"
-            )
-            .and(write!(f, "{}", report)),
+            SystemTestGroupError::SystemTestFailure(report) => {
+                writeln!(f, "Test driver completed normally, but some tests failed")
+                    .and(write!(f, "{report}"))
+            }
         }
     }
 }
@@ -186,7 +184,7 @@ impl Display for SystemTestGroupError {
 impl std::convert::From<anyhow::Error> for SystemTestGroupError {
     fn from(e: anyhow::Error) -> Self {
         Self::TestDriverError {
-            message: format!("{:?}", e),
+            message: format!("{e:?}"),
         }
     }
 }

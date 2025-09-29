@@ -1,16 +1,18 @@
 use crate::{
+    MAX_IDKG_THREADS,
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
     signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
+    utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_mocks::{dependencies, Dependencies};
+use ic_consensus_mocks::{Dependencies, dependencies};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    dummy_values::dummy_idkg_dealing_for_tests, setup_masked_random_params,
     CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
+    dummy_values::dummy_idkg_dealing_for_tests, setup_masked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
@@ -22,36 +24,35 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 };
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
-use ic_test_utilities_consensus::{fake::*, idkg::*, IDkgStatsNoOp};
-use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
+use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*, idkg::*};
+use ic_test_utilities_types::ids::{NODE_1, NODE_2, node_test_id};
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId,
     artifact::IDkgMessageId,
     consensus::idkg::{
-        self,
-        common::{CombinedSignature, PreSignatureRef},
-        EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent,
+        self, EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent,
         IDkgMasterPublicKeyId, IDkgMessage, IDkgOpeningContent, IDkgPayload, IDkgReshareRequest,
         IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
         MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
         SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, TranscriptAttributes,
         TranscriptLookupError, TranscriptRef, UnmaskedTranscript, VetKdKeyShare,
+        common::{CombinedSignature, PreSignatureRef},
     },
     crypto::{
+        AlgorithmId,
         canister_threshold_sig::{
+            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
             idkg::{
                 IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin,
                 IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
                 SignedIDkgDealing,
             },
-            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         },
         vetkd::{VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent},
-        AlgorithmId,
     },
     messages::CallbackId,
     signature::*,
-    Height, NodeId, RegistryVersion, SubnetId,
 };
 use rand::{CryptoRng, Rng};
 use std::{
@@ -238,8 +239,7 @@ impl IDkgBlockReader for TestIDkgBlockReader {
             .get(transcript_ref)
             .cloned()
             .ok_or(format!(
-                "transcript(): {:?} not found in idkg_transcripts",
-                transcript_ref
+                "transcript(): {transcript_ref:?} not found in idkg_transcripts"
             ))
     }
 
@@ -413,6 +413,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        build_thread_pool(MAX_IDKG_THREADS),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -433,6 +434,7 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
         NODE_1,
         pool.get_block_cache(),
         crypto,
+        build_thread_pool(MAX_IDKG_THREADS),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -576,7 +578,7 @@ pub(crate) fn create_transcript(
         transcript_id,
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
         algorithm_id: AlgorithmId::from(key_id.inner()),
         internal_transcript_raw: vec![],
@@ -698,7 +700,10 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
     let (node_id, params, mut transcript) = create_valid_transcript(env, rng, algorithm);
     let to_corrupt = *transcript.verified_dealings.keys().next().unwrap();
     let complainer_index = params.receiver_index(node_id).unwrap();
-    let signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
+    let signed_dealing = Arc::get_mut(&mut transcript.verified_dealings)
+        .unwrap()
+        .get_mut(&to_corrupt)
+        .unwrap();
     let mut rng = rand::thread_rng();
     let builder = signed_dealing.content.clone().into_builder();
     signed_dealing.content = builder
@@ -923,13 +928,12 @@ pub(crate) fn is_dealing_support_added_to_validated(
     dealer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action {
-            if support.transcript_id == *transcript_id
-                && support.dealer_id == *dealer_id
-                && support.sig_share.signer == NODE_1
-            {
-                return true;
-            }
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action
+            && support.transcript_id == *transcript_id
+            && support.dealer_id == *dealer_id
+            && support.sig_share.signer == NODE_1
+        {
+            return true;
         }
     }
     false
@@ -1013,10 +1017,10 @@ pub(crate) fn is_moved_to_validated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::MoveToValidated(msg) = action {
-            if IDkgArtifactId::from(msg) == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::MoveToValidated(msg) = action
+            && IDkgArtifactId::from(msg) == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1028,10 +1032,10 @@ pub(crate) fn is_removed_from_validated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::RemoveValidated(id) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::RemoveValidated(id) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1043,10 +1047,10 @@ pub(crate) fn is_removed_from_unvalidated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::RemoveUnvalidated(id) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::RemoveUnvalidated(id) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1055,10 +1059,10 @@ pub(crate) fn is_removed_from_unvalidated(
 // Checks that artifact is being dropped as invalid
 pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::HandleInvalid(id, _) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::HandleInvalid(id, _) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1236,7 +1240,7 @@ impl IDkgPayloadTestHelper for IDkgPayload {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values().next().unwrap(),
-            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+            n => panic!("There are multiple ({n}) key transcripts in the payload"),
         }
     }
 
@@ -1244,7 +1248,7 @@ impl IDkgPayloadTestHelper for IDkgPayload {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values_mut().next().unwrap(),
-            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+            n => panic!("There are multiple ({n}) key transcripts in the payload"),
         }
     }
 

@@ -1,14 +1,14 @@
 #![allow(deprecated)]
-use candid::{define_function, CandidType, Nat, Principal};
-use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
+use candid::{CandidType, Nat, Principal, define_function};
+use ic_cdk::api::call::{RejectionCode, accept_message, arg_data_raw, reject};
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
-    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
+    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
 };
 use ic_cdk::api::management_canister::http_request::{
-    http_request as canister_http_outcall, CanisterHttpRequestArgument, HttpMethod, HttpResponse,
-    TransformArgs, TransformContext, TransformFunc,
+    CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs, TransformContext,
+    TransformFunc, http_request as canister_http_outcall,
 };
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
@@ -198,7 +198,7 @@ async fn ecdsa_public_key(
     };
     Ok(ic_cdk_ecdsa_public_key(arg)
         .await
-        .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
+        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
         .0)
 }
 
@@ -218,7 +218,7 @@ async fn sign_with_ecdsa(
     };
     Ok(ic_cdk_sign_with_ecdsa(arg)
         .await
-        .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
+        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
         .0
         .signature)
 }

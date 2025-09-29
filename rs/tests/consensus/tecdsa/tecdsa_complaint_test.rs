@@ -2,8 +2,8 @@ use anyhow::Result;
 
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_and_test_signature, make_key_ids_for_all_schemes,
-    DKG_INTERVAL,
+    DKG_INTERVAL, enable_chain_key_signing, get_public_key_and_test_signature,
+    make_key_ids_for_all_schemes,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -14,9 +14,9 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
-use ic_types::malicious_behavior::MaliciousBehavior;
+use ic_system_test_driver::util::{MessageCanister, assert_malicious_from_topo, runtime_from_url};
 use ic_types::Height;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use slog::info;
 
 fn setup(env: TestEnv) {

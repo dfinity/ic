@@ -1,6 +1,6 @@
 use super::*;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::{
         canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
         canister_state_bits::v1 as pb_canister_state_bits,
@@ -132,7 +132,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
                 |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "ComputeAllocation",
-                    err: format!("{:?}", e),
+                    err: format!("{e:?}"),
                 },
             )?,
             accumulated_priority: value.accumulated_priority.into(),
@@ -143,11 +143,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .unwrap_or_default()
             .into(),
             execution_state_bits,
-            memory_allocation: MemoryAllocation::try_from(NumBytes::from(value.memory_allocation))
-                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                    typ: "MemoryAllocation",
-                    err: format!("{:?}", e),
-                })?,
+            memory_allocation: MemoryAllocation::new_unchecked(NumBytes::from(
+                value.memory_allocation,
+            )),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
@@ -252,7 +250,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
                 .try_into()
                 .map_err(|e| ProxyDecodeError::ValueOutOfRange {
                     typ: "BinaryHash",
-                    err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                    err: format!("Expected a 32-byte long module hash, got {e:?}"),
                 })?;
 
         Ok(Self {
@@ -316,7 +314,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
                 .try_into()
                 .map_err(|e| ProxyDecodeError::ValueOutOfRange {
                     typ: "BinaryHash",
-                    err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                    err: format!("Expected a 32-byte long module hash, got {e:?}"),
                 })?;
 
         let mut exported_globals = Vec::with_capacity(item.exported_globals.len());

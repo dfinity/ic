@@ -22,18 +22,14 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
     let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
     std::fs::read(&uc_wasm_path)
-        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
 
 pub fn get_universal_canister_no_heartbeat_wasm() -> Vec<u8> {
     let uc_no_heartbeat_wasm_path = std::env::var("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH not set");
-    std::fs::read(&uc_no_heartbeat_wasm_path).unwrap_or_else(|e| {
-        panic!(
-            "Could not read WASM from {:?}: {e:?}",
-            uc_no_heartbeat_wasm_path
-        )
-    })
+    std::fs::read(&uc_no_heartbeat_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_no_heartbeat_wasm_path:?}: {e:?}"))
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
@@ -703,6 +699,11 @@ impl PayloadBuilder {
     pub fn certified_data_set(mut self, data: &[u8]) -> Self {
         self = self.push_bytes(data);
         self.0.push(Ops::CertifiedDataSet as u8);
+        self
+    }
+
+    pub fn data_certificate_present(mut self) -> Self {
+        self.0.push(Ops::DataCertificatePresent as u8);
         self
     }
 

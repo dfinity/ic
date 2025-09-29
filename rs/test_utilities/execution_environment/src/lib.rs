@@ -10,16 +10,16 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::{compile, decoding::decode_wasm},
     wasmtime_embedder::system_api::InstructionLimits,
-    WasmtimeEmbedder,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, Hypervisor,
+    IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions,
+    RoundLimits, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -27,7 +27,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
@@ -37,21 +37,21 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    CanisterIdRange, RoutingTable, WellFormedError, CANISTER_IDS_PER_SUBNET,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{
-        execution_state::SandboxMemory, execution_state::WasmExecutionMode, NextExecution,
-    },
-    page_map::{
-        test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
-        PAGE_SIZE,
-    },
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
+    canister_state::{
+        NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
+    },
+    page_map::{
+        PAGE_SIZE, PageMap, TestPageAllocatorFileDescriptorImpl,
+        test_utils::base_only_storage_layout,
+    },
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
@@ -61,15 +61,16 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 };
 use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
+    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
-    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
+    crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query, QuerySource,
-        RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Query, QuerySource, RequestOrResponse,
+        Response,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
@@ -88,7 +89,7 @@ use std::{
 use tempfile::NamedTempFile;
 
 mod wat_canister;
-pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
+pub use wat_canister::{WatCanisterBuilder, WatFnCode, wat_canister, wat_fn};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -326,12 +327,11 @@ impl ExecutionTest {
 
     pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
         // In case of any error or missing state, default to Wasm32.
-        if let Some(state) = self.state.as_ref() {
-            if let Some(canister) = state.canister_state(&canister_id).as_ref() {
-                if let Some(execution_state) = canister.execution_state.as_ref() {
-                    return execution_state.wasm_execution_mode;
-                }
-            }
+        if let Some(state) = self.state.as_ref()
+            && let Some(canister) = state.canister_state(&canister_id).as_ref()
+            && let Some(execution_state) = canister.execution_state.as_ref()
+        {
+            return execution_state.wasm_execution_mode;
         }
         WasmExecutionMode::Wasm32
     }
@@ -343,10 +343,7 @@ impl ExecutionTest {
     pub fn get_xnet_response(&self, index: usize) -> &Arc<Response> {
         match &self.xnet_messages[index] {
             RequestOrResponse::Request(request) => {
-                panic!(
-                    "Expected the xnet message to be a Response, but got a Request: {:?}",
-                    request
-                )
+                panic!("Expected the xnet message to be a Response, but got a Request: {request:?}")
             }
             RequestOrResponse::Response(response) => response,
         }
@@ -627,7 +624,7 @@ impl ExecutionTest {
                 Ok(CanisterIdRecord::decode(&data).unwrap().get_canister_id())
             }
             Ok(WasmResult::Reject(error)) => {
-                panic!("Expected reply, got: {:?}", error);
+                panic!("Expected reply, got: {error:?}");
             }
             Err(error) => Err(error),
         }
@@ -1369,14 +1366,14 @@ impl ExecutionTest {
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
-        if let Some(canister_id) = maybe_canister_id {
-            if let Some(instructions_used) = instructions_used {
-                self.update_execution_stats(
-                    canister_id,
-                    self.install_code_instruction_limits.message(),
-                    instructions_used,
-                );
-            }
+        if let Some(canister_id) = maybe_canister_id
+            && let Some(instructions_used) = instructions_used
+        {
+            self.update_execution_stats(
+                canister_id,
+                self.install_code_instruction_limits.message(),
+                instructions_used,
+            );
         }
         true
     }
@@ -1679,7 +1676,7 @@ impl ExecutionTest {
         self.exec_env.should_accept_ingress_message(
             Arc::new(self.state().clone()),
             &ProvisionalWhitelist::new_empty(),
-            ingress.content(),
+            &ingress,
             ExecutionMode::NonReplicated,
             &IngressFilterMetrics::new(&MetricsRegistry::new()),
         )
@@ -2319,7 +2316,7 @@ impl ExecutionTestBuilder {
             Some(caller_canister) => RoutingTable::try_from(btreemap! {
                 CanisterIdRange { start: caller_canister, end: caller_canister } => self.caller_subnet_id.unwrap(),
                 own_range => self.own_subnet_id,
-            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", caller_canister, own_range)),
+            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {caller_canister} is in the range {own_range:?}")),
         });
 
         self.build_common(routing_table)
@@ -2692,6 +2689,23 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
         .1
         .unwrap();
     serialized_module.compilation_cost
+}
+
+// This function copies the behavior of the actual logging cost computation in
+// rs/embedders/src/wasmtime_embedder/linker.rs.
+fn logging_charge_bytes(message_num_bytes: usize) -> usize {
+    const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let capacity = MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    let remaining_space = capacity;
+    let allocated_num_bytes = message_num_bytes.min(capacity);
+    let transmitted_num_bytes = message_num_bytes.min(remaining_space);
+    2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
+}
+
+/// Helper function to compute the cost of logging during `debug_print` and `trap`.
+pub fn bytes_and_logging_cost(num_bytes: usize) -> usize {
+    num_bytes + logging_charge_bytes(num_bytes)
 }
 
 /// Create a routing table with an allocation range for the creation of canisters with specified Canister IDs.

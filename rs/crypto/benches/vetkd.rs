@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_crypto_temp_crypto::{CryptoComponentRng, TempCryptoComponentGeneric};
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment, RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::LoadTranscriptResult;
@@ -23,6 +23,8 @@ use rand::prelude::*;
 use rand::{CryptoRng, Rng};
 use rand_chacha::ChaCha20Rng;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 criterion_main!(benches);
 criterion_group!(benches, vetkd_bench);
 
@@ -33,12 +35,15 @@ fn vetkd_bench(criterion: &mut Criterion) {
         name: "dummy_key_name".to_string(),
     }));
 
-    for subnet_size in [1, 4, 13, 34, 40] {
+    let number_of_nodes = [34];
+    for subnet_size in number_of_nodes {
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
 
         let group = &mut criterion.benchmark_group(format!(
             "crypto_vetkd_{subnet_size}_nodes_threshold_{threshold}_remote_vault",
         ));
+
+        group.warm_up_time(WARMUP_TIME);
 
         let (config, env) = setup_with_random_ni_dkg_config(&dkg_tag, subnet_size, rng);
         assert_eq!(config.threshold().get().get(), threshold as u32);
@@ -223,10 +228,7 @@ fn create_and_verify_key_shares_for_each<C: CryptoComponentRng>(
             let key_share = crypto
                 .create_encrypted_key_share(vetkd_args.clone())
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "vetKD encrypted key share creation by node {:?} failed: {}",
-                        creator, e
-                    )
+                    panic!("vetKD encrypted key share creation by node {creator:?} failed: {e}")
                 });
             assert_eq!(
                 crypto.verify_encrypted_key_share(*creator, &key_share, vetkd_args),

@@ -1,12 +1,12 @@
 use candid::{Nat, Principal};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_ed25519::{PrivateKey as Ed25519SecretKey, PrivateKeyFormat};
 use ic_icrc1::{Block, Operation, Transaction};
+use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
-use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
 use ic_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -534,8 +534,7 @@ impl TransactionsAndBalances {
                                     .checked_sub(used_allowance)
                                     .unwrap_or_else(|| {
                                         panic!(
-                                            "Allowance {} not enough to cover amount and fee {} - from: {}, to: {}, spender: {}",
-                                            current_amount, used_allowance, from, to, spender_account
+                                            "Allowance {current_amount} not enough to cover amount and fee {used_allowance} - from: {from}, to: {to}, spender: {spender_account}"
                                         )
                                     }),
                             );
@@ -543,10 +542,10 @@ impl TransactionsAndBalances {
                     );
 
                     // Remove allowance entry if it's now zero
-                    if let Some(allowance) = self.allowances.get(&(from, spender_account)) {
-                        if allowance.get_e8s() == 0 {
-                            self.allowances.remove(&(from, spender_account));
-                        }
+                    if let Some(allowance) = self.allowances.get(&(from, spender_account))
+                        && allowance.get_e8s() == 0
+                    {
+                        self.allowances.remove(&(from, spender_account));
                     }
                 }
             }
@@ -1104,14 +1103,12 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                         let allowance_max =
                             allowance_amount.checked_sub(fee_amount).unwrap_or_else(|| {
                                 panic!(
-                                    "allowance ({}) must be greater than or equal to the fee ({})",
-                                    allowance_amount, fee_amount,
+                                    "allowance ({allowance_amount}) must be greater than or equal to the fee ({fee_amount})",
                                 )
                             });
                         let balance_max = current_balance.checked_sub(fee_amount).unwrap_or_else(|| {
                             panic!(
-                                "current balance ({}) must be greater than or equal to the fee ({})",
-                                current_balance, fee_amount,
+                                "current balance ({current_balance}) must be greater than or equal to the fee ({fee_amount})",
                             )
                         });
 

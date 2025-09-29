@@ -8,17 +8,17 @@ use crate::driver::{
     dsl::SubprocessFn,
     event::TaskId,
     process::{KillFn, Process},
-    subprocess_ipc::{log_panic_event, LogReceiver, ReportOrFailure},
+    subprocess_ipc::{LogReceiver, ReportOrFailure, log_panic_event},
     task::{Task, TaskHandle},
     task_scheduler::TaskResult,
 };
-use slog::{debug, error, info, Logger};
+use slog::{Logger, debug, error, info};
 use std::{
     panic::catch_unwind,
     process::Command,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
 };
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle, time::timeout};
@@ -152,7 +152,7 @@ impl Task for SubprocessTask {
                                     )),
                                     Some(code) => notify(TaskResult::Failure(
                                         task_id.clone(),
-                                        format!("Task {} failed with exit code: {:?}.", task_id, code),
+                                        format!("Task {task_id} failed with exit code: {code:?}."),
                                     )),
                                     None => notify(TaskResult::Failure(
                                         task_id.clone(),
@@ -163,7 +163,7 @@ impl Task for SubprocessTask {
                                 Err(e) => {
                                     notify(TaskResult::Failure(
                                         task_id,
-                                        format!("System API failure: {:?}", e),
+                                        format!("System API failure: {e:?}"),
                                     ));
                                 }
                             }
@@ -271,7 +271,7 @@ fn panic_to_result(panic_res: std::thread::Result<()>) -> Result<(), String> {
         } else if let Some(s) = panic_res.downcast_ref::<&str>() {
             Err(s.to_string())
         } else {
-            Err(format!("{:?}", panic_res))
+            Err(format!("{panic_res:?}"))
         }
     } else {
         Ok(())

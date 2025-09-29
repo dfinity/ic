@@ -180,7 +180,9 @@ impl MaliciousBehavior {
         if self.allow_malicious_behavior {
             f(self)
         } else {
-            panic!("Attempted to enable malicious behavior without first setting allow_malicious_behavior to true")
+            panic!(
+                "Attempted to enable malicious behavior without first setting allow_malicious_behavior to true"
+            )
         }
     }
 
@@ -188,7 +190,9 @@ impl MaliciousBehavior {
         if self.allow_malicious_behavior {
             f(self, value)
         } else {
-            panic!("Attempted to enable malicious behavior without first setting allow_malicious_behavior to true")
+            panic!(
+                "Attempted to enable malicious behavior without first setting allow_malicious_behavior to true"
+            )
         }
     }
 }

@@ -1,4 +1,6 @@
-use crate::{governance::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map};
+use crate::{
+    proposals::register_known_neuron::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{Memory, StableBTreeMap, Storable};
@@ -146,7 +148,7 @@ impl KnownNeuronName {
 }
 
 impl Storable for KnownNeuronName {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         self.0.to_bytes()
     }
 

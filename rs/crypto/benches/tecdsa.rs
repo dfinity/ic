@@ -1,30 +1,32 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, SamplingMode, criterion_group, criterion_main};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    ecdsa_sig_share_from_each_receiver, generate_key_transcript, generate_tecdsa_protocol_inputs,
-    random_crypto_component_not_in_receivers, CanisterThresholdSigTestEnvironment,
-    IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, ecdsa_sig_share_from_each_receiver,
+    generate_key_transcript, generate_tecdsa_protocol_inputs,
+    random_crypto_component_not_in_receivers,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+use ic_types::Randomness;
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
-use ic_types::Randomness;
 use rand::{CryptoRng, Rng, RngCore};
 use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
+
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
 
 criterion_main!(benches);
 criterion_group!(benches, crypto_tecdsa_benchmarks);
 
 fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
-    let number_of_nodes = [1, 4, 13, 34, 40];
+    let number_of_nodes = [34];
 
     let test_cases = generate_test_cases(&number_of_nodes);
 
@@ -32,6 +34,7 @@ fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
+            .warm_up_time(WARMUP_TIME)
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
@@ -309,7 +312,7 @@ impl TestCase {
         let curve = match self.alg {
             AlgorithmId::ThresholdEcdsaSecp256k1 => "secp256k1",
             AlgorithmId::ThresholdEcdsaSecp256r1 => "secp256r1",
-            unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
+            unexpected => panic!("Unexpected testcase algorithm {unexpected}"),
         };
         format!("crypto_tecdsa_{}_{}_nodes", curve, self.num_of_nodes)
     }

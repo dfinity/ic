@@ -1,37 +1,41 @@
 //! The complaint handling
 use crate::{
-    metrics::{timed_call, IDkgComplaintMetrics},
-    utils::{update_purge_height, IDkgBlockReaderImpl},
+    IDkgSchedule,
+    metrics::{IDkgComplaintMetrics, timed_call},
+    utils::IDkgBlockReaderImpl,
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, RoundRobin};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::{ErrorReproducibility, IDkgProtocol},
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
+    Height, NodeId, RegistryVersion,
     artifact::IDkgMessageId,
     consensus::idkg::{
-        complaint_prefix, opening_prefix, IDkgBlockReader, IDkgComplaintContent, IDkgMessage,
-        IDkgOpeningContent, SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef,
+        IDkgBlockReader, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent,
+        SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef, complaint_prefix, opening_prefix,
     },
     crypto::canister_threshold_sig::{
         error::IDkgLoadTranscriptError,
         idkg::{IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId},
     },
-    Height, NodeId, RegistryVersion,
 };
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
 
 pub(crate) trait IDkgComplaintHandler: Send {
     /// The on_state_change() called from the main IDKG path.
-    fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet;
+    fn on_state_change(
+        &self,
+        idkg_pool: &dyn IDkgPool,
+        schedule: &IDkgSchedule<Height>,
+    ) -> IDkgChangeSet;
 
     /// Get a reference to the transcript loader.
     fn as_transcript_loader(&self) -> &dyn IDkgTranscriptLoader;
@@ -75,10 +79,8 @@ pub(crate) struct IDkgComplaintHandlerImpl {
     node_id: NodeId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
-    schedule: RoundRobin,
     metrics: IDkgComplaintMetrics,
     log: ReplicaLogger,
-    prev_finalized_height: RefCell<Height>,
 }
 
 impl IDkgComplaintHandlerImpl {
@@ -93,10 +95,8 @@ impl IDkgComplaintHandlerImpl {
             node_id,
             consensus_block_cache,
             crypto,
-            schedule: RoundRobin::default(),
             metrics: IDkgComplaintMetrics::new(metrics_registry),
             log,
-            prev_finalized_height: RefCell::new(Height::from(0)),
         }
     }
 
@@ -122,10 +122,7 @@ impl IDkgComplaintHandlerImpl {
                     .complaint_errors_inc("duplicate_complaints_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate complaint in unvalidated batch: {}",
-                        signed_complaint
-                    ),
+                    format!("Duplicate complaint in unvalidated batch: {signed_complaint}"),
                 ));
                 continue;
             }
@@ -146,7 +143,7 @@ impl IDkgComplaintHandlerImpl {
                         self.metrics.complaint_errors_inc("duplicate_complaint");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate complaint: {}", signed_complaint),
+                            format!("Duplicate complaint: {signed_complaint}"),
                         ));
                     } else {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_complaints")
@@ -163,8 +160,7 @@ impl IDkgComplaintHandlerImpl {
                                 ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
-                                        "validate_complaints(): failed to resolve: {}",
-                                        signed_complaint
+                                        "validate_complaints(): failed to resolve: {signed_complaint}"
                                     ),
                                 ));
                             }
@@ -246,7 +242,7 @@ impl IDkgComplaintHandlerImpl {
                     .complaint_errors_inc("duplicate_openings_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Duplicate opening in unvalidated batch: {}", signed_opening),
+                    format!("Duplicate opening in unvalidated batch: {signed_opening}"),
                 ));
                 continue;
             }
@@ -268,7 +264,7 @@ impl IDkgComplaintHandlerImpl {
                         self.metrics.complaint_errors_inc("duplicate_opening");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate opening: {}", signed_opening),
+                            format!("Duplicate opening: {signed_opening}"),
                         ));
                     } else if let Some(signed_complaint) =
                         self.get_complaint_for_opening(idkg_pool, &signed_opening)
@@ -290,8 +286,7 @@ impl IDkgComplaintHandlerImpl {
                                 ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
-                                        "validate_openings(): failed to resolve: {}",
-                                        signed_opening
+                                        "validate_openings(): failed to resolve: {signed_opening}"
                                     ),
                                 ));
                             }
@@ -444,8 +439,7 @@ impl IDkgComplaintHandlerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Complaint signature validation(permanent error): {}, error = {:?}",
-                        signed_complaint, error
+                        "Complaint signature validation(permanent error): {signed_complaint}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -473,8 +467,7 @@ impl IDkgComplaintHandlerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Complaint validation(permanent error): {}, error = {:?}",
-                        signed_complaint, error
+                        "Complaint validation(permanent error): {signed_complaint}, error = {error:?}"
                     ),
                 ))
             }
@@ -571,8 +564,7 @@ impl IDkgComplaintHandlerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Opening signature validation(permanent error): {}, error = {:?}",
-                        signed_opening, error
+                        "Opening signature validation(permanent error): {signed_opening}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -601,8 +593,7 @@ impl IDkgComplaintHandlerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Opening validation(permanent error): {}, error = {:?}",
-                        signed_opening, error
+                        "Opening validation(permanent error): {signed_opening}, error = {error:?}"
                     ),
                 ))
             }
@@ -778,20 +769,23 @@ impl IDkgComplaintHandlerImpl {
 }
 
 impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
-    fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet {
+    fn on_state_change(
+        &self,
+        idkg_pool: &dyn IDkgPool,
+        schedule: &IDkgSchedule<Height>,
+    ) -> IDkgChangeSet {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
-        let mut changes =
-            if update_purge_height(&self.prev_finalized_height, block_reader.tip_height()) {
-                timed_call(
-                    "purge_artifacts",
-                    || self.purge_artifacts(idkg_pool, &block_reader),
-                    &metrics.on_state_change_duration,
-                )
-            } else {
-                IDkgChangeSet::default()
-            };
+        let mut changes = if schedule.update_last_purge(block_reader.tip_height()) {
+            timed_call(
+                "purge_artifacts",
+                || self.purge_artifacts(idkg_pool, &block_reader),
+                &metrics.on_state_change_duration,
+            )
+        } else {
+            IDkgChangeSet::default()
+        };
 
         let validate_complaints = || {
             timed_call(
@@ -818,7 +812,7 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         let calls: [&'_ dyn Fn() -> IDkgChangeSet; 3] =
             [&validate_complaints, &send_openings, &validate_openings];
 
-        changes.append(&mut self.schedule.call_next(&calls));
+        changes.append(&mut schedule.call_next(&calls));
         changes
     }
 
@@ -827,7 +821,7 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
     }
 }
 
-pub(crate) trait IDkgTranscriptLoader: Send {
+pub(crate) trait IDkgTranscriptLoader: Send + Sync {
     /// Loads the given transcript
     fn load_transcript(
         &self,
@@ -987,10 +981,10 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
+        Height,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, TranscriptRef},
         crypto::AlgorithmId,
         time::UNIX_EPOCH,
-        Height,
     };
 
     // Tests the Action logic
@@ -1233,21 +1227,16 @@ mod tests {
                 ];
                 idkg_pool.apply(change_set);
 
+                let schedule = IDkgSchedule::new(Height::from(0));
                 // Finalized height doesn't increase, so complaint1 shouldn't be purged
-                let change_set = complaint_handler.on_state_change(&idkg_pool);
-                assert_eq!(
-                    *complaint_handler.prev_finalized_height.borrow(),
-                    Height::from(0)
-                );
+                let change_set = complaint_handler.on_state_change(&idkg_pool, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), Height::from(0));
                 assert!(change_set.is_empty());
 
                 // Finalized height increases, so complaint1 is purged
                 let new_height = consensus_pool.advance_round_normal_operation_n(29);
-                let change_set = complaint_handler.on_state_change(&idkg_pool);
-                assert_eq!(
-                    *complaint_handler.prev_finalized_height.borrow(),
-                    new_height
-                );
+                let change_set = complaint_handler.on_state_change(&idkg_pool, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
 
@@ -1255,11 +1244,8 @@ mod tests {
 
                 // Finalized height increases above complaint2, so it is purged
                 let new_height = consensus_pool.advance_round_normal_operation();
-                let change_set = complaint_handler.on_state_change(&idkg_pool);
-                assert_eq!(
-                    *complaint_handler.prev_finalized_height.borrow(),
-                    new_height
-                );
+                let change_set = complaint_handler.on_state_change(&idkg_pool, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(transcript_height, new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id2));

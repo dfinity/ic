@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_canister_on_subnet, STARTING_CYCLES_PER_CANISTER,
+    STARTING_CYCLES_PER_CANISTER, install_canister_on_subnet,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
@@ -14,13 +14,13 @@ use ic_sns_testing::bootstrap::bootstrap_nns;
 use ic_sns_testing::sns::pocket_ic::{create_sns, propose_sns_controlled_canister_upgrade};
 use ic_sns_testing::sns::{await_sns_controlled_canister_upgrade, sns_proposal_upvote};
 use ic_sns_testing::utils::{
-    validate_network, validate_target_canister, SnsTestingCanisterValidationError,
-    SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
+    SnsTestingCanisterValidationError, SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
+    validate_network, validate_target_canister,
 };
 use icp_ledger::Tokens;
 use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig, InstanceHttpGatewayConfig};
 use pocket_ic::nonblocking::PocketIc;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIcBuilder, Time};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
@@ -78,7 +78,7 @@ async fn prepare_network_for_test(
     let pocket_ic = PocketIcBuilder::new()
         .with_state_dir(state_dir)
         .with_icp_features(all_icp_features)
-        .with_initial_timestamp(current_time)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(current_time))
         .with_http_gateway(http_gateway_config)
         .with_nns_subnet()
         .with_sns_subnet()
@@ -132,9 +132,11 @@ async fn prepare_test_canister(pocket_ic: &PocketIc) -> CanisterId {
         },
     )
     .await;
-    assert!(validate_target_canister(pocket_ic, test_canister_id)
-        .await
-        .is_empty());
+    assert!(
+        validate_target_canister(pocket_ic, test_canister_id)
+            .await
+            .is_empty()
+    );
     test_canister_query(pocket_ic, test_canister_id, greeting).await;
     test_canister_id
 }

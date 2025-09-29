@@ -66,6 +66,12 @@ write_info_file_var(
     visibility = ["//visibility:public"],
 )
 
+write_info_file_var(
+    name = "commit_date_iso_8601.txt",
+    varname = "STABLE_COMMIT_DATE_ISO_8601",
+    visibility = ["//visibility:public"],
+)
+
 exports_files(
     [
         "prost_generator.sh",

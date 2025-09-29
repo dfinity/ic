@@ -8,9 +8,9 @@ use humantime::{format_duration, parse_duration};
 use ipnet::IpNet;
 use regex::Regex;
 use serde::{
+    Deserialize, Serialize,
     de::{self, Deserializer, Error},
     ser::Serializer,
-    Deserialize, Serialize,
 };
 
 pub const SCHEMA_VERSION: u64 = 1;
@@ -19,11 +19,15 @@ pub const SCHEMA_VERSION: u64 = 1;
 #[serde(rename_all = "snake_case")]
 pub enum RequestType {
     Unknown,
-    Query,
-    Call,
-    SyncCall,
-    ReadState,
-    ReadStateSubnet,
+    QueryV2,
+    QueryV3,
+    CallV2,
+    CallV3,
+    CallV4,
+    ReadStateV2,
+    ReadStateV3,
+    ReadStateSubnetV2,
+    ReadStateSubnetV3,
 }
 
 /// Implement serde parser for Action
@@ -316,10 +320,12 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("v4 prefix must be"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("v4 prefix must be")
+        );
 
         let rule_raw = indoc! {"
         canister_id: aaaaa-aa
@@ -331,10 +337,12 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("v6 prefix must be"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("v6 prefix must be")
+        );
 
         // limit: block with ip prefixes
         let rule_raw = indoc! {"
@@ -347,10 +355,12 @@ mod test {
         limit: block
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("ip_prefix_group only makes sense with"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("ip_prefix_group only makes sense with")
+        );
 
         // No conditions
         let rule_raw = indoc! {"
@@ -360,10 +370,12 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("at least one filtering condition must be"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("at least one filtering condition must be")
+        );
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa
@@ -385,20 +397,20 @@ mod test {
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
           request_types:
-            - query
+            - query_v2
           methods_regex: ^(foo|bar)$
           limit: block
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
           request_types:
-            - call
-            - sync_call
+            - query_v2
+            - call_v3
           limit: block
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
           request_types:
-            - call
-            - sync_call
+            - call_v2
+            - call_v3
           limit: pass
           "};
 
@@ -454,7 +466,7 @@ mod test {
                 RateLimitRule {
                     subnet_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_types: Some(vec![RequestType::Query]),
+                    request_types: Some(vec![RequestType::QueryV2]),
                     methods_regex: Some(Regex::new("^(foo|bar)$").unwrap()),
                     ip: None,
                     ip_prefix_group: None,
@@ -463,7 +475,7 @@ mod test {
                 RateLimitRule {
                     subnet_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_types: Some(vec![RequestType::Call, RequestType::SyncCall]),
+                    request_types: Some(vec![RequestType::QueryV2, RequestType::CallV3]),
                     methods_regex: None,
                     ip: None,
                     ip_prefix_group: None,
@@ -472,7 +484,7 @@ mod test {
                 RateLimitRule {
                     subnet_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_types: Some(vec![RequestType::Call, RequestType::SyncCall]),
+                    request_types: Some(vec![RequestType::CallV2, RequestType::CallV3]),
                     methods_regex: None,
                     ip: None,
                     ip_prefix_group: None,

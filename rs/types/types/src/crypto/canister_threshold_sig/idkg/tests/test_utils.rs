@@ -1,13 +1,14 @@
+use crate::crypto::AlgorithmId;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin,
 };
-use crate::crypto::AlgorithmId;
 use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_test_utils_canister_threshold_sigs::node_id;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 // Due to a quasi-circular dependency with ic-types
 // the test utilities here cannot be replaced by the ones in
@@ -68,7 +69,7 @@ pub fn mock_transcript<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
         internal_transcript_raw: vec![],

@@ -5,7 +5,7 @@ use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant};
+use deterministic_ips::{IpVariant, calculate_deterministic_mac};
 use std::path::{Path, PathBuf};
 
 // See build.rs
@@ -64,13 +64,16 @@ fn make_bootstrap_options(
     };
 
     #[cfg(feature = "dev")]
-    if hostos_config.icos_settings.use_ssh_authorized_keys {
-        bootstrap_options.accounts_ssh_authorized_keys =
-            Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
-    }
+    {
+        if hostos_config.icos_settings.use_ssh_authorized_keys {
+            bootstrap_options.accounts_ssh_authorized_keys =
+                Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
+        }
 
-    if hostos_config.icos_settings.use_nns_public_key {
-        bootstrap_options.nns_public_key = Some(PathBuf::from("/boot/config/nns_public_key.pem"));
+        let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
+        if nns_key_override_path.exists() {
+            bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
+        }
     }
 
     if hostos_config.icos_settings.use_node_operator_private_key {
@@ -197,7 +200,6 @@ mod tests {
     #[test]
     fn test_make_bootstrap_options() {
         let mut config = create_test_hostos_config();
-        config.icos_settings.use_nns_public_key = true;
         config.icos_settings.use_ssh_authorized_keys = true;
         config.icos_settings.use_node_operator_private_key = true;
 
@@ -210,7 +212,7 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
-                nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
+                nns_public_key_override: None,
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"
                 )),

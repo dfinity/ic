@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::str::FromStr;
 use tempfile::TempDir;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use url::Url;
 
 use ic_icrc_rosetta_client::RosettaClient;
@@ -62,12 +62,11 @@ pub async fn start_rosetta(
         |state_dir| (state_dir, None),
     );
     let port_file = state_directory.join("port");
-    if port_file.exists() {
-        if let Err(e) = std::fs::remove_file(port_file.clone()) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                panic!("Unable to remove port file: {:?}", e);
-            }
-        }
+    if port_file.exists()
+        && let Err(e) = std::fs::remove_file(port_file.clone())
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        panic!("Unable to remove port file: {e:?}");
     }
     let mut cmd = Command::new(rosetta_bin);
     cmd.arg("--ic-url")
@@ -106,7 +105,7 @@ pub async fn start_rosetta(
     let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
     let port = u16::from_str(&port).expect("Expected port in port file");
 
-    let rosetta_client = RosettaClient::from_str_url(&format!("http://localhost:{}", port))
+    let rosetta_client = RosettaClient::from_str_url(&format!("http://localhost:{port}"))
         .expect("Unable to create the RosettaClient");
 
     // wait because rosetta may be recovering from existing state
@@ -117,7 +116,7 @@ pub async fn start_rosetta(
     }
 
     if let Err(e) = rosetta_client.network_list().await {
-        panic!("Unable to get the network_list from rosetta: {:?}", e);
+        panic!("Unable to get the network_list from rosetta: {e:?}");
     };
 
     let context = RosettaContext {

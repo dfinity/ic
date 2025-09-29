@@ -230,7 +230,7 @@ fn generator_h_has_expected_value() -> CanisterThresholdResult<()> {
             "idkg"
         };
 
-        let dst = format!("ic-crypto-{}-{}-generator-h", proto_name, curve_type);
+        let dst = format!("ic-crypto-{proto_name}-{curve_type}-generator-h");
 
         let h2p = EccPoint::hash_to_point(curve_type, input.as_bytes(), dst.as_bytes())?;
 
@@ -646,5 +646,49 @@ fn test_mul_n_vartime_naf() -> CanisterThresholdResult<()> {
         }
     }
 
+    Ok(())
+}
+
+#[test]
+fn test_scalar_inversion() -> CanisterThresholdResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve in EccCurveType::all() {
+        let zero = EccScalar::zero(curve);
+        assert!(zero.invert().is_none());
+        assert!(zero.invert_vartime().is_none());
+
+        let hex_one = hex::encode(EccScalar::one(curve).serialize());
+
+        for _trial in 0..1024 {
+            let s = EccScalar::random(curve, rng);
+
+            match (s.invert(), s.invert_vartime()) {
+                (Some(si), Some(siv)) => {
+                    assert_eq!(hex::encode(si.serialize()), hex::encode(siv.serialize()));
+                    assert_eq!(hex::encode(s.mul(&si)?.serialize()), hex_one);
+                }
+                (None, None) => {
+                    assert!(s.is_zero());
+                }
+                (Some(_), None) => panic!("Invert and invert vartime disagreed"),
+                (None, Some(_)) => panic!("Invert and invert vartime disagreed"),
+            }
+        }
+
+        for n in 0..64 {
+            let scalars = (0..n)
+                .map(|_i| EccScalar::random(curve, rng))
+                .collect::<Vec<_>>();
+
+            if let Ok(inverses) = EccScalar::batch_invert_vartime(&scalars) {
+                assert_eq!(inverses.len(), scalars.len());
+
+                for (s, i) in scalars.iter().zip(&inverses) {
+                    assert_eq!(hex::encode(s.mul(i)?.serialize()), hex_one);
+                }
+            }
+        }
+    }
     Ok(())
 }

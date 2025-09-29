@@ -121,15 +121,15 @@ fn read() {
         for _ in 0..repeat {
             for i in (src..src + len).step_by(step) {
                 let value = memory[i];
-                if let Some(expected_value) = operation.value {
-                    if expected_value != value as u8 {
-                        trap_with(&format!(
-                            "Value mismatch at {}, expected {}, got {}",
-                            i * ELEMENT_SIZE,
-                            expected_value,
-                            value
-                        ));
-                    }
+                if let Some(expected_value) = operation.value
+                    && expected_value != value as u8
+                {
+                    trap_with(&format!(
+                        "Value mismatch at {}, expected {}, got {}",
+                        i * ELEMENT_SIZE,
+                        expected_value,
+                        value
+                    ));
                 }
                 sum += value;
             }
@@ -250,13 +250,12 @@ fn stable_read() {
                     // provided the rest of the bytes are zeros.
                     // So the sum should match the sum of normal `read()`
                     let value = buf[i as usize];
-                    if let Some(expected_value) = operation.value {
-                        if expected_value != value {
-                            trap_with(&format!(
-                                "Value mismatch at {}, expected {}, got {}",
-                                i, expected_value, value
-                            ));
-                        }
+                    if let Some(expected_value) = operation.value
+                        && expected_value != value
+                    {
+                        trap_with(&format!(
+                            "Value mismatch at {i}, expected {expected_value}, got {value}"
+                        ));
                     }
                     sum += value as u64;
                 }
@@ -269,13 +268,12 @@ fn stable_read() {
                 for i in (src..src + len).step_by(step) {
                     stable::stable64_read(buf, i, 1);
                     let value = buf[0];
-                    if let Some(expected_value) = operation.value {
-                        if expected_value != value {
-                            trap_with(&format!(
-                                "Value mismatch at {}, expected {}, got {}",
-                                i, expected_value, value
-                            ));
-                        }
+                    if let Some(expected_value) = operation.value
+                        && expected_value != value
+                    {
+                        trap_with(&format!(
+                            "Value mismatch at {i}, expected {expected_value}, got {value}"
+                        ));
                     }
                     sum += value as u64;
                 }
@@ -520,20 +518,17 @@ fn main() {
     }
     MEMORY.with(|s| s.replace(memory));
     api::print(format!(
-        "Successfully initialized canister with {} bytes",
-        MEMORY_SIZE,
+        "Successfully initialized canister with {MEMORY_SIZE} bytes",
     ));
 
     // Grow stable memory by `STABLE_MEMORY_SIZE`.
     if stable::stable64_grow(STABLE_MEMORY_SIZE / WASM_PAGE_SIZE_IN_BYTES as u64) == -1 {
         api::trap_with(&format!(
-            "Could not grow stable memory by {} bytes",
-            STABLE_MEMORY_SIZE,
+            "Could not grow stable memory by {STABLE_MEMORY_SIZE} bytes",
         ));
     }
 
     api::print(format!(
-        "Successfully initialized canister with {} bytes of stable memory",
-        STABLE_MEMORY_SIZE,
+        "Successfully initialized canister with {STABLE_MEMORY_SIZE} bytes of stable memory",
     ));
 }

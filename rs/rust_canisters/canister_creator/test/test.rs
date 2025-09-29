@@ -47,7 +47,7 @@ fn creating_canisters_works() {
         .execute_ingress(
             canister_creator_canister_id,
             "create_canisters",
-            format!(r#"{}"#, number_of_canisters).as_bytes().to_vec(),
+            format!(r#"{number_of_canisters}"#).as_bytes().to_vec(),
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply("null".as_bytes().to_vec()));
@@ -72,7 +72,7 @@ fn install_code_works() {
         .execute_ingress(
             canister_creator_canister_id,
             "create_canisters",
-            format!(r#"{}"#, number_of_canisters).as_bytes().to_vec(),
+            format!(r#"{number_of_canisters}"#).as_bytes().to_vec(),
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply("null".as_bytes().to_vec()));

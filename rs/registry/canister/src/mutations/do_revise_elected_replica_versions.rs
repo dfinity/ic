@@ -16,7 +16,7 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 
@@ -154,8 +154,7 @@ impl Registry {
 
         if !in_use.is_empty() {
             panic!(
-                "{}Cannot retire versions {:?}, because they are currently deployed to a subnet!",
-                LOG_PREFIX, in_use
+                "{LOG_PREFIX}Cannot retire versions {in_use:?}, because they are currently deployed to a subnet!"
             );
         }
 
@@ -172,14 +171,12 @@ impl Registry {
 
         if let Some(version) = in_use {
             panic!(
-                "{}Cannot retire version {}, because it is currently deployed to unassigned nodes!",
-                LOG_PREFIX, version
+                "{LOG_PREFIX}Cannot retire version {version}, because it is currently deployed to unassigned nodes!"
             );
         }
 
         println!(
-            "{}Blessed versions before: {:?} and after: {:?}",
-            LOG_PREFIX, before_removal, after_removal
+            "{LOG_PREFIX}Blessed versions before: {before_removal:?} and after: {after_removal:?}"
         );
 
         after_removal

@@ -120,7 +120,8 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
         ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
     ).stdout.splitlines()
 
-    log("Calculating targets to test for the following {n} modified files:".format(n=len(modified_files)))
+    n = len(modified_files)
+    log(f"Calculating targets to {command} for the following {n} modified files:")
     for file in modified_files:
         log(file)
 
@@ -166,10 +167,19 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     return query
 
 
-def targets(command: str, skip_long_tests: bool, base: str | None, head: str | None):
+def targets(
+    command: str,
+    skip_long_tests: bool,
+    skip_didc_checks: bool,
+    skip_buf_checks: bool,
+    base: str | None,
+    head: str | None,
+):
     """Print the bazel targets to build or test to stdout."""
     # If no base is specified, form a query to return all targets
-    # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified).
+    # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified)
+    # and exclude those tagged with 'didc' (in case --skip_didc_checks was specified)
+    # and exclude those tagged with 'buf' (in case --skip_buf_checks was specified).
     # Otherwise return a query for all targets that have modified inputs in the specified
     # git commit range taking several factors into account:
     query = (
@@ -179,7 +189,12 @@ def targets(command: str, skip_long_tests: bool, base: str | None, head: str | N
     )
 
     # Finally, exclude targets that have any of the excluded tags:
-    excluded_tags_regex = "|".join(EXCLUDED_TAGS)
+    excluded_tags = EXCLUDED_TAGS
+    if skip_didc_checks:
+        excluded_tags.append("didc")
+    if skip_buf_checks:
+        excluded_tags.append("buf")
+    excluded_tags_regex = "|".join(excluded_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
     args = ["bazel", "query", "--keep_going", query]
@@ -260,6 +275,8 @@ def main():
         help="Bazel command to generate targets for. If 'check' then check PULL_REQUEST_BAZEL_TARGETS for correctness",
     )
     parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
+    parser.add_argument("--skip_didc_checks", action="store_true", help="Exclude tests tagged as 'didc'")
+    parser.add_argument("--skip_buf_checks", action="store_true", help="Exclude tests tagged as 'buf'")
     parser.add_argument(
         "--base",
         help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`. When --head is not provided defaults to HEAD.",
@@ -270,7 +287,7 @@ def main():
     if args.command == "check":
         check()
 
-    targets(args.command, args.skip_long_tests, args.base, args.head)
+    targets(args.command, args.skip_long_tests, args.skip_didc_checks, args.skip_buf_checks, args.base, args.head)
 
 
 if __name__ == "__main__":

@@ -6,10 +6,9 @@ use crate::pb::v1::{
     NeuronsFundParticipationConstraints as NeuronsFundParticipationConstraintsPb,
 };
 use ic_neurons_fund::{
-    DeserializableFunction, IdealMatchingFunction, PolynomialMatchingFunction,
+    DeserializableFunction, IdealMatchingFunction, MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
+    MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES, PolynomialMatchingFunction,
     ValidatedLinearScalingCoefficient, ValidatedNeuronsFundParticipationConstraints,
-    MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
-    MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
 };
 
 #[derive(Debug)]
@@ -33,7 +32,7 @@ impl std::fmt::Display for LinearScalingCoefficientValidationError {
         let prefix = "LinearScalingCoefficientValidationError: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                write!(f, "{prefix}Field `{}` must be specified.", field_name)
+                write!(f, "{prefix}Field `{field_name}` must be specified.")
             }
             Self::EmptyInterval {
                 from_direct_participation_icp_e8s,
@@ -41,9 +40,8 @@ impl std::fmt::Display for LinearScalingCoefficientValidationError {
             } => {
                 write!(
                     f,
-                    "{prefix}from_direct_participation_icp_e8s ({}) must be strictly less that \
-                    to_direct_participation_icp_e8s ({})).",
-                    from_direct_participation_icp_e8s, to_direct_participation_icp_e8s,
+                    "{prefix}from_direct_participation_icp_e8s ({from_direct_participation_icp_e8s}) must be strictly less that \
+                    to_direct_participation_icp_e8s ({to_direct_participation_icp_e8s})).",
                 )
             }
             Self::DenominatorIsZero => {
@@ -55,9 +53,8 @@ impl std::fmt::Display for LinearScalingCoefficientValidationError {
             } => {
                 write!(
                     f,
-                    "{prefix}slope_numerator ({}) must be less than or equal \
-                    slope_denominator ({})",
-                    slope_numerator, slope_denominator,
+                    "{prefix}slope_numerator ({slope_numerator}) must be less than or equal \
+                    slope_denominator ({slope_denominator})",
                 )
             }
         }
@@ -132,26 +129,23 @@ impl std::fmt::Display for LinearScalingCoefficientVecValidationError {
             Self::LinearScalingCoefficientsOutOfRange(num_elements) => {
                 write!(
                     f,
-                    "{}coefficient_intervals (len={}) must contain at least 1 and at most {} elements.",
-                    prefix, num_elements, MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
+                    "{prefix}coefficient_intervals (len={num_elements}) must contain at least 1 and at most {MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN} elements.",
                 )
             }
             Self::LinearScalingCoefficientsUnordered(left, right) => {
                 write!(
                     f,
-                    "{}The intervals {:?} and {:?} are ordered incorrectly.",
-                    prefix, left, right
+                    "{prefix}The intervals {left:?} and {right:?} are ordered incorrectly."
                 )
             }
             Self::IrregularLinearScalingCoefficients(interval) => {
                 write!(
                     f,
-                    "{}The first interval {:?} does not start from 0.",
-                    prefix, interval,
+                    "{prefix}The first interval {interval:?} does not start from 0.",
                 )
             }
             Self::LinearScalingCoefficientValidationError(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
         }
     }
@@ -251,15 +245,13 @@ impl std::fmt::Display for IdealMatchedParticipationFunctionValidationError {
             Self::TooManyBytes(num_bytes) => {
                 write!(
                     f,
-                    "{prefix} serialized representation has {} bytes; the maximum is {} bytes.",
-                    num_bytes, MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
+                    "{prefix} serialized representation has {num_bytes} bytes; the maximum is {MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES} bytes.",
                 )
             }
             Self::DeserializationError { input, err } => {
                 write!(
                     f,
-                    "{prefix} deserialization failed: {}; input: `{}`.",
-                    err, input
+                    "{prefix} deserialization failed: {err}; input: `{input}`."
                 )
             }
         }
@@ -280,13 +272,13 @@ impl std::fmt::Display for NeuronsFundParticipationConstraintsValidationError {
         let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
         match self {
             Self::RelatedFieldUnspecified(related_field_name) => {
-                write!(f, "{}{} must be specified.", prefix, related_field_name,)
+                write!(f, "{prefix}{related_field_name} must be specified.",)
             }
             Self::LinearScalingCoefficientVecValidationError(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             Self::IdealMatchedParticipationFunctionValidationError(error) => {
-                write!(f, "{prefix}{}", error)
+                write!(f, "{prefix}{error}")
             }
         }
     }
@@ -374,14 +366,14 @@ where
             })?;
 
         // Validate that coefficient_intervals starts from 0.
-        if let Some(first_interval) = intervals.first() {
-            if first_interval.from_direct_participation_icp_e8s != 0 {
-                return Err(Self::Error::LinearScalingCoefficientVecValidationError(
-                    LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
-                        first_interval.clone(),
-                    ),
-                ));
-            }
+        if let Some(first_interval) = intervals.first()
+            && first_interval.from_direct_participation_icp_e8s != 0
+        {
+            return Err(Self::Error::LinearScalingCoefficientVecValidationError(
+                LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
+                    first_interval.clone(),
+                ),
+            ));
         }
 
         let matching_function_serialized_representation = value
@@ -601,14 +593,14 @@ where
             })?;
 
         // Validate that coefficient_intervals starts from 0.
-        if let Some(first_interval) = intervals.first() {
-            if first_interval.from_direct_participation_icp_e8s != 0 {
-                return Err(Self::Error::LinearScalingCoefficientVecValidationError(
-                    LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
-                        first_interval.clone(),
-                    ),
-                ));
-            }
+        if let Some(first_interval) = intervals.first()
+            && first_interval.from_direct_participation_icp_e8s != 0
+        {
+            return Err(Self::Error::LinearScalingCoefficientVecValidationError(
+                LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
+                    first_interval.clone(),
+                ),
+            ));
         }
 
         let matching_function_serialized_representation = value

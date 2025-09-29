@@ -1,18 +1,18 @@
 use super::{
     canister_state::CanisterState,
     metadata_state::{
-        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
         IngressHistoryState, Stream, StreamMap, SystemMetadata,
+        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
     },
 };
 use crate::{
+    CanisterQueues, DroppedMessageMetrics,
     canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
-        system_state::{push_input, CanisterOutputQueuesIterator},
+        system_state::{CanisterOutputQueuesIterator, push_input},
     },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
-    CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -26,12 +26,12 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
+    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -298,35 +298,43 @@ impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StateError::CanisterNotFound(canister_id) => {
-                write!(f, "Canister {} not found", canister_id)
+                write!(f, "Canister {canister_id} not found")
             }
             StateError::CanisterStopped(canister_id) => {
-                write!(f, "Canister {} is stopped", canister_id)
+                write!(f, "Canister {canister_id} is stopped")
             }
             StateError::CanisterStopping(canister_id) => {
-                write!(f, "Canister {} is stopping", canister_id)
+                write!(f, "Canister {canister_id} is stopping")
             }
             StateError::QueueFull { capacity } => {
-                write!(f, "Maximum queue capacity {} reached", capacity)
+                write!(f, "Maximum queue capacity {capacity} reached")
             }
             StateError::OutOfMemory {
                 requested,
                 available,
             } => write!(
                 f,
-                "Cannot enqueue message. Out of memory: requested {}, available {}",
-                requested, available
+                "Cannot enqueue message. Out of memory: requested {requested}, available {available}"
             ),
-            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
+            StateError::NonMatchingResponse {
+                err_str,
+                originator,
+                callback_id,
+                respondent,
+                deadline,
+            } => write!(
                 f,
                 "Cannot enqueue response with callback ID {} due to {} : originator => {}, respondent => {}, deadline => {}",
-                callback_id, err_str, originator, respondent, Time::from(*deadline)
+                callback_id,
+                err_str,
+                originator,
+                respondent,
+                Time::from(*deadline)
             ),
             StateError::BitcoinNonMatchingResponse { callback_id } => {
                 write!(
                     f,
-                    "Bitcoin: Attempted to push a response for callback ID {} without an in-flight corresponding request",
-                    callback_id
+                    "Bitcoin: Attempted to push a response for callback ID {callback_id} without an in-flight corresponding request"
                 )
             }
         }
@@ -639,7 +647,7 @@ impl ReplicatedState {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
             UserError::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found", canister_id),
+                format!("Canister {canister_id} not found"),
             )
         })?;
 
@@ -912,7 +920,7 @@ impl ReplicatedState {
         match subnet_id {
             None => Err(UserError::new(
                 ErrorCode::SubnetNotFound,
-                format!("Could not find subnetId given principalId {}", principal_id),
+                format!("Could not find subnetId given principalId {principal_id}"),
             )),
             Some(subnet_id) => Ok(subnet_id),
         }

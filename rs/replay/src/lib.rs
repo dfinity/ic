@@ -78,7 +78,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             std::process::exit(1);
         }));
         let mut cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
-            println!("Failed to load config:\n  {}", err);
+            println!("Failed to load config:\n  {err}");
             std::process::exit(1);
         });
 
@@ -100,7 +100,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 
         let target_height = args.replay_until_height;
         if let Some(h) = target_height {
-            let question = format!("The checkpoint created at height {} ", h)
+            let question = format!("The checkpoint created at height {h} ")
                 + "cannot be used for deterministic state computation if it is not a CUP height.\n"
                 + "Continue?";
             if !args.skip_prompts && !consent_given(&question) {
@@ -193,15 +193,15 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
         }
     });
-    let ret = result.borrow().clone();
-    ret
+
+    result.borrow().clone()
 }
 
 /// Prints a question to the user and returns `true`
 /// if the user replied with a yes.
 pub fn consent_given(question: &str) -> bool {
-    use std::io::{stdin, stdout, Write};
-    println!("{} [Y/n] ", question);
+    use std::io::{Write, stdin, stdout};
+    println!("{question} [Y/n] ");
     let _ = stdout().flush();
     let mut s = String::new();
     stdin().read_line(&mut s).expect("Couldn't read user input");
@@ -219,7 +219,7 @@ fn cmd_get_recovery_cup(
 
     let context_time = ic_types::time::current_time();
     let time = context_time + std::time::Duration::from_secs(60);
-    let state_hash = hex::decode(&cmd.state_hash).map_err(|err| format!("{}", err))?;
+    let state_hash = hex::decode(&cmd.state_hash).map_err(|err| format!("{err}"))?;
     let cup = player.get_highest_catch_up_package();
     let payload = cup.content.block.as_ref().payload.as_ref();
     let summary = payload.as_summary();
@@ -254,7 +254,7 @@ fn cmd_get_recovery_cup(
         chain_key_initializations: vec![],
     };
 
-    let cup = ic_consensus::make_registry_cup_from_cup_contents(
+    let cup = ic_consensus_cup_utils::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,

@@ -2,7 +2,7 @@ use crate::pb::v1::Vote;
 
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{
-    memory_manager::VirtualMemory, storable::Bound, DefaultMemoryImpl, StableBTreeMap, Storable,
+    DefaultMemoryImpl, StableBTreeMap, Storable, memory_manager::VirtualMemory, storable::Bound,
 };
 use std::borrow::Cow;
 

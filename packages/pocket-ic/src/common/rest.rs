@@ -114,11 +114,11 @@ impl std::fmt::Display for RawEffectivePrincipal {
             RawEffectivePrincipal::None => write!(f, "None"),
             RawEffectivePrincipal::SubnetId(subnet_id) => {
                 let principal = Principal::from_slice(subnet_id);
-                write!(f, "SubnetId({})", principal)
+                write!(f, "SubnetId({principal})")
             }
             RawEffectivePrincipal::CanisterId(canister_id) => {
                 let principal = Principal::from_slice(canister_id);
-                write!(f, "CanisterId({})", principal)
+                write!(f, "CanisterId({principal})")
             }
         }
     }
@@ -224,7 +224,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -235,7 +235,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Started { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -246,7 +246,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Busy { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -255,7 +255,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse error: {}", e),
+                        message: format!("Could not parse error: {e}"),
                     },
                 }
             }
@@ -568,6 +568,7 @@ pub struct IcpConfig {
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub enum IcpFeaturesConfig {
+    /// Default configuration of an ICP feature resembling mainnet configuration as closely as possible.
     #[default]
     DefaultConfig,
 }
@@ -575,16 +576,32 @@ pub enum IcpFeaturesConfig {
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
+/// The subnets to which the corresponding system canisters are deployed must be empty.
+/// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
+/// if the corresponding field is not `None`.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
+    /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
+    /// Note. The registry used internally by PocketIC is not updated after changing the registry stored in the registry canister
+    /// (e.g., after executing an NNS proposal mutating the registry).
     pub registry: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS cycles minting canister, sets ICP/XDR conversion rate, and keeps its subnet lists in sync with PocketIC topology.
     /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
     pub cycles_minting: Option<IcpFeaturesConfig>,
+    /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
     pub icp_token: Option<IcpFeaturesConfig>,
+    /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
     pub cycles_token: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
+    /// The initial NNS neuron is controlled by the anonymous principal.
     pub nns_governance: Option<IcpFeaturesConfig>,
+    /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
+    /// and uploads the SNS canister WASMs to the SNS-W canister.
     pub sns: Option<IcpFeaturesConfig>,
+    /// Deploys the Internet Identity canister.
     pub ii: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS frontend dapp. The HTTP gateway must be specified via `http_gateway_config` in `InstanceConfig`
+    /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
     pub nns_ui: Option<IcpFeaturesConfig>,
 }
 
@@ -749,13 +766,12 @@ impl ExtendedSubnetConfigSet {
 
     pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
         let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
-            if let Some(config) = subnet {
-                if !matches!(config.state_config, SubnetStateConfig::New) {
-                    return Err(format!(
-                        "The {} subnet must be empty when specifying the `{}` ICP feature.",
-                        subnet_desc, icp_feature
-                    ));
-                }
+            if let Some(config) = subnet
+                && !matches!(config.state_config, SubnetStateConfig::New)
+            {
+                return Err(format!(
+                    "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
+                ));
             }
             Ok(())
         };

@@ -1,10 +1,10 @@
 use super::*;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_base_types::RegistryVersion;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     PublicCoefficientsBytes, Transcript,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use std::collections::BTreeMap;
 

@@ -1,34 +1,41 @@
 /* tag::catalog[]
-Title:: Basic HTTP requests from canisters
+Title:: IC public HTTP interface tests.
 
-Goal:: Ensure simple HTTP requests can be made from canisters.
+Goal:: IC public HTTP interface complies with public Interface Specification.
 
 Runbook::
-0. Create an IC with two subnets with one node each
-1. Instanciate two universal canisters, two on the system subnet, one on the app subnet
-2. Run the specific spec tests
+0. Create an IC with one API BN and two subnets (one system subnet and one app subnet) each with one node.
+1. Instantiate two universal canisters on the system subnet and one universal canister on the app subnet.
+2. Run the specific specification compliance tests.
 
 
 Success::
-1. Received expected http response code as per specification
+1. Received expected HTTP response code as per specification.
 
 
-Effective Canister test:
+Invalid effective canister ID tests:
 1. Update call with canister_id A to the endpoint /api/v{2,3,4}/canister/B/call with a different canister ID B in the URL is rejected with 4xx;
-2. Query call with canister_id A to the endpoint /api/v2/canister/B/query with a different canister ID B in the URL is rejected with 4xx;
+2. Query call with canister_id A to the endpoint /api/v{2,3}/canister/B/query with a different canister ID B in the URL is rejected with 4xx;
 3. Read state request for the path /canisters/A/controllers to the endpoints /api/{v2,v3}/canister/B/read_state with a different canister ID B in the URL is rejected with 4xx;
 4. Read state request for the path /time to the endpoints /api/{v2,v3}/canister/aaaaa-aa/read_state is rejected with 4xx.
 
 The different canister ID B is
 1. The canister ID of a different canister on the same subnet;
 2. The canister ID of a different canister on a different subnet;
-3. A malformed principal;
+3. Invalid canister ID (non-existing canister, user ID).
 4. The management canister ID.
 
+
+Malformed HTTP request tests:
+1. Update call with omitted sender (anonymous principal) is rejected with 4xx.
+2. Update call with omitted request type is rejected with 4xx.
+3. Update call with wrong request type is rejected with 4xx.
+4. Update call with malformed textual representation of its effective canister ID is rejected with 4xx.
 
 end::catalog[] */
 
 use anyhow::Result;
+use candid::Principal;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
@@ -45,12 +52,17 @@ use ic_system_test_driver::{
         },
     },
     systest,
-    util::{block_on, UniversalCanister},
+    util::{UniversalCanister, block_on},
 };
 use ic_types::{CanisterId, PrincipalId};
-use reqwest::Response;
-use slog::{info, Logger};
+use ic_universal_canister::wasm;
+use maplit::btreemap;
+use reqwest::{Response, StatusCode};
+use serde_cbor::Value;
+use slog::{Logger, info};
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
 
 fn setup(env: TestEnv) {
@@ -220,8 +232,7 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
                 assert_2xx(&status);
             }
             read_state::canister::Version::V3 => {
-                // TODO(CON-1586): change it to 2xx once the boundary node supports the new endpoint
-                assert_4xx(&status);
+                assert_2xx(&status);
             }
         }
 
@@ -234,6 +245,154 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
         let response = read_state(CanisterId::ic_00(), subnet_replica_url).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
+    });
+}
+
+fn malformed_http_request(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let (primary, _test_ids) = get_canister_test_ids(&snapshot);
+    let subnet_replica_url = get_subnet_replica_url(&snapshot);
+    let api_bn_url = get_api_bn_url(&snapshot);
+
+    block_on(async {
+        for url in [subnet_replica_url, api_bn_url] {
+            let call_content = btreemap! {
+                    Value::Text("canister_id".to_string()) => Value::Bytes(primary.get().as_slice().to_vec()),
+                    Value::Text("method_name".to_string()) => Value::Text("query".to_string()),
+                    Value::Text("arg".to_string()) => Value::Bytes(wasm().reply().build()),
+            };
+            let read_state_content = btreemap! {
+                    Value::Text("paths".to_string()) => Value::Array(vec![]),
+            };
+            for (request_type, version, content, wrong_request_type) in [
+                ("call", "v2", call_content.clone(), "query"),
+                ("call", "v3", call_content.clone(), "query"),
+                // TODO(CON-1586): uncomment once API BN support is added.
+                // ("call", "v4", call_content.clone(), "query"),
+                ("query", "v2", call_content.clone(), "call"),
+                // TODO(CON-1586): uncomment once API BN support is added.
+                // ("query", "v3", call_content.clone(), "call"),
+                ("read_state", "v2", read_state_content.clone(), "query"),
+                // TODO(CON-1586): uncomment once API BN support is added.
+                // ("read state", "v3", read_state_content.clone(), "query"),
+            ] {
+                let mut request_url = url.clone();
+                request_url.set_path(&format!(
+                    "/api/{}/canister/{}/{}",
+                    version, primary, request_type
+                ));
+                let mut malformed_url = url.clone();
+                malformed_url.set_path(&format!(
+                    "/api/{}/canister/this-is-not-a-valid-canister-id/{}",
+                    version, request_type
+                ));
+
+                let mut valid_content = btreemap! {
+                    Value::Text("request_type".to_string()) => Value::Text(request_type.to_string()),
+                    Value::Text("sender".to_string()) => Value::Bytes(Principal::anonymous().as_slice().to_vec()),
+                };
+                valid_content.extend(content.into_iter());
+                let envelope = |mut content: BTreeMap<Value, Value>| {
+                    let ingress_expiry = SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+                        + Duration::from_secs(3 * 60);
+                    content.insert(
+                        Value::Text("ingress_expiry".to_string()),
+                        Value::Integer(ingress_expiry.as_nanos() as i128),
+                    );
+                    Value::Map(
+                        btreemap! {Value::Text("content".to_string()) => Value::Map(content) },
+                    )
+                };
+                let bytes = serde_cbor::to_vec(&envelope(valid_content.clone())).unwrap();
+                let client = reqwest::Client::builder()
+                    .danger_accept_invalid_certs(true)
+                    .build()
+                    .unwrap();
+                let resp = client
+                    .post(request_url.clone())
+                    .header("Content-Type", "application/cbor")
+                    .body(bytes)
+                    .send()
+                    .await
+                    .unwrap();
+                assert!(resp.status().is_success());
+
+                let assert_bad_request =
+                    |logger: Logger,
+                     url: Url,
+                     content: BTreeMap<Value, Value>,
+                     expected_err: String| async move {
+                        let client = reqwest::Client::builder()
+                            .danger_accept_invalid_certs(true)
+                            .build()
+                            .unwrap();
+                        let bytes = serde_cbor::to_vec(&envelope(content)).unwrap();
+                        let resp = client
+                            .post(url)
+                            .header("Content-Type", "application/cbor")
+                            .body(bytes)
+                            .send()
+                            .await
+                            .unwrap();
+                        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+                        let bytes = resp.bytes().await.unwrap();
+                        let err = String::from_utf8(bytes.to_vec()).unwrap();
+                        info!(logger, "Response: {}", err);
+                        assert!(err.contains(&expected_err));
+                    };
+
+                let mut no_sender_content = valid_content.clone();
+                no_sender_content
+                    .remove(&Value::Text("sender".to_string()))
+                    .unwrap();
+                assert_bad_request(
+                    logger.clone(),
+                    request_url.clone(),
+                    no_sender_content,
+                    "missing field `sender`".to_string(),
+                )
+                .await;
+
+                let mut no_request_type_content = valid_content.clone();
+                no_request_type_content
+                    .remove(&Value::Text("request_type".to_string()))
+                    .unwrap();
+                assert_bad_request(
+                    logger.clone(),
+                    request_url.clone(),
+                    no_request_type_content,
+                    "missing field `request_type`".to_string(),
+                )
+                .await;
+
+                let mut wrong_request_type_content = valid_content.clone();
+                wrong_request_type_content
+                    .insert(
+                        Value::Text("request_type".to_string()),
+                        Value::Text(wrong_request_type.to_string()),
+                    )
+                    .unwrap();
+                assert_bad_request(
+                    logger.clone(),
+                    request_url.clone(),
+                    wrong_request_type_content,
+                    format!(
+                        "unknown variant `{}`, expected `{}`",
+                        wrong_request_type, request_type
+                    ),
+                )
+                .await;
+
+                assert_bad_request(
+                    logger.clone(),
+                    malformed_url.clone(),
+                    valid_content,
+                    "Text must be in valid Base32 encoding.".to_string(),
+                )
+                .await;
+            }
+        }
     });
 }
 
@@ -325,7 +484,7 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
             CanisterId::from(1337),
             // Management canister
             CanisterId::ic_00(),
-            // Invalid canister id
+            // User id
             CanisterId::try_from(PrincipalId::new_user_test_id(42)).unwrap(),
         ],
     )
@@ -359,6 +518,7 @@ fn main() -> Result<()> {
         .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V3))
         .add_test(systest!(read_time; read_state::canister::Version::V2))
         .add_test(systest!(read_time; read_state::canister::Version::V3))
+        .add_test(systest!(malformed_http_request))
         .execute_from_args()?;
 
     Ok(())

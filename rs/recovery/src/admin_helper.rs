@@ -127,8 +127,7 @@ impl AdminHelper {
             .add_argument(
                 SUMMARY_ARG,
                 quote(format!(
-                    "Elect new replica binary revision (commit {})",
-                    upgrade_version,
+                    "Elect new replica binary revision (commit {upgrade_version})",
                 )),
             );
 
@@ -150,7 +149,7 @@ impl AdminHelper {
             .add_positional_argument(upgrade_version)
             .add_argument(
                 SUMMARY_ARG,
-                quote(format!("Upgrade replica version of subnet {}.", subnet_id)),
+                quote(format!("Upgrade replica version of subnet {subnet_id}.")),
             );
 
         self.add_proposer_args(&mut ic_admin);
@@ -190,13 +189,13 @@ impl AdminHelper {
                 })
                 .collect::<Vec<_>>();
             let key_requests_string = serde_json::to_string(&key_requests)
-                .map_err(|err| eprintln!("Generating key_requests_string failed with {}", err))
+                .map_err(|err| eprintln!("Generating key_requests_string failed with {err}"))
                 .unwrap_or_default();
 
             if !key_requests.is_empty() {
                 ic_admin.add_argument(
                     "initial-chain-key-configs-to-request",
-                    format!("'{}'", key_requests_string),
+                    format!("'{key_requests_string}'"),
                 );
             }
             if let Some(idkg_key_rotation_period_ms) = config.idkg_key_rotation_period_ms {
@@ -226,7 +225,7 @@ impl AdminHelper {
                 .add_argument("registry-version", params.registry_version);
         }
 
-        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {}.", subnet_id)));
+        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {subnet_id}.")));
 
         let since_the_epoch = time
             .duration_since(UNIX_EPOCH)
@@ -258,7 +257,7 @@ impl AdminHelper {
             .add_argument("subnet-type", "system")
             .add_argument(
                 SUMMARY_ARG,
-                format!("Create subnet with id {}", subnet_id_override),
+                format!("Create subnet with id {subnet_id_override}"),
             );
 
         for node_id in node_ids {
@@ -334,7 +333,7 @@ fn prepend_if_necessary(argument: impl ToString, prefix: &str) -> String {
 
 /// Wraps a string in escaped quotation marks.
 pub fn quote(text: impl Display) -> String {
-    format!("\"{}\"", text)
+    format!("\"{text}\"")
 }
 
 #[cfg(test)]
@@ -368,7 +367,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
@@ -377,7 +377,7 @@ mod tests {
             --is-halted true \
             --ssh-readonly-access \"fake public key\" \
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
-            );
+        );
     }
 
     #[test]
@@ -390,7 +390,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-create-subnet \
@@ -402,7 +403,8 @@ mod tests {
             --is-halted \
             --subnet-type system \
             --summary Create subnet with id gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     #[test]
@@ -442,7 +444,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-recovery-cup \
@@ -451,7 +454,8 @@ mod tests {
             --state-hash fake_state_hash \
             --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
             --time-ns 123456 \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     #[test]
@@ -504,7 +508,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             --use-hsm \
@@ -528,7 +533,8 @@ mod tests {
             --registry-version 666 \
             --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
             --time-ns 123456 \
-            --proposer fake_neuron_id");
+            --proposer fake_neuron_id"
+        );
     }
 
     #[test]
@@ -540,14 +546,16 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-deploy-guestos-to-all-subnet-nodes \
             gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             fake_replica_version \
             --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     fn subnet_id_from_str(subnet_id: &str) -> SubnetId {

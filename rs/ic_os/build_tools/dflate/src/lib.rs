@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::os::fd::AsRawFd;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use tar::{Builder, EntryType, GnuExtSparseHeader, GnuSparseHeader, Header, HeaderMode};
 
 mod tar_util;

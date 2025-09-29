@@ -5,7 +5,7 @@ use std::default::Default;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::str::FromStr;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
 pub const DEFAULT_TOKEN_SYMBOL: &str = "XTST";
@@ -49,6 +49,8 @@ pub struct RosettaOptions {
     pub multi_tokens: Option<String>,
 
     pub multi_tokens_store_dir: Option<String>,
+
+    pub log_file: Option<String>,
 }
 
 impl Default for RosettaOptions {
@@ -64,6 +66,7 @@ impl Default for RosettaOptions {
             decimals: Some(DEFAULT_DECIMAL_PLACES.into()),
             multi_tokens: None,
             multi_tokens_store_dir: None,
+            log_file: None,
         }
     }
 }
@@ -118,6 +121,10 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         command.arg("--exit-on-sync");
     }
 
+    if let Some(log_file) = arguments.log_file {
+        command.arg("--log-file").arg(log_file);
+    }
+
     let mut child_process = command.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-icrc-rosetta-bin (path = {}, exists? = {}): {}",
@@ -138,11 +145,11 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                     break;
                 }
                 Err(e) => {
-                    println!("Expected port in port file, got {}: {}", port_str, e);
+                    println!("Expected port in port file, got {port_str}: {e}");
                 }
             }
         } else if let Some(exit_status) = child_process.try_wait().unwrap() {
-            println!("Rosetta exited with status: {}", exit_status);
+            println!("Rosetta exited with status: {exit_status}");
             break;
         }
         sleep(Duration::from_millis(100)).await;
@@ -154,7 +161,7 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                 .wait_with_output()
                 .expect("Failed to wait for child process");
 
-            panic!("Failed to start rosetta: {:?}", output);
+            panic!("Failed to start rosetta: {output:?}");
         }
         Some(port) => RosettaContext {
             _proc: KillOnDrop(child_process),
