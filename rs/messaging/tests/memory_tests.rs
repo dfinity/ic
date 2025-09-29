@@ -56,11 +56,11 @@ fn chrigi() {
     let (local_env, remote_env) = two_subnets_simple();
 
     let wasm = Project::cargo_bin_maybe_from_env("random-traffic-test-canister", &[]).bytes();
-    let local_canisters = vec![
+    let local_canisters = [
         install_canister(&local_env, wasm.clone()),
         install_canister(&local_env, wasm.clone()),
     ];
-    let remote_canisters = vec![install_canister(&remote_env, wasm.clone())];
+    let remote_canisters = [install_canister(&remote_env, wasm.clone())];
 
     let receivers = local_canisters
         .iter()
