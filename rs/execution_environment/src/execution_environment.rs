@@ -1570,7 +1570,7 @@ impl ExecutionEnvironment {
                                             *msg.sender(),
                                             &state,
                                             args,
-                                            self.config.fetch_canister_logs_filter_by_idx,
+                                            self.config.fetch_canister_logs_filter,
                                         )
                                     })
                                     .map(|resp| (Encode!(&resp).unwrap(), None))

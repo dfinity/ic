@@ -11,7 +11,7 @@ pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
-    fetch_canister_logs_filter_by_idx: FlagStatus,
+    fetch_canister_logs_filter: FlagStatus,
 ) -> Result<FetchCanisterLogsResponse, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -27,7 +27,7 @@ pub(crate) fn fetch_canister_logs(
     let records = canister.system_state.canister_log.records();
 
     let canister_log_records = match (
-        fetch_canister_logs_filter_by_idx,
+        fetch_canister_logs_filter,
         args.filter_by_idx,
         args.filter_by_timestamp_nanos,
     ) {

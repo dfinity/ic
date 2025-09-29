@@ -179,7 +179,7 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.config.fetch_canister_logs_filter_by_idx,
+                        self.config.fetch_canister_logs_filter,
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
