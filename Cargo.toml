@@ -528,6 +528,8 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/ic_os/remote_attestation/shared",
+    "rs/ic_os/remote_attestation/server",
 ]
 
 resolver = "2"
