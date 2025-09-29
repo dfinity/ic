@@ -10,15 +10,15 @@ impl Registry {
     ) -> MigrateCanistersResponse {
         let (canister_ids, target_subnet_id) =
             self.validate_payload(payload).expect("Invalid payload");
-
+        let version = self.latest_version();
         self.maybe_apply_mutation_internal(self.migrate_canisters_to_subnet(
-            self.latest_version(),
+            version,
             canister_ids,
             target_subnet_id,
         ));
 
         MigrateCanistersResponse {
-            registry_version: self.latest_version(),
+            registry_version: version,
         }
     }
 
