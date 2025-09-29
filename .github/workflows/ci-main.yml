@@ -704,7 +704,8 @@ jobs:
         if: |
           steps.filter.outputs.cargo == 'true' ||
           env.BRANCH_NAME == 'master' ||
-          startsWith(env.BRANCH_NAME, 'rc--')
+          startsWith(env.BRANCH_NAME, 'rc--') ||
+          startsWith(env.BRANCH_NAME, 'hotfix-')
         shell: bash
         run: |
           set -eExuo pipefail
