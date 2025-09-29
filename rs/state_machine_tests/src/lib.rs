@@ -99,8 +99,7 @@ use ic_registry_keys::{
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, RoutingTable,
-    routing_table_insert_subnet,
+    CanisterIdRange, CanisterIdRanges, RoutingTable, routing_table_insert_subnet,
 };
 use ic_registry_subnet_features::{
     ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig, SubnetFeatures,
@@ -3134,21 +3133,27 @@ impl StateMachine {
                     .subnets(),
             );
 
-        // Adapt the registry.
-        self.reroute_canister_range(canister_range, env.get_subnet_id());
-        self.add_subnet_to_subnets_list(env.get_subnet_id());
-
-        // Reload registry to ensure on both state machines have a consistent view of the registry.
-        self.reload_registry();
-        env.reload_registry();
-
-        // Perform the split.
         let last_version = self.registry_client.get_latest_version();
-        let routing_table = self
+        let mut routing_table = self
             .registry_client
             .get_routing_table(last_version)
             .expect("malformed routing table")
             .expect("missing routing table");
+
+        // Add the new subnet and assign the split canister range to it.
+        routing_table_insert_subnet(&mut routing_table, env.get_subnet_id()).unwrap();
+        routing_table
+            .assign_ranges(
+                CanisterIdRanges::try_from(vec![CanisterIdRange {
+                    start: *canister_range.start(),
+                    end: *canister_range.end(),
+                }])
+                .unwrap(),
+                env.get_subnet_id(),
+            )
+            .expect("ranges are not well formed");
+
+        // Perform the split.
         for env in [self, &env] {
             let (height, state) = env.state_manager.take_tip();
             let mut state = state.split(env.get_subnet_id(), &routing_table, None)?;
@@ -3161,6 +3166,22 @@ impl StateMachine {
                 None,
             );
         }
+
+        // Adapt the registry.
+        let pb_routing_table = PbRoutingTable::from(routing_table);
+        self.registry_data_provider
+            .add(
+                &make_canister_ranges_key(CanisterId::from_u64(0)),
+                last_version.increment(),
+                Some(pb_routing_table.clone()),
+            )
+            .unwrap();
+        self.registry_client.update_to_latest_version();
+        self.add_subnet_to_subnets_list(env.get_subnet_id());
+
+        // Reload registry to ensure on both state machines have a consistent view of the registry.
+        self.reload_registry();
+        env.reload_registry();
 
         Ok(env)
     }
@@ -4775,17 +4796,10 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     // Set up routing table with two subnets.
     let subnet_id1 = env1.get_subnet_id();
     let subnet_id2 = env2.get_subnet_id();
-    let range1 = CanisterIdRange {
-        start: CanisterId::from_u64(0),
-        end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
-    };
-    let range2 = CanisterIdRange {
-        start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
-        end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
-    };
+
     let mut routing_table = RoutingTable::new();
-    routing_table.insert(range1, subnet_id1).unwrap();
-    routing_table.insert(range2, subnet_id2).unwrap();
+    routing_table_insert_subnet(&mut routing_table, subnet_id1).unwrap();
+    routing_table_insert_subnet(&mut routing_table, subnet_id2).unwrap();
 
     // Set up subnet list for registry.
     let subnet_list = vec![subnet_id1, subnet_id2];

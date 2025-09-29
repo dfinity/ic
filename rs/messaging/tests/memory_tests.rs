@@ -1,10 +1,13 @@
 pub mod common;
 
+use candid::{Decode, Encode};
 use common::{
     DebugInfo, KB, MB, SubnetPair, SubnetPairConfig, arb_canister_config,
     induct_from_head_of_stream, stream_snapshot,
 };
+use ic_state_machine_tests::{StateMachine, two_subnets_simple};
 use ic_types::{
+    CanisterId,
     ingress::{IngressState, IngressStatus},
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
 };
@@ -12,6 +15,94 @@ use proptest::prelude::*;
 use random_traffic_test::Config as CanisterConfig;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
+
+/// Helper function for update calls to `canister`; returns the current `T` as it was before
+/// this call.
+///
+/// Panics if `canister` is not installed in `self`.
+fn set_canister_state<T>(env: &StateMachine, canister: CanisterId, method: &str, item: T) -> T
+where
+    T: candid::CandidType + for<'a> candid::Deserialize<'a>,
+{
+    let msg = candid::Encode!(&item).unwrap();
+    let reply = env.execute_ingress(canister, method, msg).unwrap();
+    candid::Decode!(&reply.bytes(), T).unwrap()
+}
+
+/// Sets the `CanisterConfig` in `canister`; returns the current config.
+///
+/// Panics if `canister` is not installed in `self`.
+pub fn set_config(
+    env: &StateMachine,
+    canister: CanisterId,
+    config: CanisterConfig,
+) -> CanisterConfig {
+    set_canister_state(env, canister, "set_config", config)
+}
+
+/// Seeds the `Rng` in `canister`.
+///
+/// Panics if `canister` is not installed in `self`.
+pub fn seed_rng(env: &StateMachine, canister: CanisterId, seed: u64) {
+    let msg = candid::Encode!(&seed).unwrap();
+    env.execute_ingress(canister, "seed_rng", msg).unwrap();
+}
+
+#[test]
+fn chrigi() {
+    use crate::common::install_canister;
+    use canister_test::Project;
+
+    let (local_env, remote_env) = two_subnets_simple();
+
+    let wasm = Project::cargo_bin_maybe_from_env("random-traffic-test-canister", &[]).bytes();
+    let local_canisters = vec![
+        install_canister(&local_env, wasm.clone()),
+        install_canister(&local_env, wasm.clone()),
+    ];
+    let remote_canisters = vec![install_canister(&remote_env, wasm.clone())];
+
+    let receivers = local_canisters
+        .iter()
+        .chain(remote_canisters.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let config = CanisterConfig {
+        receivers,
+        calls_per_heartbeat: 10,
+        ..CanisterConfig::default()
+    };
+
+    set_config(&local_env, local_canisters[0], config.clone());
+    set_config(&local_env, local_canisters[1], config.clone());
+    set_config(&remote_env, remote_canisters[0], config.clone());
+
+    for _ in 0..50 {
+        local_env.do_execute_round(None);
+        remote_env.do_execute_round(None);
+    }
+
+    let split_env = local_env
+        .split([123; 32], local_canisters[1]..=local_canisters[1])
+        .unwrap();
+
+    /*
+    assert!(
+        false,
+        "{:?}\n{:?}\n{:?}",
+        local_env.get_latest_state().canister_states.keys(),
+        remote_env.get_latest_state().canister_states.keys(),
+        split_env.get_latest_state().canister_states.keys(),
+    );
+    */
+
+    for _ in 0..50 {
+        local_env.do_execute_round(None);
+        remote_env.do_execute_round(None);
+        split_env.do_execute_round(None);
+    }
+}
 
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
 fn check_message_memory_limits_are_respected(
