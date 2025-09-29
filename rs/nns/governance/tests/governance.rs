@@ -120,7 +120,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::once,
-    ops::Div,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -5189,7 +5188,7 @@ fn test_rate_limiting_neuron_creation() {
     let nonce = 3;
     let amount_e8s = 10 * E8;
     let new_neuron_subaccount = ledger::compute_neuron_staking_subaccount(controller, nonce);
-    driver = driver.with_ledger_accounts(vec![fake::FakeAccount {
+    driver.with_ledger_accounts(vec![fake::FakeAccount {
         id: AccountIdentifier::new(
             ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
             Some(new_neuron_subaccount),
