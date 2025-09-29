@@ -854,12 +854,14 @@ struct MemoryUsage {
     /// The current amount of message memory that the canister is using.
     current_message_usage: MessageMemoryUsage,
 
-    // This is the amount of memory that the subnet has available. Any
-    // expansions in the canister's memory need to be deducted from here.
+    /// This is the amount of memory that the subnet has available.
+    /// New memory allocations (memory usage growth beyond
+    /// the memory allocation of the canister) need to be deducted from here.
     subnet_available_memory: SubnetAvailableMemory,
 
-    /// Execution memory allocated during this message execution, i.e. the canister
-    /// memory (Wasm binary, Wasm memory, stable memory) without message memory.
+    /// Execution memory allocated during this message execution, i.e.,
+    /// extra wasm/stable memory usage beyond
+    /// the memory allocation of the canister.
     allocated_execution_memory: NumBytes,
 
     /// Message memory allocated during this message execution.
@@ -942,19 +944,15 @@ impl MemoryUsage {
 
     /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
-    /// If the canister has memory allocation, then this function doesn't allocate
-    /// bytes, but only increases `current_usage`.
-    ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if either the canister memory limit or the subnet memory limit would be
-    /// exceeded.
+    /// if the subnet memory limit would be exceeded.
     ///
     /// Returns `Err(HypervisorError::InsufficientCyclesInMemoryGrow)` and
     /// leaves `self` unchanged if freezing threshold check is needed for the
     /// given API type and canister would be frozen after the allocation.
     fn allocate_execution_memory(
         &mut self,
-        execution_bytes: NumBytes,
+        extra_usage_bytes: NumBytes,
         api_type: &ApiType,
         sandbox_safe_system_state: &mut SandboxSafeSystemState,
         subnet_memory_saturation: &ResourceSaturation,
@@ -963,79 +961,58 @@ impl MemoryUsage {
         let (new_usage, overflow) = self
             .current_usage
             .get()
-            .overflowing_add(execution_bytes.get());
+            .overflowing_add(extra_usage_bytes.get());
         if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
 
+        let old_allocated_bytes = self.memory_allocation.allocated_bytes(self.current_usage);
+        let new_allocated_bytes = self
+            .memory_allocation
+            .allocated_bytes(NumBytes::new(new_usage));
+        debug_assert!(old_allocated_bytes <= new_allocated_bytes);
+        let allocated_bytes = new_allocated_bytes - old_allocated_bytes; // subtraction on `NumBytes` is already saturating
+
         sandbox_safe_system_state.check_freezing_threshold_for_memory_grow(
             api_type,
             self.current_message_usage,
-            self.current_usage,
-            NumBytes::new(new_usage),
+            old_allocated_bytes,
+            new_allocated_bytes,
         )?;
 
-        match self.memory_allocation {
-            MemoryAllocation::BestEffort => {
-                match self.subnet_available_memory.check_available_memory(
-                    execution_bytes,
-                    NumBytes::new(0),
-                    NumBytes::new(0),
-                ) {
-                    Ok(()) => {
-                        sandbox_safe_system_state.reserve_storage_cycles(
-                            execution_bytes,
-                            &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
-                            api_type,
-                        )?;
-                        // All state changes after this point should not fail
-                        // because the cycles have already been reserved.
-                        self.subnet_available_memory
-                            .try_decrement(execution_bytes, NumBytes::new(0), NumBytes::new(0))
-                            .expect(
-                                "Decrementing subnet available memory is \
+        match self.subnet_available_memory.check_available_memory(
+            allocated_bytes,
+            NumBytes::new(0),
+            NumBytes::new(0),
+        ) {
+            Ok(()) => {
+                sandbox_safe_system_state.reserve_storage_cycles(
+                    allocated_bytes,
+                    &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
+                    api_type,
+                )?;
+                // All state changes after this point should not fail
+                // because the cycles have already been reserved.
+                self.subnet_available_memory
+                    .try_decrement(allocated_bytes, NumBytes::new(0), NumBytes::new(0))
+                    .expect(
+                        "Decrementing subnet available memory is \
                                  guaranteed to succeed by check_available_memory().",
-                            );
-                        self.current_usage = NumBytes::new(new_usage);
-                        self.allocated_execution_memory += execution_bytes;
-
-                        self.add_execution_memory(execution_bytes, execution_memory_type)?;
-
-                        sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
-                            None,
-                            self.wasm_memory_limit,
-                            self.current_usage,
-                            self.wasm_memory_usage,
-                        );
-
-                        Ok(())
-                    }
-                    Err(_err) => Err(HypervisorError::OutOfMemory),
-                }
-            }
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                // The canister can increase its memory usage up to the reserved bytes
-                // without decrementing the subnet available memory and without
-                // reserving cycles because it has already done that during the
-                // original reservation.
-                if new_usage > reserved_bytes.get() {
-                    // Note that this branch should be unreachable because
-                    // `self.limit` should already be set to `reserved_bytes` and
-                    // the guard above should have returned an error. In order to
-                    // keep code robust, we repeat the check here again.
-                    return Err(HypervisorError::OutOfMemory);
-                }
+                    );
                 self.current_usage = NumBytes::new(new_usage);
-                self.add_execution_memory(execution_bytes, execution_memory_type)?;
+                self.allocated_execution_memory += allocated_bytes;
+
+                self.add_execution_memory(extra_usage_bytes, execution_memory_type)?;
 
                 sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
-                    Some(reserved_bytes),
                     self.wasm_memory_limit,
                     self.current_usage,
                     self.wasm_memory_usage,
                 );
+
                 Ok(())
             }
+            Err(_err) => Err(HypervisorError::OutOfMemory),
         }
     }
 
@@ -1352,7 +1329,9 @@ impl SystemApiImpl {
         self.memory_usage.current_usage
     }
 
-    /// Bytes allocated in the Wasm/stable memory.
+    /// Execution memory allocated during this message execution, i.e.,
+    /// extra wasm/stable memory usage beyond
+    /// the memory allocation of the canister.
     pub fn get_allocated_bytes(&self) -> NumBytes {
         self.memory_usage.allocated_execution_memory
     }

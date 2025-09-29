@@ -7490,7 +7490,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
     let memory_allocation = 655360000 + empty_memory_usage.get();
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         freezing_threshold,
-        ic_types::MemoryAllocation::Reserved(NumBytes::new(memory_allocation)),
+        ic_types::MemoryAllocation::try_from(NumBytes::new(memory_allocation)).unwrap(),
         NumBytes::new(0),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
@@ -7536,7 +7536,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
     let memory_usage = 655_360_000 + 1_000_000;
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         freezing_threshold,
-        ic_types::MemoryAllocation::BestEffort,
+        ic_types::MemoryAllocation::default(),
         NumBytes::new(memory_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),

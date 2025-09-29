@@ -309,22 +309,10 @@ impl CanisterManager {
         self.validate_environment_variables(&settings)?;
 
         let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
-        let new_memory_bytes = match settings.memory_allocation {
-            None => canister_memory_usage,
-            Some(new_memory_allocation) => {
-                // The new memory allocation cannot be lower than the current canister
-                // memory usage.
-                if let MemoryAllocation::Reserved(reserved_bytes) = new_memory_allocation
-                    && reserved_bytes < canister_memory_usage
-                {
-                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        memory_allocation_given: new_memory_allocation,
-                        memory_usage_needed: canister_memory_usage,
-                    });
-                }
-                new_memory_allocation.allocated_bytes(canister_memory_usage)
-            }
-        };
+        let new_memory_bytes = settings
+            .memory_allocation
+            .unwrap_or(canister_memory_allocation)
+            .allocated_bytes(canister_memory_usage);
 
         // If the available memory in the subnet is negative, then we must cap
         // it at zero such that the new memory allocation can change between
@@ -489,7 +477,7 @@ impl CanisterManager {
             settings,
             NumBytes::new(0),
             MessageMemoryUsage::ZERO,
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             subnet_available_memory,
             subnet_memory_saturation,
             ComputeAllocation::zero(),
@@ -522,20 +510,6 @@ impl CanisterManager {
             canister.scheduler_state.compute_allocation = compute_allocation;
         }
         if let Some(memory_allocation) = settings.memory_allocation() {
-            if let MemoryAllocation::Reserved(new_bytes) = memory_allocation {
-                let memory_usage = canister.memory_usage();
-                if new_bytes < memory_usage {
-                    // This case is unreachable because the canister settings should have been validated.
-                    error!(
-                        self.log,
-                        "[EXC-BUG]: Canister {}: unreachable code in update settings: \
-                        memory allocation {} is lower than memory usage {}.",
-                        canister.canister_id(),
-                        new_bytes,
-                        memory_usage,
-                    );
-                }
-            }
             canister.system_state.memory_allocation = memory_allocation;
         }
         if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
@@ -1091,7 +1065,7 @@ impl CanisterManager {
             canister_snapshots_memory_usage,
             canister.system_state.balance().get(),
             compute_allocation.as_percent(),
-            Some(memory_allocation.bytes().get()),
+            Some(memory_allocation.pre_allocated_bytes().get()),
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
@@ -1350,8 +1324,7 @@ impl CanisterManager {
         let new_mem = new_canister
             .system_state
             .memory_allocation
-            .bytes()
-            .max(new_usage);
+            .allocated_bytes(new_usage);
 
         // settings were validated before so this should always succeed
         round_limits
@@ -1625,11 +1598,10 @@ impl CanisterManager {
     }
 
     // Runs the following checks on cycles and memory usage:
-    // 1. The new memory usage does not exceed reserved memory allocation (if applicable).
-    // 2. There is enough subnet available memory for the new memory usage.
-    // 3. The canister is not frozen due to its new memory usage.
-    // 4. Cycles for instructions can be withdrawn (in particular, the canister is not frozen afterwards).
-    // 5. Storage reservation cycles can be reserved.
+    // 1. There is enough subnet available memory for the new memory usage.
+    // 2. The canister is not frozen due to its new memory usage.
+    // 3. Cycles for instructions can be withdrawn (in particular, the canister is not frozen afterwards).
+    // 4. Storage reservation cycles can be reserved.
     fn cycles_and_memory_usage_checks(
         &self,
         subnet_size: usize,
@@ -1642,42 +1614,23 @@ impl CanisterManager {
         old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
     ) -> Result<ValidatedCyclesAndMemoryUsage, CanisterManagerError> {
-        // Check that the new memory usage does not exceed reserved memory allocation (if applicable).
-        match canister.memory_allocation() {
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                if reserved_bytes < new_memory_usage {
-                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        memory_allocation_given: canister.memory_allocation(),
-                        memory_usage_needed: new_memory_usage,
-                    });
-                }
-            }
-            MemoryAllocation::BestEffort => (),
-        };
-
         // Check that there is enough subnet available memory for the new memory usage.
-        let (allocated_bytes, deallocated_bytes) = match canister.memory_allocation() {
-            MemoryAllocation::Reserved(_) => (NumBytes::from(0), NumBytes::from(0)),
-            MemoryAllocation::BestEffort => {
-                let allocated_bytes = new_memory_usage.saturating_sub(&old_memory_usage);
-                let deallocated_bytes = old_memory_usage.saturating_sub(&new_memory_usage);
-                round_limits
-                    .subnet_available_memory
-                    .check_available_memory(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
-                    .map_err(
-                        |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: allocated_bytes,
-                            available: NumBytes::from(
-                                round_limits
-                                    .subnet_available_memory
-                                    .get_execution_memory()
-                                    .max(0) as u64,
-                            ),
-                        },
-                    )?;
-                (allocated_bytes, deallocated_bytes)
-            }
-        };
+        let allocated_bytes = new_memory_usage.saturating_sub(&old_memory_usage);
+        let deallocated_bytes = old_memory_usage.saturating_sub(&new_memory_usage);
+        round_limits
+            .subnet_available_memory
+            .check_available_memory(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
+            .map_err(
+                |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                    requested: allocated_bytes,
+                    available: NumBytes::from(
+                        round_limits
+                            .subnet_available_memory
+                            .get_execution_memory()
+                            .max(0) as u64,
+                    ),
+                },
+            )?;
 
         // Check that the canister is not frozen due to its new memory usage.
         let threshold = self.cycles_account_manager.freeze_threshold_cycles(
@@ -1714,40 +1667,34 @@ impl CanisterManager {
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
 
         // Check that storage reservation cycles can be reserved.
-        let new_storage_reservation_cycles = match canister.memory_allocation() {
-            MemoryAllocation::Reserved(_) => Cycles::zero(),
-            MemoryAllocation::BestEffort => {
-                let new_storage_reservation_cycles =
-                    self.cycles_account_manager.storage_reservation_cycles(
-                        allocated_bytes,
-                        resource_saturation,
-                        subnet_size,
-                        cost_schedule,
-                    );
-                let main_balance = canister.system_state.balance() - cycles_for_instructions; // `-` on `Cycles` is saturating
-                canister
-                    .system_state
-                    .can_reserve_cycles(new_storage_reservation_cycles, main_balance)
-                    .map_err(|err| match err {
-                        ReservationError::InsufficientCycles {
-                            requested,
-                            available,
-                        } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                            bytes: allocated_bytes,
-                            available,
-                            required: requested,
-                        },
-                        ReservationError::ReservedLimitExceed { requested, limit } => {
-                            CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
-                                bytes: allocated_bytes,
-                                requested,
-                                limit,
-                            }
-                        }
-                    })?;
-                new_storage_reservation_cycles
-            }
-        };
+        let new_storage_reservation_cycles =
+            self.cycles_account_manager.storage_reservation_cycles(
+                allocated_bytes,
+                resource_saturation,
+                subnet_size,
+                cost_schedule,
+            );
+        let main_balance = canister.system_state.balance() - cycles_for_instructions; // `-` on `Cycles` is saturating
+        canister
+            .system_state
+            .can_reserve_cycles(new_storage_reservation_cycles, main_balance)
+            .map_err(|err| match err {
+                ReservationError::InsufficientCycles {
+                    requested,
+                    available,
+                } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                    bytes: allocated_bytes,
+                    available,
+                    required: requested,
+                },
+                ReservationError::ReservedLimitExceed { requested, limit } => {
+                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
+                        bytes: allocated_bytes,
+                        requested,
+                        limit,
+                    }
+                }
+            })?;
 
         Ok(ValidatedCyclesAndMemoryUsage {
             cycles_for_instructions,

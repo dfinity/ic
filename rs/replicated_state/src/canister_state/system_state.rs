@@ -499,7 +499,7 @@ impl SystemState {
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
-            memory_allocation: MemoryAllocation::BestEffort,
+            memory_allocation: MemoryAllocation::default(),
             environment_variables: Default::default(),
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
@@ -1795,18 +1795,12 @@ impl SystemState {
         memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) -> bool {
-        let memory_allocation = match self.memory_allocation {
-            MemoryAllocation::Reserved(bytes) => Some(bytes),
-            MemoryAllocation::BestEffort => None,
-        };
-
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
 
         is_low_wasm_memory_hook_condition_satisfied(
             memory_usage,
             wasm_memory_usage,
-            memory_allocation,
             wasm_memory_limit,
             wasm_memory_threshold,
         )

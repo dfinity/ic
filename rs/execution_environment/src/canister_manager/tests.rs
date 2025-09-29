@@ -4149,7 +4149,7 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
         assert_eq!(
             test.canister_state(canister_id)
                 .memory_allocation()
-                .bytes()
+                .pre_allocated_bytes()
                 .get(),
             USAGE
         );
@@ -4280,7 +4280,7 @@ fn resource_saturation_scaling_works_in_create_canister() {
     assert_eq!(
         test.canister_state(canister_id)
             .memory_allocation()
-            .bytes()
+            .pre_allocated_bytes()
             .get(),
         USAGE,
     );
@@ -5843,10 +5843,9 @@ fn helper_update_settings_updates_hook_status(
 
     let mut initial_settings = CanisterSettingsArgsBuilder::new();
 
-    if let Some(MemoryAllocation::Reserved(memory_allocation)) =
-        initial_memory_state.memory_allocation
-    {
-        initial_settings = initial_settings.with_memory_allocation(memory_allocation.get());
+    if let Some(memory_allocation) = initial_memory_state.memory_allocation {
+        initial_settings =
+            initial_settings.with_memory_allocation(memory_allocation.pre_allocated_bytes().get());
     }
 
     if let Some(wasm_memory_limit) = initial_memory_state.wasm_memory_limit {
@@ -5897,10 +5896,10 @@ fn helper_update_settings_updates_hook_status(
     }
 
     if updated_memory_state.memory_allocation != initial_memory_state.memory_allocation
-        && let Some(MemoryAllocation::Reserved(updated_memory_allocation)) =
-            updated_memory_state.memory_allocation
+        && let Some(updated_memory_allocation) = updated_memory_state.memory_allocation
     {
-        settings = settings.with_memory_allocation(updated_memory_allocation.get());
+        settings =
+            settings.with_memory_allocation(updated_memory_allocation.pre_allocated_bytes().get());
     }
 
     let payload = UpdateSettingsArgs {
@@ -6143,7 +6142,7 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
 }
 
 #[test]
-fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
+fn update_memory_allocation_does_not_update_hook_status_not_satisfied() {
     let used_wasm_memory_pages = 1;
     let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
     let wasm_memory_threshold = 1_000;
@@ -6151,27 +6150,26 @@ fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
 
     let initial_memory_allocation = used_wasm_memory + 1_500;
 
-    // wasm_memory_capacity = min(wasm_memory_limit, memory_allocation - used_non_wasm_memory)
-    // wasm_memory_capacity - used_wasm_memory > wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
     let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
     let initial_memory_state = MemoryState {
         wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
         wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
-        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
-            initial_memory_allocation,
-        ))),
+        memory_allocation: Some(
+            MemoryAllocation::try_from(NumBytes::from(initial_memory_allocation)).unwrap(),
+        ),
         hook_status: initial_hook_status,
     };
 
     let updated_memory_allocation = used_wasm_memory + 500;
-    // wasm_memory_capacity - used_wasm_memory < wasm_memory_threshold
-    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
     let updated_memory_state = MemoryState {
-        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
-            updated_memory_allocation,
-        ))),
+        memory_allocation: Some(
+            MemoryAllocation::try_from(NumBytes::from(updated_memory_allocation)).unwrap(),
+        ),
         hook_status: updated_hook_status,
         ..initial_memory_state
     };
@@ -6185,35 +6183,33 @@ fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
 }
 
 #[test]
-fn update_memory_allocation_updates_hook_status_ready_to_not_satisfied() {
+fn update_memory_allocation_does_not_update_hook_status_ready() {
     let used_wasm_memory_pages = 1;
     let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
     let wasm_memory_threshold = 1_000;
     let wasm_memory_limit = 100_000;
 
-    // wasm_memory_capacity = min(wasm_memory_limit, memory_allocation - used_non_wasm_memory)
-
     let initial_memory_allocation = used_wasm_memory + 500;
-    // wasm_memory_capacity - used_wasm_memory < wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
     let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
     let initial_memory_state = MemoryState {
         wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
         wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
-        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
-            initial_memory_allocation,
-        ))),
+        memory_allocation: Some(
+            MemoryAllocation::try_from(NumBytes::from(initial_memory_allocation)).unwrap(),
+        ),
         hook_status: initial_hook_status,
     };
 
     let updated_memory_allocation = used_wasm_memory + 1_500;
-    // wasm_memory_capacity - used_wasm_memory > wasm_memory_threshold
-    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
     let updated_memory_state = MemoryState {
-        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
-            updated_memory_allocation,
-        ))),
+        memory_allocation: Some(
+            MemoryAllocation::try_from(NumBytes::from(updated_memory_allocation)).unwrap(),
+        ),
         hook_status: updated_hook_status,
         ..initial_memory_state
     };
@@ -7243,7 +7239,10 @@ fn create_canister_sets_correct_allocations() {
         compute_allocation
     );
     assert_eq!(
-        canister_state.memory_allocation().bytes().get(),
+        canister_state
+            .memory_allocation()
+            .pre_allocated_bytes()
+            .get(),
         memory_allocation
     );
 }
@@ -7786,7 +7785,7 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
         assert_eq!(
             test.canister_state(canister_id)
                 .memory_allocation()
-                .bytes()
+                .pre_allocated_bytes()
                 .get(),
             USAGE,
         );

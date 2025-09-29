@@ -597,13 +597,14 @@ fn memory_taken_by_canister_history() {
 
     // Test fixed memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::from(888));
+    canister_state.system_state.memory_allocation =
+        MemoryAllocation::try_from(NumBytes::from(888)).unwrap();
     assert_execution_memory_taken(888 + canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Reset canister memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation = MemoryAllocation::BestEffort;
+    canister_state.system_state.memory_allocation = MemoryAllocation::default();
 
     // Test a system subnet.
     fixture.state.metadata.own_subnet_type = SubnetType::System;

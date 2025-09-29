@@ -345,29 +345,6 @@ impl CanisterState {
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
     pub fn check_invariants(&self, config: &HypervisorConfig) -> Result<(), String> {
-        match self.memory_allocation() {
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                let memory_used = self.memory_usage();
-                let canister_history_memory_usage = self.canister_history_memory_usage();
-
-                // We check if the memory usage exceeds the memory allocation while ignoring the canister history memory usage
-                // (whose growth is not validated against the memory allocation), i.e., we want to log an error if
-                // `memory_used - canister_history_memory_usage > memory_allocation`.
-                // To avoid subtraction, we check for
-                // `memory_used > memory_allocation + canister_history_memory_usage` instead.
-                if memory_used > reserved_bytes + canister_history_memory_usage {
-                    return Err(format!(
-                        "Invariant broken: Memory of canister {} exceeds the memory allocation: used {}, memory allocation {}, canister history memory usage {}",
-                        self.canister_id(),
-                        memory_used,
-                        reserved_bytes,
-                        canister_history_memory_usage,
-                    ));
-                }
-            }
-            MemoryAllocation::BestEffort => (),
-        }
-
         if let Some(execution_state) = &self.execution_state {
             let wasm_memory_usage = execution_state.wasm_memory_usage();
             let wasm_memory_limit = match execution_state.wasm_execution_mode() {

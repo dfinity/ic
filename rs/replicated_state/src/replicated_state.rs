@@ -26,7 +26,7 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
@@ -820,10 +820,9 @@ impl ReplicatedState {
             .canisters_iter()
             .map(|canister| {
                 (
-                    match canister.memory_allocation() {
-                        MemoryAllocation::Reserved(bytes) => bytes,
-                        MemoryAllocation::BestEffort => canister.execution_memory_usage(),
-                    },
+                    canister
+                        .memory_allocation()
+                        .allocated_bytes(canister.execution_memory_usage()),
                     canister
                         .system_state
                         .guaranteed_response_message_memory_usage(),

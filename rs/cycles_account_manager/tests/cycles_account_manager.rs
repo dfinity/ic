@@ -75,10 +75,7 @@ fn test_can_charge_application_subnets() {
                     canister.scheduler_state.compute_allocation = compute_allocation;
                     let duration = Duration::from_secs(1);
 
-                    let memory = match memory_allocation {
-                        MemoryAllocation::BestEffort => canister.memory_usage(),
-                        MemoryAllocation::Reserved(bytes) => *bytes,
-                    };
+                    let memory = memory_allocation.allocated_bytes(canister.memory_usage());
                     let expected_fee = cycles_account_manager.compute_allocation_cost(
                         compute_allocation,
                         duration,
@@ -1312,7 +1309,7 @@ fn freezing_threshold_uses_reserved_balance() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let threshold_without_reserved = cycles_account_manager.freeze_threshold_cycles(
         NumSeconds::from(1_000),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         NumBytes::from(1_000_000),
         MessageMemoryUsage {
             guaranteed_response: NumBytes::new(1_000),
@@ -1326,7 +1323,7 @@ fn freezing_threshold_uses_reserved_balance() {
 
     let threshold_with_reserved = cycles_account_manager.freeze_threshold_cycles(
         NumSeconds::from(1_000),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         NumBytes::from(1_000_000),
         MessageMemoryUsage {
             guaranteed_response: NumBytes::new(1_000),
