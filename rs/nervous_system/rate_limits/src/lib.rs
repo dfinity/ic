@@ -1,6 +1,8 @@
 //! Rate limits library for nervous system components.
 //!
-//! This crate provides utilities for implementing rate limiting in nervous system canisters.
+//! This library uses a [Leaky Bucket Algorithm](https://en.wikipedia.org/wiki/Leaky_bucket) to
+//! enforce rate limites, which allows for a configurable amount of spikiness around the average
+//! limit desired.
 use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use std::{
     borrow::Cow,
@@ -16,64 +18,6 @@ pub struct UsageRecord {
     pub capacity_used: u64,
 }
 
-impl Storable for UsageRecord {
-    fn to_bytes(&self) -> Cow<'_, [u8]> {
-        let timestamp_secs = self
-            .last_capacity_drip
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        let mut bytes = Vec::with_capacity(16);
-        bytes.extend_from_slice(&timestamp_secs.to_be_bytes());
-        bytes.extend_from_slice(&self.capacity_used.to_be_bytes());
-
-        Cow::Owned(bytes)
-    }
-
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        if bytes.len() != 16 {
-            panic!("Invalid UsageRecord bytes length");
-        }
-
-        let timestamp_bytes: [u8; 8] = bytes[0..8].try_into().unwrap();
-        let capacity_bytes: [u8; 8] = bytes[8..16].try_into().unwrap();
-
-        let timestamp_secs = u64::from_be_bytes(timestamp_bytes);
-        let capacity_used = u64::from_be_bytes(capacity_bytes);
-
-        let last_updated = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(timestamp_secs);
-
-        Self {
-            last_capacity_drip: last_updated,
-            capacity_used,
-        }
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 16,
-        is_fixed_size: true,
-    };
-}
-
-// Note: String already implements Storable in ic-stable-structures
-// If you need a custom key type, create a newtype wrapper:
-//
-// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-// pub struct RateLimiterKey(pub String);
-//
-// impl Storable for RateLimiterKey {
-//     fn to_bytes(&self) -> Cow<[u8]> {
-//         Cow::Borrowed(self.0.as_bytes())
-//     }
-//
-//     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-//         Self(String::from_utf8(bytes.into_owned()).expect("Invalid UTF-8 string"))
-//     }
-//
-//     const BOUND: Bound = Bound::Unbounded;
-// }
-
 /// Trait for storing and retrieving capacity usage records.
 /// This allows different storage backends (in-memory, persistent, etc.)
 pub trait CapacityStorage<K> {
@@ -81,7 +25,7 @@ pub trait CapacityStorage<K> {
     fn get_usage(&self, key: &K) -> Option<UsageRecord>;
 
     /// Insert or update usage record for a key  
-    fn insert_usage(&mut self, key: K, record: UsageRecord);
+    fn upsert_usage(&mut self, key: K, record: UsageRecord);
 
     /// Atomic update operation
     fn with_usage<R>(
@@ -92,7 +36,7 @@ pub trait CapacityStorage<K> {
     ) -> R {
         let mut usage = self.get_usage(&key).unwrap_or(default);
         let result = f(&mut usage);
-        self.insert_usage(key, usage);
+        self.upsert_usage(key, usage);
         result
     }
 }
@@ -120,7 +64,7 @@ impl<K: Ord + Clone> CapacityStorage<K> for InMemoryCapacityStorage<K> {
         self.storage.get(key).cloned()
     }
 
-    fn insert_usage(&mut self, key: K, record: UsageRecord) {
+    fn upsert_usage(&mut self, key: K, record: UsageRecord) {
         self.storage.insert(key, record);
     }
 }
@@ -132,7 +76,7 @@ where
     K: Storable + Ord + Clone,
     Memory: ic_stable_structures::Memory,
 {
-    map: StableBTreeMap<K, UsageRecord, Memory>,
+    capacity_usage_info: StableBTreeMap<K, (u64 /*time*/, u64 /*capacity used*/), Memory>,
 }
 
 impl<K, Memory> StableBTreeMapCapacityStorage<K, Memory>
@@ -142,7 +86,7 @@ where
 {
     pub fn new(memory: Memory) -> Self {
         Self {
-            map: StableBTreeMap::init(memory),
+            capacity_usage_info: StableBTreeMap::init(memory),
         }
     }
 }
@@ -153,11 +97,29 @@ where
     Memory: ic_stable_structures::Memory,
 {
     fn get_usage(&self, key: &K) -> Option<UsageRecord> {
-        self.map.get(key)
+        self.capacity_usage_info
+            .get(key)
+            .map(|(last_drip_nanoseconds, capacity_used)| {
+                let last_capacity_drip =
+                    SystemTime::UNIX_EPOCH + Duration::from_nanos(last_drip_nanoseconds);
+                UsageRecord {
+                    last_capacity_drip,
+                    capacity_used,
+                }
+            })
     }
 
-    fn insert_usage(&mut self, key: K, record: UsageRecord) {
-        self.map.insert(key, record);
+    fn upsert_usage(&mut self, key: K, record: UsageRecord) {
+        let last_capacity_drip = record
+            .last_capacity_drip
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+            .try_into()
+            .expect("Nanos from Unix Epoch should be under u64::MAX for hundreds of years...");
+
+        self.capacity_usage_info
+            .insert(key, (last_capacity_drip, record.capacity_used));
     }
 
     fn with_usage<R>(
@@ -168,7 +130,7 @@ where
     ) -> R {
         let mut usage = self.get_usage(&key).unwrap_or(default);
         let result = f(&mut usage);
-        self.insert_usage(key, usage);
+        self.upsert_usage(key, usage);
         result
     }
 }
@@ -259,7 +221,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
             );
             // Update the storage with the modified usage
             self.capacity_storage
-                .insert_usage(key.clone(), usage.clone());
+                .upsert_usage(key.clone(), usage.clone());
             usage.capacity_used
         } else {
             0
