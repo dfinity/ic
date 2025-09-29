@@ -13,7 +13,7 @@ use std::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct UsageRecord {
+pub struct CapacityUsageRecord {
     pub last_capacity_drip: SystemTime,
     pub capacity_used: u64,
 }
@@ -22,17 +22,17 @@ pub struct UsageRecord {
 /// This allows different storage backends (in-memory, persistent, etc.)
 pub trait CapacityStorage<K> {
     /// Get usage record for a key
-    fn get_usage(&self, key: &K) -> Option<UsageRecord>;
+    fn get_usage(&self, key: &K) -> Option<CapacityUsageRecord>;
 
     /// Insert or update usage record for a key  
-    fn upsert_usage(&mut self, key: K, record: UsageRecord);
+    fn upsert_usage(&mut self, key: K, record: CapacityUsageRecord);
 
     /// Atomic update operation
     fn with_usage<R>(
         &mut self,
         key: K,
-        default: UsageRecord,
-        f: impl FnOnce(&mut UsageRecord) -> R,
+        default: CapacityUsageRecord,
+        f: impl FnOnce(&mut CapacityUsageRecord) -> R,
     ) -> R {
         let mut usage = self.get_usage(&key).unwrap_or(default);
         let result = f(&mut usage);
@@ -42,7 +42,7 @@ pub trait CapacityStorage<K> {
 }
 
 pub struct InMemoryCapacityStorage<K> {
-    storage: BTreeMap<K, UsageRecord>,
+    storage: BTreeMap<K, CapacityUsageRecord>,
 }
 
 impl<K: Ord + Clone> InMemoryCapacityStorage<K> {
@@ -60,18 +60,18 @@ impl<K: Ord + Clone> Default for InMemoryCapacityStorage<K> {
 }
 
 impl<K: Ord + Clone> CapacityStorage<K> for InMemoryCapacityStorage<K> {
-    fn get_usage(&self, key: &K) -> Option<UsageRecord> {
+    fn get_usage(&self, key: &K) -> Option<CapacityUsageRecord> {
         self.storage.get(key).cloned()
     }
 
-    fn upsert_usage(&mut self, key: K, record: UsageRecord) {
+    fn upsert_usage(&mut self, key: K, record: CapacityUsageRecord) {
         self.storage.insert(key, record);
     }
 }
 
 /// Persistent capacity storage implementation using StableBTreeMap.
 /// This allows capacity usage to survive canister upgrades.
-pub struct StableBTreeMapCapacityStorage<K, Memory>
+pub struct StableMemoryCapacityStorage<K, Memory>
 where
     K: Storable + Ord + Clone,
     Memory: ic_stable_structures::Memory,
@@ -79,7 +79,7 @@ where
     capacity_usage_info: StableBTreeMap<K, (u64 /*time*/, u64 /*capacity used*/), Memory>,
 }
 
-impl<K, Memory> StableBTreeMapCapacityStorage<K, Memory>
+impl<K, Memory> StableMemoryCapacityStorage<K, Memory>
 where
     K: Ord + Clone + Storable,
     Memory: ic_stable_structures::Memory,
@@ -91,25 +91,25 @@ where
     }
 }
 
-impl<K, Memory> CapacityStorage<K> for StableBTreeMapCapacityStorage<K, Memory>
+impl<K, Memory> CapacityStorage<K> for StableMemoryCapacityStorage<K, Memory>
 where
     K: Ord + Clone + Storable,
     Memory: ic_stable_structures::Memory,
 {
-    fn get_usage(&self, key: &K) -> Option<UsageRecord> {
+    fn get_usage(&self, key: &K) -> Option<CapacityUsageRecord> {
         self.capacity_usage_info
             .get(key)
             .map(|(last_drip_nanoseconds, capacity_used)| {
                 let last_capacity_drip =
                     SystemTime::UNIX_EPOCH + Duration::from_nanos(last_drip_nanoseconds);
-                UsageRecord {
+                CapacityUsageRecord {
                     last_capacity_drip,
                     capacity_used,
                 }
             })
     }
 
-    fn upsert_usage(&mut self, key: K, record: UsageRecord) {
+    fn upsert_usage(&mut self, key: K, record: CapacityUsageRecord) {
         let last_capacity_drip = record
             .last_capacity_drip
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -125,8 +125,8 @@ where
     fn with_usage<R>(
         &mut self,
         key: K,
-        default: UsageRecord,
-        f: impl FnOnce(&mut UsageRecord) -> R,
+        default: CapacityUsageRecord,
+        f: impl FnOnce(&mut CapacityUsageRecord) -> R,
     ) -> R {
         let mut usage = self.get_usage(&key).unwrap_or(default);
         let result = f(&mut usage);
@@ -146,7 +146,7 @@ pub struct RateLimiter<K, S> {
 pub type InMemoryRateLimiter<K> = RateLimiter<K, InMemoryCapacityStorage<K>>;
 
 // Convenience type alias for the stable structures case
-pub type StableRateLimiter<K, Memory> = RateLimiter<K, StableBTreeMapCapacityStorage<K, Memory>>;
+pub type StableRateLimiter<K, Memory> = RateLimiter<K, StableMemoryCapacityStorage<K, Memory>>;
 
 #[derive(Clone, Debug, PartialEq)]
 struct ReservationData {
@@ -251,7 +251,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
     }
 
     pub fn commit(&mut self, now: SystemTime, reservation: Reservation<K>) {
-        let default_usage = UsageRecord {
+        let default_usage = CapacityUsageRecord {
             last_capacity_drip: now,
             capacity_used: 0,
         };
@@ -286,7 +286,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
             return;
         }
 
-        let default_usage = UsageRecord {
+        let default_usage = CapacityUsageRecord {
             last_capacity_drip: now,
             capacity_used: 0,
         };
@@ -309,7 +309,7 @@ impl<K: Ord + Clone + Debug, S: CapacityStorage<K>> RateLimiter<K, S> {
 }
 
 fn update_capacity(
-    usage_record: &mut UsageRecord,
+    usage_record: &mut CapacityUsageRecord,
     now: SystemTime,
     amount_to_add: u64,
     add_frequency: Duration,
@@ -530,7 +530,7 @@ mod tests {
 
         let memory_manager = MemoryManager::init(DefaultMemoryImpl::default());
         let capacity_memory = memory_manager.get(MemoryId::new(0));
-        let capacity_storage = StableBTreeMapCapacityStorage::new(capacity_memory);
+        let capacity_storage = StableMemoryCapacityStorage::new(capacity_memory);
 
         let mut rate_limiter = RateLimiter::new(
             RateLimiterConfig {
@@ -572,14 +572,14 @@ mod tests {
     #[test]
     fn test_usage_record_serialization() {
         let now = SystemTime::now();
-        let original = UsageRecord {
+        let original = CapacityUsageRecord {
             last_capacity_drip: now,
             capacity_used: 42,
         };
 
         // Serialize and deserialize
         let bytes = original.to_bytes();
-        let deserialized = UsageRecord::from_bytes(bytes);
+        let deserialized = CapacityUsageRecord::from_bytes(bytes);
 
         // Capacity should be exactly equal
         assert_eq!(deserialized.capacity_used, original.capacity_used);
