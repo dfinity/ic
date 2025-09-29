@@ -44,7 +44,6 @@ pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) ->
 
 /// Generate a dummy replica config with placeholder values for testing purposes.
 pub fn generate_dummy_ic_config() -> String {
-    // Create a template with dummy values
     let template = IcConfigTemplate {
         ipv6_address: "::".to_string(),
         ipv6_prefix: "::/64".to_string(),
