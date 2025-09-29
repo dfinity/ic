@@ -118,7 +118,8 @@
               }
             }
           ]
-        }
+        },
+        "launch_measurements_dev": "unimplemented"
       },
       "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": {
         "version": "206b61a8616bc93d36d6a014e5cc8edf1ba256ae",
@@ -237,7 +238,8 @@
               }
             }
           ]
-        }
+        },
+        "launch_measurements_dev": "unimplemented"
       }
     },
     "latest_release": {
@@ -357,7 +359,8 @@
             }
           }
         ]
-      }
+      },
+      "launch_measurements_dev": "unimplemented"
     }
   },
   "hostos": {
@@ -478,7 +481,8 @@
             }
           }
         ]
-      }
+      },
+      "launch_measurements_dev": "unimplemented"
     }
   }
 }
