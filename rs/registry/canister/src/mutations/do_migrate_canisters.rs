@@ -117,7 +117,7 @@ mod test {
         // currently just empty response.
         assert_eq!(
             MigrateCanistersResponse {
-                registry_version: registry.latest_version()
+                registry_version: registry.latest_version() - 1
             },
             response
         );
