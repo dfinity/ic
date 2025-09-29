@@ -5,9 +5,9 @@ type Decimal = record {
 };
 
 type DateUtc = record {
-  day: opt u32;
-  month: opt u32;
-  year: opt u32;
+  day: opt nat32;
+  month: opt nat32;
+  year: opt nat32;
 };
 
 type NodeMetricsDaily = record {
