@@ -296,7 +296,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
         replica_version: Some(ic_version),
-        key_file: Some(ssh_priv_key_path.clone()),
+        admin_key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -541,7 +541,7 @@ fn local_recovery(
     let node_ip = node.get_ip_addr();
 
     let maybe_admin_key_file =
-        if let Some(admin_key_file) = &subnet_recovery_tool.recovery_args.key_file {
+        if let Some(admin_key_file) = &subnet_recovery_tool.recovery_args.admin_key_file {
             info!(
                 logger,
                 "Copying the admin key file to node {node_id} with IP {node_ip} ..."
@@ -554,7 +554,7 @@ fn local_recovery(
                 0o400,
             );
 
-            format!("--key-file {ADMIN_KEY_FILE_REMOTE_PATH} ")
+            format!("--admin-key-file {ADMIN_KEY_FILE_REMOTE_PATH} ")
         } else {
             String::default()
         };

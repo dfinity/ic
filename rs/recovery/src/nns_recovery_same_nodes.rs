@@ -303,7 +303,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         Ok(Box::new(self.recovery.get_download_state_step(
                             node_ip,
                             SshUser::Admin,
-                            self.recovery.key_file.clone(),
+                            self.recovery.admin_key_file.clone(),
                             self.params.keep_downloaded_state == Some(true),
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))

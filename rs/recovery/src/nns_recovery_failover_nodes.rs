@@ -261,7 +261,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 Ok(Box::new(self.recovery.get_download_certs_step(
                     self.params.subnet_id,
                     SshUser::Admin,
-                    self.recovery.key_file.clone(),
+                    self.recovery.admin_key_file.clone(),
                     !self.interactive(),
                 )))
             }
@@ -275,7 +275,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
                         SshUser::Admin,
-                        self.recovery.key_file.clone(),
+                        self.recovery.admin_key_file.clone(),
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/ vec![CUPS_DIR],
                     )))

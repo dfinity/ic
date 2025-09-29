@@ -105,7 +105,7 @@ pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,
     pub replica_version: Option<ReplicaVersion>,
-    pub key_file: Option<PathBuf>,
+    pub admin_key_file: Option<PathBuf>,
     pub test_mode: bool,
     pub skip_prompts: bool,
     pub use_local_binaries: bool,
@@ -129,7 +129,7 @@ pub struct Recovery {
     pub admin_helper: AdminHelper,
     pub registry_helper: RegistryHelper,
 
-    pub key_file: Option<PathBuf>,
+    pub admin_key_file: Option<PathBuf>,
     ssh_confirmation: bool,
 
     pub logger: Logger,
@@ -221,7 +221,7 @@ impl Recovery {
             local_store_path,
             admin_helper,
             registry_helper,
-            key_file: args.key_file,
+            admin_key_file: args.admin_key_file,
             ssh_confirmation,
             logger,
         })
@@ -274,32 +274,19 @@ impl Recovery {
     }
 
     /// Executes the given SSH command.
-    pub fn execute_ssh_command(
+    pub fn execute_admin_ssh_command(
         &self,
-        account: &str,
         node_ip: IpAddr,
         commands: &str,
     ) -> RecoveryResult<Option<String>> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            account.to_string(),
+            SshUser::Admin.to_string(),
             node_ip,
             self.ssh_confirmation,
-            self.key_file.clone(),
+            self.admin_key_file.clone(),
         );
         ssh_helper.ssh(commands.to_string())
-    }
-
-    /// Returns true if ssh access to the given account and ip exists.
-    pub fn check_ssh_access(&self, account: &str, node_ip: IpAddr) -> bool {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            account.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            self.key_file.clone(),
-        );
-        ssh_helper.can_connect()
     }
 
     // Execute an `ic-admin` command, log the output.
@@ -530,7 +517,7 @@ impl Recovery {
             work_dir: self.work_dir.clone(),
             data_src: self.work_dir.join(IC_STATE_DIR),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
             check_ic_replay_height: true,
         }
     }
@@ -791,7 +778,7 @@ impl Recovery {
             logger: self.logger.clone(),
             node_ip,
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 
@@ -862,7 +849,7 @@ impl Recovery {
             node_ip,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 
@@ -909,7 +896,7 @@ impl Recovery {
             original_nns_id,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 
@@ -926,7 +913,7 @@ impl Recovery {
             aux_ip,
             tar,
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 }
