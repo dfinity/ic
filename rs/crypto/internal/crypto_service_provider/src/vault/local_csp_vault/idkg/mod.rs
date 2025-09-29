@@ -59,9 +59,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
         let start_time = self.metrics.now();
-        let transcript_operation =
-            IDkgTranscriptOperationInternal::try_from(&transcript_operation_internal_bytes)
-                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
         let receiver_keys_typed = receiver_keys
             .into_iter()
             .enumerate()
@@ -86,13 +83,16 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 })
             })
             .collect::<Result<Vec<_>, IDkgCreateDealingVaultError>>()?;
+        let transcript_operation_internal =
+            IDkgTranscriptOperationInternal::try_from(&transcript_operation_internal_bytes)
+                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
         let result = self.idkg_create_dealing_internal(
             algorithm_id,
             &context_data,
             dealer_index,
             reconstruction_threshold,
             &receiver_keys_typed[..],
-            &transcript_operation,
+            &transcript_operation_internal,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
