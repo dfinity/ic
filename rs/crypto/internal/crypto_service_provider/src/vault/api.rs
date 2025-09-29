@@ -6,7 +6,9 @@ use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CanisterThresholdSerializationResult, CommitmentOpening, IDkgComplaintInternal,
+    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -920,6 +922,43 @@ impl From<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternalBytes {
                         idkm_transcript_2.internal_transcript_raw.clone(),
                     ),
                 )
+            }
+        }
+    }
+}
+
+impl TryFrom<&IDkgTranscriptOperationInternalBytes> for IDkgTranscriptOperationInternal {
+    type Error = CanisterThresholdSerializationResult;
+
+    fn try_from(
+        transcript_operation_internal_bytes: &IDkgTranscriptOperationInternalBytes,
+    ) -> Result<Self, Self::Error> {
+        match transcript_operation_internal_bytes {
+            IDkgTranscriptOperationInternalBytes::Random => {
+                Ok(IDkgTranscriptOperationInternal::Random)
+            }
+            IDkgTranscriptOperationInternalBytes::RandomUnmasked => {
+                Ok(IDkgTranscriptOperationInternal::RandomUnmasked)
+            }
+            IDkgTranscriptOperationInternalBytes::ReshareOfMasked(bytes) => {
+                let t = IDkgTranscriptInternal::deserialize(bytes.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::ReshareOfMasked(
+                    t.combined_commitment.into_commitment(),
+                ))
+            }
+            IDkgTranscriptOperationInternalBytes::ReshareOfUnmasked(bytes) => {
+                let t = IDkgTranscriptInternal::deserialize(bytes.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::ReshareOfUnmasked(
+                    t.combined_commitment.into_commitment(),
+                ))
+            }
+            IDkgTranscriptOperationInternalBytes::UnmaskedTimesMasked(bytes_1, bytes_2) => {
+                let t1 = IDkgTranscriptInternal::deserialize(bytes_1.as_ref())?;
+                let t2 = IDkgTranscriptInternal::deserialize(bytes_2.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::UnmaskedTimesMasked(
+                    t1.combined_commitment.into_commitment(),
+                    t2.combined_commitment.into_commitment(),
+                ))
             }
         }
     }

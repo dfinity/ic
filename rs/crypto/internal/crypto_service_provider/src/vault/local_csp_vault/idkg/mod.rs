@@ -60,7 +60,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
         let start_time = self.metrics.now();
         let transcript_operation =
-            transcript_operation_internal_from_bytes(transcript_operation_internal_bytes)?;
+            IDkgTranscriptOperationInternal::try_from(&transcript_operation_internal_bytes)
+                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
         let receiver_keys_typed = receiver_keys
             .into_iter()
             .enumerate()
@@ -755,41 +756,6 @@ impl From<MEGaKeysetFromSksError> for IDkgLoadTranscriptError {
         match mega_keyset_from_sks_error {
             Mkfse::DeserializationError(e) => Ilte::SerializationError { internal_error: e },
             Mkfse::PrivateKeyNotFound => Ilte::PrivateKeyNotFound,
-        }
-    }
-}
-
-fn transcript_operation_internal_from_bytes(
-    transcript_operation_internal_bytes: IDkgTranscriptOperationInternalBytes,
-) -> Result<IDkgTranscriptOperationInternal, IDkgCreateDealingVaultError> {
-    match transcript_operation_internal_bytes {
-        IDkgTranscriptOperationInternalBytes::Random => Ok(IDkgTranscriptOperationInternal::Random),
-        IDkgTranscriptOperationInternalBytes::RandomUnmasked => {
-            Ok(IDkgTranscriptOperationInternal::RandomUnmasked)
-        }
-        IDkgTranscriptOperationInternalBytes::ReshareOfMasked(bytes) => {
-            let transcript = IDkgTranscriptInternal::deserialize(bytes.as_ref())
-                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
-            Ok(IDkgTranscriptOperationInternal::ReshareOfMasked(
-                transcript.combined_commitment.commitment().clone(),
-            ))
-        }
-        IDkgTranscriptOperationInternalBytes::ReshareOfUnmasked(bytes) => {
-            let transcript = IDkgTranscriptInternal::deserialize(bytes.as_ref())
-                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
-            Ok(IDkgTranscriptOperationInternal::ReshareOfUnmasked(
-                transcript.combined_commitment.commitment().clone(),
-            ))
-        }
-        IDkgTranscriptOperationInternalBytes::UnmaskedTimesMasked(bytes_1, bytes_2) => {
-            let transcript_1 = IDkgTranscriptInternal::deserialize(bytes_1.as_ref())
-                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
-            let transcript_2 = IDkgTranscriptInternal::deserialize(bytes_2.as_ref())
-                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
-            Ok(IDkgTranscriptOperationInternal::UnmaskedTimesMasked(
-                transcript_1.combined_commitment.commitment().clone(),
-                transcript_2.combined_commitment.commitment().clone(),
-            ))
         }
     }
 }
