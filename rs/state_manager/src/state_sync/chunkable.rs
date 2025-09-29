@@ -1,22 +1,22 @@
 use crate::{
-    manifest::{build_file_group_chunks, filter_out_zero_chunks, DiffScript},
-    state_sync::types::{
-        decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
-        ManifestChunkIndex, MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
-        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
-    },
-    state_sync::StateSync,
-    StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
-    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
+    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_FETCH,
     LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
+    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
+    StateSyncMetrics, StateSyncRefs,
+    manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
+    state_sync::StateSync,
+    state_sync::types::{
+        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks,
+        MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, Manifest, ManifestChunkIndex, MetaManifest,
+        StateSyncChunk, StateSyncMessage, decode_manifest, decode_meta_manifest,
+        state_sync_chunk_type,
+    },
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
-use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
-use ic_state_layout::utils::do_copy_overwrite;
-use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
+use ic_logger::{ReplicaLogger, debug, error, fatal, info, trace, warn};
+use ic_state_layout::{CheckpointLayout, ReadOnly, RwPolicy, StateLayout, error::LayoutError};
 use ic_sys::mmap::ScopedMmap;
-use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
+use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -121,7 +121,7 @@ impl Drop for IncompleteState {
                 manifest: _,
                 state_sync_file_group,
                 fetch_chunks,
-                copied_chunks_from_file_group: _,
+                copied_chunks_from_file_group,
             } => {
                 self.metrics
                     .state_sync_metrics
@@ -129,18 +129,32 @@ impl Drop for IncompleteState {
                     .with_label_values(&["aborted"])
                     .observe(elapsed.as_secs_f64());
 
-                let dropped_chunks: usize = fetch_chunks
+                let remaining_file_group_chunks: HashSet<usize> = fetch_chunks
+                    .iter()
+                    .filter(|ix| (**ix as u32) >= FILE_GROUP_CHUNK_ID_OFFSET)
+                    .copied()
+                    .collect();
+
+                let mut dropped_chunks = fetch_chunks.len() - remaining_file_group_chunks.len();
+
+                let file_group_dropped_chunks = remaining_file_group_chunks
                     .iter()
                     .map(|ix| {
-                        if (*ix as u32) < FILE_GROUP_CHUNK_ID_OFFSET {
-                            1
-                        } else {
-                            state_sync_file_group
-                                .get(&(*ix as u32))
-                                .map_or(0, |vec| vec.len())
-                        }
+                        state_sync_file_group.get(&(*ix as u32)).map_or(0, |vec| {
+                            if copied_chunks_from_file_group.is_empty() {
+                                vec.len()
+                            } else {
+                                // Rare case where copied chunks from file group are not empty.
+                                vec.iter()
+                                    .filter(|chunk| !copied_chunks_from_file_group.contains(chunk))
+                                    .count()
+                            }
+                        })
                     })
-                    .sum();
+                    .sum::<usize>();
+
+                dropped_chunks += file_group_dropped_chunks;
+
                 self.metrics
                     .state_sync_metrics
                     .remaining
@@ -212,9 +226,7 @@ impl IncompleteState {
         // Create the `IncompleteState` object while holding the write lock on the active state sync reference.
         Some(Self {
             log,
-            root: state_layout
-                .state_sync_scratchpad(height)
-                .expect("failed to create directory for state sync scratchpad"),
+            root: state_layout.state_sync_scratchpad(height),
             state_sync: state_sync.clone(),
             state_layout,
             height,
@@ -265,9 +277,66 @@ impl IncompleteState {
         }
     }
 
-    /// Copy reusable files from previous checkpoint according to diff script.
+    /// Marks the source file as readonly and creates a hard link to the destination.
+    ///
+    /// If the source file is writable, it will be marked as readonly.
+    /// Any existing file at the destination will be removed.
+    fn mark_readonly_and_hardlink_file(
+        _log: &ReplicaLogger,
+        src: &Path,
+        dst: &Path,
+    ) -> std::io::Result<()> {
+        let src_metadata = src.metadata()?;
+        let mut permissions = src_metadata.permissions();
+        if !permissions.readonly() {
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::ffi::OsStrExt;
+                use std::os::unix::fs::MetadataExt;
+
+                // Writable source files should originate from state_sync_cache, not from existing checkpoints which are already readonly.
+                debug_assert!(
+                    !src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes() == b"checkpoint")
+                );
+                debug_assert!(
+                    src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes().starts_with(b"state_sync_cache"))
+                );
+
+                // Writable source files should be newly fetched, not already hardlinked from anywhere else.
+                debug_assert_eq!(src_metadata.nlink(), 1);
+            }
+
+            // Make the source file readonly to prevent accidental modifications
+            permissions.set_readonly(true);
+            std::fs::set_permissions(src, permissions).map_err(|e| {
+                std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to set readonly permissions for file {}: {}",
+                        src.display(),
+                        e
+                    ),
+                )
+            })?;
+        }
+
+        // hard_link() requires the destination to not exist.
+        if dst.exists() {
+            std::fs::remove_file(dst)?;
+        }
+
+        std::fs::hard_link(src, dst)
+    }
+
+    /// Hardlink unchanged files from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn copy_files(
+    pub(crate) fn hardlink_files(
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -281,12 +350,12 @@ impl IncompleteState {
     ) {
         let _timer = metrics
             .step_duration
-            .with_label_values(&[LABEL_COPY_FILES])
+            .with_label_values(&[LABEL_HARDLINK_FILES])
             .start_timer();
 
         info!(
             log,
-            "state sync: copy_files for {} files {} validation",
+            "state sync: hardlink_files for {} files {} validation",
             diff_script.copy_files.len(),
             if validate_data || ALWAYS_VALIDATE {
                 "with"
@@ -309,15 +378,6 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    let original_perms = std::fs::metadata(&dst_path).unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to get metadata of file {}: {}",
-                            dst_path.display(),
-                            err
-                        )
-                    })
-                        .permissions();
                     if validate_data || ALWAYS_VALIDATE {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
@@ -388,7 +448,7 @@ impl IncompleteState {
                                     );
                                     metrics.corrupted_chunks_critical.inc();
                                 }
-                                metrics.corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
+                                metrics.corrupted_chunks.with_label_values(&[LABEL_HARDLINK_FILES]).inc();
                                 continue;
                             }
 
@@ -420,7 +480,7 @@ impl IncompleteState {
                                     );
                                     metrics.corrupted_chunks_critical.inc();
                                 }
-                                metrics.corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
+                                metrics.corrupted_chunks.with_label_values(&[LABEL_HARDLINK_FILES]).inc();
                             }
                         }
 
@@ -429,19 +489,18 @@ impl IncompleteState {
                                 == manifest_old.file_table[*old_index].size_bytes as usize
                         {
                             // All the hash sums and the file size match, so we can
-                            // simply copy the whole file.  That's much faster than
+                            // simply hardlink the whole file.  That's much faster than
                             // copying one chunk at a time.
-                            do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(
-                                |err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to copy file from {} to {}: {}",
-                                        src_path.display(),
-                                        dst_path.display(),
-                                        err
-                                    )
-                                },
-                            );
+                            Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to hardlink file from {} to {}: {}",
+                                    src_path.display(),
+                                    dst_path.display(),
+                                    err
+                                )
+                            });
+
                             metrics
                                 .remaining
                                 .sub(new_chunk_range.len() as i64);
@@ -512,29 +571,22 @@ impl IncompleteState {
                             }
                         }
                     } else {
-                        // Since we do not validate in this else branch, we can simply copy the
+                        // Since we do not validate in this else branch, we can simply hardlink the
                         // file without any extra work
-                        do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                        Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
                             fatal!(
                                 log,
-                                "Failed to copy file from {} to {}: {}",
+                                "Failed to hardlink file from {} to {}: {}",
                                 src_path.display(),
                                 dst_path.display(),
                                 err
                             )
                         });
+
                         metrics
                             .remaining
                             .sub(new_chunk_range.len() as i64);
                     }
-                    std::fs::set_permissions(&dst_path, original_perms).unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "failed to set permissions for file {}: {}",
-                            dst_path.display(),
-                            err
-                        )
-                    });
                 });
             }
         });
@@ -863,7 +915,7 @@ impl IncompleteState {
     /// Preallocates the files listed in the manifest and copies the chunks
     /// that we have locally.
     /// Returns a set of chunks that still need to be fetched
-    fn initialize_state_on_disk(&mut self, manifest_new: &Manifest) -> HashSet<usize> {
+    fn initialize_state_on_disk(&self, manifest_new: &Manifest) -> HashSet<usize> {
         Self::preallocate_layout(&self.log, &self.root, manifest_new);
 
         let state_sync_size_fetch = self
@@ -871,11 +923,11 @@ impl IncompleteState {
             .state_sync_metrics
             .size
             .with_label_values(&[LABEL_FETCH]);
-        let state_sync_size_copy_files = self
+        let state_sync_size_hardlink_files = self
             .metrics
             .state_sync_metrics
             .size
-            .with_label_values(&[LABEL_COPY_FILES]);
+            .with_label_values(&[LABEL_HARDLINK_FILES]);
         let state_sync_size_copy_chunks = self
             .metrics
             .state_sync_metrics
@@ -1010,18 +1062,18 @@ impl IncompleteState {
             let preallocate_bytes: u64 =
                 (diff_script.zeros_chunks * crate::state_sync::types::DEFAULT_CHUNK_SIZE) as u64;
 
-            let copy_files_bytes: u64 = diff_script
+            let hardlink_files_bytes: u64 = diff_script
                 .copy_files
                 .keys()
                 .map(|i| manifest_new.file_table[*i].size_bytes)
                 .sum();
 
             let copy_chunks_bytes: u64 =
-                total_bytes - diff_bytes - preallocate_bytes - copy_files_bytes;
+                total_bytes - diff_bytes - preallocate_bytes - hardlink_files_bytes;
 
             state_sync_size_fetch.inc_by(diff_bytes);
             state_sync_size_preallocate.inc_by(preallocate_bytes);
-            state_sync_size_copy_files.inc_by(copy_files_bytes);
+            state_sync_size_hardlink_files.inc_by(hardlink_files_bytes);
             state_sync_size_copy_chunks.inc_by(copy_chunks_bytes);
 
             self.metrics
@@ -1030,7 +1082,7 @@ impl IncompleteState {
                 .sub(diff_script.zeros_chunks as i64);
 
             let mut thread_pool = self.thread_pool.lock().unwrap();
-            Self::copy_files(
+            Self::hardlink_files(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1244,7 +1296,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     Err(AddChunkError::Invalid)
                 }
             }
-            DownloadState::Prep {
+            &mut DownloadState::Prep {
                 ref meta_manifest,
                 ref mut manifest_in_construction,
                 ref mut manifest_chunks,
@@ -1414,7 +1466,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     Ok(())
                 }
             }
-            DownloadState::Loading {
+            &mut DownloadState::Loading {
                 ref meta_manifest,
                 ref manifest,
                 ref mut fetch_chunks,

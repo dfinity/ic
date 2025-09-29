@@ -2,24 +2,26 @@
 
 use crate::{
     complaints::IDkgTranscriptLoader,
-    metrics::{timed_call, IDkgPayloadMetrics, IDkgPreSignerMetrics},
-    utils::{load_transcripts, transcript_op_summary, update_purge_height, IDkgBlockReaderImpl},
+    metrics::{IDkgPayloadMetrics, IDkgPreSignerMetrics, timed_call},
+    utils::{IDkgBlockReaderImpl, IDkgSchedule, load_transcripts, transcript_op_summary},
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, RoundRobin};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::{ErrorReproducibility, IDkgProtocol},
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
+    Height, NodeId,
     artifact::IDkgMessageId,
     consensus::idkg::{
-        dealing_prefix, dealing_support_prefix, IDkgBlockReader, IDkgMessage, IDkgStats,
-        IDkgTranscriptParamsRef,
+        IDkgBlockReader, IDkgMessage, IDkgStats, IDkgTranscriptParamsRef, dealing_prefix,
+        dealing_support_prefix,
     },
     crypto::{
+        CryptoHashOf,
         canister_threshold_sig::{
             error::IDkgCreateDealingError,
             idkg::{
@@ -28,16 +30,17 @@ use ic_types::{
                 SignedIDkgDealing,
             },
         },
-        CryptoHashOf,
     },
     signature::BasicSignatureBatch,
-    Height, NodeId,
+};
+use rayon::{
+    ThreadPool,
+    iter::{IntoParallelIterator, ParallelIterator},
 };
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 /// Key to identify how many signature shares we have received for a <transcript_id, dealer_id,
@@ -66,6 +69,7 @@ pub(crate) trait IDkgPreSigner: Send {
         &self,
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
+        schedule: &IDkgSchedule<Height>,
     ) -> IDkgChangeSet;
 }
 
@@ -74,12 +78,11 @@ pub struct IDkgPreSignerImpl {
     pub(crate) node_id: NodeId,
     pub(crate) consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
-    schedule: RoundRobin,
+    thread_pool: Arc<ThreadPool>,
     pub(crate) metrics: IDkgPreSignerMetrics,
     pub(crate) log: ReplicaLogger,
-    prev_finalized_height: RefCell<Height>,
     validated_dealing_supports:
-        RefCell<BTreeMap<IDkgValidatedDealingSupportIdentifier, BTreeSet<NodeId>>>,
+        RwLock<BTreeMap<IDkgValidatedDealingSupportIdentifier, BTreeSet<NodeId>>>,
 }
 
 impl IDkgPreSignerImpl {
@@ -87,6 +90,7 @@ impl IDkgPreSignerImpl {
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
+        thread_pool: Arc<ThreadPool>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
@@ -94,11 +98,10 @@ impl IDkgPreSignerImpl {
             node_id,
             consensus_block_cache,
             crypto,
-            schedule: RoundRobin::default(),
+            thread_pool,
             metrics: IDkgPreSignerMetrics::new(metrics_registry),
             log,
-            prev_finalized_height: RefCell::new(Height::from(0)),
-            validated_dealing_supports: RefCell::new(BTreeMap::new()),
+            validated_dealing_supports: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -116,41 +119,38 @@ impl IDkgPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
-        block_reader
-            .requested_transcripts()
-            .filter_map(|transcript_params_ref| {
-                let mut ret = None;
-                if let Some(transcript_params) =
-                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealings")
-                {
+        let requested = block_reader.requested_transcripts().collect::<Vec<_>>();
+
+        self.thread_pool.install(|| {
+            requested
+                .into_par_iter()
+                .filter(|transcript_params_ref| {
                     // Issue a dealing if we are in the dealer list and we haven't
-                    //already issued a dealing for this transcript
-                    if transcript_params.dealers().contains(self.node_id)
+                    // already issued a dealing for this transcript
+                    transcript_params_ref.dealers.contains(&self.node_id)
                         && !self.has_dealer_issued_dealing(
                             idkg_pool,
-                            &transcript_params.transcript_id(),
+                            &transcript_params_ref.transcript_id,
                             &self.node_id,
                         )
-                    {
-                        ret = Some(transcript_params);
+                })
+                .filter_map(|transcript_params_ref| {
+                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealings")
+                })
+                .flat_map(|transcript_params| {
+                    if target_subnet_xnet_transcripts.contains(&transcript_params.transcript_id()) {
+                        self.metrics
+                            .pre_sign_errors_inc("create_dealing_for_xnet_transcript");
+                        warn!(
+                            self.log,
+                            "Dealing creation: dealing for target xnet dealing: {:?}",
+                            transcript_params,
+                        );
                     }
-                }
-                ret
-            })
-            .flat_map(|transcript_params| {
-                if target_subnet_xnet_transcripts.contains(&transcript_params.transcript_id()) {
-                    self.metrics
-                        .pre_sign_errors_inc("create_dealing_for_xnet_transcript");
-                    warn!(
-                        self.log,
-                        "Dealing creation: dealing for target xnet dealing: {:?}",
-                        transcript_params,
-                    );
-                }
-
-                self.crypto_create_dealing(idkg_pool, transcript_loader, &transcript_params)
-            })
-            .collect()
+                    self.crypto_create_dealing(idkg_pool, transcript_loader, &transcript_params)
+                })
+                .collect()
+        })
     }
 
     /// Processes the dealings received from peer dealers
@@ -182,7 +182,7 @@ impl IDkgPreSignerImpl {
                     .pre_sign_errors_inc("duplicate_dealing_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Duplicate dealing in unvalidated batch: {}", signed_dealing),
+                    format!("Duplicate dealing in unvalidated batch: {signed_dealing}"),
                 ));
                 continue;
             }
@@ -214,8 +214,7 @@ impl IDkgPreSignerImpl {
                             ret.push(IDkgChangeAction::HandleInvalid(
                                 id,
                                 format!(
-                                    "validate_dealings(): failed to translate transcript_params_ref: {}",
-                                    signed_dealing
+                                    "validate_dealings(): failed to translate transcript_params_ref: {signed_dealing}"
                                 ),
                             ));
                             continue;
@@ -230,7 +229,7 @@ impl IDkgPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("unexpected_dealing");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Dealing from unexpected node: {}", signed_dealing),
+                            format!("Dealing from unexpected node: {signed_dealing}"),
                         ))
                     } else if self.has_dealer_issued_dealing(
                         idkg_pool,
@@ -241,7 +240,7 @@ impl IDkgPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("duplicate_dealing");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate dealing: {}", signed_dealing),
+                            format!("Duplicate dealing: {signed_dealing}"),
                         ))
                     } else {
                         let action =
@@ -273,6 +272,7 @@ impl IDkgPreSignerImpl {
         for transcript_params_ref in block_reader.source_subnet_xnet_transcripts() {
             source_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
+        let mut validated_dealing_supports = self.validated_dealing_supports.write().unwrap();
 
         idkg_pool
             .validated()
@@ -343,8 +343,7 @@ impl IDkgPreSignerImpl {
                 ))) = action
                 {
                     // Record our share in the map of validated dealing supports
-                    self.validated_dealing_supports
-                        .borrow_mut()
+                    validated_dealing_supports
                         .entry(IDkgValidatedDealingSupportIdentifier::from(support))
                         .or_default()
                         .insert(support.sig_share.signer);
@@ -389,12 +388,12 @@ impl IDkgPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
+        let mut valid_dealing_supports = self.validated_dealing_supports.write().unwrap();
         let mut ret = Vec::new();
         for (id, support) in idkg_pool.unvalidated().dealing_support() {
             // Dedup dealing support by checking whether a previous (transcript_id, dealer_id,
             // dealing_hash) was already signed by the signer
             let key = IDkgValidatedDealingSupportIdentifier::from(&support);
-            let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
             let maybe_signers = valid_dealing_supports.get_mut(&key);
             if maybe_signers
                 .as_ref()
@@ -402,10 +401,7 @@ impl IDkgPreSignerImpl {
             {
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate dealing support in unvalidated batch: {}",
-                        support
-                    ),
+                    format!("Duplicate dealing support in unvalidated batch: {support}"),
                 ));
                 continue;
             };
@@ -414,7 +410,7 @@ impl IDkgPreSignerImpl {
                 self.metrics.pre_sign_errors_inc("xnet_reshare_support");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Support for xnet reshare transcript: {}", support),
+                    format!("Support for xnet reshare transcript: {support}"),
                 ));
                 continue;
             }
@@ -445,7 +441,7 @@ impl IDkgPreSignerImpl {
                         None => {
                             ret.push(IDkgChangeAction::HandleInvalid(
                                 id,
-                                format!("Failed to translate transcript_params_ref: {}", support),
+                                format!("Failed to translate transcript_params_ref: {support}"),
                             ));
                             continue;
                         }
@@ -465,7 +461,7 @@ impl IDkgPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("unexpected_support");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Support from unexpected node: {}", support),
+                            format!("Support from unexpected node: {support}"),
                         ))
                     } else if let Some(signed_dealing) = valid_dealings.get(&support.dealing_hash) {
                         let dealing = signed_dealing.idkg_dealing();
@@ -480,7 +476,7 @@ impl IDkgPreSignerImpl {
                             self.metrics.pre_sign_errors_inc("duplicate_support");
                             ret.push(IDkgChangeAction::HandleInvalid(
                                 id,
-                                format!("Duplicate support: {}", support),
+                                format!("Duplicate support: {support}"),
                             ))
                         } else if support.transcript_id != dealing.transcript_id
                             || support.dealer_id != signed_dealing.dealer_id()
@@ -547,10 +543,10 @@ impl IDkgPreSignerImpl {
                                     .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
                                 ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                                 warn!(
-                                self.log,
-                                "validate_dealing_support(): Missing hash, meta data mismatch: {:?}",
-                                support
-                            );
+                                    self.log,
+                                    "validate_dealing_support(): Missing hash, meta data mismatch: {:?}",
+                                    support
+                                );
                             }
                             // Else: Support for a dealing we don't have yet, defer it
                         }
@@ -626,7 +622,7 @@ impl IDkgPreSignerImpl {
         let ret = ret.chain(action);
 
         // Validated dealing support.
-        let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
+        let mut valid_dealing_supports = self.validated_dealing_supports.write().unwrap();
         let action = idkg_pool
             .validated()
             .dealing_support()
@@ -711,8 +707,7 @@ impl IDkgPreSignerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Dealing validation(permanent error): {}, error = {:?}",
-                        signed_dealing, error
+                        "Dealing validation(permanent error): {signed_dealing}, error = {error:?}"
                     ),
                 ))
             }
@@ -758,8 +753,7 @@ impl IDkgPreSignerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
-                        "Dealing private verification(permanent error): {}, error = {:?}",
-                        dealing, error
+                        "Dealing private verification(permanent error): {dealing}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -830,10 +824,7 @@ impl IDkgPreSignerImpl {
                 self.metrics.pre_sign_errors_inc("verify_dealing_support");
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Support validation failed: {}, error = {:?}",
-                        support, error
-                    ),
+                    format!("Support validation failed: {support}, error = {error:?}"),
                 ))
             }
             Ok(_) => {
@@ -974,6 +965,7 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
         &self,
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
+        schedule: &IDkgSchedule<Height>,
     ) -> IDkgChangeSet {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
@@ -982,16 +974,15 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
             .stats()
             .update_active_pre_signatures(&block_reader);
 
-        let mut changes =
-            if update_purge_height(&self.prev_finalized_height, block_reader.tip_height()) {
-                timed_call(
-                    "purge_artifacts",
-                    || self.purge_artifacts(idkg_pool, &block_reader),
-                    &metrics.on_state_change_duration,
-                )
-            } else {
-                IDkgChangeSet::default()
-            };
+        let mut changes = if schedule.update_last_purge(block_reader.tip_height()) {
+            timed_call(
+                "purge_artifacts",
+                || self.purge_artifacts(idkg_pool, &block_reader),
+                &metrics.on_state_change_duration,
+            )
+        } else {
+            IDkgChangeSet::default()
+        };
 
         let send_dealings = || {
             timed_call(
@@ -1029,12 +1020,12 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
             &validate_dealing_support,
         ];
 
-        changes.append(&mut self.schedule.call_next(&calls));
+        changes.append(&mut schedule.call_next(&calls));
         changes
     }
 }
 
-pub(crate) trait IDkgTranscriptBuilder {
+pub(crate) trait IDkgTranscriptBuilder: Send + Sync {
     /// Returns the specified transcript if it can be successfully
     /// built from the current entries in the IDKG pool
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript>;
@@ -1316,12 +1307,12 @@ impl<'a> Action<'a> {
         msg_height: Option<Height>,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
-        if let Some(height) = msg_height {
-            if height > block_reader.tip_height() {
-                // Message is from a node ahead of us, keep it to be
-                // processed later
-                return Action::Defer;
-            }
+        if let Some(height) = msg_height
+            && height > block_reader.tip_height()
+        {
+            // Message is from a node ahead of us, keep it to be
+            // processed later
+            return Action::Defer;
         }
 
         match requested_transcripts.get(msg_transcript_id) {
@@ -1391,8 +1382,7 @@ impl TranscriptState {
             Ok(())
         } else {
             Err(format!(
-                "TranscriptState::add_dealing_support(): dealing not found: {:}",
-                support
+                "TranscriptState::add_dealing_support(): dealing not found: {support:}"
             ))
         }
     }
@@ -1404,21 +1394,34 @@ mod tests {
     use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, setup_masked_random_params,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_test_utilities_consensus::{idkg::*, IDkgStatsNoOp};
+    use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
+        Height, RegistryVersion,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject},
         crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash},
         time::UNIX_EPOCH,
-        Height, RegistryVersion,
     };
     use ic_types_test_utils::ids::node_test_id;
     use std::{collections::HashSet, ops::Deref};
+
+    impl IDkgPreSignerImpl {
+        fn validated_dealing_supports(
+            &self,
+        ) -> std::sync::RwLockReadGuard<
+            '_,
+            BTreeMap<IDkgValidatedDealingSupportIdentifier, BTreeSet<NodeId>>,
+        > {
+            self.validated_dealing_supports
+                .read()
+                .expect("IDkgPreSignerImpl::validated_dealing_supports(): RwLock poisoned")
+        }
+    }
 
     // Tests the Action logic
     #[test]
@@ -1557,15 +1560,18 @@ mod tests {
                 ];
                 idkg_pool.apply(change_set);
 
+                let schedule = IDkgSchedule::new(Height::from(0));
                 // Finalized height doesn't increase, so dealing1 shouldn't be purged
-                let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*pre_signer.prev_finalized_height.borrow(), Height::from(0));
+                let change_set =
+                    pre_signer.on_state_change(&idkg_pool, &transcript_loader, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), Height::from(0));
                 assert!(change_set.is_empty());
 
                 // Finalized height increases, so dealing1 is purged
                 let new_height = consensus_pool.advance_round_normal_operation_n(29);
-                let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
+                let change_set =
+                    pre_signer.on_state_change(&idkg_pool, &transcript_loader, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
 
@@ -1573,8 +1579,9 @@ mod tests {
 
                 // Finalized height increases above dealing2, so it is purged
                 let new_height = consensus_pool.advance_round_normal_operation();
-                let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
+                let change_set =
+                    pre_signer.on_state_change(&idkg_pool, &transcript_loader, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(transcript_height, new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id2));
@@ -2073,16 +2080,17 @@ mod tests {
                     &NODE_2,
                 ));
 
-                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
-                assert!(pre_signer
-                    .validated_dealing_supports
-                    .borrow()
-                    .iter()
-                    .next()
-                    .is_some_and(
-                        |(support_identifier, signers)| support_identifier.transcript_id == id
-                            && *signers == BTreeSet::from([NODE_1])
-                    ));
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .iter()
+                        .next()
+                        .is_some_and(|(support_identifier, signers)| support_identifier
+                            .transcript_id
+                            == id
+                            && *signers == BTreeSet::from([NODE_1]))
+                );
 
                 idkg_pool.apply(change_set);
 
@@ -2091,16 +2099,17 @@ mod tests {
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
 
-                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
-                assert!(pre_signer
-                    .validated_dealing_supports
-                    .borrow()
-                    .iter()
-                    .next()
-                    .is_some_and(
-                        |(support_identifier, signers)| support_identifier.transcript_id == id
-                            && *signers == BTreeSet::from([NODE_1])
-                    ));
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .iter()
+                        .next()
+                        .is_some_and(|(support_identifier, signers)| support_identifier
+                            .transcript_id
+                            == id
+                            && *signers == BTreeSet::from([NODE_1]))
+                );
             })
         })
     }
@@ -2150,7 +2159,7 @@ mod tests {
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2192,7 +2201,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &dealing.message_id()));
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2227,7 +2236,7 @@ mod tests {
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2252,7 +2261,7 @@ mod tests {
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2395,12 +2404,13 @@ mod tests {
                 );
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
-                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
-                assert!(pre_signer
-                    .validated_dealing_supports
-                    .borrow()
-                    .get(&validated_id_2)
-                    .is_some_and(|signers| *signers == BTreeSet::from([NODE_3])));
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id_2)
+                        .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
+                );
             })
         });
 
@@ -2426,7 +2436,7 @@ mod tests {
                 assert!(is_handle_invalid(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         });
 
@@ -2453,7 +2463,7 @@ mod tests {
                 assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         });
     }
@@ -2509,19 +2519,22 @@ mod tests {
                 let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
                     .into_iter()
                     .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
-                assert!(dropped
-                    .iter()
-                    .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id)));
+                assert!(
+                    dropped
+                        .iter()
+                        .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
+                );
                 assert_eq!(accepted.len(), 2 * f + 1);
                 assert_eq!(dropped.len(), f);
 
-                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
-                assert!(pre_signer
-                    .validated_dealing_supports
-                    .borrow()
-                    .get(&validated_id)
-                    .is_some_and(|signers| signers.len() == 2 * f + 1
-                        && signers.is_subset(&node_ids.into_iter().collect())));
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id)
+                        .is_some_and(|signers| signers.len() == 2 * f + 1
+                            && signers.is_subset(&node_ids.into_iter().collect()))
+                );
             })
         });
     }
@@ -2548,7 +2561,7 @@ mod tests {
                 let validated_id = IDkgValidatedDealingSupportIdentifier::from(&support);
                 {
                     let mut valid_dealing_supports =
-                        pre_signer.validated_dealing_supports.borrow_mut();
+                        pre_signer.validated_dealing_supports.write().unwrap();
                     valid_dealing_supports
                         .entry(validated_id.clone())
                         .or_default()
@@ -2577,12 +2590,13 @@ mod tests {
                 assert!(is_handle_invalid(&change_set, &msg_id));
 
                 // The original validated dealing support should still be there
-                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
-                assert!(pre_signer
-                    .validated_dealing_supports
-                    .borrow()
-                    .get(&validated_id)
-                    .is_some_and(|signers| *signers == BTreeSet::from([NODE_3])));
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id)
+                        .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
+                );
             })
         })
     }
@@ -2616,7 +2630,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2657,7 +2671,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2698,7 +2712,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2740,7 +2754,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
 
-                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+                assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         })
     }
@@ -2920,7 +2934,7 @@ mod tests {
 
                 {
                     let mut valid_dealing_supports =
-                        pre_signer.validated_dealing_supports.borrow_mut();
+                        pre_signer.validated_dealing_supports.write().unwrap();
                     valid_dealing_supports
                         .entry(validated_id_1.clone())
                         .or_default()
@@ -2948,17 +2962,19 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
 
-                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 2);
-                assert!(pre_signer
-                    .validated_dealing_supports
-                    .borrow()
-                    .get(&validated_id_1)
-                    .is_some_and(|signers| *signers == BTreeSet::from([NODE_3])));
-                assert!(pre_signer
-                    .validated_dealing_supports
-                    .borrow()
-                    .get(&validated_id_3)
-                    .is_some_and(|signers| *signers == BTreeSet::from([NODE_3])));
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 2);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id_1)
+                        .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
+                );
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id_3)
+                        .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
+                );
             })
         })
     }

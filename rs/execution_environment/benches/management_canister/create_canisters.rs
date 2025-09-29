@@ -1,6 +1,6 @@
-use crate::utils::{expect_reply, setup, CANISTERS_PER_BATCH};
+use crate::utils::{CANISTERS_PER_BATCH, expect_reply, setup};
 use candid::{CandidType, Encode, Principal};
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]

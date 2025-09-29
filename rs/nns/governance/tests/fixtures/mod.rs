@@ -22,23 +22,23 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, Environment, Governance,
-        HeapGrowthPotential, RngError,
+        Environment, Governance, HeapGrowthPotential, RngError, governance_minting_account,
+        neuron_subaccount,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
-        manage_neuron,
+        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron, Motion,
+        NetworkEconomics, NeuronType, NnsFunction, Proposal, ProposalData, RewardEvent, Topic,
+        Vote, XdrConversionRate as XdrConversionRatePb, manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
-        proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        Motion, NetworkEconomics, NeuronType, NnsFunction, Proposal, ProposalData, RewardEvent,
-        Topic, Vote, XdrConversionRate as XdrConversionRatePb,
+        proposal,
     },
     storage::reset_stable_memory,
 };
-use ic_nns_governance_api::{self as api, manage_neuron_response, ManageNeuronResponse};
+use ic_nns_governance_api::{self as api, ManageNeuronResponse, manage_neuron_response};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
-use rand::{prelude::StdRng, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng, prelude::StdRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -48,7 +48,7 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+    self, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla,
 };
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::tla_function;
@@ -65,7 +65,7 @@ type LedgerMap = BTreeMap<AccountIdentifier, u64>;
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Constructs a test neuron's account.
@@ -448,7 +448,13 @@ impl IcpLedger for NNSFixture {
         let from_account = from_subaccount.map_or(governance_minting_account(), neuron_subaccount);
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
-            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
+            from_account,
+            from_subaccount
+                .as_ref()
+                .map_or_else(|| "None".to_string(), ToString::to_string),
+            to_account,
+            amount_e8s,
+            fee_e8s
         );
         tla_log_request!(
             "WaitForTransfer",
@@ -655,7 +661,7 @@ impl ProposalNeuronBehavior {
         // Submit proposal
         let action = match self.proposal_topic {
             ProposalTopicBehaviour::Governance => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
+                motion_text: format!("summary: {summary}"),
             }),
             ProposalTopicBehaviour::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {

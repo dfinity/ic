@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use config_types::*;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -109,5 +109,6 @@ fn generate_default_guestos_config() -> GuestOSConfig {
         trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
             sev_cert_chain_pem,
         }),
+        recovery_config: None,
     }
 }

@@ -13,9 +13,9 @@ use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
     CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
 };
 use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
-    prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop,
+    EncryptionKeyInstance, EncryptionKeyPop, prove_pop, verify_pop,
 };
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, random_oracle};
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
     CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
@@ -25,10 +25,10 @@ use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
 };
 pub use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
 use std::sync::LazyLock;
@@ -63,11 +63,7 @@ pub(crate) enum Bit {
 
 impl From<u8> for Bit {
     fn from(i: u8) -> Self {
-        if i == 0 {
-            Bit::Zero
-        } else {
-            Bit::One
-        }
+        if i == 0 { Bit::Zero } else { Bit::One }
     }
 }
 
@@ -467,10 +463,10 @@ impl SecretKey {
     ///
     /// A key update can take up to 2*LAMBDA_T*LAMBDA_H G2 multiplications
     pub fn update_to<R: RngCore + CryptoRng>(&mut self, epoch: Epoch, sys: &SysParam, rng: &mut R) {
-        if let Some(current_epoch) = self.current_epoch() {
-            if current_epoch > epoch {
-                return;
-            }
+        if let Some(current_epoch) = self.current_epoch()
+            && current_epoch > epoch
+        {
+            return;
         }
 
         // Drop nodes from the end of bte_nodes until we either run out of nodes
@@ -1000,7 +996,7 @@ impl SysParam {
         }
         let mut f_h = Vec::with_capacity(LAMBDA_H);
         for i in 0..LAMBDA_H {
-            let s = format!("f_h{}", i);
+            let s = format!("f_h{i}");
             f_h.push(G2Affine::hash_with_precomputation(dst, s.as_bytes()));
         }
 

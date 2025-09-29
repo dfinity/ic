@@ -1,7 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use ic_agent::{agent::RejectCode, Agent};
+use ic_agent::{Agent, agent::RejectCode};
 use ic_base_types::PrincipalId;
 use ic_management_canister_types_private::{self as ic00, EmptyBlob, Method, Payload};
 use ic_system_test_driver::driver::test_env::TestEnv;

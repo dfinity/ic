@@ -1,18 +1,20 @@
+use candid::Reserved;
 use canister_test::WasmResult;
 use ic_base_types::SnapshotId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, Global, GlobalTimer,
-    LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterChangeDetails, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, Global,
+    GlobalTimer, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
-    wasm, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
 use ic_types::CanisterId;
 
@@ -223,9 +225,8 @@ fn take_download_upload_load_snapshot_roundtrip_no_globals() {
     (call $msg_reply)
   )
   (export "canister_update run" (func $run))
-  (memory {} 1)
-)"#,
-            memory
+  (memory {memory} 1)
+)"#
         );
         for download_upload in [false, true] {
             take_download_upload_load_snapshot_roundtrip(&wat, vec![], download_upload);
@@ -258,10 +259,9 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
     (call $msg_reply)
   )
   (export "canister_update run" (func $run))
-  (global {} {} (i32.const 42))
-  (memory {} 1)
-)"#,
-                    exported, mutable, memory
+  (global {exported} {mutable} (i32.const 42))
+  (memory {memory} 1)
+)"#
                 );
                 // The current implementation includes all globals that are exported or mutable.
                 let expected_globals = if is_exported || is_mutable {
@@ -281,8 +281,8 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
     }
 }
 
-fn test_env_for_global_timer_on_low_wasm_memory(
-) -> (StateMachine, CanisterId, SnapshotId, WasmResult) {
+fn test_env_for_global_timer_on_low_wasm_memory()
+-> (StateMachine, CanisterId, SnapshotId, WasmResult) {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)
         .with_snapshot_upload_enabled(true)
@@ -783,7 +783,7 @@ const COUNTER_GROW_CANISTER_WAT: &str = r#"
     )
     (call $msg_reply)
   )
-  
+
   (func $write
     ;; grow by a page
     (i32.const 1)
@@ -885,4 +885,118 @@ fn take_frozen_canister_snapshot_fails() {
     };
     let err = env.take_canister_snapshot(args).unwrap_err();
     assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn load_canister_snapshot_works_on_another_canister() {
+    let subnet_type = SubnetType::Application;
+    let subnet_config = SubnetConfig::new(subnet_type);
+    let execution_config = ExecutionConfig::default();
+    let config = StateMachineConfig::new(subnet_config, execution_config);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(config))
+        .with_snapshot_download_enabled(true)
+        .with_subnet_type(subnet_type)
+        .build();
+
+    const T: u128 = 1_000_000_000_000;
+    let initial_cycles = 10 * T;
+    let canister_id_1 = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            initial_cycles.into(),
+        )
+        .unwrap();
+
+    let canister_id_2 = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            initial_cycles.into(),
+        )
+        .unwrap();
+
+    env.execute_ingress(
+        canister_id_1,
+        "update",
+        wasm().stable_grow(100).reply().build(),
+    )
+    .unwrap();
+
+    let canister_version_at_snapshot = env
+        .get_latest_state()
+        .canister_state(&canister_id_1)
+        .unwrap()
+        .system_state
+        .canister_version;
+
+    let snapshot_1 = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_1, None))
+        .unwrap();
+    let snapshot_id_1 = snapshot_1.snapshot_id();
+    let snapshot_taken_at_timestamp = snapshot_1.taken_at_timestamp();
+
+    // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` should
+    // fail if there is non-empty page delta in the shared page map.
+    // This limitation will be lifted in the future.
+    let err = env
+        .load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+            canister_id_2,
+            snapshot_id_1,
+            None,
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Snapshot {} is not currently loadable on the specified canister {}. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes).",
+            snapshot_id_1, canister_id_2
+        ),
+    );
+
+    // Checkpoint the state before loading the snapshot to ensure that
+    // there no outstanding page delta in the shared page map by the
+    // two canisters (the one owning the snapshot and the one loading it).
+    env.checkpointed_tick();
+
+    // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` succeeds.
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id_2,
+        snapshot_id_1,
+        None,
+    ))
+    .unwrap();
+
+    // The two canisters now should have the same state (equivalently, their current snapshots should be equal).
+    let snapshot_id_2 = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_2, None))
+        .unwrap()
+        .snapshot_id();
+    assert_snapshot_eq(
+        &env,
+        canister_id_1,
+        snapshot_id_1,
+        canister_id_2,
+        snapshot_id_2,
+    );
+
+    // Verify that the latest canister history change is a `load_snapshot` with
+    // with the expected `from_canister_id` set appropriately to the canister
+    // that the snapshot belongs to.
+    let history = env.get_canister_history(canister_id_2);
+    let latest_change_details = history.get_changes(1).next().unwrap().details();
+    assert_eq!(
+        latest_change_details,
+        &CanisterChangeDetails::load_snapshot(
+            canister_version_at_snapshot,
+            snapshot_id_1,
+            snapshot_taken_at_timestamp,
+            SnapshotSource::TakenFromCanister(Reserved),
+            Some(canister_id_1),
+        ),
+    );
 }

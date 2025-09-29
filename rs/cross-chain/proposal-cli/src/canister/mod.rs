@@ -250,7 +250,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive3
             | TargetCanister::IcpArchive4 => "ledger-archive-node-canister.wasm.gz",
             TargetCanister::IcpIndex => "ic-icp-index-canister.wasm.gz",
-            TargetCanister::IcpLedger => "ledger-canister_notify-method.wasm.gz",
+            TargetCanister::IcpLedger => "ledger-canister.wasm.gz",
             TargetCanister::LedgerSuiteOrchestrator => {
                 "ic-ledger-suite-orchestrator-canister.wasm.gz"
             }
@@ -412,7 +412,7 @@ impl FromStr for TargetCanister {
             ["sol", "rpc"] => Ok(TargetCanister::SolRpc),
             ["bitcoin"] => Ok(TargetCanister::Bitcoin),
             ["btc", "watchdog"] => Ok(TargetCanister::BtcWatchdog),
-            _ => Err(format!("Unknown canister name: {}", canister)),
+            _ => Err(format!("Unknown canister name: {canister}")),
         }
     }
 }

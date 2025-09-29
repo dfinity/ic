@@ -1,7 +1,3 @@
-use ic00::{
-    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
-    TakeCanisterSnapshotArgs,
-};
 use ic_base_types::{EnvironmentVariables, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
@@ -14,14 +10,16 @@ use ic_management_canister_types_private::{
     InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::{
-    CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
-};
+use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_types::{ingress::WasmResult, CanisterId, Cycles};
+use ic_types::{CanisterId, Cycles, ingress::WasmResult};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
-    call_args, wasm, UNIVERSAL_CANISTER_WASM, UNIVERSAL_CANISTER_WASM_SHA256,
+    UNIVERSAL_CANISTER_WASM, UNIVERSAL_CANISTER_WASM_SHA256, call_args, wasm,
+};
+use ic00::{
+    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
+    TakeCanisterSnapshotArgs,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -52,15 +50,6 @@ fn universal_canister_payload(
         .build()
 }
 
-fn get_canister_history(env: &StateMachine, canister_id: CanisterId) -> CanisterHistory {
-    env.get_latest_state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .system_state
-        .get_canister_history()
-        .clone()
-}
-
 fn get_canister_info(
     env: &StateMachine,
     ucan: CanisterId,
@@ -88,7 +77,7 @@ fn canister_id_from_wasm_result(wasm_result: WasmResult) -> CanisterId {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     }
 }
 
@@ -148,7 +137,7 @@ fn canister_history_tracks_create_install_reinstall() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -157,7 +146,7 @@ fn canister_history_tracks_create_install_reinstall() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -187,7 +176,7 @@ fn canister_history_tracks_create_install_reinstall() {
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -223,7 +212,7 @@ fn canister_history_tracks_create_install_reinstall() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::code_deployment(Reinstall, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -269,7 +258,7 @@ fn canister_history_tracks_upgrade() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -320,7 +309,7 @@ fn canister_history_tracks_upgrade() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -366,7 +355,7 @@ fn canister_history_tracks_uninstall() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -412,7 +401,7 @@ fn canister_history_tracks_uninstall() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::CanisterCodeUninstall,
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -426,10 +415,9 @@ fn canister_history_tracks_uninstall() {
     );
 }
 
-#[test]
-fn canister_history_tracks_controllers_change() {
+fn canister_history_tracks_controllers_change(environment_variables_flag: FlagStatus) {
     let mut now = std::time::SystemTime::now();
-    let env = setup_with_environment_variables_flag(FlagStatus::Disabled);
+    let env = setup_with_environment_variables_flag(environment_variables_flag);
     env.set_time(now);
 
     // declare user IDs
@@ -462,7 +450,7 @@ fn canister_history_tracks_controllers_change() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     // the list of controllers in the canister history is sorted and contains no duplicates
@@ -473,6 +461,11 @@ fn canister_history_tracks_controllers_change() {
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2], None),
     )];
 
+    let env_vars = BTreeMap::from([
+        ("NODE_ENV".to_string(), "production".to_string()),
+        ("LOG_LEVEL".to_string(), "debug".to_string()),
+    ]);
+
     for i in 1..MAX_CANISTER_HISTORY_CHANGES + 42 {
         // update controllers via ingress from user_id2
         // (effectively the same set of controllers provided as a list containing repeated controllers,
@@ -480,15 +473,29 @@ fn canister_history_tracks_controllers_change() {
         let new_controllers = vec![user_id2, user_id1, user_id2, user_id1, user_id1, user_id2];
         now += Duration::from_secs(5);
         env.set_time(now);
+        let settings = if i % 2 == 0 {
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(new_controllers.clone())
+                .with_environment_variables(
+                    env_vars
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+                        .collect::<Vec<_>>(),
+                )
+                .build()
+        } else {
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(new_controllers.clone())
+                .build()
+        };
         env.execute_ingress_as(
             user_id2,
             ic00::IC_00,
             Method::UpdateSettings,
             UpdateSettingsArgs {
                 canister_id: canister_id.into(),
-                settings: CanisterSettingsArgsBuilder::new()
-                    .with_controllers(new_controllers.clone())
-                    .build(),
+                settings,
                 sender_canister_version: Some(666), // ignored for ingress messages
             }
             .encode(),
@@ -502,7 +509,7 @@ fn canister_history_tracks_controllers_change() {
             CanisterChangeOrigin::from_user(user_id2),
             CanisterChangeDetails::controllers_change(vec![user_id1, user_id2]),
         ));
-        let history = get_canister_history(&env, canister_id);
+        let history = env.get_canister_history(canister_id);
         assert_eq!(history.get_total_num_changes(), i + 1);
         while reference_change_entries.len() > (MAX_CANISTER_HISTORY_CHANGES as usize) {
             reference_change_entries.remove(0);
@@ -515,6 +522,12 @@ fn canister_history_tracks_controllers_change() {
             reference_change_entries
         );
     }
+}
+
+#[test]
+fn canister_history_tracks_controllers_change_as_controllers_change() {
+    canister_history_tracks_controllers_change(FlagStatus::Disabled);
+    canister_history_tracks_controllers_change(FlagStatus::Enabled);
 }
 
 #[test]
@@ -550,7 +563,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -606,7 +619,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     // check canister history
     let total_num_change_entries = reference_change_entries.len();
     reference_change_entries.clear();
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         total_num_change_entries as u64
@@ -666,7 +679,7 @@ fn canister_history_tracks_changes_from_canister() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -675,7 +688,7 @@ fn canister_history_tracks_changes_from_canister() {
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2], None),
     )];
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -705,7 +718,7 @@ fn canister_history_tracks_changes_from_canister() {
         CanisterChangeOrigin::from_canister(ucan.into(), None),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -766,7 +779,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -800,7 +813,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     };
     assert!(env.module_hash(canister_id).is_none());
     // check canister history
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -847,7 +860,7 @@ fn canister_info_retrieval() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -1063,7 +1076,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
 
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -1085,7 +1098,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         .unwrap();
     match wasm_result {
         WasmResult::Reply(_) => {}
-        WasmResult::Reject(reason) => panic!("install_code call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("install_code call rejected: {reason}"),
     };
     // Check canister history.
     reference_change_entries.push(CanisterChange::new(
@@ -1094,7 +1107,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         CanisterChangeOrigin::from_user(ucan.into()),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
     ));
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -1122,7 +1135,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         WasmResult::Reply(bytes) => {
             CanisterSnapshotResponse::decode(&bytes[..]).expect("failed to decode record")
         }
-        WasmResult::Reject(reason) => panic!("take_canister_snapshot call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("take_canister_snapshot call rejected: {reason}"),
     };
     let snapshot_id = result.snapshot_id();
 
@@ -1149,7 +1162,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     };
 
     // Check canister history is unchanged.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(
         history.get_total_num_changes(),
         reference_change_entries.len() as u64
@@ -1240,7 +1253,7 @@ fn check_environment_variables_for_create_canister_history(
     };
 
     // Verify canister history is updated.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)
@@ -1332,6 +1345,7 @@ fn canister_history_tracking_env_vars_update_settings() {
     )
     .unwrap();
 
+    /*
     // Expected canister history change after update settings.
     let env_vars_hash = env_vars.hash();
     let reference_change = CanisterChange::new(
@@ -1340,10 +1354,11 @@ fn canister_history_tracking_env_vars_update_settings() {
         CanisterChangeOrigin::from_user(user_id),
         CanisterChangeDetails::settings_change(None, Some(env_vars_hash)),
     );
+    */
 
-    // Verify canister history is updated.
-    let history = get_canister_history(&env, canister_id);
-    assert_eq!(history.get_total_num_changes(), 2);
+    // Verify canister history is not updated.
+    let history = env.get_canister_history(canister_id);
+    assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)
         .map(|c| (**c).clone())
@@ -1352,7 +1367,7 @@ fn canister_history_tracking_env_vars_update_settings() {
         changes[0].details(),
         &CanisterChangeDetails::canister_creation(vec![user_id], Some(initial_env_vars_hash))
     );
-    assert_eq!(changes[1], reference_change);
+    //assert_eq!(changes[1], reference_change);
 
     // Verify the environment variables of the canister state.
     let state = env.get_latest_state();
@@ -1374,7 +1389,12 @@ fn canister_history_no_change_during_update_settings() {
         ),
     );
 
-    // Update settings with no controllers and no environment variables.
+    let env_vars = BTreeMap::from([
+        ("NODE_ENV".to_string(), "production".to_string()),
+        ("LOG_LEVEL".to_string(), "info".to_string()),
+    ]);
+
+    // Update settings with no controllers changed.
     env.execute_ingress_as(
         user_id,
         ic00::IC_00,
@@ -1382,14 +1402,22 @@ fn canister_history_no_change_during_update_settings() {
         UpdateSettingsArgs {
             canister_id: canister_id.into(),
             sender_canister_version: Some(2),
-            settings: CanisterSettingsArgsBuilder::new().build(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(
+                    env_vars
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| EnvironmentVariable { name: k, value: v })
+                        .collect::<Vec<_>>(),
+                )
+                .build(),
         }
         .encode(),
     )
     .unwrap();
 
     // Verify canister history contains only the canister creation change.
-    let history = get_canister_history(&env, canister_id);
+    let history = env.get_canister_history(canister_id);
     assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)
@@ -1547,9 +1575,9 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
     )
     .unwrap();
 
-    // Check canister history: should have two entries.
-    let history = get_canister_history(&env, canister_id);
-    assert_eq!(history.get_total_num_changes(), 2);
+    // Check canister history: should still only have one entry.
+    let history = env.get_canister_history(canister_id);
+    assert_eq!(history.get_total_num_changes(), 1);
     let changes = history
         .get_changes(history.get_total_num_changes() as usize)
         .map(|c| (**c).clone())
@@ -1560,11 +1588,13 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
         changes[0].details(),
         &CanisterChangeDetails::canister_creation(vec![user_id], Some(env_vars_hash))
     );
+    /*
     // Second entry: settings change with identical env vars.
     assert_eq!(
         changes[1].details(),
         &CanisterChangeDetails::settings_change(None, Some(env_vars_hash))
     );
+    */
     // Also check that the canister's environment variables are as expected.
     let state = env.get_latest_state();
     let canister_state = state.canister_state(&canister_id).unwrap();
@@ -1612,7 +1642,8 @@ fn canister_history_memory_usage_ignored_in_invariant_checks() {
             wasm().reply().build(),
         )
         .unwrap_err();
-    assert!(err
-        .description()
-        .contains("Canister cannot grow its memory usage."));
+    assert!(
+        err.description()
+            .contains("Canister cannot grow its memory usage.")
+    );
 }

@@ -2,7 +2,7 @@ use crate::{
     balances_len, canister_init, icrc1_send_not_async, icrc2_approve_not_async, query_blocks,
     query_encoded_blocks,
 };
-use canbench_rs::{bench, BenchResult};
+use canbench_rs::{BenchResult, bench};
 use candid::{Nat, Principal};
 use ic_ledger_core::Tokens;
 use icp_ledger::{GetBlocksArgs, LedgerCanisterInitPayload};

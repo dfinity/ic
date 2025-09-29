@@ -84,4 +84,4 @@ num-traits = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
 serde = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }

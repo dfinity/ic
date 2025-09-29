@@ -17,7 +17,7 @@ use crate::{
 use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -29,15 +29,15 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_types::QueryStatsEpoch;
 use ic_types::batch::QueryStats;
 use ic_types::messages::CertificateDelegationMetadata;
-use ic_types::QueryStatsEpoch;
 use ic_types::{
+    CanisterId, NumInstructions,
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions,
 };
-use prometheus::{histogram_opts, labels, Histogram};
+use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -49,7 +49,7 @@ use std::{
     time::Instant,
 };
 use tokio::sync::oneshot;
-use tower::{util::BoxCloneService, Service};
+use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types_private::{FetchCanisterLogsRequest, Payload, QueryMethod};
@@ -107,35 +107,6 @@ pub struct InternalHttpQueryHandler {
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_query_execution_stats: QueryStatsCollector,
     query_cache: query_cache::QueryCache,
-}
-
-#[derive(Clone)]
-struct HttpQueryHandlerMetrics {
-    pub height_diff_during_query_scheduling: Histogram,
-}
-
-impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
-        Self {
-            height_diff_during_query_scheduling: metrics_registry.register(
-                Histogram::with_opts(histogram_opts!(
-                    "execution_query_height_diff_during_query_scheduling",
-                    "The height difference between the latest certified height before query scheduling and state height used for execution",
-                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
-                    labels! {"query_type".to_string() => namespace.to_string()}
-                )).unwrap(),
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-/// Struct that is responsible for handling queries sent by user.
-pub(crate) struct HttpQueryHandler {
-    internal: Arc<InternalHttpQueryHandler>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    query_scheduler: QueryScheduler,
-    metrics: Arc<HttpQueryHandlerMetrics>,
 }
 
 impl InternalHttpQueryHandler {
@@ -297,6 +268,35 @@ impl InternalHttpQueryHandler {
         }
         result
     }
+}
+
+#[derive(Clone)]
+struct HttpQueryHandlerMetrics {
+    pub height_diff_during_query_scheduling: Histogram,
+}
+
+impl HttpQueryHandlerMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
+        Self {
+            height_diff_during_query_scheduling: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_height_diff_during_query_scheduling",
+                    "The height difference between the latest certified height before query scheduling and state height used for execution",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+                    labels! {"query_type".to_string() => namespace.to_string()}
+                )).unwrap(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+/// Struct that is responsible for handling queries sent by user.
+pub(crate) struct HttpQueryHandler {
+    internal: Arc<InternalHttpQueryHandler>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    query_scheduler: QueryScheduler,
+    metrics: Arc<HttpQueryHandlerMetrics>,
 }
 
 impl HttpQueryHandler {

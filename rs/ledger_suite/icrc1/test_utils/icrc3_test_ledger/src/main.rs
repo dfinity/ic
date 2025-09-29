@@ -1,11 +1,12 @@
-use candid::{candid_method, Nat};
+use candid::{Nat, candid_method};
 use ic_cdk::{init, query, update};
 use ic_certification::{
-    hash_tree::{empty, fork, label, leaf, Label},
     HashTree,
+    hash_tree::{Label, empty, fork, label, leaf},
 };
 use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc3_test_ledger::AddBlockResult;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{
@@ -170,6 +171,16 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
     })
 }
 
+#[query]
+fn icrc1_metadata() -> Vec<(String, MetadataValue)> {
+    vec![
+        MetadataValue::entry("icrc1:decimals", 0u64),
+        MetadataValue::entry("icrc1:name", ""),
+        MetadataValue::entry("icrc1:symbol", "XTST"),
+        MetadataValue::entry("icrc1:fee", 0u64),
+    ]
+}
+
 #[init]
 fn init() {
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
@@ -183,7 +194,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     candid::export_service!();
 

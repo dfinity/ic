@@ -9,11 +9,12 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added a new proposal type `DeregisterKnownNeuron` without enabling it (behind feature flag).
-
 ## Changed
 
 ## Deprecated
+
+* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
+  instead).
 
 ## Removed
 

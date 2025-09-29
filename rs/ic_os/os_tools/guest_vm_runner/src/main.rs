@@ -1,14 +1,14 @@
-use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
+use crate::guest_direct_boot::{DirectBoot, prepare_direct_boot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{Context, Error, Result, bail};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 use tokio::process::Command;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
@@ -366,7 +366,8 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
-        let config_media = NamedTempFile::new().context("Failed to create config media file")?;
+        let config_media = NamedTempFile::with_prefix("config_media")
+            .context("Failed to create config media file")?;
 
         println!("Extracting direct boot dependencies");
         let direct_boot = prepare_direct_boot(self.guest_vm_type, self.partition_provider.as_ref())
@@ -615,8 +616,8 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
         NetworkSettings,
     };
-    use ic_device::mount::testing::ExtractingFilesystemMounter;
     use ic_device::mount::GptPartitionProvider;
+    use ic_device::mount::testing::ExtractingFilesystemMounter;
     use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
@@ -648,7 +649,7 @@ mod tests {
             "Tar returned error"
         );
 
-        let guestos_device = NamedTempFile::new().unwrap();
+        let guestos_device = NamedTempFile::with_prefix("guestos_device").unwrap();
         std::fs::rename(tempdir.path().join("disk.img"), guestos_device.path()).unwrap();
 
         guestos_device
@@ -732,25 +733,23 @@ mod tests {
         fn get_config_media_path(&self) -> PathBuf {
             let domain = self.get_domain();
             let vm_config = domain.get_xml_desc(0).unwrap();
-            let config_media_path = PathBuf::from(
+            PathBuf::from(
                 &Regex::new("<source file='([^']+)'")
                     .unwrap()
                     .captures(&vm_config)
                     .expect("Config media path not found in VM config")[1],
-            );
-            config_media_path
+            )
         }
 
         fn get_kernel_path(&self) -> PathBuf {
             let domain = self.get_domain();
             let vm_config = domain.get_xml_desc(0).unwrap();
-            let kernel_path = PathBuf::from(
+            PathBuf::from(
                 &Regex::new("<kernel>([^']+)</kernel>")
                     .unwrap()
                     .captures(&vm_config)
                     .expect("Kernel path not found in VM config")[1],
-            );
-            kernel_path
+            )
         }
 
         fn get_kernel_cmdline(&self) -> String {

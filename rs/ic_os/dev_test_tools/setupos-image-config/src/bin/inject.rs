@@ -9,9 +9,9 @@ use anyhow::{Context, Error};
 use clap::Parser;
 use tempfile::NamedTempFile;
 
-use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
+use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
 use setupos_image_config::{
-    update_deployment, write_config, write_public_keys, ConfigIni, DeploymentConfig,
+    ConfigIni, DeploymentConfig, update_deployment, write_config, write_public_keys,
 };
 
 #[derive(Parser)]
@@ -51,10 +51,8 @@ async fn main() -> Result<(), Error> {
     println!("{previous_config}");
 
     // Update config.ini
-    let config_ini = NamedTempFile::new()?;
-    write_config(config_ini.path(), &cli.config_ini)
-        .await
-        .context("failed to write config file")?;
+    let config_ini = NamedTempFile::with_prefix("config.ini")?;
+    write_config(config_ini.path(), &cli.config_ini).context("failed to write config file")?;
     config
         .write_file(config_ini.path(), Path::new("/config.ini"))
         .await
@@ -100,7 +98,7 @@ async fn main() -> Result<(), Error> {
 
     // Update SSH keys
     if let Some(ks) = cli.public_keys {
-        let public_keys = NamedTempFile::new()?;
+        let public_keys = NamedTempFile::with_prefix("public_keys")?;
         write_public_keys(public_keys.path(), ks)
             .await
             .context("failed to write public keys")?;
@@ -137,7 +135,7 @@ async fn main() -> Result<(), Error> {
     println!("{previous_deployment}");
 
     // Update deployment.json
-    let mut deployment_json = NamedTempFile::new()?;
+    let mut deployment_json = NamedTempFile::with_prefix("deployment.json")?;
     deployment_json.write_all(previous_deployment.as_bytes())?;
     fs::set_permissions(deployment_json.path(), Permissions::from_mode(0o644))?;
     update_deployment(deployment_json.path(), &cli.deployment)
@@ -157,19 +155,19 @@ async fn main() -> Result<(), Error> {
     println!("{updated_deployment}");
 
     // Update NNS key
-    if let Some(public_key) = cli.deployment.nns_public_key {
-        let mut nns_key = NamedTempFile::new()?;
+    if let Some(public_key) = cli.deployment.nns_public_key_override {
+        let mut nns_key = NamedTempFile::with_prefix("nns_key")?;
         write!(&mut nns_key, "{public_key}")?;
         fs::set_permissions(nns_key.path(), Permissions::from_mode(0o644))?;
 
-        data.write_file(nns_key.path(), Path::new("/nns_public_key.pem"))
+        data.write_file(nns_key.path(), Path::new("/nns_public_key_override.pem"))
             .await
             .context("failed to copy nns key file")?;
 
         // Print updated NNS key
-        println!("Updated nns_public_key.pem:\n---");
+        println!("Updated nns_public_key_override.pem:\n---");
         let updated_nns_key = String::from_utf8(
-            data.read_file(Path::new("/nns_public_key.pem"))
+            data.read_file(Path::new("/nns_public_key_override.pem"))
                 .await
                 .context("failed to read updated nns key")?,
         )?;

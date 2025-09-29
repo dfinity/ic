@@ -1,5 +1,5 @@
 use crate::message_routing::{
-    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
 };
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
@@ -9,18 +9,18 @@ use ic_interfaces::messaging::{
     LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
 };
-use ic_logger::{debug, error, info, trace, ReplicaLogger};
-use ic_metrics::buckets::{add_bucket, decimal_buckets};
+use ic_logger::{ReplicaLogger, debug, error, info, trace};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{add_bucket, decimal_buckets};
 use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::metadata_state::{Stream, StreamMap};
 use ic_replicated_state::replicated_state::{
-    ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, ReplicatedStateMessageRouting,
 };
 use ic_replicated_state::{ReplicatedState, StateError};
 use ic_types::messages::{
-    Payload, RejectContext, Request, RequestOrResponse, Response,
-    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES, Payload, RejectContext,
+    Request, RequestOrResponse, Response,
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CanisterId, Cycles, SubnetId};
@@ -384,10 +384,12 @@ impl StreamHandlerImpl {
         {
             let loopback_stream = state.get_stream(&self.subnet_id).unwrap();
             debug_assert!(loopback_stream.reject_signals().is_empty());
-            debug_assert!(loopback_stream
-                .messages()
-                .iter()
-                .all(|(_, msg)| matches!(msg, RequestOrResponse::Response(_))));
+            debug_assert!(
+                loopback_stream
+                    .messages()
+                    .iter()
+                    .all(|(_, msg)| matches!(msg, RequestOrResponse::Response(_)))
+            );
         }
 
         state
@@ -433,13 +435,12 @@ impl StreamHandlerImpl {
                     assert_eq!(
                         stream_slice.header().signals_end(),
                         StreamIndex::from(0),
-                        "Cannot garbage collect a stream for subnet {} that does not exist",
-                        remote_subnet
+                        "Cannot garbage collect a stream for subnet {remote_subnet} that does not exist"
                     );
                     assert_eq!(
-                        stream_slice.header().begin(), StreamIndex::from(0),
-                        "Signals from subnet {} do not start from 0 in the first communication attempt",
-                        remote_subnet
+                        stream_slice.header().begin(),
+                        StreamIndex::from(0),
+                        "Signals from subnet {remote_subnet} do not start from 0 in the first communication attempt"
                     );
                 }
             }
@@ -787,7 +788,9 @@ impl StreamHandlerImpl {
                         Cycles::zero()
                     }
                     Reject(_, RequestOrResponse::Response(_)) => {
-                        unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
+                        unreachable!(
+                            "No signals are generated for response induction failures except for CanisterMigrating"
+                        );
                     }
                 }
             }
@@ -1193,10 +1196,7 @@ fn assert_valid_signals(
         iter.clone()
             .zip(iter.skip(1).chain(std::iter::once(signals_end)))
             .all(|(x, y)| x < y),
-        "Invalid {}: signals_end {}, signals {:?}",
-        stream_component,
-        signals_end,
-        reject_signals
+        "Invalid {stream_component}: signals_end {signals_end}, signals {reject_signals:?}"
     );
 }
 
@@ -1209,11 +1209,7 @@ fn assert_valid_signals_for_messages(
 ) {
     assert!(
         messages_begin <= signals_end && signals_end <= messages_end,
-        "Invalid {}: signals_end {}, messages [{}, {})",
-        stream_component,
-        signals_end,
-        messages_begin,
-        messages_end,
+        "Invalid {stream_component}: signals_end {signals_end}, messages [{messages_begin}, {messages_end})",
     );
 }
 
@@ -1247,13 +1243,13 @@ impl std::fmt::Display for StreamComponent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StreamComponent::SignalsFrom(subnet) => {
-                write!(f, "signal indices in stream slice from subnet {}", subnet)
+                write!(f, "signal indices in stream slice from subnet {subnet}")
             }
             StreamComponent::SignalsTo(subnet) => {
-                write!(f, "signal indices in stream to subnet {}", subnet)
+                write!(f, "signal indices in stream to subnet {subnet}")
             }
             StreamComponent::MessagesFrom(subnet) => {
-                write!(f, "message indices in stream slice from subnet {}", subnet)
+                write!(f, "message indices in stream slice from subnet {subnet}")
             }
         }
     }

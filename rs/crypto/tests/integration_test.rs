@@ -18,15 +18,15 @@ use ic_interfaces::crypto::{
     CheckKeysWithRegistryError, IDkgKeyRotationResult, KeyRotationOutcome,
 };
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
-use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
+use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::crypto::{AlgorithmId, KeyPurpose};
 use ic_types::time::GENESIS;
@@ -171,8 +171,8 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_key_is_missing
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missing_in_registry_and_pubkey_store(
-) {
+fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missing_in_registry_and_pubkey_store()
+ {
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all_except_idkg_dealing_encryption_key())
         .add_generated_node_signing_key_to_registry()
@@ -870,8 +870,8 @@ fn should_fail_check_keys_with_registry_if_registry_node_signing_key_has_no_matc
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key_has_no_matching_secret_key(
-) {
+fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key_has_no_matching_secret_key()
+ {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let crypto_component = TempCryptoComponent::builder()
@@ -909,8 +909,8 @@ fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_if_registry_dkg_dealing_encryption_key_has_no_matching_secret_key(
-) {
+fn should_fail_check_keys_with_registry_if_registry_dkg_dealing_encryption_key_has_no_matching_secret_key()
+ {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let crypto_component = TempCryptoComponent::builder()
@@ -1242,8 +1242,8 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
 }
 
 #[test]
-fn should_return_registration_needed_from_rotate_idkg_dealing_encryption_keys_if_local_idkg_dealing_encryption_key_newer_than_in_the_registry(
-) {
+fn should_return_registration_needed_from_rotate_idkg_dealing_encryption_keys_if_local_idkg_dealing_encryption_key_newer_than_in_the_registry()
+ {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
@@ -1351,8 +1351,8 @@ fn should_not_rotate_key_when_key_rotation_period_too_large_to_handle() {
 }
 
 #[test]
-fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timestamp_only_almost_too_old(
-) {
+fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timestamp_only_almost_too_old()
+ {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();

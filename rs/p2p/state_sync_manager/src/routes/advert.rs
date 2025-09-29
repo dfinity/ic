@@ -1,8 +1,8 @@
 use axum::{
+    Extension,
     body::Bytes,
     extract::State,
     http::{Request, StatusCode},
-    Extension,
 };
 use bytes::BytesMut;
 use ic_base_types::NodeId;

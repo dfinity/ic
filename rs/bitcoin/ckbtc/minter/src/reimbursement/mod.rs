@@ -1,7 +1,7 @@
 use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
 use crate::state::LedgerMintIndex;
-use crate::{state, CanisterRuntime};
+use crate::{CanisterRuntime, state};
 use candid::{CandidType, Deserialize};
 use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Account;

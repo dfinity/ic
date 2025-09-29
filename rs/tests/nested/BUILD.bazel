@@ -29,7 +29,6 @@ rust_library(
         "@crate_index//:regex",
         "@crate_index//:reqwest",
         "@crate_index//:slog",
-        "@crate_index//:url",
     ],
 )
 
@@ -68,8 +67,11 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":nested",
+        "//rs/registry/nns_data_provider",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
     ],
 )
 
@@ -102,6 +104,7 @@ system_test_nns(
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
     uses_guestos_img = False,
     uses_guestos_mainnet_latest_img = True,
     uses_guestos_update = True,
@@ -122,8 +125,10 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":nested",
+        "//rs/registry/nns_data_provider",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 
@@ -156,6 +161,7 @@ system_test_nns(
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
     uses_guestos_img = False,
     uses_guestos_mainnet_latest_img = True,
     uses_hostos_update = True,
@@ -175,8 +181,12 @@ system_test_nns(
     name = "recovery_upgrader_test",
     env = MAINNET_ENV,
     flaky = True,
-    tags = ["long_test"],
+    tags = [
+        "long_test",
+        "manual",  # TODO(NODE-1707): re-enable this test after next weekly release
+    ],
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
     uses_guestos_mainnet_nns_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
@@ -185,5 +195,7 @@ system_test_nns(
         ":nested",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
     ],
 )

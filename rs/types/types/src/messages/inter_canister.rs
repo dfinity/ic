@@ -1,7 +1,7 @@
 use crate::{
+    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
-    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
@@ -15,7 +15,7 @@ use ic_management_canister_types_private::{
     UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
@@ -72,7 +72,7 @@ impl Default for RequestMetadata {
 }
 
 impl RequestMetadata {
-    pub fn new(call_tree_depth: u64, call_tree_start_time: Time) -> Self {
+    pub const fn new(call_tree_depth: u64, call_tree_start_time: Time) -> Self {
         Self {
             call_tree_depth,
             call_tree_start_time,
@@ -513,7 +513,7 @@ impl Response {
 /// without a `deadline`.
 ///
 /// This is a temporary workaround for Consensus integrity checks relying on
-/// hasning Rust structs. This can be dropped once those checks are removed.
+/// hashing Rust structs. This can be dropped once those checks are removed.
 impl Hash for Response {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let Response {
@@ -537,6 +537,37 @@ impl Hash for Response {
     }
 }
 
+/// XNet message type (like `Request` and `Response`) for guaranteed delivery of
+/// refunds for best-effort calls.
+///
+/// Represents an _anonymous refund_.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct Refund {
+    /// Whom this refund is to be delivered to.
+    recipient: CanisterId,
+
+    /// The amount of cycles being refunded. Non-zero for anonymous refunds.
+    amount: Cycles,
+}
+
+impl Refund {
+    /// Creates a new anonymous refund for the given recipient, in the given
+    /// amount.
+    pub fn anonymous(recipient: CanisterId, amount: Cycles) -> Self {
+        debug_assert!(!amount.is_zero());
+        Self { recipient, amount }
+    }
+
+    pub fn recipient(&self) -> CanisterId {
+        self.recipient
+    }
+
+    pub fn amount(&self) -> Cycles {
+        self.amount
+    }
+}
+
 /// Canister-to-canister message.
 ///
 /// The underlying request / response is wrapped within an `Arc`, for cheap
@@ -551,12 +582,8 @@ pub enum RequestOrResponse {
 impl ValidateEq for RequestOrResponse {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
         match (self, rhs) {
-            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
-                l.validate_eq(r)
-            }
-            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
-                l.validate_eq(r)
-            }
+            (RequestOrResponse::Request(l), RequestOrResponse::Request(r)) => l.validate_eq(r),
+            (RequestOrResponse::Response(l), RequestOrResponse::Response(r)) => l.validate_eq(r),
             _ => Err("RequestOrResponse enum mismatch".to_string()),
         }
     }
@@ -612,9 +639,60 @@ impl RequestOrResponse {
     }
 }
 
+/// XNet message: request, response or refund.
+///
+/// The underlying request / response / refund is wrapped within an `Arc`, for
+/// cheap cloning.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum StreamMessage {
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    Refund(Arc<Refund>),
+}
+
+impl ValidateEq for StreamMessage {
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        match (self, rhs) {
+            (StreamMessage::Request(l), StreamMessage::Request(r)) => l.validate_eq(r),
+            (StreamMessage::Response(l), StreamMessage::Response(r)) => l.validate_eq(r),
+            (StreamMessage::Refund(l), StreamMessage::Refund(r)) => l.validate_eq(r),
+            _ => Err("StreamMessage enum mismatch".to_string()),
+        }
+    }
+}
+
+impl StreamMessage {
+    pub fn receiver(&self) -> CanisterId {
+        match self {
+            StreamMessage::Request(req) => req.receiver,
+            StreamMessage::Response(resp) => resp.originator,
+            StreamMessage::Refund(refund) => refund.recipient,
+        }
+    }
+
+    /// Returns the amount of cycles contained in this message.
+    pub fn cycles(&self) -> Cycles {
+        match self {
+            StreamMessage::Request(req) => req.payment,
+            StreamMessage::Response(resp) => resp.refund,
+            StreamMessage::Refund(refund) => refund.amount,
+        }
+    }
+
+    /// Returns `true` iff this is a best-effort `Response`.
+    pub fn is_best_effort_response(&self) -> bool {
+        match self {
+            StreamMessage::Response(resp) => resp.is_best_effort(),
+            _ => false,
+        }
+    }
+}
+
 /// Convenience `CountBytes` implementation that returns the same value as
-/// `RequestOrResponse::Request(self).count_bytes()`, so we don't need to wrap
-/// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
+/// `RequestOrResponse::Request(self).count_bytes()` and
+/// `StreamMessage::Request(self).count_bytes()` so we don't need to wrap
+/// `self` only to calculate its estimated byte size.
 impl CountBytes for Request {
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
@@ -624,8 +702,9 @@ impl CountBytes for Request {
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
-/// `RequestOrResponse::Response(self).count_bytes()`, so we don't need to wrap
-/// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
+/// `RequestOrResponse::Response(self).count_bytes()` and
+/// `StreamMessage::Response(self).count_bytes()`, so we don't need to wrap
+/// `self` only to calculate its estimated byte size.
 impl CountBytes for Response {
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
@@ -634,11 +713,36 @@ impl CountBytes for Response {
     }
 }
 
+/// Convenience `CountBytes` implementation that returns the same value as
+/// `StreamMessage::Refund(self).count_bytes()`, so we don't need to wrap
+/// `self` into a `StreamMessage` only to calculate its estimated byte size.
+impl CountBytes for Refund {
+    fn count_bytes(&self) -> usize {
+        size_of::<StreamMessage>() + size_of::<Refund>()
+    }
+}
+
+/// Ensure that `RequestOrResponse` and `StreamMessage` have the same size, so that
+/// their respective `CountBytes` implementations are consistent.
+const _: () = {
+    assert!(size_of::<RequestOrResponse>() == size_of::<StreamMessage>());
+};
+
 impl CountBytes for RequestOrResponse {
     fn count_bytes(&self) -> usize {
         match self {
             RequestOrResponse::Request(req) => req.count_bytes(),
             RequestOrResponse::Response(resp) => resp.count_bytes(),
+        }
+    }
+}
+
+impl CountBytes for StreamMessage {
+    fn count_bytes(&self) -> usize {
+        match self {
+            StreamMessage::Request(req) => req.count_bytes(),
+            StreamMessage::Response(resp) => resp.count_bytes(),
+            StreamMessage::Refund(refund) => refund.count_bytes(),
         }
     }
 }
@@ -652,6 +756,24 @@ impl From<Request> for RequestOrResponse {
 impl From<Response> for RequestOrResponse {
     fn from(resp: Response) -> Self {
         RequestOrResponse::Response(Arc::new(resp))
+    }
+}
+
+impl From<Request> for StreamMessage {
+    fn from(req: Request) -> Self {
+        StreamMessage::Request(Arc::new(req))
+    }
+}
+
+impl From<Response> for StreamMessage {
+    fn from(resp: Response) -> Self {
+        StreamMessage::Response(Arc::new(resp))
+    }
+}
+
+impl From<Refund> for StreamMessage {
+    fn from(refund: Refund) -> Self {
+        StreamMessage::Refund(Arc::new(refund))
     }
 }
 
@@ -784,6 +906,26 @@ impl TryFrom<pb_queues::Response> for Response {
     }
 }
 
+impl From<&Refund> for pb_queues::Refund {
+    fn from(refund: &Refund) -> Self {
+        Self {
+            recipient: Some(pb_types::CanisterId::from(refund.recipient)),
+            amount: Some((refund.amount).into()),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::Refund> for Refund {
+    type Error = ProxyDecodeError;
+
+    fn try_from(refund: pb_queues::Refund) -> Result<Self, Self::Error> {
+        Ok(Self {
+            recipient: try_from_option_field(refund.recipient, "Refund::recipient")?,
+            amount: try_from_option_field(refund.amount, "Refund::amount")?,
+        })
+    }
+}
+
 impl From<&RequestOrResponse> for pb_queues::RequestOrResponse {
     fn from(rr: &RequestOrResponse) -> Self {
         match rr {
@@ -815,6 +957,58 @@ impl TryFrom<pb_queues::RequestOrResponse> for RequestOrResponse {
             pb_queues::request_or_response::R::Response(r) => {
                 Ok(RequestOrResponse::Response(Arc::new(r.try_into()?)))
             }
+        }
+    }
+}
+
+impl From<&StreamMessage> for pb_queues::StreamMessage {
+    fn from(sm: &StreamMessage) -> Self {
+        match sm {
+            StreamMessage::Request(req) => pb_queues::StreamMessage {
+                message: Some(pb_queues::stream_message::Message::Request(
+                    req.as_ref().into(),
+                )),
+            },
+            StreamMessage::Response(rep) => pb_queues::StreamMessage {
+                message: Some(pb_queues::stream_message::Message::Response(
+                    rep.as_ref().into(),
+                )),
+            },
+            StreamMessage::Refund(refund) => pb_queues::StreamMessage {
+                message: Some(pb_queues::stream_message::Message::Refund(
+                    refund.as_ref().into(),
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<pb_queues::StreamMessage> for StreamMessage {
+    type Error = ProxyDecodeError;
+
+    fn try_from(sm: pb_queues::StreamMessage) -> Result<Self, Self::Error> {
+        match sm
+            .message
+            .ok_or(ProxyDecodeError::MissingField("StreamMessage::message"))?
+        {
+            pb_queues::stream_message::Message::Request(r) => {
+                Ok(StreamMessage::Request(Arc::new(r.try_into()?)))
+            }
+            pb_queues::stream_message::Message::Response(r) => {
+                Ok(StreamMessage::Response(Arc::new(r.try_into()?)))
+            }
+            pb_queues::stream_message::Message::Refund(r) => {
+                Ok(StreamMessage::Refund(Arc::new(r.try_into()?)))
+            }
+        }
+    }
+}
+
+impl From<RequestOrResponse> for StreamMessage {
+    fn from(rr: RequestOrResponse) -> Self {
+        match rr {
+            RequestOrResponse::Request(req) => StreamMessage::Request(req),
+            RequestOrResponse::Response(resp) => StreamMessage::Response(resp),
         }
     }
 }

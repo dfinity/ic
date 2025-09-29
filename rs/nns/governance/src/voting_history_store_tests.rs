@@ -1,7 +1,7 @@
 use super::*;
 
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_stable_structures::DefaultMemoryImpl;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 
 fn create_test_store() -> VotingHistoryStore {
     let memory_manager = MemoryManager::init(DefaultMemoryImpl::default());
