@@ -117,6 +117,7 @@ use ic_types::{
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount, Tokens};
+use icrc_ledger_types::icrc1::account::Account;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
@@ -1434,9 +1435,14 @@ impl PocketIcSubnets {
             // `dfx canister call um5iw-rqaaa-aaaaq-qaaba-cai icrc1_metadata --ic --update`:
             //   record { "dfn:max_blocks_per_request"; variant { Nat = 50 : nat } };
             //   record { "dfn:index_id"; variant { Blob = blob "\00\00\00\00\02\10\00\03\01\01" }; };
+            let anonymous_account = Account {
+                owner: Principal::anonymous(),
+                subaccount: None,
+            };
             let cycles_ledger_config = CyclesLedgerConfig {
                 max_blocks_per_request: 50,
                 index_id: Some(CYCLES_LEDGER_INDEX_CANISTER_ID.into()),
+                initial_balances: Some(vec![(anonymous_account, INITIAL_CYCLES)]),
             };
             let cycles_ledger_args = CyclesLedgerArgs::Init(cycles_ledger_config);
             ii_subnet

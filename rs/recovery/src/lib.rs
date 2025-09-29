@@ -76,6 +76,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     // page deltas. We do not need to copy page deltas when nodes are re-assigned.
     "page_deltas",
     "node_operator_private_key.pem",
+    "ic_adapter",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";

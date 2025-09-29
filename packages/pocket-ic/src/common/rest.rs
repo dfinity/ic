@@ -590,7 +590,7 @@ pub struct IcpFeatures {
     pub cycles_minting: Option<IcpFeaturesConfig>,
     /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
     pub icp_token: Option<IcpFeaturesConfig>,
-    /// Deploys the cycles ledger and index canisters.
+    /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
     pub cycles_token: Option<IcpFeaturesConfig>,
     /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
     /// The initial NNS neuron is controlled by the anonymous principal.

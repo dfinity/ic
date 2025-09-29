@@ -250,7 +250,10 @@ impl NodeMetricsHistoryResponseTracker {
         for (from, proposed_failed) in metrics {
             let mut metrics_day = from;
             for (proposed, failed) in proposed_failed {
-                let entry = self.subnets_responses.entry(metrics_day.get()).or_default();
+                let entry = self
+                    .subnets_responses
+                    .entry(metrics_day.unix_timestamp_at_day_end_nanoseconds())
+                    .or_default();
                 let entry_sub = entry.entry(self.current_subnet).or_default();
 
                 entry_sub.push(NodeMetrics {
@@ -295,17 +298,18 @@ impl NodeMetricsHistoryResponseTracker {
 }
 
 async fn _daily_metrics_correct_different_update_size(size: usize) {
+    let day_start = DayUtc::from_nanos(0);
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_id(1))
         .add_node_metrics(
             node_id(1),
-            vec![(0.into(), vec![(7, 5), (10, 6), (15, 6), (25, 50)])],
+            vec![(day_start, vec![(7, 5), (10, 6), (15, 6), (25, 50)])],
         )
-        .add_node_metrics(node_id(2), vec![(0.into(), vec![(19, 21), (32, 22)])])
+        .add_node_metrics(node_id(2), vec![(day_start, vec![(19, 21), (32, 22)])])
         // Node 2 is redeployed to subnet 1 on day 2
         .add_node_metrics(
             node_id(2),
-            vec![((3 * ONE_DAY_NANOS).into(), vec![(10, 10)])],
+            vec![(day_start.next_day().next_day().next_day(), vec![(10, 10)])],
         );
 
     let mut mock = mock::MockCanisterClient::new();
@@ -317,7 +321,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
         mm.update_subnets_metrics(vec![subnet_id(1)]).await;
     }
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> =
-        mm.metrics_by_subnet(&0.into()).into_values().collect();
+        mm.metrics_by_subnet(&day_start).into_values().collect();
 
     println!("{:?}", daily_metrics);
 
@@ -329,7 +333,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][1].num_blocks_failed, 21);
 
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .metrics_by_subnet(&ONE_DAY_NANOS.into())
+        .metrics_by_subnet(&day_start.next_day())
         .into_values()
         .collect();
 
@@ -342,7 +346,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][1].num_blocks_failed, 1);
 
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .metrics_by_subnet(&(2 * ONE_DAY_NANOS).into())
+        .metrics_by_subnet(&day_start.next_day().next_day())
         .into_values()
         .collect();
 
@@ -351,7 +355,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][0].num_blocks_failed, 0);
 
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .metrics_by_subnet(&(3 * ONE_DAY_NANOS).into())
+        .metrics_by_subnet(&day_start.next_day().next_day().next_day())
         .into_values()
         .collect();
 
@@ -377,14 +381,18 @@ async fn daily_metrics_correct_2_subs() {
     let subnet_2 = subnet_id(2);
 
     let node_1 = node_id(1);
+    let day_start = DayUtc::from_nanos(0);
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)
-        .add_node_metrics(node_1, vec![(0.into(), vec![(1, 1), (2, 2), (3, 3)])])
+        .add_node_metrics(node_1, vec![(day_start, vec![(1, 1), (2, 2), (3, 3)])])
         .with_subnet(subnet_2)
         .add_node_metrics(
             node_1,
-            vec![((3 * ONE_DAY_NANOS).into(), vec![(4, 4), (6, 6), (8, 8)])],
+            vec![(
+                day_start.next_day().next_day().next_day(),
+                vec![(4, 4), (6, 6), (8, 8)],
+            )],
         );
 
     let mut mock = mock::MockCanisterClient::new();
@@ -399,7 +407,7 @@ async fn daily_metrics_correct_2_subs() {
     let mut node_1_daily_metrics = Vec::new();
     for day in 0..8 {
         let daily_metrics = mm
-            .metrics_by_subnet(&(day * ONE_DAY_NANOS).into())
+            .metrics_by_subnet(&DayUtc::from_nanos(day * ONE_DAY_NANOS))
             .into_iter()
             .collect::<BTreeMap<_, _>>()
             .into_iter()
@@ -468,19 +476,26 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let node_1 = node_id(1);
     let node_2 = node_id(1);
+    let day_start = DayUtc::from_nanos(0);
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)
-        .add_node_metrics(node_1, vec![(0.into(), vec![(1, 1), (2, 2), (3, 3)])])
+        .add_node_metrics(node_1, vec![(day_start, vec![(1, 1), (2, 2), (3, 3)])])
         .with_subnet(subnet_2)
         // Node 1 redeployed to subnet 2 on day 2
         .add_node_metrics(
             node_1,
-            vec![((2 * ONE_DAY_NANOS).into(), vec![(4, 4), (6, 6), (8, 8)])],
+            vec![(
+                day_start.next_day().next_day(),
+                vec![(4, 4), (6, 6), (8, 8)],
+            )],
         )
         .add_node_metrics(
             node_2,
-            vec![((2 * ONE_DAY_NANOS).into(), vec![(1, 1), (3, 3), (6, 6)])],
+            vec![(
+                day_start.next_day().next_day(),
+                vec![(1, 1), (3, 3), (6, 6)],
+            )],
         );
 
     let mut mock = mock::MockCanisterClient::new();
@@ -495,7 +510,7 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let mut daily_metrics = Vec::new();
     for idx in 0..4 {
-        let day = (idx * ONE_DAY_NANOS).into();
+        let day = DayUtc::from_nanos(idx * ONE_DAY_NANOS);
         let metrics = mm
             .metrics_by_subnet(&day)
             .into_iter()
@@ -513,7 +528,7 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let overlapping_sub_1 = daily_metrics
         .iter()
-        .find(|(sub, day, _)| sub == &subnet_1 && *day == (2 * ONE_DAY_NANOS).into())
+        .find(|(sub, day, _)| sub == &subnet_1 && *day == day_start.next_day().next_day())
         .map(|(_, _, node_metrics)| node_metrics)
         .unwrap();
 
@@ -522,7 +537,7 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let overlapping_sub_2 = daily_metrics
         .iter()
-        .find(|(sub, day, _)| sub == &subnet_2 && *day == (2 * ONE_DAY_NANOS).into())
+        .find(|(sub, day, _)| sub == &subnet_2 && *day == day_start.next_day().next_day())
         .map(|(_, _, node_metrics)| node_metrics)
         .unwrap();
 
