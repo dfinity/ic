@@ -3334,6 +3334,10 @@ impl Payload<'_> for TimestampNanosRange {}
 ///            start: nat64;
 ///            end: nat64;
 ///     };
+///     filter_by_timestamp_nanos: opt record {
+///            start: nat64;
+///            end: nat64;
+///     };
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
