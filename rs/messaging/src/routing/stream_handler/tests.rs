@@ -1425,8 +1425,8 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
     );
 }
 
-/// Tests that an incoming reject signal for a refund results in its induction
-/// when the recipient is on this subnet; and in its rerouting otherwise.
+/// Tests that an incoming reject signal for a refund results in its correct
+/// rerouting, including when the recipient is local to the subnet.
 #[test]
 fn garbage_collect_local_state_with_reject_signals_for_misrouted_refunds() {
     with_test_setup(
@@ -2711,18 +2711,15 @@ fn induct_stream_slices_with_refunds() {
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
             // Refund to `LOCAL_CANISTER` (@43) was applied.
-            let StreamMessage::Refund(refund43) = message_in_slice(slices.get(&REMOTE_SUBNET), 43)
-            else {
-                panic!("Expected a refund message");
-            };
+            let refund43 = refund_in_slice(slices.get(&REMOTE_SUBNET), 43);
             expected_state.credit_refund(refund43);
 
             // Cycles in refund @44 are lost
-            let refund44 = message_in_slice(slices.get(&REMOTE_SUBNET), 44);
+            let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
             expected_state
                 .metadata
                 .subnet_metrics
-                .observe_consumed_cycles_with_use_case(DroppedMessages, refund44.cycles().into());
+                .observe_consumed_cycles_with_use_case(DroppedMessages, refund44.amount().into());
 
             // Act.
             let mut available_guaranteed_response_memory =
@@ -3526,6 +3523,23 @@ fn response_in_slice(
             .and_then(|msgs| msgs.get(stream_index.into()))
     }) {
         Some(StreamMessage::Response(response)) => response,
+        _ => unreachable!(),
+    }
+}
+
+/// Returns a reference to a refund in the stream slice at `stream_index`.
+///
+/// Panics if no such refund exists.
+fn refund_in_slice(
+    opt_slice: Option<&StreamSlice>,
+    stream_index: u64,
+) -> &ic_types::messages::Refund {
+    match opt_slice.and_then(|slice| {
+        slice
+            .messages()
+            .and_then(|msgs| msgs.get(stream_index.into()))
+    }) {
+        Some(StreamMessage::Refund(refund)) => refund,
         _ => unreachable!(),
     }
 }

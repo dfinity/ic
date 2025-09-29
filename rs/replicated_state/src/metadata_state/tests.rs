@@ -1494,12 +1494,12 @@ fn stream_discard_messages_before_returns_expected_messages() {
 fn stream_discard_messages_before_returns_expected_refunds() {
     // A stream with 3 refund messages at indices 30..=32.
     let mut messages = StreamIndexedQueue::with_begin(30.into());
-    let refund1 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(1_000_000)));
-    let refund2 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(2_000_000)));
-    let refund3 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(3_000_000)));
-    messages.push(StreamMessage::Refund(refund1.clone()));
-    messages.push(StreamMessage::Refund(refund2.clone()));
-    messages.push(StreamMessage::Refund(refund3.clone()));
+    let refund30 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(1_000_000)));
+    let refund31 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(2_000_000)));
+    let refund32 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(3_000_000)));
+    messages.push(StreamMessage::Refund(refund30.clone()));
+    messages.push(StreamMessage::Refund(refund31.clone()));
+    messages.push(StreamMessage::Refund(refund32.clone()));
     let mut stream = Stream::new(messages, 42.into());
 
     // Discard messages before index 32, rejecting refund @31.
@@ -1512,13 +1512,13 @@ fn stream_discard_messages_before_returns_expected_refunds() {
 
     // Expect refund @32 to remain in the stream, refund @31 to be rejected.
     let mut expected_messages = StreamIndexedQueue::with_begin(32.into());
-    expected_messages.push(StreamMessage::Refund(refund3.clone()));
+    expected_messages.push(StreamMessage::Refund(refund32.clone()));
     let expected_stream = Stream::new(expected_messages, 42.into());
     assert_eq!(expected_stream, stream);
     assert_eq!(
         vec![(
             RejectReason::CanisterMigrating,
-            StreamMessage::Refund(refund2)
+            StreamMessage::Refund(refund31)
         )],
         rejected_messages
     );
