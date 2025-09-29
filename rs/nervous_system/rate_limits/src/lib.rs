@@ -3,9 +3,8 @@
 //! This library uses a [Leaky Bucket Algorithm](https://en.wikipedia.org/wiki/Leaky_bucket) to
 //! enforce rate limites, which allows for a configurable amount of spikiness around the average
 //! limit desired.
-use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
+use ic_stable_structures::{StableBTreeMap, Storable, VectorMemory};
 use std::{
-    borrow::Cow,
     collections::BTreeMap,
     fmt::Debug,
     sync::{Arc, Mutex, Weak},
@@ -41,34 +40,6 @@ pub trait CapacityStorage<K> {
     }
 }
 
-pub struct InMemoryCapacityStorage<K> {
-    storage: BTreeMap<K, CapacityUsageRecord>,
-}
-
-impl<K: Ord + Clone> InMemoryCapacityStorage<K> {
-    pub fn new() -> Self {
-        Self {
-            storage: BTreeMap::new(),
-        }
-    }
-}
-
-impl<K: Ord + Clone> Default for InMemoryCapacityStorage<K> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<K: Ord + Clone> CapacityStorage<K> for InMemoryCapacityStorage<K> {
-    fn get_usage(&self, key: &K) -> Option<CapacityUsageRecord> {
-        self.storage.get(key).cloned()
-    }
-
-    fn upsert_usage(&mut self, key: K, record: CapacityUsageRecord) {
-        self.storage.insert(key, record);
-    }
-}
-
 /// Persistent capacity storage implementation using StableBTreeMap.
 /// This allows capacity usage to survive canister upgrades.
 pub struct StableMemoryCapacityStorage<K, Memory>
@@ -77,6 +48,14 @@ where
     Memory: ic_stable_structures::Memory,
 {
     capacity_usage_info: StableBTreeMap<K, (u64 /*time*/, u64 /*capacity used*/), Memory>,
+}
+
+type InMemoryCapacityStorage<K> = StableMemoryCapacityStorage<K, VectorMemory>;
+
+impl<K: Storable + Ord + Clone> Default for InMemoryCapacityStorage<K> {
+    fn default() -> Self {
+        Self::new(VectorMemory::default())
+    }
 }
 
 impl<K, Memory> StableMemoryCapacityStorage<K, Memory>
@@ -364,7 +343,7 @@ mod tests {
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(u64::MAX),
             },
-            InMemoryCapacityStorage::new(),
+            InMemoryCapacityStorage::default(),
         );
 
         let now = SystemTime::now();
@@ -422,7 +401,7 @@ mod tests {
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(u64::MAX),
             },
-            InMemoryCapacityStorage::new(),
+            InMemoryCapacityStorage::default(),
         );
 
         let now = SystemTime::now();
@@ -478,7 +457,7 @@ mod tests {
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(5), // 5 second timeout
             },
-            InMemoryCapacityStorage::new(),
+            InMemoryCapacityStorage::default(),
         );
 
         let now = SystemTime::now();
@@ -570,34 +549,6 @@ mod tests {
     }
 
     #[test]
-    fn test_usage_record_serialization() {
-        let now = SystemTime::now();
-        let original = CapacityUsageRecord {
-            last_capacity_drip: now,
-            capacity_used: 42,
-        };
-
-        // Serialize and deserialize
-        let bytes = original.to_bytes();
-        let deserialized = CapacityUsageRecord::from_bytes(bytes);
-
-        // Capacity should be exactly equal
-        assert_eq!(deserialized.capacity_used, original.capacity_used);
-
-        // Time should be equal when both are truncated to seconds
-        let original_secs = now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let deserialized_secs = deserialized
-            .last_capacity_drip
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        assert_eq!(deserialized_secs, original_secs);
-    }
-
-    #[test]
     fn test_restore_capacity() {
         let mut rate_limiter = RateLimiter::new(
             RateLimiterConfig {
@@ -606,7 +557,7 @@ mod tests {
                 max_capacity: 10,
                 reservation_timeout: Duration::from_secs(u64::MAX),
             },
-            InMemoryCapacityStorage::new(),
+            InMemoryCapacityStorage::default(),
         );
 
         let now = SystemTime::now();
