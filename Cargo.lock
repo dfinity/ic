@@ -14395,7 +14395,6 @@ version = "0.9.0"
 dependencies = [
  "ic-artifact-pool",
  "ic-config",
- "ic-consensus",
  "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-interfaces",
