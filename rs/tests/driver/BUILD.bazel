@@ -20,7 +20,6 @@ rust_library(
         "//rs/utils": "utils",
     },
     compile_data = [
-        "//rs/ic_os/config:templates/ic.json5.template",
         ":assets/vector.toml",
     ],
     crate_name = "ic_system_test_driver",

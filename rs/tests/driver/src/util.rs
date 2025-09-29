@@ -30,7 +30,7 @@ use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_cdk::management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
-use ic_config::ConfigOptional;
+use ic_config::{ConfigOptional, ConfigSource};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
@@ -87,9 +87,6 @@ pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
-
-pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../ic_os/config/templates/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
@@ -1517,17 +1514,10 @@ pub fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    // Make the string parsable by filling the template placeholders with dummy values
-    let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES)
-        .to_string()
-        .replace("{{ ipv6_address }}", "::")
-        .replace("{{ backup_retention_time_secs }}", "0")
-        .replace("{{ backup_purging_interval_secs }}", "0")
-        .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
-        .replace("{{ malicious_behavior }}", "null")
-        .replace("{{ query_stats_epoch_length }}", "600");
-
-    json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
+    let ic_json = config::guestos::generate_ic_config::generate_dummy_ic_config();
+    ConfigSource::Literal(ic_json)
+        .load()
+        .expect("Failed to parse dummy config")
 }
 
 /// A stream of logs from one or multiple nodes

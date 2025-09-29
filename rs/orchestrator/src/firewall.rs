@@ -730,8 +730,6 @@ mod tests {
 
     use super::*;
 
-    const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../ic_os/config/templates/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES: &[u8] =
@@ -944,20 +942,10 @@ mod tests {
 
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
-        // Make the string parsable by filling the template placeholders with dummy values
-        let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
-            .unwrap()
-            .replace("{{ ipv6_address }}", "::")
-            .replace("{{ backup_retention_time_secs }}", "0")
-            .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
-            .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_epoch_length }}", "600");
-        let config_source = ConfigSource::Literal(cfg);
-
-        let config: ConfigOptional = config_source.load().unwrap();
-
-        config
+        let ic_json = config::guestos::generate_ic_config::generate_dummy_ic_config();
+        ConfigSource::Literal(ic_json)
+            .load()
+            .expect("Failed to parse dummy config")
     }
 
     /// When `TEST_UNDECLARED_OUTPUTS_DIR` is set, writes the `content` to a file in the specified
