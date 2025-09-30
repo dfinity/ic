@@ -34,7 +34,7 @@ link:../../rs/ic_os/config/README.md[rs/ic_os/config].
 * *System state:* Node initialization material (initial registry & keys) is copied directly into target directories for replica use.
 * *Config partition:* Only the SSH authorized keys (`accounts_ssh_authorized_keys`) from the injected config are copied into the `/boot/config` directory. These keys need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.
 
-`generate-ic-config.sh` uses `ic.json5.template` to produce the ic configuration (also cf. service file definition). Template placeholders are populated with information from `/run/config`.
+The config tool uses `ic.json5.template` to produce the ic configuration (also cf. service file definition). Template placeholders are populated with information from `/run/config`.
 
 [NOTE]
 GuestOS only reads a predefined set of files from the bootstrap config image (i.e., it "sanitizes" the bootstrap config image).
