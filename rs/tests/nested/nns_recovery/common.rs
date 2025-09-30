@@ -312,7 +312,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             node.get_ip_addr()
         );
 
-        node.block_on_bash_script(&format!("rm /var/lib/admin/.ssh/authorized_keys"))
+        node.block_on_bash_script("rm /var/lib/admin/.ssh/authorized_keys")
             .unwrap_or_else(|_| {
                 panic!(
                     "Failed to disable admin SSH access on node {} ({:?})",
