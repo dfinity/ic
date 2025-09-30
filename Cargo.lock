@@ -11413,6 +11413,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-tools-neuron-subaccount"
+version = "0.9.0"
+dependencies = [
+ "clap 4.5.27",
+ "hex",
+ "ic-base-types",
+ "ic-nervous-system-common",
+ "ic-nns-constants",
+ "icp-ledger",
+]
+
+[[package]]
 name = "ic-networking-subnet-update-workload"
 version = "0.9.0"
 dependencies = [
