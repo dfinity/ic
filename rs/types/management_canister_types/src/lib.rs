@@ -3311,7 +3311,8 @@ pub struct NodeMetricsHistoryResponse {
 impl Payload<'_> for NodeMetricsHistoryResponse {}
 
 /// Exclusive range for fetching canister logs `[start, end)`.
-/// If `end` is below `start`, the range is empty.
+/// It's used both for `idx` and `timestamp_nanos` based filtering.
+/// If `end` is below `start`, the range is considered empty.
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRange {
     start: u64, // Inclusive.
