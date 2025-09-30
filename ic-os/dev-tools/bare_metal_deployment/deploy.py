@@ -149,7 +149,7 @@ class Args:
         self.csv_filename = self.csv_filename or csv_filename_env_var
 
         assert (self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway) or not (
-            self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway
+            self.inject_image_ipv6_prefix or self.inject_image_ipv6_gateway
         ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
             assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
@@ -222,7 +222,7 @@ def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
             IPv6Address(hostos_ipv6_address),
         )
 
-    assert False, f"Invalid csv row found. Must be 3 or 4 items: {row}"
+    assert False, f"Invalid csv row found. Must be 4 items: {row}"
 
 
 def parse_from_csv_file(csv_filename: str, network_image_url: str) -> List["BMCInfo"]:
