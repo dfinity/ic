@@ -24,7 +24,7 @@ by `DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION` and other compilation limits.
 4. ✅ Baseline comparison:
     * `INCLUDE=compilation ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
-TODO: There is no script to derive the cost based on benchmark results.
+TODO(EXC-2040): There is no script to derive the cost based on benchmark results.
 
 Heap Memory Overhead
 --------------------
@@ -39,7 +39,7 @@ by `DEFAULT_DIRTY_PAGE_OVERHEAD` and other costs.
 4. ✅ Baseline comparison:
     * `INCLUDE=heap ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
-TODO: There is no script to derive the cost based on benchmark results.
+TODO(EXC-2040): There is no script to derive the cost based on benchmark results.
 
 Management Canister Calls
 -------------------------
@@ -54,7 +54,7 @@ etc.
     * `bazel run //rs/execution_environment:management_canister_bench`
 4. ❌ Baseline is not available.
 
-TODO: The following scripts should be updated to use the `*.min` files.
+TODO(EXC-2040): The following scripts should be updated to use the `*.min` files.
 
 Scripts: `rs/execution_environment/benches/management_canister/*`
 
@@ -73,7 +73,7 @@ by `DEFAULT_DIRTY_PAGE_OVERHEAD` and other costs.
 4. ✅ Baseline comparison:
     * `INCLUDE=stable ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
-TODO: There is no script to derive the cost based on benchmark results.
+TODO(EXC-2040): There is no script to derive the cost based on benchmark results.
 
 System API
 ----------
@@ -95,7 +95,7 @@ the `system_api_complexity.rs` file.
     * Queries: `INCLUDE=query ./rs/execution_environment/benches/run-all-benchmarks.sh`
     * Updates: `INCLUDE=update ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
-TODO: The following scripts should be updated to use the `*.min` files.
+TODO(EXC-2040): The following scripts should be updated to use the `*.min` files.
 
 Scripts: `rs/execution_environment/benches/system_api/*`
 
@@ -113,7 +113,7 @@ Each Wasm instruction has its own weight set in the `instruction_to_cost()` func
 4. ✅ Baseline comparison:
     * `INCLUDE=wasm ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
-TODO: The following scripts should be updated to use the `*.min` files.
+TODO(EXC-2040): The following scripts should be updated to use the `*.min` files.
 
 Scripts: `rs/execution_environment/benches/wasm_instructions/*`
 
