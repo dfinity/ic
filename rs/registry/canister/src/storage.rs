@@ -1,16 +1,20 @@
 use crate::{flags::is_chunkifying_large_values_enabled, registry::MAX_REGISTRY_DELTAS_SIZE};
 use ic_nervous_system_chunks::Chunks;
+use ic_nervous_system_rate_limits::{RateLimiter, RateLimiterConfig, StableMemoryCapacityStorage};
 use ic_registry_canister_chunkify::chunkify_composite_mutation;
 use ic_registry_transport::pb::v1::{
     HighCapacityRegistryAtomicMutateRequest, RegistryAtomicMutateRequest,
 };
-use ic_stable_structures::DefaultMemoryImpl;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+};
 use prost::Message;
 use std::cell::RefCell;
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
+const NODE_OPERATOR_RATE_LIMITER_MEMORY_ID: MemoryId = MemoryId::new(2);
 
 /// A RegistryAtomicMutateRequest that has an encoded size greater than this
 /// will cause a panic when it is passed to changelog_insert (or maybe_chunkify,
@@ -49,6 +53,11 @@ thread_local! {
     static CHUNKS: RefCell<Chunks<VM>> = RefCell::new({
         MEMORY_MANAGER.with(|mm| Chunks::init(mm.borrow().get(CHUNKS_MEMORY_ID)))
     });
+
+    static NODE_OPERATOR_RATE_LIMITER: RefCell<RateLimiter> = RefCell::new(RateLimiter::new(
+        RateLimiterConfig {},
+        StableMemoryCapacityStorage::new(MEMORY_MANAGER.with(|mm| mm.borrow().get(NODE_OPERATOR_RATE_LIMITER_MEMORY_ID))),
+    ));
 }
 
 pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
@@ -62,6 +71,14 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
     CHUNKS.with(|chunks| {
         let chunks = chunks.borrow();
         f(&chunks)
+    })
+}
+
+// Used to create the rate limiter
+pub(crate) fn with_rate_limiter_memory<R>(f: impl FnOnce(VM) -> R) -> R {
+    MEMORY_MANAGER.with(|mm| {
+        let upgrades_memory = mm.borrow().get(NODE_OPERATOR_RATE_LIMITER_MEMORY_ID);
+        f(upgrades_memory)
     })
 }
 
