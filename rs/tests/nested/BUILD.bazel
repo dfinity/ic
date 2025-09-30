@@ -48,7 +48,7 @@ system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["long_test"],  # since it takes longer than 5 minutes.
+    # tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
@@ -80,7 +80,7 @@ system_test_nns(
     name = "guestos_upgrade_smoke_test",
     env = MAINNET_ENV,
     flaky = True,
-    tags = ["long_test"],
+    # tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_test_update = True,
@@ -101,7 +101,7 @@ system_test_nns(
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
     flaky = True,
-    tags = ["long_test"],
+    # tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_dev_mainnet = True,  # necessary for configuring NNS public key
@@ -137,7 +137,7 @@ system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
     flaky = True,
-    tags = ["long_test"],
+    # tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_hostos_test_update = True,
@@ -158,7 +158,7 @@ system_test_nns(
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["long_test"],
+    # tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_dev_mainnet = True,  # necessary for configuring NNS public key
