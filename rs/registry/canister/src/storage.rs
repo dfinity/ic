@@ -53,11 +53,6 @@ thread_local! {
     static CHUNKS: RefCell<Chunks<VM>> = RefCell::new({
         MEMORY_MANAGER.with(|mm| Chunks::init(mm.borrow().get(CHUNKS_MEMORY_ID)))
     });
-
-    static NODE_OPERATOR_RATE_LIMITER: RefCell<RateLimiter> = RefCell::new(RateLimiter::new(
-        RateLimiterConfig {},
-        StableMemoryCapacityStorage::new(MEMORY_MANAGER.with(|mm| mm.borrow().get(NODE_OPERATOR_RATE_LIMITER_MEMORY_ID))),
-    ));
 }
 
 pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
@@ -75,11 +70,8 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
 }
 
 // Used to create the rate limiter
-pub(crate) fn with_rate_limiter_memory<R>(f: impl FnOnce(VM) -> R) -> R {
-    MEMORY_MANAGER.with(|mm| {
-        let upgrades_memory = mm.borrow().get(NODE_OPERATOR_RATE_LIMITER_MEMORY_ID);
-        f(upgrades_memory)
-    })
+pub(crate) fn get_rate_limiter_memory() -> VM {
+    MEMORY_MANAGER.with(|mm| mm.borrow().get(NODE_OPERATOR_RATE_LIMITER_MEMORY_ID))
 }
 
 /// Converts to HighCapacity version of input.
