@@ -39,10 +39,10 @@ pub fn upgrade_hostos(env: TestEnv) {
     let update_image_sha256 = get_hostos_update_img_sha256();
 
     info!(logger, "Image configuration:");
-    info!(logger, "  Original HostOS version: {}", original_version);
-    info!(logger, "  Target HostOS version: {}", target_version);
-    info!(logger, "  Update image URL: '{}'", update_image_url);
-    info!(logger, "  Update image SHA256: {}", update_image_sha256);
+    info!(logger, "  Original HostOS version: {original_version}");
+    info!(logger, "  Target HostOS version: {target_version}");
+    info!(logger, "  Update image URL: {update_image_url}");
+    info!(logger, "  Update image SHA256: {update_image_sha256}");
 
     registration(env.clone());
 

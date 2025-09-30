@@ -42,10 +42,10 @@ pub fn upgrade_guestos(env: TestEnv) {
     let guest_launch_measurements = get_guestos_launch_measurements();
 
     info!(logger, "Image configuration:");
-    info!(logger, "  Original GuestOS version: {}", original_version);
-    info!(logger, "  Target GuestOS version: {}", target_version);
-    info!(logger, "  Upgrade image URL: {}", upgrade_url);
-    info!(logger, "  Upgrade image SHA256: {}", sha256);
+    info!(logger, "  Original GuestOS version: {original_version}");
+    info!(logger, "  Target GuestOS version: {target_version}");
+    info!(logger, "  Upgrade image URL: {upgrade_url}");
+    info!(logger, "  Upgrade image SHA256: {sha256}");
 
     registration(env.clone());
 
