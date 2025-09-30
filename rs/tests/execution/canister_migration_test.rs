@@ -4,7 +4,7 @@ use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_nns_constants::MIGRATION_CANISTER_ID;
+use ic_nns_constants::{MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{
@@ -210,4 +210,31 @@ async fn test_async(env: TestEnv) {
         decoded_status[0],
         MigrationStatus::Succeeded { .. }
     ));
+
+    #[derive(CandidType, Deserialize)]
+    struct GetSubnetForCanisterArgs {
+        principal: Option<Principal>,
+    }
+    #[derive(CandidType, Deserialize)]
+    struct Response {
+        subnet_id: Option<Principal>,
+    }
+    let res = nns_agent
+        .update(&REGISTRY_CANISTER_ID.into(), "get_subnet_for_canister")
+        .with_arg(
+            Encode!(&GetSubnetForCanisterArgs {
+                principal: Some(source_canister.canister_id())
+            })
+            .unwrap(),
+        )
+        .call_and_wait()
+        .await
+        .unwrap();
+    let Ok(Response { subnet_id }) = Decode!(&res, Result<Response, String>).unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        subnet_id.unwrap(),
+        app_subnet_2.subnet_id().unwrap().get().0
+    );
 }
