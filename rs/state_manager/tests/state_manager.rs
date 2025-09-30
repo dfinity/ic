@@ -2607,7 +2607,7 @@ fn can_serve_chunks_from_incomplete_state() {
 
         state_manager_test_with_state_sync(|_dst_metrics, dst_state_manager, dst_state_sync| {
             let mut chunkable =
-                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+                set_fetch_state_and_start_state_sync(&dst_state_manager, &dst_state_sync, &id);
 
             // 0 chunk is canister.pbuf, which is in file group; chunks 1 and 2 are real
             let omit: HashSet<ChunkId> =
