@@ -150,28 +150,3 @@ system_test_nns(
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
 )
-
-# Tests the recovery-upgrader component by upgrading the GuestOS to the mainnet update image
-# Uses the mainnet update image, as this image is hosted at https://download.dfinity.systems/
-system_test_nns(
-    name = "recovery_upgrader_test",
-    env = MAINNET_ENV,
-    flaky = True,
-    tags = [
-        "long_test",
-        "manual",  # TODO(NODE-1707): re-enable this test after next weekly release
-    ],
-    test_timeout = "eternal",
-    uses_dev_mainnet = True,  # necessary for configuring NNS public key
-    uses_guestos_mainnet_nns_update = True,
-    uses_setupos_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        ":nested",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-        "@crate_index//:reqwest",
-        "@crate_index//:slog",
-    ],
-)

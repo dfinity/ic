@@ -230,7 +230,7 @@ jobs:
               bazel_cmd="$1"
               invocation_id="$2"
 
-              "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py "$bazel_cmd" \
+              "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
 
               num_targets=$(wc <"$target_pattern_file" -l)
@@ -571,7 +571,7 @@ jobs:
             if [[ "$DIFF_ONLY" == 'true' ]]; then
               targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
-            ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
+            ci/scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
             num_targets=$(wc <"$target_pattern_file" -l)
             echo "Considering $num_targets targets ..."
             # the target list can get quite big, so we wrap it in details/summary
@@ -753,4 +753,4 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Check PULL_REQUEST_BAZEL_TARGETS
-        run: ./ci/bazel-scripts/targets.py check
+        run: ./ci/scripts/targets.py check
