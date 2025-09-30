@@ -2691,6 +2691,23 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
     serialized_module.compilation_cost
 }
 
+// This function copies the behavior of the actual logging cost computation in
+// rs/embedders/src/wasmtime_embedder/linker.rs.
+fn logging_charge_bytes(message_num_bytes: usize) -> usize {
+    const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let capacity = MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    let remaining_space = capacity;
+    let allocated_num_bytes = message_num_bytes.min(capacity);
+    let transmitted_num_bytes = message_num_bytes.min(remaining_space);
+    2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
+}
+
+/// Helper function to compute the cost of logging during `debug_print` and `trap`.
+pub fn bytes_and_logging_cost(num_bytes: usize) -> usize {
+    num_bytes + logging_charge_bytes(num_bytes)
+}
+
 /// Create a routing table with an allocation range for the creation of canisters with specified Canister IDs.
 /// /// It is only used for tests for ProvisionalCreateCanisterWithCycles when specified ID is provided.
 pub fn get_routing_table_with_specified_ids_allocation_range(

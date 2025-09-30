@@ -22,6 +22,8 @@ use std::convert::TryInto;
 use std::time::Duration;
 use strum::IntoEnumIterator;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 criterion_main!(benches);
 criterion_group!(
     benches,
@@ -52,6 +54,7 @@ fn bench_threshold_sig_1_node_threshold_1(criterion: &mut Criterion) {
         let group = &mut criterion.benchmark_group(format!(
             "crypto_threshold_sig_1_node_threshold_1_{vault_type:?}"
         ));
+        group.warm_up_time(WARMUP_TIME);
         group.sample_size(25);
         for message_size in [32, 1_000_000] {
             bench_threshold_sig_n_nodes(group, 1, 1, message_size, vault_type);
@@ -64,6 +67,7 @@ fn bench_threshold_sig_34_nodes_threshold_12(criterion: &mut Criterion) {
         let group = &mut criterion.benchmark_group(format!(
             "crypto_threshold_sig_34_nodes_threshold_12_{vault_type:?}"
         ));
+        group.warm_up_time(WARMUP_TIME);
         group.sample_size(25);
         group.measurement_time(Duration::from_secs(7));
         for message_size in [32, 1_000_000] {
