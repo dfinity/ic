@@ -398,7 +398,10 @@ impl DkgKeyManager {
                     .1;
 
                 let result = loop {
-                    info!(logger, "PIERUGO | Loading transcript: {:?}", transcript);
+                    info!(
+                        logger,
+                        "PIERUGO | Loading transcript: {:?}. Deadline: {:?}", transcript, deadline
+                    );
 
                     let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
                     let elapsed = since.elapsed().as_secs_f64();
@@ -501,11 +504,13 @@ impl DkgKeyManager {
 
         while let Some(summary) = dkg_summary {
             let next_summary_height = summary.dkg.get_next_start_height();
+            let height = summary.dkg.height;
             for transcript in summary.dkg.into_transcripts() {
                 info!(
                     self.logger,
-                    "PIERUGO | Retaining DKG transcript {} from summary",
+                    "PIERUGO | Retaining DKG transcript {} from summary at height {:?}",
                     dkg_id_log_msg(&transcript.dkg_id),
+                    height
                 );
                 transcripts_to_retain.insert(transcript);
             }
