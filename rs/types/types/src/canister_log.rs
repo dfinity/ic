@@ -166,7 +166,7 @@ impl CanisterLog {
     }
 
     /// Moves all the logs from `other` to `self`.
-    pub fn append(&mut self, other: &mut Self) {
+    pub fn append_delta_log(&mut self, other: &mut Self) {
         // Assume records sorted cronologically (with increasing idx) and
         // update the system state's next index with the last record's index.
         if let Some(last) = other.records.get().back() {
@@ -295,7 +295,7 @@ mod tests {
         delta.add_record(202, b"delta #2".to_vec());
 
         // Act.
-        main.append(&mut delta);
+        main.append_delta_log(&mut delta);
 
         // Assert.
         assert_eq!(
@@ -329,7 +329,7 @@ mod tests {
         delta.add_record(202, b"delta #2".to_vec());
 
         // Act.
-        main.append(&mut delta);
+        main.append_delta_log(&mut delta);
 
         // Assert main log had data loss.
         assert_eq!(

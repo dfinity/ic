@@ -598,7 +598,7 @@ impl CanisterState {
 
     /// Appends the given log to the canister log.
     pub fn append_log(&mut self, other: &mut CanisterLog) {
-        self.system_state.canister_log.append(other);
+        self.system_state.canister_log.append_delta_log(other);
     }
 
     /// Clears the canister log.

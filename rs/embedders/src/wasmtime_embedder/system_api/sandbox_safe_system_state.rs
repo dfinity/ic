@@ -508,7 +508,9 @@ impl SystemStateModifications {
         }
 
         // Append canister log.
-        system_state.canister_log.append(&mut self.canister_log);
+        system_state
+            .canister_log
+            .append_delta_log(&mut self.canister_log);
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
