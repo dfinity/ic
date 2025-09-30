@@ -3,8 +3,8 @@ use std::collections::VecDeque;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterLogRecord, FetchCanisterLogsRequest, FetchCanisterLogsResponse, IndexRange,
-    LogVisibilityV2, TimestampNanosRange,
+    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibilityV2,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::PrincipalId;
@@ -65,38 +65,27 @@ fn filter_records(
     args: &FetchCanisterLogsRequest,
     records: &VecDeque<CanisterLogRecord>,
 ) -> Result<Vec<CanisterLogRecord>, UserError> {
-    match (&args.filter_by_idx, &args.filter_by_timestamp_nanos) {
-        (Some(_), Some(_)) => Err(contract_violation("Only one of filters can be set")),
-        (Some(IndexRange { start, end }), None) => {
-            validate_range(start, end, "index")?;
+    match &args.filter {
+        Some(FetchCanisterLogsFilter::ByIdx(range)) => {
+            if range.is_empty() {
+                return Ok(vec![]);
+            }
             Ok(records
                 .iter()
-                .filter(|r| start <= &r.idx && &r.idx <= end)
+                .filter(|r| range.contains(r.idx))
                 .cloned()
                 .collect())
         }
-        (None, Some(TimestampNanosRange { start, end })) => {
-            validate_range(start, end, "timestamp")?;
+        Some(FetchCanisterLogsFilter::ByTimestampNanos(range)) => {
+            if range.is_empty() {
+                return Ok(vec![]);
+            }
             Ok(records
                 .iter()
-                .filter(|r| start <= &r.timestamp_nanos && &r.timestamp_nanos <= end)
+                .filter(|r| range.contains(r.timestamp_nanos))
                 .cloned()
                 .collect())
         }
-        (None, None) => Ok(records.iter().cloned().collect()),
+        None => Ok(records.iter().cloned().collect()),
     }
-}
-
-fn validate_range<T: PartialOrd>(start: &T, end: &T, range_type: &str) -> Result<(), UserError> {
-    if start > end {
-        Err(contract_violation(&format!(
-            "Invalid {range_type} range: start is greater than end"
-        )))
-    } else {
-        Ok(())
-    }
-}
-
-fn contract_violation(msg: &str) -> UserError {
-    UserError::new(ErrorCode::CanisterContractViolation, msg.to_string())
 }

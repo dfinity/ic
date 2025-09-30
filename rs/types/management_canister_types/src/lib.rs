@@ -3310,41 +3310,71 @@ pub struct NodeMetricsHistoryResponse {
 
 impl Payload<'_> for NodeMetricsHistoryResponse {}
 
+/// Exclusive range for fetching canister logs `[start, end)`.
+/// If `end` is below `start`, the range is empty.
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
-pub struct IndexRange {
-    pub start: u64,
-    pub end: u64,
+pub struct FetchCanisterLogsRange {
+    start: u64, // Inclusive.
+    end: u64,   // Exclusive, values below `start` are ignored.
 }
 
-impl Payload<'_> for IndexRange {}
+impl Payload<'_> for FetchCanisterLogsRange {}
 
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
-pub struct TimestampNanosRange {
-    pub start: u64,
-    pub end: u64,
+impl FetchCanisterLogsRange {
+    /// Creates a new range from `start` (inclusive) to `end` (exclusive).
+    pub fn new(start: u64, end: u64) -> Self {
+        Self { start, end }
+    }
+
+    /// Returns the start of the range (inclusive).
+    pub fn start(&self) -> u64 {
+        self.start
+    }
+
+    /// Returns the end of the range (exclusive).
+    pub fn end(&self) -> u64 {
+        self.start + self.len()
+    }
+
+    /// Returns the length of the range.
+    /// If user provides an `end` value below `start`, the length is 0.
+    pub fn len(&self) -> u64 {
+        self.end.saturating_sub(self.start)
+    }
+
+    /// Returns true if the range is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns true if the range contains the given value.
+    pub fn contains(&self, value: u64) -> bool {
+        self.start <= value && value < self.end()
+    }
 }
 
-impl Payload<'_> for TimestampNanosRange {}
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum FetchCanisterLogsFilter {
+    ByIdx(FetchCanisterLogsRange),
+    ByTimestampNanos(FetchCanisterLogsRange),
+}
+
+impl Payload<'_> for FetchCanisterLogsFilter {}
 
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text
 /// record {
 ///     canister_id: principal;
-///     filter_by_idx: opt record {
-///            start: nat64;
-///            end: nat64;
-///     };
-///     filter_by_timestamp_nanos: opt record {
-///            start: nat64;
-///            end: nat64;
-///     };
+///     filter: opt variant {
+///       by_idx: record { start: nat64; end: nat64 };
+///       by_timestamp_nanos: record { start: nat64; end: nat64 };
+///     }
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRequest {
     pub canister_id: PrincipalId,
-    pub filter_by_idx: Option<IndexRange>,
-    pub filter_by_timestamp_nanos: Option<TimestampNanosRange>,
+    pub filter: Option<FetchCanisterLogsFilter>,
 }
 
 impl Payload<'_> for FetchCanisterLogsRequest {}
@@ -3353,27 +3383,14 @@ impl FetchCanisterLogsRequest {
     pub fn new(canister_id: CanisterId) -> Self {
         Self {
             canister_id: canister_id.into(),
-            filter_by_idx: None,
-            filter_by_timestamp_nanos: None,
+            filter: None,
         }
     }
 
-    pub fn new_with_filter_by_index(canister_id: CanisterId, filter: IndexRange) -> Self {
+    pub fn new_with_filter(canister_id: CanisterId, filter: FetchCanisterLogsFilter) -> Self {
         Self {
             canister_id: canister_id.into(),
-            filter_by_idx: Some(filter),
-            filter_by_timestamp_nanos: None,
-        }
-    }
-
-    pub fn new_with_filter_by_timestamp_nanos(
-        canister_id: CanisterId,
-        filter: TimestampNanosRange,
-    ) -> Self {
-        Self {
-            canister_id: canister_id.into(),
-            filter_by_idx: None,
-            filter_by_timestamp_nanos: Some(filter),
+            filter: Some(filter),
         }
     }
 

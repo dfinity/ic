@@ -5,8 +5,8 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, IndexRange, LogVisibilityV2, Payload,
-    TimestampNanosRange,
+    FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -498,8 +498,7 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
 }
 
 fn run_fetch_canister_logs_with_filtering_test(
-    index_range: Option<IndexRange>,
-    timestamp_range: Option<TimestampNanosRange>,
+    filter: Option<FetchCanisterLogsFilter>,
 ) -> (Result<WasmResult, UserError>, Vec<SystemTime>) {
     let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
     let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
@@ -525,22 +524,9 @@ fn run_fetch_canister_logs_with_filtering_test(
         let _ = env.execute_ingress(canister_a, "test", vec![]);
     }
 
-    let method_payload = match (index_range, timestamp_range) {
-        (Some(index_range), None) => {
-            FetchCanisterLogsRequest::new_with_filter_by_index(canister_a, index_range)
-        }
-        (None, Some(timestamp_range)) => {
-            FetchCanisterLogsRequest::new_with_filter_by_timestamp_nanos(
-                canister_a,
-                timestamp_range,
-            )
-        }
-        (None, None) => FetchCanisterLogsRequest::new(canister_a),
-        (Some(index_range), Some(timestamp_range)) => FetchCanisterLogsRequest {
-            canister_id: canister_a.into(),
-            filter_by_idx: Some(index_range),
-            filter_by_timestamp_nanos: Some(timestamp_range),
-        },
+    let method_payload = match filter {
+        None => FetchCanisterLogsRequest::new(canister_a),
+        Some(filter) => FetchCanisterLogsRequest::new_with_filter(canister_a, filter),
     };
     let result = env.query_as(
         user,
@@ -554,7 +540,7 @@ fn run_fetch_canister_logs_with_filtering_test(
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_without_any_filters() {
-    let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(None, None);
+    let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(None);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -574,28 +560,38 @@ fn test_fetch_canister_logs_with_filtering_without_any_filters() {
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_by_idx() {
-    let (result, timestamps) =
-        run_fetch_canister_logs_with_filtering_test(Some(IndexRange { start: 3, end: 5 }), None);
+    let start = 2;
+    let end = 5;
+    let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(Some(
+        FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange::new(start, end)),
+    ));
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
+            (2, timestamps[2], "message".to_string()),
             (3, timestamps[3], "message".to_string()),
             (4, timestamps[4], "message".to_string()),
-            (5, timestamps[5], "message".to_string()),
         ]
     );
 }
 
 #[test]
+fn test_fetch_canister_logs_with_filtering_by_idx_zero_length() {
+    let start = 2;
+    let (result, _timestamps) = run_fetch_canister_logs_with_filtering_test(Some(
+        FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange::new(start, start)),
+    ));
+    assert_eq!(readable_logs_without_backtraces(result), vec![]);
+}
+
+#[test]
 fn test_fetch_canister_logs_with_filtering_by_timestamp() {
     let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
-    let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(
-        None,
-        Some(TimestampNanosRange {
-            start: sec_and_nanosec(1620328633, 2),
-            end: sec_and_nanosec(1620328634, 2),
-        }),
-    );
+    let start = sec_and_nanosec(1620328633, 2);
+    let end = start + sec_and_nanosec(2, 0);
+    let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(Some(
+        FetchCanisterLogsFilter::ByTimestampNanos(FetchCanisterLogsRange::new(start, end)),
+    ));
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -606,40 +602,13 @@ fn test_fetch_canister_logs_with_filtering_by_timestamp() {
 }
 
 #[test]
-fn test_fetch_canister_logs_with_filtering_fails_with_more_than_one_filters_enabled() {
-    let (result, _timestamps) = run_fetch_canister_logs_with_filtering_test(
-        Some(IndexRange { start: 0, end: 1 }),
-        Some(TimestampNanosRange { start: 2, end: 3 }),
-    );
-    let err = result.unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
-    assert_eq!(err.description(), "Only one of filters can be set");
-}
-
-#[test]
-fn test_fetch_canister_logs_with_filtering_fails_with_incorrect_idx_range() {
-    let (result, _timestamps) =
-        run_fetch_canister_logs_with_filtering_test(Some(IndexRange { start: 1, end: 0 }), None);
-    let err = result.unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
-    assert_eq!(
-        err.description(),
-        "Invalid index range: start is greater than end"
-    );
-}
-
-#[test]
-fn test_fetch_canister_logs_with_filtering_fails_with_incorrect_timestamp_range() {
-    let (result, _timestamps) = run_fetch_canister_logs_with_filtering_test(
-        None,
-        Some(TimestampNanosRange { start: 1, end: 0 }),
-    );
-    let err = result.unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
-    assert_eq!(
-        err.description(),
-        "Invalid timestamp range: start is greater than end"
-    );
+fn test_fetch_canister_logs_with_filtering_by_timestamp_zero_length() {
+    let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
+    let start = sec_and_nanosec(1620328633, 2);
+    let (result, _timestamps) = run_fetch_canister_logs_with_filtering_test(Some(
+        FetchCanisterLogsFilter::ByTimestampNanos(FetchCanisterLogsRange::new(start, start)),
+    ));
+    assert_eq!(readable_logs_without_backtraces(result), vec![]);
 }
 
 #[test]
