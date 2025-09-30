@@ -472,7 +472,6 @@ def deploy_server(
 
         def check_connectivity_func() -> bool:
             log.info(f"Checking guestos ({bmc_info.guestos_ipv6_address}) connectivity...")
-            assert bmc_info.guestos_ipv6_address is not None, "Logic error"
 
             result = check_guestos_ping_connectivity(bmc_info.guestos_ipv6_address, timeout_secs)
             result = result and check_guestos_metrics_version(bmc_info.guestos_ipv6_address, timeout_secs)
