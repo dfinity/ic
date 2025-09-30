@@ -855,11 +855,12 @@ mod metrics_tests {
     use ic_nns_common::pb::v1::ProposalId;
     use std::sync::Arc;
 
+    use crate::test_utils::MockRandomness;
     use crate::{
         encode_metrics,
         governance::Governance,
         pb::v1::{Motion, Proposal, ProposalData, Tally, Topic, proposal},
-        test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
+        test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
 
     #[test]

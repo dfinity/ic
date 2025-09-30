@@ -82,7 +82,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
-use ic_nervous_system_canisters::{cmc::CMC, ledger::IcpLedger};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
     NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, ledger,
 };
@@ -120,6 +121,7 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::sync::Arc;
 use std::{
     borrow::Cow,
     cmp::{Ordering, max},
@@ -129,7 +131,6 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
-    sync::Arc,
     time::{Duration, SystemTime},
 };
 
@@ -150,10 +151,9 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
-use crate::{
-    pb::v1::AddOrRemoveNodeProvider, reward::distribution::RewardsDistribution,
-    storage::with_voting_state_machines_mut,
-};
+use crate::pb::v1::AddOrRemoveNodeProvider;
+use crate::reward::distribution::RewardsDistribution;
+use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 pub use tla::{
     CLAIM_NEURON_DESC, DISBURSE_MATURITY_DESC, DISBURSE_NEURON_DESC, DISBURSE_TO_NEURON_DESC,

@@ -1,7 +1,8 @@
+use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
+use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
-    neuron::{DissolveStateAndAge, NeuronBuilder},
-    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{

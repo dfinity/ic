@@ -39,20 +39,19 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
-    canister_state::{governance_mut, set_governance_for_tests},
     governance::{
         Environment, Governance, HeapGrowthPotential, INITIAL_NEURON_DISSOLVE_DELAY,
         MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS, RandomnessGenerator,
-        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS, get_node_provider_reward,
+        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        get_node_provider_reward,
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
-        Account, AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
+        AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
         InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MonthlyNodeProviderRewards,
         Motion, NetworkEconomics, NeuronType, NeuronsFundData, NeuronsFundEconomics,
@@ -61,9 +60,9 @@ use ic_nns_governance::{
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
-        SettleNeuronsFundParticipationRequest, Subaccount as GovernanceSubaccount,
-        SwapBackgroundInformation, SwapParticipationLimits, Tally, Topic, UpdateNodeProvider,
-        Visibility, Vote, VotingPowerEconomics, WaitForQuietState,
+        SettleNeuronsFundParticipationRequest, SwapBackgroundInformation, SwapParticipationLimits,
+        Tally, Topic, UpdateNodeProvider, Visibility, Vote, VotingPowerEconomics,
+        WaitForQuietState,
         add_or_remove_node_provider::Change,
         governance::GovernanceCachedMetrics,
         governance_error::ErrorType::{
@@ -72,9 +71,9 @@ use ic_nns_governance::{
         install_code::CanisterInstallMode,
         manage_neuron::{
             self, ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
-            DisburseMaturity, DisburseToNeuron, Follow, IncreaseDissolveDelay, JoinCommunityFund,
-            LeaveCommunityFund, MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower,
-            SetVisibility, Spawn, Split, StartDissolving,
+            DisburseToNeuron, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
+            MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
+            StartDissolving,
             claim_or_refresh::{By, MemoAndController},
             configure::Operation,
             disburse::Amount,
@@ -85,6 +84,11 @@ use ic_nns_governance::{
         settle_neurons_fund_participation_request, swap_background_information,
     },
 };
+use ic_nns_governance::{
+    canister_state::{governance_mut, set_governance_for_tests},
+    pb::v1::{Account, Subaccount as GovernanceSubaccount, manage_neuron::DisburseMaturity},
+};
+use ic_nns_governance::{governance::RandomnessGenerator, pb::v1::manage_neuron::Follow};
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
     ListNeuronsResponse, ManageNeuronResponse, NeuronState,
@@ -126,10 +130,8 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
-use ic_nns_governance::{
-    governance::MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE, storage::reset_stable_memory,
-    timer_tasks::schedule_tasks,
-};
+use ic_nns_governance::storage::reset_stable_memory;
+use ic_nns_governance::timer_tasks::schedule_tasks;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 

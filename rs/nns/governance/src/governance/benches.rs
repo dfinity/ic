@@ -1,17 +1,20 @@
+use crate::benches_util::check_projected_instructions;
+use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
+use crate::pb::v1::{Motion, VotingPowerEconomics};
+use crate::test_utils::MockRandomness;
 use crate::{
-    benches_util::check_projected_instructions,
     governance::{
-        Governance, MAX_NUMBER_OF_NEURONS, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        Governance, MAX_NUMBER_OF_NEURONS,
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{
         Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
-        KnownNeuron, ListProposalInfo, Motion, NnsFunction, Proposal, ProposalData, Topic, Vote,
-        VotingPowerEconomics, install_code::CanisterInstallMode, proposal::Action,
+        KnownNeuron, ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        install_code::CanisterInstallMode, proposal::Action,
     },
-    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use canbench_rs::{BenchResult, bench, bench_fn};
 use futures::FutureExt;
@@ -29,7 +32,8 @@ use icp_ledger::Subaccount;
 use maplit::{btreemap, hashmap};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 enum SetUpStrategy {
     // Every neuron follows a single neuron.
