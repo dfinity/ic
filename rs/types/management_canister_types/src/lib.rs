@@ -3356,7 +3356,10 @@ impl FetchCanisterLogsRange {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum FetchCanisterLogsFilter {
+    #[serde(rename = "by_idx")]
     ByIdx(FetchCanisterLogsRange),
+
+    #[serde(rename = "by_timestamp_nanos")]
     ByTimestampNanos(FetchCanisterLogsRange),
 }
 
