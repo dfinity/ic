@@ -439,7 +439,6 @@ where
         self.main.len().min(usize::MAX as u64) as usize
     }
 
-    #[cfg(any(test, feature = "canbench-rs", feature = "tla"))]
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
     where
         R: RangeBounds<NeuronId> + Clone,

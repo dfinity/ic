@@ -211,6 +211,9 @@ thread_local! {
 
     static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_NEURON_INDEXES: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -276,6 +279,10 @@ pub fn temporarily_enable_deregister_known_neuron() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_deregister_known_neuron() -> Temporary {
     Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, false)
+}
+
+pub fn is_neuron_indexes_enabled() -> bool {
+    ENABLE_NEURON_INDEXES.get()
 }
 
 pub fn decoder_config() -> DecoderConfig {
