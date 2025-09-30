@@ -19,8 +19,6 @@ fn setup(env: TestEnv) {
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-
-    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 fn test(env: TestEnv) {
