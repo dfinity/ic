@@ -1433,6 +1433,7 @@ impl StateManagerImpl {
                 ReplicatedState::new(own_subnet_id, own_subnet_type),
             ),
         };
+        let started_height = Height::new(latest_state_height.load(Ordering::Relaxed));
 
         let snapshots: VecDeque<Snapshot> = std::iter::once(initial_snapshot)
             .chain(
@@ -1523,7 +1524,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
-            started_height: Height::new(latest_state_height.load(Ordering::Relaxed)),
+            started_height,
         }
     }
 
