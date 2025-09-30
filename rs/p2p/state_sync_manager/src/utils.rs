@@ -2,6 +2,7 @@ use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProxyDecodeError};
 use ic_types::NodeId;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Advert {
@@ -69,6 +70,44 @@ impl XorDistance {
             .for_each(|(lhs, rhs)| *lhs ^= rhs);
 
         Self(lhs_hash)
+    }
+}
+
+pub(crate) struct ChunksToDownload(BTreeMap<XorDistance, (ChunkId, bool)>);
+
+impl ChunksToDownload {
+    // Add chunks to the chunks to download list
+    pub(crate) fn add_chunks(
+        &mut self,
+        node_id: NodeId,
+        artifact_id: StateSyncArtifactId,
+        chunks: impl Iterator<Item = ChunkId>,
+    ) {
+        for chunk in chunks {
+            let xor_distance = XorDistance::new(node_id, artifact_id.clone(), chunk);
+            self.0.insert(xor_distance, (chunk, false));
+        }
+    }
+
+    pub(crate) fn next_chunk_to_download(&mut self) -> Option<ChunkId> {
+        let next_chunk = self
+            .0
+            .iter_mut()
+            .find(|(_, (_, downloading))| *downloading == false)?;
+
+        next_chunk.1.1 = true;
+        Some(next_chunk.1.0.clone())
+    }
+
+    pub(crate) fn download_finished(&mut self, chunk_id: ChunkId) {
+        if let Some(key) = self.0.iter().find(|(_, (chunk, _))| *chunk == chunk_id) {
+            let key = key.0.clone();
+            self.0.remove(&key);
+        }
+    }
+
+    pub(crate) fn next_xor_distance(&self) -> Option<XorDistance> {
+        self.0.first_key_value().map(|(key, _)| key.clone())
     }
 }
 
