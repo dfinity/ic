@@ -21,7 +21,7 @@ by `DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION` and other compilation limits.
 2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-compilation/benchmarks3a-embedders-compilation).
 3. ✅ Raw benchmark:
     * `bazel run //rs/embedders:compilation_bench`
-4. ✅ Benchmark script:
+4. ✅ Baseline comparison:
     * `INCLUDE=compilation ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
 TODO: There is no script to derive the cost based on benchmark results.
@@ -36,7 +36,7 @@ by `DEFAULT_DIRTY_PAGE_OVERHEAD` and other costs.
 2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-heap/benchmarks3a-embedders-heap).
 3. ✅ Raw benchmark:
     * `bazel run //rs/embedders:heap_bench`
-4. ✅ Benchmark script:
+4. ✅ Baseline comparison:
     * `INCLUDE=heap ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
 TODO: There is no script to derive the cost based on benchmark results.
@@ -52,7 +52,7 @@ etc.
 2. ❌ Results are not available in Grafana.
 3. ✅ Raw benchmark:
     * `bazel run //rs/execution_environment:management_canister_bench`
-4. ❌ Benchmark script is not available.
+4. ❌ Baseline is not available.
 
 TODO: The following scripts should be updated to use the `*.min` files.
 
@@ -70,7 +70,7 @@ by `DEFAULT_DIRTY_PAGE_OVERHEAD` and other costs.
 2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-stable-memory/benchmarks3a-embedders-stable-memory).
 3. ✅ Raw benchmark:
     * `bazel run //rs/embedders:stable_memory_bench`
-4. ✅ Benchmark script:
+4. ✅ Baseline comparison:
     * `INCLUDE=stable ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
 TODO: There is no script to derive the cost based on benchmark results.
@@ -90,7 +90,7 @@ the `system_api_complexity.rs` file.
     * Inspect messages: `bazel run //rs/execution_environment:execute_inspect_message_bench`
     * Queries: `bazel run //rs/execution_environment:execute_query_bench`
     * Updates: `bazel run //rs/execution_environment:execute_update_bench`
-4. ✅ Benchmark scripts:
+4. ✅ Baseline comparison:
     * Inspect messages: `INCLUDE=inspect ./rs/execution_environment/benches/run-all-benchmarks.sh`
     * Queries: `INCLUDE=query ./rs/execution_environment/benches/run-all-benchmarks.sh`
     * Updates: `INCLUDE=update ./rs/execution_environment/benches/run-all-benchmarks.sh`
@@ -110,7 +110,7 @@ Each Wasm instruction has its own weight set in the `instruction_to_cost()` func
 2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-wasm-instructions/benchmarks3a-wasm-instructions).
 3. ✅ Raw benchmark:
     * `bazel run //rs/execution_environment:wasm_instructions_bench`
-4. ✅ Benchmark script:
+4. ✅ Baseline comparison:
     * `INCLUDE=wasm ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
 TODO: The following scripts should be updated to use the `*.min` files.
