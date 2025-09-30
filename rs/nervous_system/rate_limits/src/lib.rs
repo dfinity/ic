@@ -352,10 +352,8 @@ pub struct Reservation<K: Clone + Ord> {
 
 impl<K: Clone + Ord> Drop for Reservation<K> {
     fn drop(&mut self) {
-        if let Some(mut reservations) = self
-            .reservations_map
-            .upgrade()
-            .and_then(|arc| arc.lock().ok())
+        if let Some(reservations_arc) = self.reservations_map.upgrade()
+            && let Ok(mut reservations) = reservations_arc.lock()
         {
             reservations.remove(&(self.key.clone(), self.index));
         }
