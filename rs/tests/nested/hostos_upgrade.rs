@@ -56,9 +56,6 @@ pub fn upgrade_hostos(env: TestEnv) {
     );
     assert_eq!(original_version.to_string(), check_hostos_version(&host));
 
-    info!(logger, "Waiting for replica to become healthy...");
-    host.await_status_is_healthy().unwrap();
-
     info!(logger, "Electing target HostOS version '{target_version}'");
     let nns_node = env
         .topology_snapshot()
@@ -121,12 +118,12 @@ pub fn upgrade_hostos(env: TestEnv) {
     )
     .unwrap();
 
+    info!(logger, "Waiting for Orchestrator dashboard...");
+    host.await_orchestrator_dashboard_accessible().unwrap();
+
     info!(logger, "Checking HostOS version after reboot");
     let new_version = check_hostos_version(&host);
     info!(logger, "Version found is: '{new_version}'");
 
     assert_eq!(new_version, target_version.to_string());
-
-    info!(logger, "Waiting for replica to become healthy...");
-    host.await_status_is_healthy().unwrap();
 }
