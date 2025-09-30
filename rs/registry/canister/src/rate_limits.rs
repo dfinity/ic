@@ -11,7 +11,7 @@ const MAX_SPIKE: u64 = MAX_AVG_OPERATIONS_PER_DAY * 7;
 const CAPACITY_ADD_INTERVAL_SECONDS: u64 = ONE_DAY_SECONDS / MAX_AVG_OPERATIONS_PER_DAY;
 
 thread_local! {
-    static NODE_OPERATOR_RATE_LIMITER: RefCell<
+    static NODE_PROVIDER_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
     > = RefCell::new(RateLimiter::new_stable(
         RateLimiterConfig {
@@ -30,5 +30,5 @@ thread_local! {
 pub fn with_node_operator_rate_limiter<R>(
     f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
 ) -> R {
-    NODE_OPERATOR_RATE_LIMITER.with_borrow_mut(f)
+    NODE_PROVIDER_RATE_LIMITER.with_borrow_mut(f)
 }

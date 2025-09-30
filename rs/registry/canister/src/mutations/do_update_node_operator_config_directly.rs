@@ -21,6 +21,15 @@ impl Registry {
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
     ) {
+        let caller = dfn_core::api::caller();
+        self.update_node_operator_config_directly_(caller, payload)
+    }
+
+    fn update_node_operator_config_directly_(
+        &mut self,
+        caller: PrincipalId,
+        payload: UpdateNodeOperatorConfigDirectlyPayload,
+    ) {
         println!("{LOG_PREFIX}do_update_node_operator_config_directly: {payload:?}");
 
         // 1. Look up the record of the requested target NodeOperatorRecord.
@@ -41,7 +50,6 @@ impl Registry {
             NodeOperatorRecord::decode(node_operator_record_vec.as_slice()).unwrap();
 
         // 2. Make sure that the caller is authorized to make the requested changes to node_operator_record.
-        let caller = dfn_core::api::caller();
         assert_eq!(
             caller,
             PrincipalId::try_from(&node_operator_record.node_provider_principal_id).unwrap()
