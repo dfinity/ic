@@ -71,6 +71,7 @@ fn decoder_config() -> DecoderConfig {
 pub enum Method {
     CanisterStatus,
     CanisterInfo,
+    CanisterMetadata,
     CreateCanister,
     DeleteCanister,
     DepositCycles,
@@ -717,6 +718,62 @@ impl CanisterInfoResponse {
 }
 
 impl Payload<'_> for CanisterInfoResponse {}
+
+/// `CandidType` for `CanisterMetadataRequest`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   name : text;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterMetadataRequest {
+    canister_id: PrincipalId,
+    name: String,
+}
+
+impl CanisterMetadataRequest {
+    pub fn new(canister_id: CanisterId, name: String) -> CanisterMetadataRequest {
+        CanisterMetadataRequest {
+            canister_id: canister_id.into(),
+            name,
+        }
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Payload<'_> for CanisterMetadataRequest {}
+
+/// `CandidType` for `CanisterMetadataResponse`
+/// ```text
+/// record {
+///   value : blob;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterMetadataResponse {
+    #[serde(with = "serde_bytes")]
+    value: Vec<u8>,
+}
+
+impl CanisterMetadataResponse {
+    pub fn new(value: Vec<u8>) -> Self {
+        Self { value }
+    }
+
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+}
+
+impl Payload<'_> for CanisterMetadataResponse {}
 
 impl From<&CanisterChangeOrigin> for pb_canister_state_bits::canister_change::ChangeOrigin {
     fn from(item: &CanisterChangeOrigin) -> Self {
