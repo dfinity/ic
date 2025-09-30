@@ -308,10 +308,12 @@ impl From<RateLimiterError> for GovernanceError {
             RateLimiterError::NotEnoughCapacity => {
                 "Reached maximum number of neurons that can be created in this hour. \
                     Please wait and try again later."
+                    .to_string()
             }
-            RateLimiterError::InvalidArguments(e) => "Rate Limit Error: {e}",
+            RateLimiterError::InvalidArguments(e) => format!("Rate Limit Error: {e}"),
             RateLimiterError::MaxReservationsReached => {
                 "Reached maximum number of neuron creation reservations.  This should not happen."
+                    .to_string()
             }
         };
 
@@ -1560,7 +1562,6 @@ fn new_rate_limiter() -> InMemoryRateLimiter<String> {
             add_capacity_amount: 1,
             add_capacity_interval: Duration::from_secs(MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE),
             max_capacity: MAX_NEURON_CREATION_SPIKE,
-            reservation_timeout: Duration::from_secs(10 * 60),
             // It should not be possible to have more than MAX_NEURON_CREATION_SPIKE_RESERVATIONS
             // because there is only one reservation space being used.
             // But we don't want to hit that error, so we add an extra one.
