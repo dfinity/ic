@@ -48,6 +48,10 @@ pub fn upgrade_guestos(env: TestEnv) {
 
     registration(env.clone());
 
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+
     let guest_ipv6 = env
         .get_nested_vm(HOST_VM_NAME)
         .expect("Unable to find HostOS node.")
@@ -94,6 +98,8 @@ pub fn upgrade_guestos(env: TestEnv) {
         .await
         .expect("guest didn't come up as expected");
 
+        host.await_status_is_healthy().unwrap();
+
         // elect the target GuestOS version
         elect_guestos_version(
             &nns_node,
@@ -128,5 +134,8 @@ pub fn upgrade_guestos(env: TestEnv) {
         )
         .await
         .expect("guest failed to upgrade");
+
+        info!(logger, "Waiting for replica to become healthy...");
+        host.await_status_is_healthy().unwrap();
     });
 }
