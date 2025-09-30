@@ -2545,9 +2545,14 @@ impl Governance {
         }
 
         // Commit the usage from reservation now that we are not going to remove the neuron
-        self.rate_limiter
+        if let Err(e) = self
+            .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
-            .expect("Reservation should not be missing");
+        {
+            println!(
+                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
+            );
+        }
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
         let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
@@ -3277,9 +3282,14 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        self.rate_limiter
+        if let Err(e) = self
+            .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
-            .expect("Reservation should not be missing");
+        {
+            println!(
+                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
+            );
+        }
 
         // Get the neurons again, but this time mutable references.
         self.with_neuron_mut(id, |parent_neuron| {
@@ -6197,9 +6207,14 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        self.rate_limiter
+        if let Err(e) = self
+            .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
-            .expect("Reservation should not be missing");
+        {
+            println!(
+                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
+            );
+        }
 
         let result = self.with_neuron_mut(&nid, |neuron| {
             // Adjust the stake.
