@@ -352,10 +352,11 @@ pub struct Reservation<K: Clone + Ord> {
 
 impl<K: Clone + Ord> Drop for Reservation<K> {
     fn drop(&mut self) {
-        if let Some(reservations_arc) = self.reservations_map.upgrade()
-            && let Ok(mut reservations) = reservations_arc.lock()
-        {
-            reservations.remove(&(self.key.clone(), self.index));
+        #[allow(clippy::collapsible_if)]
+        if let Some(reservations_arc) = self.reservations_map.upgrade() {
+            if let Ok(mut reservations) = reservations_arc.lock() {
+                reservations.remove(&(self.key.clone(), self.index));
+            }
         }
     }
 }
