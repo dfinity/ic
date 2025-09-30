@@ -49,7 +49,7 @@ impl NestedNodes {
         NestedNodes {
             nodes: names
                 .iter()
-                .map(|v| NestedNode::new(v.as_ref().to_string(), vm_resources.clone()))
+                .map(|v| NestedNode::new(v.as_ref().to_string(), vm_resources))
                 .collect(),
         }
     }
