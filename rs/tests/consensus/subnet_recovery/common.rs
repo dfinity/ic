@@ -53,18 +53,18 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     NodeMetrics, Recovery, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
+    get_node_metrics,
     steps::Step,
     util::DataLocation,
 };
-use ic_recovery::{file_sync_helper, get_node_metrics};
 use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env_api::scp_send_to;
+use ic_system_test_driver::driver::{constants::SSH_USERNAME, test_env::SshKeyGen};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
 use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
@@ -86,6 +86,8 @@ const APP_NODES_LARGE: usize = 37;
 /// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
+
+const READONLY_USERNAME: &str = "readonly";
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 
@@ -422,10 +424,15 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
-    let ssh_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
-    let readonly_pub_key =
-        file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(SSH_USERNAME))
-            .expect("Couldn't read public key");
+    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
+
+    // Generate a new readonly keypair
+    env.ssh_keygen(READONLY_USERNAME)
+        .expect("ssh-keygen failed for readonly key");
+    let ssh_readonly_priv_key_path = ssh_authorized_priv_keys_dir.join(READONLY_USERNAME);
+    let ssh_readonly_pub_key_path = ssh_authorized_pub_keys_dir.join(READONLY_USERNAME);
+    let ssh_readonly_pub_key = std::fs::read_to_string(&ssh_readonly_pub_key_path)
+        .expect("Failed to read readonly SSH public key");
 
     let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
@@ -434,7 +441,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
         replica_version: Some(initial_version.clone()),
-        admin_key_file: Some(ssh_priv_key_path.clone()),
+        admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: cfg.local_recovery,
@@ -471,8 +478,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
-        readonly_pub_key: (!cfg.corrupt_cup).then_some(readonly_pub_key),
-        readonly_key_file: Some(ssh_priv_key_path),
+        readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
+        readonly_key_file: Some(ssh_readonly_priv_key_path),
         download_method: None, // We will set this after breaking/halting the subnet, see below
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
