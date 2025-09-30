@@ -16,7 +16,7 @@ include!(concat!(env!("OUT_DIR"), "/ic_config_template.rs"));
 pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) -> Result<()> {
     let template = get_config_vars(guestos_config)?;
 
-    let output_content = template.render().context("Failed to render template")?;
+    let output_content = render_ic_config(template)?;
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
@@ -42,26 +42,11 @@ pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) ->
     Ok(())
 }
 
-/// Generate a dummy replica config with placeholder values for testing purposes.
-pub fn generate_dummy_ic_config() -> String {
-    let template = IcConfigTemplate {
-        ipv6_address: "::".to_string(),
-        ipv6_prefix: "::/64".to_string(),
-        ipv4_address: "".to_string(),
-        ipv4_gateway: "".to_string(),
-        nns_urls: "http://www.fakeurl.com/".to_string(),
-        backup_retention_time_secs: "0".to_string(),
-        backup_purging_interval_secs: "0".to_string(),
-        query_stats_epoch_length: "600".to_string(),
-        jaeger_addr: "".to_string(),
-        domain_name: "".to_string(),
-        node_reward_type: "".to_string(),
-        malicious_behavior: "null".to_string(),
-    };
-
+/// Render IC configuration from template.
+pub fn render_ic_config(template: IcConfigTemplate) -> Result<String> {
     template
         .render()
-        .expect("Failed to render dummy config template")
+        .context("Failed to render config template")
 }
 
 fn generate_ipv6_prefix(ipv6_address: &str) -> String {
@@ -331,7 +316,7 @@ mod tests {
     fn test_template_substitution_with_default_config() {
         let guestos_config = create_test_guestos_config();
         let template = get_config_vars(&guestos_config).unwrap();
-        let output_content = template.render().unwrap();
+        let output_content = render_ic_config(template).unwrap();
 
         // Verify that all placeholders were replaced
         assert!(!output_content.contains("{{ ipv6_address }}"));

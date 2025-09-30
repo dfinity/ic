@@ -1514,7 +1514,23 @@ pub fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    let ic_json = config::guestos::generate_ic_config::generate_dummy_ic_config();
+    let template = config::guestos::generate_ic_config::IcConfigTemplate {
+        ipv6_address: "::".to_string(),
+        ipv6_prefix: "::/64".to_string(),
+        ipv4_address: "".to_string(),
+        ipv4_gateway: "".to_string(),
+        nns_urls: "http://www.fakeurl.com/".to_string(),
+        backup_retention_time_secs: "0".to_string(),
+        backup_purging_interval_secs: "0".to_string(),
+        query_stats_epoch_length: "600".to_string(),
+        jaeger_addr: "".to_string(),
+        domain_name: "".to_string(),
+        node_reward_type: "".to_string(),
+        malicious_behavior: "null".to_string(),
+    };
+
+    let ic_json = config::guestos::generate_ic_config::render_ic_config(template)
+        .expect("Failed to render config template");
     ConfigSource::Literal(ic_json)
         .load()
         .expect("Failed to parse dummy config")
