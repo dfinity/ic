@@ -33,6 +33,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_binary_size: Histogram,
     pub(super) canister_log_memory_usage: Histogram, // TODO(EXC-1722): remove after migrating to v2.
     pub(super) canister_log_memory_usage_v2: Histogram,
+    pub(super) canister_log_memory_usage_v3: Histogram,
+    pub(super) canister_log_delta_memory_usage: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -137,6 +139,7 @@ pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
+const GIB: u64 = 1024 * MIB;
 
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -185,6 +188,57 @@ impl SchedulerMetrics {
                     2 * MIB,
                     5 * MIB,
                     10 * MIB,
+                ])
+            ),
+            canister_log_memory_usage_v3: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v3",
+                "Canisters log memory usage distribution in bytes.",
+                unique_sorted_buckets(&[
+                    0,
+                    KIB,
+                    2 * KIB,
+                    5 * KIB,
+                    10 * KIB,
+                    20 * KIB,
+                    50 * KIB,
+                    100 * KIB,
+                    200 * KIB,
+                    500 * KIB,
+                    MIB,
+                    2 * MIB,
+                    5 * MIB,
+                    10 * MIB,
+                    20 * MIB,
+                    50 * MIB,
+                    100 * MIB,
+                    200 * MIB,
+                    500 * MIB,
+                    GIB,
+                    2 * GIB,
+                    5 * GIB,
+                    10 * GIB,
+                ])
+            ),
+            canister_log_delta_memory_usage: metrics_registry.histogram(
+                "canister_log_delta_memory_usage_bytes",
+                "Canisters log delta (per single execution) memory usage distribution in bytes.",
+                unique_sorted_buckets(&[
+                    0,
+                    KIB,
+                    2 * KIB,
+                    5 * KIB,
+                    10 * KIB,
+                    20 * KIB,
+                    50 * KIB,
+                    100 * KIB,
+                    200 * KIB,
+                    500 * KIB,
+                    MIB,
+                    2 * MIB,
+                    5 * MIB,
+                    10 * MIB,
+                    20 * MIB,
+                    50 * MIB,
                 ])
             ),
             canister_wasm_memory_usage: memory_histogram(
