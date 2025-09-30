@@ -507,7 +507,7 @@ impl SystemStateModifications {
             system_state.global_timer = new_global_timer;
         }
 
-        // Append canister log.
+        // Append delta log to the total canister log.
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
