@@ -132,7 +132,7 @@ impl OngoingStateSync {
                         info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
                         e.insert(0);
                         self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
-                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
+                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
                     }
                 }
                 Some(download_result) = self.downloading_chunks.join_next() => {
@@ -145,9 +145,9 @@ impl OngoingStateSync {
                             // 5-10min when state sync restarts.
                             self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
                             self.handle_downloaded_chunk_result(result);
-                            self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
+                            self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
 
-                            self.chunks_to_download.download_finished(chunk);
+                            self.chunks_to_download.download_finished(chunk).await;
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -213,7 +213,7 @@ impl OngoingStateSync {
         }
     }
 
-    fn spawn_chunk_downloads<T: 'static + Send>(
+    async fn spawn_chunk_downloads<T: 'static + Send>(
         &mut self,
         cancellation: CancellationToken,
         tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
@@ -241,7 +241,7 @@ impl OngoingStateSync {
         }
         let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
         for _ in 0..available_download_capacity {
-            match self.chunks_to_download.next_chunk_to_download() {
+            match self.chunks_to_download.next_chunk_to_download().await {
                 Some(chunk) if !self.downloading_chunks.contains(&chunk) => {
                     // Select random peer weighted proportional to active downloads.
                     // Peers with less active downloads are more likely to be selected.
@@ -274,11 +274,11 @@ impl OngoingStateSync {
                         .chunks_to_download()
                         .filter(|chunk| !self.downloading_chunks.contains(chunk));
 
-                    let added = self.chunks_to_download.add_chunks(
-                        self.node_id,
-                        self.artifact_id.clone(),
-                        chunks_to_download,
-                    );
+                    let added = self
+                        .chunks_to_download
+                        .clone()
+                        .add_chunks(self.node_id, self.artifact_id.clone(), chunks_to_download)
+                        .await;
 
                     self.metrics.chunks_to_download_calls_total.inc();
                     self.metrics.chunks_to_download_total.inc_by(added as u64);

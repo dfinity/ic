@@ -64,7 +64,7 @@ pub trait Chunkable<T> {
     /// Returns the remaining chunks needed to complete the state sync.
     /// The list is dynamic and may change over time based on addition of new chunks.
     /// The function will return empty iff the corresponding state sync is completed.
-    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
+    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId> + Send>;
     /// Delivers the corresponding chunk.
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
 }
