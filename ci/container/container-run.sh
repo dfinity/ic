@@ -93,6 +93,7 @@ PODMAN_RUN_ARGS=(
 
     -u "$(id -u):$(id -g)"
     -e HOSTUSER="$USER"
+    -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
