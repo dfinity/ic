@@ -540,7 +540,6 @@ fn run_fetch_canister_logs_with_filtering_test(
             canister_id: canister_a.into(),
             filter_by_idx: Some(index_range),
             filter_by_timestamp_nanos: Some(timestamp_range),
-            ..Default::default()
         },
     };
     let result = env.query_as(
