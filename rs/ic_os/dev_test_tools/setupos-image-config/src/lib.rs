@@ -1,76 +1,15 @@
-use anyhow::{Context, Error, bail};
-use clap::Args;
 use std::{
     assert,
     fs::{self, File},
     io::Write,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::Ipv6Addr,
     path::Path,
 };
-use url::Url;
+
+use anyhow::{Context, Error, bail};
 
 use config::setupos::config_ini::ConfigIniSettings;
 use config::setupos::deployment_json::DeploymentSettings;
-use config_types::DeploymentEnvironment;
-
-#[derive(Args)]
-pub struct ConfigIni {
-    #[arg(long)]
-    pub node_reward_type: Option<String>,
-
-    #[arg(long)]
-    pub ipv6_prefix: String,
-
-    #[arg(long)]
-    pub ipv6_prefix_length: u8,
-
-    #[arg(long)]
-    pub ipv6_gateway: Ipv6Addr,
-
-    #[arg(long)]
-    pub ipv4_address: Option<Ipv4Addr>,
-
-    #[arg(long)]
-    pub ipv4_gateway: Option<Ipv4Addr>,
-
-    #[arg(long)]
-    pub ipv4_prefix_length: Option<u8>,
-
-    #[arg(long)]
-    pub domain_name: Option<String>,
-
-    #[arg(long)]
-    pub enable_trusted_execution_environment: bool,
-
-    #[arg(long)]
-    pub verbose: bool,
-}
-
-#[derive(Args)]
-pub struct DeploymentConfig {
-    #[arg(long)]
-    pub nns_urls: Option<Url>,
-
-    #[arg(long, allow_hyphen_values = true)]
-    pub nns_public_key_override: Option<String>,
-
-    #[arg(long)]
-    pub memory_gb: Option<u32>,
-
-    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
-    #[arg(long)]
-    pub cpu: Option<String>,
-
-    /// If None, is treated as 64.
-    #[arg(long)]
-    pub nr_of_vcpus: Option<u32>,
-
-    #[arg(long)]
-    pub mgmt_mac: Option<String>,
-
-    #[arg(long)]
-    pub deployment_environment: Option<DeploymentEnvironment>,
-}
 
 pub fn create_setupos_config(
     config_dir: &Path,
@@ -165,55 +104,6 @@ pub fn write_config(path: &Path, cfg: &ConfigIniSettings) -> Result<(), Error> {
     )?;
 
     writeln!(&mut f, "verbose={verbose}")?;
-
-    Ok(())
-}
-
-pub fn write_public_keys(path: &Path, ks: Vec<String>) -> Result<(), Error> {
-    let mut f = File::create(path).context("failed to create public keys file")?;
-
-    for k in ks {
-        writeln!(&mut f, "{k}")?;
-    }
-
-    Ok(())
-}
-
-pub fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
-    let mut deployment_json = {
-        let f = File::open(path).context("failed to open deployment config file")?;
-        let deployment_json: DeploymentSettings = serde_json::from_reader(f)?;
-
-        deployment_json
-    };
-
-    if let Some(mgmt_mac) = &cfg.mgmt_mac {
-        deployment_json.deployment.mgmt_mac = Some(mgmt_mac.to_owned());
-    }
-
-    if let Some(nns_urls) = &cfg.nns_urls {
-        deployment_json.nns.urls = vec![nns_urls.clone()];
-    }
-
-    if let Some(memory) = cfg.memory_gb {
-        deployment_json.vm_resources.memory = memory;
-    }
-
-    if let Some(cpu) = &cfg.cpu {
-        deployment_json.vm_resources.cpu = cpu.to_owned();
-    }
-
-    if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
-        deployment_json.vm_resources.nr_of_vcpus = nr_of_vcpus.to_owned();
-    }
-
-    if let Some(deployment_environment) = &cfg.deployment_environment {
-        deployment_json.deployment.deployment_environment = deployment_environment.to_owned();
-    }
-
-    let mut f = File::create(path).context("failed to open deployment config file")?;
-    let output = serde_json::to_string_pretty(&deployment_json)?;
-    write!(&mut f, "{output}")?;
 
     Ok(())
 }

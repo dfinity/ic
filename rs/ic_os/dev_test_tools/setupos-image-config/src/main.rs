@@ -1,19 +1,21 @@
 use std::os::unix::fs::PermissionsExt;
 use std::{
-    fs::{self, Permissions},
+    fs::{self, File, Permissions},
     io::Write,
+    net::{Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Error};
-use clap::Parser;
+use clap::{Args, Parser};
 use config::setupos::config_ini::ConfigIniSettings;
 use tempfile::NamedTempFile;
+use url::Url;
 
+use config::setupos::deployment_json::DeploymentSettings;
+use config_types::DeploymentEnvironment;
 use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
-use setupos_image_config::{
-    ConfigIni, DeploymentConfig, update_deployment, write_config, write_public_keys,
-};
+use setupos_image_config::write_config;
 
 #[derive(Parser)]
 #[command(name = "setupos-inject-config")]
@@ -35,6 +37,114 @@ struct Cli {
 
     #[command(flatten)]
     deployment: DeploymentConfig,
+}
+
+#[derive(Args)]
+struct ConfigIni {
+    #[arg(long)]
+    node_reward_type: Option<String>,
+
+    #[arg(long)]
+    ipv6_prefix: String,
+
+    #[arg(long)]
+    ipv6_prefix_length: u8,
+
+    #[arg(long)]
+    ipv6_gateway: Ipv6Addr,
+
+    #[arg(long)]
+    ipv4_address: Option<Ipv4Addr>,
+
+    #[arg(long)]
+    ipv4_gateway: Option<Ipv4Addr>,
+
+    #[arg(long)]
+    ipv4_prefix_length: Option<u8>,
+
+    #[arg(long)]
+    domain_name: Option<String>,
+
+    #[arg(long)]
+    enable_trusted_execution_environment: bool,
+
+    #[arg(long)]
+    verbose: bool,
+}
+
+#[derive(Args)]
+struct DeploymentConfig {
+    #[arg(long)]
+    nns_urls: Option<Url>,
+
+    #[arg(long, allow_hyphen_values = true)]
+    nns_public_key_override: Option<String>,
+
+    #[arg(long)]
+    memory_gb: Option<u32>,
+
+    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
+    #[arg(long)]
+    cpu: Option<String>,
+
+    /// If None, is treated as 64.
+    #[arg(long)]
+    nr_of_vcpus: Option<u32>,
+
+    #[arg(long)]
+    mgmt_mac: Option<String>,
+
+    #[arg(long)]
+    deployment_environment: Option<DeploymentEnvironment>,
+}
+
+fn write_public_keys(path: &Path, ks: Vec<String>) -> Result<(), Error> {
+    let mut f = File::create(path).context("failed to create public keys file")?;
+
+    for k in ks {
+        writeln!(&mut f, "{k}")?;
+    }
+
+    Ok(())
+}
+
+fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
+    let mut deployment_json = {
+        let f = File::open(path).context("failed to open deployment config file")?;
+        let deployment_json: DeploymentSettings = serde_json::from_reader(f)?;
+
+        deployment_json
+    };
+
+    if let Some(mgmt_mac) = &cfg.mgmt_mac {
+        deployment_json.deployment.mgmt_mac = Some(mgmt_mac.to_owned());
+    }
+
+    if let Some(nns_urls) = &cfg.nns_urls {
+        deployment_json.nns.urls = vec![nns_urls.clone()];
+    }
+
+    if let Some(memory) = cfg.memory_gb {
+        deployment_json.vm_resources.memory = memory;
+    }
+
+    if let Some(cpu) = &cfg.cpu {
+        deployment_json.vm_resources.cpu = cpu.to_owned();
+    }
+
+    if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
+        deployment_json.vm_resources.nr_of_vcpus = nr_of_vcpus.to_owned();
+    }
+
+    if let Some(deployment_environment) = &cfg.deployment_environment {
+        deployment_json.deployment.deployment_environment = deployment_environment.to_owned();
+    }
+
+    let mut f = File::create(path).context("failed to open deployment config file")?;
+    let output = serde_json::to_string_pretty(&deployment_json)?;
+    write!(&mut f, "{output}")?;
+
+    Ok(())
 }
 
 #[tokio::main]

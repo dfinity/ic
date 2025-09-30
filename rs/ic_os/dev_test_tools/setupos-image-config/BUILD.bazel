@@ -14,9 +14,7 @@ rust_library(
         "//rs/ic_os/config:config_lib_dev",
         "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
-        "@crate_index//:clap",
         "@crate_index//:serde_json",
-        "@crate_index//:url",
     ],
 )
 
@@ -32,9 +30,12 @@ rust_binary(
         ":setupos-image-config",
         "//rs/ic_os/build_tools/partition_tools",
         "//rs/ic_os/config:config_lib_dev",
+        "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
+        "@crate_index//:serde_json",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )
