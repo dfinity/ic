@@ -70,8 +70,10 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
             min_confirmations: args.min_confirmations,
             mode: args.mode,
             check_fee: Some(0),
+            #[allow(deprecated)]
             kyt_fee: None,
             btc_checker_principal: None,
+            #[allow(deprecated)]
             kyt_principal: None,
             get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
         }

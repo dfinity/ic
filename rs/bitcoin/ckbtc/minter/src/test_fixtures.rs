@@ -1,5 +1,5 @@
 use crate::lifecycle::init::InitArgs;
-use crate::{ECDSAPublicKey, GetUtxosResponse, Network, Timestamp, lifecycle, IC_CANISTER_RUNTIME};
+use crate::{ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp, lifecycle};
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};

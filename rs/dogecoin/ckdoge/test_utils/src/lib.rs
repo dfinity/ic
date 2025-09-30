@@ -22,7 +22,7 @@ pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
 pub struct Setup {
     env: Arc<PocketIc>,
     minter: CanisterId,
-    ledger: CanisterId,
+    _ledger: CanisterId,
 }
 
 impl Setup {
@@ -116,7 +116,7 @@ impl Setup {
         Self {
             env,
             minter,
-            ledger,
+            _ledger: ledger,
         }
     }
 
