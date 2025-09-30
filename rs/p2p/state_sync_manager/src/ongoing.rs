@@ -16,12 +16,6 @@ use crate::{
     routes::{build_chunk_handler_request, parse_chunk_handler_response},
     utils::ChunksToDownload,
 };
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-
 use ic_base_types::NodeId;
 use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
@@ -32,7 +26,13 @@ use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::SmallRng,
 };
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    sync::Arc,
+    time::Duration,
+};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tokio::{
     runtime::Handle,
     select,
@@ -270,7 +270,7 @@ impl OngoingStateSync {
                     // by filtering with the current in flight request we avoid double download.
                     let chunks_to_download = tracker
                         .lock()
-                        .unwrap()
+                        .await
                         .chunks_to_download()
                         .filter(|chunk| !self.downloading_chunks.contains(chunk));
 
@@ -329,9 +329,9 @@ impl OngoingStateSync {
             }
         };
 
+        let mut tracker_guard = tracker.clone().lock_owned().await;
         let result = tokio::task::spawn_blocking(move || {
             let chunk = parse_chunk_handler_response(response, chunk_id, metrics)?;
-            let mut tracker_guard = tracker.lock().unwrap();
             tracker_guard.add_chunk(chunk_id, chunk).map_err(|err| {
                 DownloadChunkError::RequestError {
                     chunk_id,

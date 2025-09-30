@@ -15,11 +15,7 @@
 //!    - There is only ever one active state sync.
 //!    - State sync is started for the advert that returned FETCH.
 //!    - State advert is periodically broadcasted and there is no delivery guarantee.
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-
+use crate::utils::Advert;
 use axum::{Router, routing::any};
 use futures::future::join_all;
 use ic_base_types::NodeId;
@@ -33,10 +29,9 @@ use routes::{
     STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH, StateSyncAdvertHandler, StateSyncChunkHandler,
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
 };
-use tokio::{runtime::Handle, select, task::JoinSet, time::MissedTickBehavior};
+use std::{sync::Arc, time::Duration};
+use tokio::{runtime::Handle, select, sync::Mutex, task::JoinSet, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
-
-use crate::utils::Advert;
 
 mod metrics;
 mod ongoing;
