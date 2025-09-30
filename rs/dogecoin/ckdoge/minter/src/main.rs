@@ -104,8 +104,7 @@ fn check_candid_interface_compatibility() {
     let new_interface = __export_service();
 
     // check the public interface against the actual one
-    let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("ckdoge_minter.did");
+    let old_interface = std::path::PathBuf::from(std::env::var("CANDID_FILE_PATH").unwrap());
     let old_interface_content = std::fs::read_to_string(&old_interface)
         .unwrap_or_else(|e| panic!("Failed to read interface file {:?}: {}", old_interface, e));
 

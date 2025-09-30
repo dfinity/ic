@@ -68,7 +68,7 @@ rust_test(
     crate = ":_wasm_ckdoge_minter",
     data = [":ckdoge_minter.did"],
     env = {
-        "CARGO_MANIFEST_DIR": "rs/dogecoin/ckdoge/minter",
+        "CANDID_FILE_PATH": "$(rootpath :ckdoge_minter.did)",
     },
     deps = [
         # Keep sorted.
@@ -84,7 +84,6 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     ],
     env = {
-        "CARGO_MANIFEST_DIR": "rs/dogecoin/ckdoge/minter",
         "IC_CKDOGE_MINTER_WASM_PATH": "$(rootpath :ckdoge_minter_debug.wasm.gz)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
