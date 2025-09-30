@@ -65,27 +65,22 @@ fn filter_records(
     args: &FetchCanisterLogsRequest,
     records: &VecDeque<CanisterLogRecord>,
 ) -> Result<Vec<CanisterLogRecord>, UserError> {
-    match &args.filter {
-        Some(FetchCanisterLogsFilter::ByIdx(range)) => {
-            if range.is_empty() {
-                return Ok(vec![]);
-            }
-            Ok(records
-                .iter()
-                .filter(|r| range.contains(r.idx))
-                .cloned()
-                .collect())
-        }
-        Some(FetchCanisterLogsFilter::ByTimestampNanos(range)) => {
-            if range.is_empty() {
-                return Ok(vec![]);
-            }
-            Ok(records
-                .iter()
-                .filter(|r| range.contains(r.timestamp_nanos))
-                .cloned()
-                .collect())
-        }
-        None => Ok(records.iter().cloned().collect()),
+    let Some(filter) = &args.filter else {
+        return Ok(records.iter().cloned().collect());
+    };
+
+    let (range, key): (&Range, fn(&CanisterLogRecord) -> u64) = match filter {
+        FetchCanisterLogsFilter::ByIdx(r) => (r, |rec| rec.idx),
+        FetchCanisterLogsFilter::ByTimestampNanos(r) => (r, |rec| rec.timestamp_nanos),
+    };
+
+    if range.is_empty() {
+        return Ok(Vec::new());
     }
+
+    Ok(records
+        .iter()
+        .filter(|r| range.contains(key(r)))
+        .cloned()
+        .collect())
 }
