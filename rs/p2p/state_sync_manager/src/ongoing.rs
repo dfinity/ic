@@ -32,7 +32,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::{
     runtime::Handle,
     select,
@@ -59,6 +59,7 @@ struct OngoingStateSync {
     // Download management
     allowed_downloads: usize,
     chunks_to_download: ChunksToDownload,
+    partial_state: Arc<RwLock<Option<XorDistance>>>,
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
 }
@@ -66,6 +67,7 @@ struct OngoingStateSync {
 pub(crate) struct OngoingStateSyncHandle {
     pub sender: Sender<(NodeId, Option<XorDistance>)>,
     pub artifact_id: StateSyncArtifactId,
+    pub partial_state: Arc<RwLock<Option<XorDistance>>>,
     pub shutdown: Shutdown,
 }
 
@@ -84,6 +86,8 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     transport: Arc<dyn Transport>,
 ) -> OngoingStateSyncHandle {
     let (new_peers_tx, new_peers_rx) = tokio::sync::mpsc::channel(ONGOING_STATE_SYNC_CHANNEL_SIZE);
+    let partial_state = Arc::new(RwLock::new(None));
+
     let ongoing = OngoingStateSync {
         log,
         rt: rt.clone(),
@@ -95,6 +99,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         active_downloads: HashMap::new(),
         allowed_downloads: 0,
         chunks_to_download: ChunksToDownload::new(),
+        partial_state: partial_state.clone(),
         downloading_chunks: JoinMap::new(),
     };
 
@@ -106,6 +111,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     OngoingStateSyncHandle {
         sender: new_peers_tx,
         artifact_id,
+        partial_state,
         shutdown,
     }
 }
@@ -148,6 +154,9 @@ impl OngoingStateSync {
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
 
                             self.chunks_to_download.download_finished(chunk).await;
+                            let new_partial_state = self.chunks_to_download.next_xor_distance().await;
+                            *self.partial_state.write().await = new_partial_state;
+
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.

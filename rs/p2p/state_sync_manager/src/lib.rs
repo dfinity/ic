@@ -15,11 +15,11 @@
 //!    - There is only ever one active state sync.
 //!    - State sync is started for the advert that returned FETCH.
 //!    - State advert is periodically broadcasted and there is no delivery guarantee.
-use crate::utils::Advert;
+use crate::utils::{Advert, XorDistance};
 use axum::{Router, routing::any};
 use futures::future::join_all;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{StateSyncArtifactId, StateSyncClient};
 use ic_logger::{ReplicaLogger, info};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{Shutdown, Transport};
@@ -114,16 +114,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 }
                 // Make sure we only have one active advertise task.
                 _ = interval.tick(), if advertise_task.is_empty() => {
-                    advertise_task.spawn_on(
-                        Self::send_state_adverts(
-                            self.rt.clone(),
-                            self.state_sync.clone(),
-                            transport.clone(),
-                            self.metrics.clone(),
-                            cancellation.clone(),
-                        ),
-                        &self.rt
-                    );
+                  self.send_adverts(&mut advertise_task, cancellation.clone(), transport.clone()).await;
                 },
                 Some((advert, peer_id)) = self.advert_receiver.recv() =>{
                     self.handle_advert(advert, peer_id, transport.clone()).await;
@@ -135,6 +126,36 @@ impl<T: 'static + Send> StateSyncManager<T> {
         if let Some(ongoing_state_sync) = self.ongoing_state_sync.take() {
             let _ = ongoing_state_sync.shutdown.shutdown().await;
         }
+    }
+
+    async fn send_adverts(
+        &mut self,
+        advertise_task: &mut JoinSet<()>,
+        cancellation: CancellationToken,
+        transport: Arc<dyn Transport>,
+    ) {
+        let partial_state = if let Some(state_sync) = &self.ongoing_state_sync {
+            state_sync
+                .partial_state
+                .read()
+                .await
+                .as_ref()
+                .map(|distance| (state_sync.artifact_id.clone(), distance.clone()))
+        } else {
+            None
+        };
+
+        advertise_task.spawn_on(
+            Self::send_state_adverts(
+                self.rt.clone(),
+                partial_state,
+                self.state_sync.clone(),
+                transport,
+                self.metrics.clone(),
+                cancellation,
+            ),
+            &self.rt,
+        );
     }
 
     async fn handle_advert(
@@ -205,6 +226,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
     // The future should be cancelled and awaited instead of aborted in order to guarantee a graceful shutdown.
     async fn send_state_adverts(
         rt: Handle,
+        partial_state: Option<(StateSyncArtifactId, XorDistance)>,
         state_sync: Arc<dyn StateSyncClient<Message = T>>,
         transport: Arc<dyn Transport>,
         metrics: StateSyncManagerMetrics,
