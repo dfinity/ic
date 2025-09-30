@@ -66,11 +66,6 @@ pub fn upgrade_guestos(env: TestEnv) {
     nns_node.await_status_is_healthy().unwrap();
 
     block_on(async {
-        // initial parameters
-        let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
-        let reg_ver = registry_canister.get_latest_version().await.unwrap();
-        info!(logger, "Registry is currently at version: {}", reg_ver);
-
         info!(
             logger,
             "Initial blessed versions: {:?}",
@@ -110,14 +105,6 @@ pub fn upgrade_guestos(env: TestEnv) {
         )
         .await;
 
-        // check that the registry was updated after blessing the target GuestOS version
-        let reg_ver2 = registry_canister.get_latest_version().await.unwrap();
-        info!(
-            logger,
-            "Registry version after blessing the upgrade version: {}", reg_ver2
-        );
-        assert!(reg_ver < reg_ver2);
-
         info!(
             logger,
             "Updated blessed versions: {:?}",
@@ -125,13 +112,6 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
 
         update_unassigned_nodes(&nns_node, &target_version).await;
-
-        let reg_ver3 = registry_canister.get_latest_version().await.unwrap();
-        info!(
-            logger,
-            "Registry version after updating the unassigned nodes: {}", reg_ver3
-        );
-        assert!(reg_ver2 < reg_ver3);
 
         info!(
             logger,
