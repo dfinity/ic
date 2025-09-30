@@ -1338,7 +1338,7 @@ fn canister_with_memory_allocation_can_grow_wasm_memory_above_allocation() {
 }
 
 #[test]
-fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm64() {
+fn canister_with_memory_allocation_can_grow_wasm_memory_above_allocation_wasm64() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let embedders_config = ic_config::embedders::Config::default();
     let env = StateMachine::new_with_config(StateMachineConfig::new(
