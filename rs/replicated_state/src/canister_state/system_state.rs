@@ -6,6 +6,7 @@ pub mod wasm_chunk_store;
 pub use self::task_queue::{TaskQueue, is_low_wasm_memory_hook_condition_satisfied};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
+use super::queues::refunds::RefundPool;
 use super::queues::{CanisterInput, can_push};
 pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -1421,8 +1422,7 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Drops expired messages given a current time. Returns the total amount of
-    /// attached cycles that was lost.
+    /// Drops expired messages given a current time.
     ///
     /// See [`CanisterQueues::time_out_messages`] for further details.
     pub fn time_out_messages(
@@ -1430,10 +1430,16 @@ impl SystemState {
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
-    ) -> Cycles {
-        self.queues
-            .time_out_messages(current_time, own_canister_id, local_canisters, metrics)
+    ) {
+        self.queues.time_out_messages(
+            current_time,
+            own_canister_id,
+            local_canisters,
+            refunds,
+            metrics,
+        )
     }
 
     /// Queries whether the `CallContextManager` in `self.state` holds any not
@@ -1512,18 +1518,18 @@ impl SystemState {
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
-    /// `true` if a message was removed; `false` otherwise; along with any attached
-    /// cycles that were lost (if a reject response with a refund was not enqueued).
+    /// `true` if a message was removed; `false` otherwise.
     ///
     /// Time complexity: `O(log(n))`.
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
-    ) -> (bool, Cycles) {
+    ) -> bool {
         self.queues
-            .shed_largest_message(own_canister_id, local_canisters, metrics)
+            .shed_largest_message(own_canister_id, local_canisters, refunds, metrics)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
