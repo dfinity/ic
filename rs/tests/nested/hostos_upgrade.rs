@@ -11,8 +11,9 @@ use ic_system_test_driver::{
 use nested::HOST_VM_NAME;
 
 use nested::util::{
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, check_hostos_version,
-    elect_hostos_version, get_host_boot_id, update_nodes_hostos_version,
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, NODE_UPGRADE_BACKOFF,
+    NODE_UPGRADE_TIMEOUT, check_hostos_version, elect_hostos_version, get_host_boot_id,
+    update_nodes_hostos_version,
 };
 
 fn main() -> Result<()> {
@@ -108,8 +109,8 @@ pub fn upgrade_hostos(env: TestEnv) {
             host_boot_id_pre_upgrade
         ),
         logger.clone(),
-        Duration::from_secs(7 * 60), // long wait for hostos upgrade to apply and reboot
-        Duration::from_secs(5),
+        NODE_UPGRADE_TIMEOUT,
+        NODE_UPGRADE_BACKOFF,
         || {
             let host_boot_id = get_host_boot_id(&host);
             if host_boot_id != host_boot_id_pre_upgrade {

@@ -13,8 +13,9 @@ use ic_system_test_driver::{
 use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
-    elect_guestos_version, get_blessed_guestos_versions, get_unassigned_nodes_config,
-    update_unassigned_nodes, wait_for_expected_guest_version,
+    NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, elect_guestos_version,
+    get_blessed_guestos_versions, get_unassigned_nodes_config, update_unassigned_nodes,
+    wait_for_expected_guest_version,
 };
 
 fn main() -> Result<()> {
@@ -92,7 +93,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             &guest_ipv6,
             &original_version,
             &logger,
-            Duration::from_secs(5 * 60),
+            Duration::from_secs(60),
             Duration::from_secs(5),
         )
         .await
@@ -142,8 +143,8 @@ pub fn upgrade_guestos(env: TestEnv) {
             &guest_ipv6,
             &target_version,
             &logger,
-            Duration::from_secs(7 * 60), // Long wait for GuestOS upgrade to apply and reboot
-            Duration::from_secs(5),
+            NODE_UPGRADE_TIMEOUT,
+            NODE_UPGRADE_BACKOFF,
         )
         .await
         .expect("guest failed to upgrade");
