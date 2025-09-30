@@ -55,7 +55,10 @@ impl Registry {
             PrincipalId::try_from(&node_operator_record.node_provider_principal_id).unwrap()
         );
 
-        // 3. Check that the Node Provider is not being set with the same ID as the Node Operator
+        // 3. Check Rate Limits
+        // TODO DO NOT MERGE
+
+        // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
             .node_provider_id
             .expect("No Node Provider specified in the payload");
@@ -65,7 +68,7 @@ impl Registry {
         );
         node_operator_record.node_provider_principal_id = node_provider_id.to_vec();
 
-        // 4. Set and execute the mutation
+        // 5. Set and execute the mutation
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: node_operator_record_key,
