@@ -132,7 +132,7 @@ fn ic0_stable_grow_works() {
 }
 
 #[test]
-fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
+fn ic0_stable_grow_succeeds_when_exceeding_memory_allocation() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
@@ -141,8 +141,8 @@ fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
 
             (func (export "canister_update test")
                 ;; Grow the memory by 1000 pages and verify that the return value
-                ;; is -1 because the grow should fail.
-                (if (i32.ne (call $stable_grow (i32.const 1000)) (i32.const -1))
+                ;; is 0 because the grow should succeed.
+                (if (i32.ne (call $stable_grow (i32.const 1000)) (i32.const 0))
                     (then (unreachable))
                 )
             )
