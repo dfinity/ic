@@ -178,3 +178,23 @@ system_test_nns(
         "@crate_index//:slog",
     ],
 )
+
+system_test_nns(
+    name = "start_stop_test",
+    tags = [
+    ],
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
