@@ -10,12 +10,11 @@ use ic_system_test_driver::{
     util::block_on,
 };
 
-use nested::HOST_VM_NAME;
+use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, elect_guestos_version,
-    get_blessed_guestos_versions, get_unassigned_nodes_config, update_unassigned_nodes,
-    wait_for_expected_guest_version,
+    elect_guestos_version, get_blessed_guestos_versions, get_unassigned_nodes_config,
+    update_unassigned_nodes, wait_for_expected_guest_version,
 };
 
 fn main() -> Result<()> {
@@ -33,22 +32,11 @@ fn main() -> Result<()> {
 /// is healthy before and after the upgrade.
 pub fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
+    registration(env.clone());
 
-    let initial_topology = env.topology_snapshot();
-    info!(logger, "Waiting for node to join ...");
-    block_on(
-        initial_topology.block_for_newer_registry_version_within_duration(
-            NODE_REGISTRATION_TIMEOUT,
-            NODE_REGISTRATION_BACKOFF,
-        ),
-    )
-    .unwrap();
-    info!(logger, "The node successfully came up and registered ...");
-
-    let host = env
+    let guest_ipv6 = env
         .get_nested_vm(HOST_VM_NAME)
-        .expect("Unable to find HostOS node.");
-    let guest_ipv6 = host
+        .expect("Unable to find HostOS node.")
         .get_nested_network()
         .expect("Unable to get nested network")
         .guest_ip;
@@ -68,27 +56,28 @@ pub fn upgrade_guestos(env: TestEnv) {
         let reg_ver = registry_canister.get_latest_version().await.unwrap();
         info!(logger, "Registry is currently at version: {}", reg_ver);
 
-        let blessed_versions = get_blessed_guestos_versions(&nns_node).await;
-        info!(logger, "Initial blessed versions: {:?}", blessed_versions);
-
-        let unassigned_nodes_config = get_unassigned_nodes_config(&nns_node).await;
         info!(
             logger,
-            "Unassigned nodes config: {:?}", unassigned_nodes_config
+            "Initial blessed versions: {:?}",
+            get_blessed_guestos_versions(&nns_node).await
         );
 
+        info!(
+            logger,
+            "Unassigned nodes config: {:?}",
+            get_unassigned_nodes_config(&nns_node).await
+        );
+
+        // The original GuestOS version is the deployed version (i.e., the SetupOS image version).
         let original_version = get_setupos_img_version();
         info!(logger, "Original GuestOS version: {}", original_version);
+        let target_version = get_guestos_update_img_version();
+        info!(logger, "Target GuestOS version: {}", target_version);
 
-        // determine new GuestOS version
         let upgrade_url = get_guestos_update_img_url().to_string();
         info!(logger, "GuestOS upgrade image URL: {}", upgrade_url);
-
-        let target_version = get_guestos_update_img_version();
-        info!(logger, "Target replica version: {}", target_version);
-
         let sha256 = get_guestos_update_img_sha256();
-        info!(logger, "Update image SHA256: {}", sha256);
+        info!(logger, "GuestOS upgrade image SHA256: {}", sha256);
 
         let guest_launch_measurements = get_guestos_launch_measurements();
 
@@ -109,7 +98,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         .await
         .expect("guest didn't come up as expected");
 
-        // elect the new GuestOS version (upgrade version)
+        // elect the target GuestOS version
         elect_guestos_version(
             &nns_node,
             &target_version,
@@ -119,7 +108,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         )
         .await;
 
-        // check that the registry was updated after blessing the new guestos version
+        // check that the registry was updated after blessing the target GuestOS version
         let reg_ver2 = registry_canister.get_latest_version().await.unwrap();
         info!(
             logger,
@@ -127,14 +116,14 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
         assert!(reg_ver < reg_ver2);
 
-        // check that the new guestOS version is indeed part of the blessed versions
-        let blessed_versions = get_blessed_guestos_versions(&nns_node).await;
-        info!(logger, "Updated blessed versions: {:?}", blessed_versions);
+        info!(
+            logger,
+            "Updated blessed versions: {:?}",
+            get_blessed_guestos_versions(&nns_node).await
+        );
 
-        // proposal to upgrade the unassigned nodes
         update_unassigned_nodes(&nns_node, &target_version).await;
 
-        // check that the registry was updated after updating the unassigned nodes
         let reg_ver3 = registry_canister.get_latest_version().await.unwrap();
         info!(
             logger,
@@ -142,14 +131,12 @@ pub fn upgrade_guestos(env: TestEnv) {
         );
         assert!(reg_ver2 < reg_ver3);
 
-        // check that the unassigned nodes config was indeed updated
-        let unassigned_nodes_config = get_unassigned_nodes_config(&nns_node).await;
         info!(
             logger,
-            "Unassigned nodes config: {:?}", unassigned_nodes_config
+            "Unassigned nodes config: {:?}",
+            get_unassigned_nodes_config(&nns_node).await
         );
 
-        // Check that GuestOS is on the expected version (upgrade version)
         wait_for_expected_guest_version(
             &client,
             &guest_ipv6,
