@@ -32,11 +32,17 @@ fn main() -> Result<()> {
 pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
+    // The original HostOS version is the deployed version (i.e., the SetupOS image version).
+    let original_version = get_setupos_img_version();
     let target_version = get_hostos_update_img_version();
-
     let update_image_url = get_hostos_update_img_url();
-    info!(logger, "HostOS update image URL: '{}'", update_image_url);
     let update_image_sha256 = get_hostos_update_img_sha256();
+
+    info!(logger, "Image configuration:");
+    info!(logger, "  Original HostOS version: {}", original_version);
+    info!(logger, "  Target HostOS version: {}", target_version);
+    info!(logger, "  Update image URL: '{}'", update_image_url);
+    info!(logger, "  Update image SHA256: {}", update_image_sha256);
 
     let initial_topology = env.topology_snapshot();
     info!(logger, "Waiting for node to join ...");
@@ -59,8 +65,7 @@ pub fn upgrade_hostos(env: TestEnv) {
         "Checking version via SSH on HostOS: '{}'",
         host.get_vm().expect("Unable to get HostOS VM.").ipv6
     );
-    let original_version = check_hostos_version(&host);
-    info!(logger, "Version found is: '{}'", original_version);
+    assert_eq!(original_version, check_hostos_version(&host));
 
     let node_id = new_topology.unassigned_nodes().next().unwrap().node_id;
 

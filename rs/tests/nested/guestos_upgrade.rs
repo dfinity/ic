@@ -71,16 +71,17 @@ pub fn upgrade_guestos(env: TestEnv) {
 
         // The original GuestOS version is the deployed version (i.e., the SetupOS image version).
         let original_version = get_setupos_img_version();
-        info!(logger, "Original GuestOS version: {}", original_version);
         let target_version = get_guestos_update_img_version();
-        info!(logger, "Target GuestOS version: {}", target_version);
-
         let upgrade_url = get_guestos_update_img_url().to_string();
-        info!(logger, "GuestOS upgrade image URL: {}", upgrade_url);
         let sha256 = get_guestos_update_img_sha256();
-        info!(logger, "GuestOS upgrade image SHA256: {}", sha256);
-
         let guest_launch_measurements = get_guestos_launch_measurements();
+
+        // Log all image information together
+        info!(logger, "Image configuration:");
+        info!(logger, "  Original GuestOS version: {}", original_version);
+        info!(logger, "  Target GuestOS version: {}", target_version);
+        info!(logger, "  Upgrade image URL: {}", upgrade_url);
+        info!(logger, "  Upgrade image SHA256: {}", sha256);
 
         // check that GuestOS is on the expected version (initial version)
         let client = Client::builder()
