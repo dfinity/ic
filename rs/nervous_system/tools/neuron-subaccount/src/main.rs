@@ -22,10 +22,8 @@ fn main() {
     let subaccount: Subaccount = compute_neuron_staking_subaccount(argv.controller, argv.memo);
     println!("Subaccount: {subaccount}");
 
-    let governance_account = AccountIdentifier::new(
-        PrincipalId::from(GOVERNANCE_CANISTER_ID),
-        Some(subaccount),
-    )
-    .to_hex();
+    let governance_account =
+        AccountIdentifier::new(PrincipalId::from(GOVERNANCE_CANISTER_ID), Some(subaccount))
+            .to_hex();
     println!("Governance Account: {governance_account}");
 }
