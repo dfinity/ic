@@ -87,6 +87,7 @@ pub(crate) struct IncompleteState {
     root_hash: CryptoHashOfState,
     state: DownloadState,
     manifest_with_checkpoint_layout: Option<(Manifest, CheckpointLayout<ReadOnly>)>,
+    state_manager_started_height: Height,
     metrics: StateManagerMetrics,
     started_at: Instant,
     fetch_started_at: Option<Instant>,
@@ -233,6 +234,7 @@ impl IncompleteState {
             root_hash,
             state: DownloadState::Blank,
             manifest_with_checkpoint_layout: state_sync.state_manager.latest_manifest(),
+            state_manager_started_height: state_sync.state_manager.started_height(),
             metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
             fetch_started_at: None,
@@ -1005,7 +1007,7 @@ impl IncompleteState {
                         missing_chunks: Default::default(),
                         root_old: checkpoint_layout.raw_path().to_path_buf(),
                         height_old: checkpoint_height,
-                        validate_data: true,
+                        validate_data: checkpoint_height <= self.state_manager_started_height,
                     })
                 }
             }
@@ -1023,11 +1025,7 @@ impl IncompleteState {
                     missing_chunks: Default::default(),
                     root_old: checkpoint_old.raw_path().to_path_buf(),
                     height_old: checkpoint_height,
-                    validate_data: !self
-                        .state_sync_refs
-                        .cache
-                        .read()
-                        .state_is_fetched(checkpoint_height),
+                    validate_data: checkpoint_height <= self.state_manager_started_height,
                 })
             }
             (None, None) => None,
