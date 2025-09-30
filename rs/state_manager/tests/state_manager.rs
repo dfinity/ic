@@ -39,8 +39,8 @@ use ic_state_manager::{
     state_sync::{
         StateSync,
         types::{
-            DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET,
-            META_MANIFEST_CHUNK, StateSyncMessage,
+            DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+            MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, StateSyncMessage,
         },
     },
     testing::StateManagerTesting,
@@ -2582,6 +2582,43 @@ fn can_do_simple_state_sync_transfer() {
 
             assert_error_counters(dst_metrics);
             assert_no_remaining_chunks(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn can_serve_chunks_from_incomplete_state() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash: hash.get(),
+        };
+
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|_dst_metrics, dst_state_manager, dst_state_sync| {
+            let mut chunkable =
+                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+            // 0 chunk is canister.pbuf, which is in file group; chunks 1 and 2 are real
+            let omit: HashSet<ChunkId> =
+                maplit::hashset! {ChunkId::new(FILE_CHUNK_ID_OFFSET as u32 + 1)};
+            pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false).unwrap();
+            assert!(dst_state_manager.get_state_at(height(1)).is_err());
+            assert!(
+                dst_state_sync
+                    .chunk(&id, ChunkId::new(FILE_CHUNK_ID_OFFSET as u32 + 2))
+                    .is_some()
+            );
         })
     })
 }

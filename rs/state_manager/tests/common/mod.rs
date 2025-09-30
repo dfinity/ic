@@ -501,15 +501,14 @@ pub fn pipe_partial_state_sync(
 ) -> Result<bool, StateSyncErrorCode> {
     loop {
         let ids: Vec<_> = dst.chunks_to_download().collect();
-
         if ids.is_empty() {
             break;
         }
 
-        let mut omitted_chunks = false;
+        let mut omitted_chunks = HashSet::new();
         for (index, id) in ids.iter().enumerate() {
             if omit.contains(id) {
-                omitted_chunks = true;
+                omitted_chunks.insert(id);
                 continue;
             }
             let mut chunk = src
@@ -530,7 +529,7 @@ pub fn pipe_partial_state_sync(
                 Err(_) => return Err(StateSyncErrorCode::OtherChunkVerificationFailed),
             }
         }
-        if omitted_chunks {
+        if !omit.is_empty() && omitted_chunks.len() == omit.len() {
             return Ok(false);
         }
     }

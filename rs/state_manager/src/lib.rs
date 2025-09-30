@@ -31,6 +31,7 @@ use ic_crypto_tree_hash::{
     Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
 };
 use ic_interfaces::certification::Verifier;
+use ic_interfaces::p2p::state_sync::ChunkId;
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -77,7 +78,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, SystemTime};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     sync::Mutex,
 };
 use tempfile::tempfile;
@@ -736,6 +737,31 @@ pub struct Snapshot {
     pub state: Arc<ReplicatedState>,
 }
 
+pub struct IncompleteStateReader {
+    root_hash: CryptoHashOfState,
+    meta_manifest: MetaManifest,
+    manifest: Manifest,
+    state_sync_file_group: FileGroupChunks,
+    chunks: HashSet<ChunkId>,
+}
+
+impl IncompleteStateReader {
+    pub fn empty(
+        root_hash: CryptoHashOfState,
+        meta_manifest: MetaManifest,
+        manifest: Manifest,
+        state_sync_file_group: FileGroupChunks,
+    ) -> Self {
+        IncompleteStateReader {
+            root_hash,
+            meta_manifest,
+            manifest,
+            state_sync_file_group,
+            chunks: Default::default(),
+        }
+    }
+}
+
 /// StateSyncRefs keeps track of the ongoing and aborted state syncs.
 #[derive(Clone)]
 pub struct StateSyncRefs {
@@ -749,6 +775,7 @@ pub struct StateSyncRefs {
     /// can take chunks from the cache instead of fetching them from other nodes
     /// when possible.
     cache: Arc<parking_lot::RwLock<StateSyncCache>>,
+    incomplete_state_readers: Arc<parking_lot::RwLock<BTreeMap<Height, IncompleteStateReader>>>,
 }
 
 impl StateSyncRefs {
@@ -756,6 +783,7 @@ impl StateSyncRefs {
         Self {
             active: Arc::new(parking_lot::RwLock::new(None)),
             cache: Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log))),
+            incomplete_state_readers: Arc::new(parking_lot::RwLock::new(BTreeMap::new())),
         }
     }
 }
