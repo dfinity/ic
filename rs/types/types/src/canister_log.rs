@@ -373,4 +373,56 @@ mod tests {
             ]))
         );
     }
+
+    #[test]
+    fn test_canister_log_record_used_space() {
+        let (size_a, size_b, size_c) = (3 * 48, 3 * 48, 4 * 48);
+        // Batch A.
+        let mut main = CanisterLog::new(
+            3,
+            canister_log_records(&[
+                (0, 100, b"main_ #0"),
+                (1, 101, b"main_ #1"),
+                (2, 102, b"main_ #2"),
+            ]),
+        );
+        assert_eq!(main.used_space(), size_a);
+
+        // Batch B.
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        delta.add_record(200, b"delta #0".to_vec());
+        delta.add_record(201, b"delta #1".to_vec());
+        delta.add_record(202, b"delta #2".to_vec());
+        assert_eq!(delta.used_space(), size_b);
+        main.append_delta_log(&mut delta);
+
+        // Batch C.
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        delta.add_record(300, b"delta #3".to_vec());
+        delta.add_record(301, b"delta #4".to_vec());
+        delta.add_record(302, b"delta #5".to_vec());
+        delta.add_record(303, b"delta #6".to_vec());
+        assert_eq!(delta.used_space(), size_c);
+        main.append_delta_log(&mut delta);
+
+        // Assert main log has all records and correct used space.
+        assert_eq!(
+            main.records(),
+            &VecDeque::from(canister_log_records(&[
+                (0, 100, b"main_ #0"),
+                (1, 101, b"main_ #1"),
+                (2, 102, b"main_ #2"),
+                (3, 200, b"delta #0"),
+                (4, 201, b"delta #1"),
+                (5, 202, b"delta #2"),
+                (6, 300, b"delta #3"),
+                (7, 301, b"delta #4"),
+                (8, 302, b"delta #5"),
+                (9, 303, b"delta #6"),
+            ]))
+        );
+        assert_eq!(main.take_delta_log_sizes(), vec![size_b, size_c]);
+        assert_eq!(main.take_delta_log_sizes(), Vec::<usize>::new()); // Second call returns empty.
+        assert_eq!(main.used_space(), size_a + size_b + size_c);
+    }
 }
