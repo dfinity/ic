@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRequest,
+    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
     FetchCanisterLogsResponse, LogVisibilityV2,
 };
 use ic_replicated_state::ReplicatedState;
@@ -69,7 +69,7 @@ fn filter_records(
         return Ok(records.iter().cloned().collect());
     };
 
-    let (range, key): (&Range, fn(&CanisterLogRecord) -> u64) = match filter {
+    let (range, key): (&FetchCanisterLogsRange, fn(&CanisterLogRecord) -> u64) = match filter {
         FetchCanisterLogsFilter::ByIdx(r) => (r, |rec| rec.idx),
         FetchCanisterLogsFilter::ByTimestampNanos(r) => (r, |rec| rec.timestamp_nanos),
     };
