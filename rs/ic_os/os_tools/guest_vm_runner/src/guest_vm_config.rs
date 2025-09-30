@@ -103,20 +103,30 @@ pub fn generate_vm_config(
         node_type,
     );
 
-    let cpu_domain = if config.hostos_settings.vm_cpu == "qemu" {
-        "qemu"
-    } else {
-        "kvm"
+    #[cfg(feature = "dev")]
+    let (cpu_domain, vm_memory, nr_of_vcpus) = {
+        let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
+            "qemu".to_string()
+        } else {
+            "kvm".to_string()
+        };
+
+        let vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
+        let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
+
+        (cpu_domain, vm_memory, vm_nr_of_vcpus)
     };
+    #[cfg(not(feature = "dev"))]
+    let (cpu_domain, vm_memory, nr_of_vcpus) = ("kvm".to_string(), 490, 64);
 
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),
         domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
         disk_device: disk_device.to_path_buf(),
-        cpu_domain: cpu_domain.to_string(),
+        cpu_domain,
         console_log_path: serial_log_path(guest_vm_type).display().to_string(),
-        vm_memory: config.hostos_settings.vm_memory,
-        nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
+        vm_memory,
+        nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
@@ -151,8 +161,8 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
 mod tests {
     use super::*;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
-        Ipv4Config, Ipv6Config, Logging, NetworkSettings,
+        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSDevSettings,
+        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, Logging, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
@@ -187,11 +197,17 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
+            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
                 vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 42,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
             },
             guestos_settings: Default::default(),
         }
@@ -271,10 +287,16 @@ mod tests {
     fn test_generate_vm_config_qemu() {
         test_vm_config(
             "guestos_vm_qemu.xml",
+            #[allow(deprecated)]
             HostOSSettings {
                 vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 42,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
@@ -287,10 +309,16 @@ mod tests {
     fn test_generate_vm_config_upgrade_guestos() {
         test_vm_config(
             "upgrade_guestos.xml",
+            #[allow(deprecated)]
             HostOSSettings {
                 vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 64,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 42,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 64,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ true,
@@ -303,10 +331,16 @@ mod tests {
     fn test_generate_vm_config_kvm() {
         test_vm_config(
             "guestos_vm_kvm.xml",
+            #[allow(deprecated)]
             HostOSSettings {
                 vm_memory: 42,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 42,
+                    vm_cpu: "kvm".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
@@ -319,10 +353,16 @@ mod tests {
     fn test_generate_vm_config_sev() {
         test_vm_config(
             "guestos_vm_sev.xml",
+            #[allow(deprecated)]
             HostOSSettings {
                 vm_memory: 42,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 42,
+                    vm_cpu: "kvm".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ true,

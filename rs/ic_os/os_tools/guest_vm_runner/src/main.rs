@@ -613,8 +613,8 @@ mod tests {
     use super::*;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
-        NetworkSettings,
+        DeploymentEnvironment, DeterministicIpv6Config, HostOSDevSettings, HostOSSettings,
+        ICOSSettings, NetworkSettings,
     };
     use ic_device::mount::GptPartitionProvider;
     use ic_device::mount::testing::ExtractingFilesystemMounter;
@@ -870,11 +870,17 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
+            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
                 vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 42,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
             },
             guestos_settings: Default::default(),
         }
@@ -882,7 +888,7 @@ mod tests {
 
     fn invalid_hostos_config() -> HostOSConfig {
         let mut hostos_config = valid_hostos_config();
-        hostos_config.hostos_settings.vm_memory = 0;
+        hostos_config.hostos_settings.hostos_dev_settings.vm_memory = 0;
         hostos_config
     }
 

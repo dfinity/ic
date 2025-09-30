@@ -33,18 +33,17 @@ pub fn create_setupos_config(
 
     let setupos_settings = SetupOSSettings;
 
-    // Only allow choosing VM memory for dev.
-    #[cfg(feature = "dev")]
-    let memory = vm_resources.memory;
-
-    #[cfg(not(feature = "dev"))]
-    let memory = PROD_GUEST_VM_MEMORY;
-
+    #[allow(deprecated)]
     let hostos_settings = HostOSSettings {
-        vm_memory: memory,
-        vm_cpu: vm_resources.cpu,
+        vm_memory: vm_resources.memory,
+        vm_cpu: vm_resources.cpu.clone(),
         vm_nr_of_vcpus: vm_resources.nr_of_vcpus,
         verbose,
+        hostos_dev_settings: HostOSDevSettings {
+            vm_memory: vm_resources.memory,
+            vm_cpu: vm_resources.cpu,
+            vm_nr_of_vcpus: vm_resources.nr_of_vcpus,
+        },
     };
 
     let guestos_settings = GuestOSSettings::default();
