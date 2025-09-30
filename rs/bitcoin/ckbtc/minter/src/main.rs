@@ -157,7 +157,9 @@ async fn retrieve_btc_with_approval(
     args: RetrieveBtcWithApprovalArgs,
 ) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
     check_anonymous_caller();
-    check_postcondition(updates::retrieve_btc::retrieve_btc_with_approval(args).await)
+    check_postcondition(
+        updates::retrieve_btc::retrieve_btc_with_approval(args, &IC_CANISTER_RUNTIME).await,
+    )
 }
 
 #[query]

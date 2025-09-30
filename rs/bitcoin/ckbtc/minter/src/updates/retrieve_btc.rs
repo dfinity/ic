@@ -5,7 +5,7 @@ use crate::management::check_withdrawal_destination_address;
 use crate::memo::{BurnMemo, Status};
 use crate::tasks::{TaskType, schedule_now};
 use crate::{
-    IC_CANISTER_RUNTIME,
+    CanisterRuntime, IC_CANISTER_RUNTIME,
     address::{BitcoinAddress, ParseAddressError, account_to_bitcoin_address},
     guard::{GuardError, retrieve_btc_guard},
     state::{self, RetrieveBtcRequest, mutate_state, read_state},
@@ -252,8 +252,9 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     Ok(RetrieveBtcOk { block_index })
 }
 
-pub async fn retrieve_btc_with_approval(
+pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
     args: RetrieveBtcWithApprovalArgs,
+    runtime: &R,
 ) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
     let caller = ic_cdk::api::msg_caller();
 
@@ -350,7 +351,7 @@ pub async fn retrieve_btc_with_approval(
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic(false), &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic(false), runtime);
 
     Ok(RetrieveBtcOk { block_index })
 }
