@@ -8,7 +8,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 
-use nested::HOST_VM_NAME;
+use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
     NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, NODE_UPGRADE_BACKOFF,
@@ -44,16 +44,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "  Update image URL: '{}'", update_image_url);
     info!(logger, "  Update image SHA256: {}", update_image_sha256);
 
-    let initial_topology = env.topology_snapshot();
-    info!(logger, "Waiting for node to join ...");
-    let new_topology = block_on(
-        initial_topology.block_for_newer_registry_version_within_duration(
-            NODE_REGISTRATION_TIMEOUT,
-            NODE_REGISTRATION_BACKOFF,
-        ),
-    )
-    .unwrap();
-    info!(logger, "The node successfully came up and registered ...");
+    registration(env.clone());
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
