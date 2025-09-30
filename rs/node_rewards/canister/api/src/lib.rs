@@ -55,12 +55,12 @@ impl TryFrom<DateUtc> for NaiveDate {
 impl DateUtc {
     pub fn from_unix_timestamp_nanoseconds(value: u64) -> Self {
         let naive_date = DateTime::from_timestamp_nanos(value as i64).date_naive();
-        DateUtc::from(naive_date)
+        Self::from(naive_date)
     }
     pub fn from_unix_timestamp_seconds(value: u64) -> Self {
         let naive_date = DateTime::from_timestamp(value as i64, 0)
             .unwrap()
             .date_naive();
-        DateUtc::from(naive_date)
+        Self::from(naive_date)
     }
 }

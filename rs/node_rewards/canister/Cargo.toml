@@ -37,10 +37,7 @@ mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 itertools = { workspace = true }
-chrono = { version = "0.4.41", default-features = false, features = [
-    "alloc",
-    "serde",
-] }
+chrono = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }

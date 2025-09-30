@@ -301,7 +301,7 @@ impl NodeMetricsHistoryResponseTracker {
 }
 
 async fn _daily_metrics_correct_different_update_size(size: usize) {
-    let day_start = NaiveDate::from_ymd(1991, 9, 5);
+    let day_start = NaiveDate::from_ymd(2025, 1, 1);
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_id(1))
         .add_node_metrics(
@@ -383,7 +383,7 @@ async fn daily_metrics_correct_2_subs() {
     let subnet_2 = subnet_id(2);
 
     let node_1 = node_id(1);
-    let day_start = NaiveDate::from_ymd(1991, 9, 5);
+    let day_start = NaiveDate::from_ymd(2025, 1, 1);
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)
@@ -475,7 +475,7 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let node_1 = node_id(1);
     let node_2 = node_id(2);
-    let day_start = NaiveDate::from_ymd(1991, 9, 5);
+    let day_start = NaiveDate::from_ymd(2025, 1, 1);
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)
