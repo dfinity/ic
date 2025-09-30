@@ -39,7 +39,7 @@ where
     capacity_usage_info: StableBTreeMap<K, (u64 /*time*/, u64 /*capacity used*/), Memory>,
 }
 
-pub type InMemoryCapacityStorage<K> = StableMemoryCapacityStorage<K, VectorMemory>;
+type InMemoryCapacityStorage<K> = StableMemoryCapacityStorage<K, VectorMemory>;
 
 impl<K: Storable + Ord + Clone> Default for InMemoryCapacityStorage<K> {
     fn default() -> Self {

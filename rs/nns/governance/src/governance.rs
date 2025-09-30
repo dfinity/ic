@@ -89,7 +89,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nervous_system_rate_limits::{
-    InMemoryCapacityStorage, InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError,
+    InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
@@ -315,6 +315,9 @@ impl From<RateLimiterError> for GovernanceError {
                 "Reached maximum number of neuron creation reservations.  This should not happen."
                     .to_string()
             }
+            RateLimiterError::ReservationNotFound => "Rate limit reservation could not be \
+                committed because rate limiter has no record of it."
+                .to_string(),
         };
 
         GovernanceError::new_with_message(ErrorType::Unavailable, message)
