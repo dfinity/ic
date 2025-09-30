@@ -122,7 +122,7 @@ fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
     }
 
     if let Some(memory) = cfg.memory_gb {
-        deployment_json.vm_resources.memory = Some(memory);
+        deployment_json.vm_resources.memory = memory;
     }
 
     if let Some(cpu) = &cfg.cpu {

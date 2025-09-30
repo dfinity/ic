@@ -38,8 +38,6 @@ pub static RESERVED_FIELD_NAMES: &[&str] = &[];
 
 pub type ConfigMap = HashMap<String, String>;
 
-pub const PROD_GUEST_VM_MEMORY: u32 = 490;
-
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]

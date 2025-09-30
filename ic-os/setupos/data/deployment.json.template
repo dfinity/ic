@@ -8,6 +8,7 @@
     "urls": NNS_URLS
   },
   "vm_resources": {
+    "memory": "42",
     "cpu": "kvm",
     "nr_of_vcpus": 64
   }

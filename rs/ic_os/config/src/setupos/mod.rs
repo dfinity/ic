@@ -35,7 +35,7 @@ pub fn create_setupos_config(
 
     // Only allow choosing VM memory for dev.
     #[cfg(feature = "dev")]
-    let memory = vm_resources.memory.unwrap_or(PROD_GUEST_VM_MEMORY);
+    let memory = vm_resources.memory;
 
     #[cfg(not(feature = "dev"))]
     let memory = PROD_GUEST_VM_MEMORY;

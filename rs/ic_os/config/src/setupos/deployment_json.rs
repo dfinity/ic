@@ -37,7 +37,8 @@ pub struct Nns {
 #[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct VmResources {
-    pub memory: Option<u32>,
+    #[serde_as(as = "DisplayFromStr")]
+    pub memory: u32,
     /// CPU virtualization type: "kvm" or "qemu".
     pub cpu: String,
     /// Maximum number of virtual CPUs allocated for the GuestOS,
@@ -67,6 +68,7 @@ mod test {
                 "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
               "vm_resources": {
+                "memory": "42",
                 "cpu": "kvm",
                 "nr_of_vcpus": 64
               }
@@ -84,6 +86,7 @@ mod test {
     "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
   "vm_resources": {
+    "memory": "42",
     "cpu": "kvm",
     "nr_of_vcpus": 64
   }
@@ -103,7 +106,7 @@ mod test {
             ],
         },
         vm_resources: VmResources {
-            memory: None,
+            memory: 42,
             cpu: "kvm".to_string(),
             nr_of_vcpus: 64,
         },
