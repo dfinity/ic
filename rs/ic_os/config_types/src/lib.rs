@@ -13,7 +13,7 @@
 //!
 //! - **Adding Enum Variants (Forward Compatibility)**: When adding new variants to an enum, ensure older versions can handle unknown variants gracefully by using `#[serde(other)]` on a fallback variant.
 //!
-//! - **Removing Fields**: To prevent backwards compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be given a default attribute and all IC-OS references to them have to be removed. In a second step, after the first step has rolled out to all OSes (HostOS and GuestOS) and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
+//! - **Removing Fields**: To prevent backwards compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be given a default attribute and all IC-OS references to them have to be removed. In a second step, after the first step has rolled out to all OSes (HostOS and GuestOS) and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_PATHS list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 //!
@@ -33,8 +33,8 @@ use url::Url;
 
 pub const CONFIG_VERSION: &str = "1.8.0";
 
-/// List of field names that have been removed and should not be reused.
-pub static RESERVED_FIELD_NAMES: &[&str] = &[];
+/// List of field paths that have been removed and should not be reused.
+pub static RESERVED_FIELD_PATHS: &[&str] = &[];
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -407,8 +407,8 @@ mod tests {
     }
 
     #[test]
-    fn test_no_reserved_field_names_used() -> Result<(), Box<dyn std::error::Error>> {
-        let reserved_field_names: HashSet<&str> = RESERVED_FIELD_NAMES.iter().cloned().collect();
+    fn test_no_reserved_field_paths_used() -> Result<(), Box<dyn std::error::Error>> {
+        let reserved_field_paths: HashSet<&str> = RESERVED_FIELD_PATHS.iter().cloned().collect();
 
         let setupos_config = SetupOSConfig {
             config_version: CONFIG_VERSION.to_string(),
@@ -434,17 +434,17 @@ mod tests {
             guestos_settings: GuestOSSettings::default(),
         };
 
-        fn get_all_field_names(value: &Value, field_names: &mut HashSet<String>) {
+        fn get_all_field_paths(prefix: &str, value: &Value, field_names: &mut HashSet<String>) {
             match value {
                 Value::Object(map) => {
                     for (key, val) in map {
-                        field_names.insert(key.clone());
-                        get_all_field_names(val, field_names);
+                        field_names.insert(format!("{prefix}{key}"));
+                        get_all_field_paths(&format!("{prefix}{key}."), val, field_names);
                     }
                 }
                 Value::Array(arr) => {
                     for val in arr {
-                        get_all_field_names(val, field_names);
+                        get_all_field_paths(&format!("{prefix}[]."), val, field_names);
                     }
                 }
                 _ => {}
@@ -453,12 +453,12 @@ mod tests {
 
         let setupos_config = serde_json::to_value(&setupos_config)?;
 
-        let mut field_names = HashSet::new();
-        get_all_field_names(&setupos_config, &mut field_names);
-        for field in field_names {
+        let mut field_paths = HashSet::new();
+        get_all_field_paths("", &setupos_config, &mut field_paths);
+        for field in field_paths {
             assert!(
-                !reserved_field_names.contains(field.as_str()),
-                "Field name '{field}' is reserved and should not be used."
+                !reserved_field_paths.contains(field.as_str()),
+                "Field path '{field}' is reserved and should not be used."
             );
         }
 
