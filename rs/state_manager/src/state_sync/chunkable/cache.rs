@@ -77,15 +77,6 @@ impl StateSyncCache {
         self.highest_successful_sync = Some(new_height);
     }
 
-    /// Returns true if we know that we successfully synced the state at
-    /// `height` using the state sync protocol
-    pub fn state_is_fetched(&self, height: Height) -> bool {
-        match self.highest_successful_sync {
-            Some(last_height) => last_height == height,
-            None => false,
-        }
-    }
-
     /// Pushes the state sync data to the cache without checking that
     /// the new state is newer that the stored one.
     ///
