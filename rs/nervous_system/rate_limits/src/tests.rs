@@ -7,7 +7,6 @@ fn test_rate_limiter_just_reservations() {
             add_capacity_amount: 1,
             add_capacity_interval: Duration::from_secs(10),
             max_capacity: 10,
-            reservation_timeout: Duration::from_secs(u64::MAX),
             max_reservations: 1000,
         },
         InMemoryCapacityStorage::default(),
@@ -76,7 +75,6 @@ fn test_token_bucket_replenishment() {
             add_capacity_amount: 2, // Add 2 capacity every 10 seconds
             add_capacity_interval: Duration::from_secs(10),
             max_capacity: 10,
-            reservation_timeout: Duration::from_secs(u64::MAX),
             max_reservations: 1000,
         },
         InMemoryCapacityStorage::default(),
@@ -133,7 +131,6 @@ fn test_max_reservations() {
             add_capacity_amount: 1,
             add_capacity_interval: Duration::from_secs(100),
             max_capacity: 10,
-            reservation_timeout: Duration::from_secs(5), // 5 second timeout
             max_reservations: 4,
         },
         InMemoryCapacityStorage::default(),
@@ -153,58 +150,6 @@ fn test_max_reservations() {
 }
 
 #[test]
-fn test_reservation_timeouts() {
-    let mut rate_limiter = RateLimiter::new(
-        RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(100),
-            max_capacity: 10,
-            reservation_timeout: Duration::from_secs(5), // 5 second timeout
-            max_reservations: 1000,
-        },
-        InMemoryCapacityStorage::default(),
-    );
-
-    let now = SystemTime::now();
-
-    // Create two reservations that use up all capacity
-    let reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 6).unwrap();
-    let reservation2 = rate_limiter.try_reserve(now, "Foo".to_string(), 4).unwrap();
-
-    // Should not be able to reserve more
-    let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 1);
-    assert!(matches!(
-        over_limit,
-        Err(RateLimiterError::NotEnoughCapacity)
-    ));
-
-    // Verify we have 2 reservations
-    assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 2);
-
-    // Fast forward past the timeout
-    let later = now + Duration::from_secs(6);
-
-    // Try to reserve again - this should clean up the expired reservations
-    let after_timeout = rate_limiter.try_reserve(later, "Foo".to_string(), 8);
-    assert!(after_timeout.is_ok()); // Should work because expired reservations were cleaned up
-
-    // Both old reservations should be gone
-    assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1); // Only the new reservation
-
-    // Try committing old reservations - should have no effect
-    rate_limiter.commit(later, reservation1);
-    rate_limiter.commit(later, reservation2);
-    assert_eq!(rate_limiter.reservations.lock().unwrap().len(), 1);
-    // Capacity record should be cleaned up when it's empty.
-    assert!(
-        rate_limiter
-            .capacity_storage
-            .get(&"Foo".to_string())
-            .is_none()
-    );
-}
-
-#[test]
 fn test_stable_rate_limiter() {
     use ic_stable_structures::{
         DefaultMemoryImpl,
@@ -220,7 +165,6 @@ fn test_stable_rate_limiter() {
             add_capacity_amount: 1,
             add_capacity_interval: Duration::from_secs(100),
             max_capacity: 10,
-            reservation_timeout: Duration::from_secs(u64::MAX),
             max_reservations: 1000,
         },
         capacity_storage,

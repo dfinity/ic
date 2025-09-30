@@ -137,8 +137,6 @@ pub struct RateLimiterConfig {
     // Max capacity per item being rate limited.  If there are many items
     // then each would have its own limit, but they would all be max_capacity.
     pub max_capacity: u64,
-    // How long a reservation can be held for.
-    pub reservation_timeout: Duration,
     // Max reservations across entire space
     pub max_reservations: u64,
 }
@@ -160,23 +158,6 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         }
     }
 
-    fn cleanup_expired_reservations(&self, key: &K, now: SystemTime) {
-        if let Ok(mut reservations) = self.reservations.lock() {
-            let expired_keys: Vec<(K, u64)> = reservations
-                .range((key.clone(), 0)..(key.clone(), u64::MAX))
-                .filter(|(_, data)| {
-                    now.duration_since(data.now).unwrap_or(Duration::ZERO)
-                        > self.config.reservation_timeout
-                })
-                .map(|((k, idx), _)| (k.clone(), *idx))
-                .collect();
-
-            for expired_key in expired_keys {
-                reservations.remove(&expired_key);
-            }
-        }
-    }
-
     pub fn try_reserve(
         &mut self,
         now: SystemTime,
@@ -190,9 +171,6 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
                     .to_string(),
             ));
         }
-
-        // Clean up expired reservations first
-        self.cleanup_expired_reservations(&key, now);
 
         let mut reservations = self.reservations.lock().unwrap();
         // validate that system can handle more reservations
