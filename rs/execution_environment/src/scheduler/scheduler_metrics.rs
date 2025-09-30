@@ -238,7 +238,6 @@ impl SchedulerMetrics {
                     5 * MIB,
                     10 * MIB,
                     20 * MIB,
-                    50 * MIB,
                 ])
             ),
             canister_wasm_memory_usage: memory_histogram(
