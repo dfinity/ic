@@ -4,7 +4,7 @@ use crate::temporarily_enable_known_neuron_voting_history;
 use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
