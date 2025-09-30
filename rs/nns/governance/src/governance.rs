@@ -3346,6 +3346,7 @@ impl Governance {
             // If the new followees list is empty, remove the entry for the topic.
             updated_followees.remove(&topic);
         } else {
+            // @todo add a check on `ENABLE_NEURON_INDEXES`
             // Otherwise, update the entry with the new followees list.
             // A new can follow another neuron if:
             // 1. the followee neuron is a public neuron
