@@ -3,7 +3,7 @@
 //! This library uses a [Leaky Bucket Algorithm](https://en.wikipedia.org/wiki/Leaky_bucket) to
 //! enforce rate limites, which allows for a configurable amount of spikiness around the average
 //! limit desired.
-use ic_stable_structures::{StableBTreeMap, Storable, VectorMemory};
+use ic_stable_structures::{StableBTreeMap, Storable};
 use std::{
     collections::BTreeMap,
     fmt::Debug,
@@ -29,6 +29,38 @@ pub trait CapacityUsageRecordStorage<K> {
     fn remove(&mut self, key: &K) -> Option<CapacityUsageRecord>;
 }
 
+pub struct InMemoryCapacityStorage<K> {
+    capacity_usage_records: BTreeMap<K, CapacityUsageRecord>,
+}
+
+impl<K: Ord + Clone> InMemoryCapacityStorage<K> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<K: Ord + Clone> Default for InMemoryCapacityStorage<K> {
+    fn default() -> Self {
+        Self {
+            capacity_usage_records: Default::default(),
+        }
+    }
+}
+
+impl<K: Ord + Clone> CapacityUsageRecordStorage<K> for InMemoryCapacityStorage<K> {
+    fn get(&self, key: &K) -> Option<CapacityUsageRecord> {
+        self.capacity_usage_records.get(key).cloned()
+    }
+
+    fn upsert(&mut self, key: K, record: CapacityUsageRecord) {
+        self.capacity_usage_records.insert(key, record);
+    }
+
+    fn remove(&mut self, key: &K) -> Option<CapacityUsageRecord> {
+        self.capacity_usage_records.remove(key)
+    }
+}
+
 /// Persistent capacity storage implementation using StableBTreeMap.
 /// This allows capacity usage to survive canister upgrades.
 pub struct StableMemoryCapacityStorage<K, Memory>
@@ -36,15 +68,7 @@ where
     K: Storable + Ord + Clone,
     Memory: ic_stable_structures::Memory,
 {
-    capacity_usage_info: StableBTreeMap<K, (u64 /*time*/, u64 /*capacity used*/), Memory>,
-}
-
-type InMemoryCapacityStorage<K> = StableMemoryCapacityStorage<K, VectorMemory>;
-
-impl<K: Storable + Ord + Clone> Default for InMemoryCapacityStorage<K> {
-    fn default() -> Self {
-        Self::new(VectorMemory::default())
-    }
+    capacity_usage_records: StableBTreeMap<K, (u64 /*time*/, u64 /*capacity used*/), Memory>,
 }
 
 impl<K, Memory> StableMemoryCapacityStorage<K, Memory>
@@ -54,7 +78,7 @@ where
 {
     pub fn new(memory: Memory) -> Self {
         Self {
-            capacity_usage_info: StableBTreeMap::init(memory),
+            capacity_usage_records: StableBTreeMap::init(memory),
         }
     }
 }
@@ -92,18 +116,18 @@ where
     Memory: ic_stable_structures::Memory,
 {
     fn get(&self, key: &K) -> Option<CapacityUsageRecord> {
-        self.capacity_usage_info
+        self.capacity_usage_records
             .get(key)
             .map(CapacityUsageRecord::from)
     }
 
     fn upsert(&mut self, key: K, record: CapacityUsageRecord) {
-        self.capacity_usage_info
+        self.capacity_usage_records
             .insert(key, <(u64, u64)>::from(record));
     }
 
     fn remove(&mut self, key: &K) -> Option<CapacityUsageRecord> {
-        self.capacity_usage_info
+        self.capacity_usage_records
             .remove(key)
             .map(CapacityUsageRecord::from)
     }
@@ -119,7 +143,7 @@ pub struct RateLimiter<K, S> {
 // Convenience type alias for the common in-memory case
 pub type InMemoryRateLimiter<K> = RateLimiter<K, InMemoryCapacityStorage<K>>;
 
-impl<K: Ord + Clone + Debug + Storable> InMemoryRateLimiter<K> {
+impl<K: Ord + Clone + Debug> InMemoryRateLimiter<K> {
     pub fn new_in_memory(config: RateLimiterConfig) -> Self {
         Self::new(config, InMemoryCapacityStorage::default())
     }
