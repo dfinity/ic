@@ -17,7 +17,7 @@ use std::time::Duration;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::pot_dsl::TestPath;
 
-use crate::driver::constants::{SSH_USERNAME, SUBREPORT_LOG_PREFIX};
+use crate::driver::constants::SUBREPORT_LOG_PREFIX;
 
 use super::farm::HostFeature;
 
@@ -329,16 +329,16 @@ fn append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
 
 pub trait SshKeyGen {
     /// Generates an SSH key-pair for the given user and stores it in self.
-    fn ssh_keygen(&self) -> Result<()>;
+    fn ssh_keygen(&self, username: &str) -> Result<()>;
 }
 
 impl SshKeyGen for TestEnv {
     /// Generates an SSH key-pair for the given user and stores it in the TestEnv.
-    fn ssh_keygen(&self) -> Result<()> {
+    fn ssh_keygen(&self, username: &str) -> Result<()> {
         let ssh_authorized_pub_keys_dir = self.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
         let ssh_authorized_priv_key_dir = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
 
-        let priv_key = ssh_authorized_priv_key_dir.join(SSH_USERNAME);
+        let priv_key = ssh_authorized_priv_key_dir.join(username);
 
         if !priv_key.exists() {
             fs::create_dir_all(ssh_authorized_pub_keys_dir.clone())?;
@@ -351,7 +351,7 @@ impl SshKeyGen for TestEnv {
                 .arg("-N")
                 .arg("")
                 .arg("-C")
-                .arg(SSH_USERNAME)
+                .arg(username)
                 .arg("-f")
                 .arg(priv_key.clone())
                 .spawn()?;
@@ -360,7 +360,7 @@ impl SshKeyGen for TestEnv {
                 .expect("Expected ssh-keygen to finish successfully");
 
             let orig_pub_key = priv_key.with_extension("pub");
-            let final_pub_key = ssh_authorized_pub_keys_dir.join(SSH_USERNAME);
+            let final_pub_key = ssh_authorized_pub_keys_dir.join(username);
             fs::rename(orig_pub_key, final_pub_key)?;
         }
 
