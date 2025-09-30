@@ -3299,12 +3299,12 @@ impl Governance {
         set_following: &manage_neuron::SetFollowing,
     ) -> Result<(), GovernanceError> {
         // Start with original following of the neuron.
-        let mut new_followees = self.with_neuron(
+        let (neuron, mut topic_to_followees) = self.with_neuron(
             id,
-            |neuron| -> Result<HashMap</* topic */ i32, Followees>, GovernanceError> {
+            |neuron| -> Result<(Neuron, HashMap</* topic */ i32, Followees>), GovernanceError> {
                 set_following.validate(caller, neuron)?;
 
-                Ok(neuron.followees.clone())
+                Ok((neuron.clone(), neuron.followees.clone()))
             },
         )??;
 
@@ -3314,21 +3314,63 @@ impl Governance {
             let topic = topic.unwrap_or_default();
             let followees = followees.clone();
 
-            if followees.is_empty() {
-                new_followees.remove(&topic);
-            } else {
-                new_followees.insert(topic, Followees { followees });
-            }
+            topic_to_followees = self.modify_followees(
+                &neuron,
+                &topic_to_followees,
+                topic,
+                Followees { followees },
+            )?;
         }
 
         // Commit new_followees to the neuron.
         let now_seconds = self.env.now();
         self.with_neuron_mut(id, |neuron| {
-            neuron.followees = new_followees;
+            // TODO use the function
+            neuron.followees = topic_to_followees;
             neuron.refresh_voting_power(now_seconds);
         })?;
 
         Ok(())
+    }
+
+    fn modify_followees(
+        &self,
+        neuron: &Neuron,
+        topic_to_followees: &HashMap<i32, Followees>,
+        topic: i32,
+        new_followees: Followees,
+    ) -> Result<HashMap<i32, Followees>, GovernanceError> {
+        let controller = neuron.controller();
+        let mut updated_followees = topic_to_followees.clone();
+        if new_followees.followees.is_empty() {
+            // If the new followees list is empty, remove the entry for the topic.
+            updated_followees.remove(&topic);
+        } else {
+            // Otherwise, update the entry with the new followees list.
+            // A new can follow another neuron if:
+            // 1. the followee neuron is a public neuron
+            // 2. or if the followee neuron is a private neuron, they share a controller.
+            // If in the list of followees, there is any follow relationship
+            // the doesn't adhere to the aforementioned rules, return a GovernanceError.
+            let is_valid_followees = new_followees.followees.iter().all(|followee| {
+                if let Ok(followee_neuron) = self.with_neuron(&followee, |neuron| neuron.clone()) {
+                    followee_neuron.visibility() == Visibility::Public
+                        || followee_neuron.controller() == controller
+                } else {
+                    false
+                }
+            });
+            if !is_valid_followees {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "One or more follow relationships are not valid.",
+                ));
+            }
+
+            updated_followees.insert(topic, new_followees);
+        }
+
+        Ok(updated_followees)
     }
 
     /// Set the status of a proposal that is 'being executed' to
@@ -5889,18 +5931,21 @@ impl Governance {
         })?;
 
         let now_seconds = self.env.now();
-        self.with_neuron_mut(id, |neuron| {
-            if follow_request.followees.is_empty() {
-                neuron.followees.remove(&(topic as i32));
-            } else {
-                neuron.followees.insert(
-                    topic as i32,
-                    Followees {
-                        followees: follow_request.followees.clone(),
-                    },
-                );
-            }
+        let neuron_followees = self.with_neuron(id, |neuron| {
+            self.modify_followees(
+                neuron,
+                &neuron.followees,
+                topic as i32,
+                Followees {
+                    followees: follow_request.followees.clone(),
+                },
+            )
+        })??;
 
+        self.with_neuron_mut(id, |neuron| {
+            neuron.followees = neuron_followees;
+
+            // Changing followees may change the voting power, so refresh it.
             neuron.refresh_voting_power(now_seconds);
         })?;
 

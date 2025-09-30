@@ -281,6 +281,8 @@ impl GovernanceCanisterInitPayloadBuilder {
         }
 
         for result in reader.records() {
+            use ic_nns_governance_api::Visibility;
+
             let record = result.expect("error reading CSV record");
 
             let id_field: &str = &record[0];
@@ -342,6 +344,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                     .iter()
                     .cloned()
                     .collect(),
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             };
 
