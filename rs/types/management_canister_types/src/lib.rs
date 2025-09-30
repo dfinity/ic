@@ -3310,15 +3310,70 @@ pub struct NodeMetricsHistoryResponse {
 
 impl Payload<'_> for NodeMetricsHistoryResponse {}
 
+/// Exclusive range for fetching canister logs `[start, end)`.
+/// It's used both for `idx` and `timestamp_nanos` based filtering.
+/// If `end` is below `start`, the range is considered empty.
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct FetchCanisterLogsRange {
+    start: u64, // Inclusive.
+    end: u64,   // Exclusive, values below `start` are ignored.
+}
+
+impl Payload<'_> for FetchCanisterLogsRange {}
+
+impl FetchCanisterLogsRange {
+    /// Creates a new range from `start` (inclusive) to `end` (exclusive).
+    pub fn new(start: u64, end: u64) -> Self {
+        Self { start, end }
+    }
+
+    /// Returns the length of the range.
+    /// If user provides an `end` value below `start`, the length is 0.
+    fn len(&self) -> u64 {
+        self.end.saturating_sub(self.start)
+    }
+
+    /// Returns the end of the range (exclusive).
+    fn sanitized_end(&self) -> u64 {
+        self.start + self.len()
+    }
+
+    /// Returns true if the range is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns true if the range contains the given value.
+    pub fn contains(&self, value: u64) -> bool {
+        self.start <= value && value < self.sanitized_end()
+    }
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum FetchCanisterLogsFilter {
+    #[serde(rename = "by_idx")]
+    ByIdx(FetchCanisterLogsRange),
+
+    #[serde(rename = "by_timestamp_nanos")]
+    ByTimestampNanos(FetchCanisterLogsRange),
+}
+
+impl Payload<'_> for FetchCanisterLogsFilter {}
+
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text
 /// record {
 ///     canister_id: principal;
+///     filter: opt variant {
+///       by_idx: record { start: nat64; end: nat64 };
+///       by_timestamp_nanos: record { start: nat64; end: nat64 };
+///     }
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRequest {
     pub canister_id: PrincipalId,
+    pub filter: Option<FetchCanisterLogsFilter>,
 }
 
 impl Payload<'_> for FetchCanisterLogsRequest {}
@@ -3327,6 +3382,14 @@ impl FetchCanisterLogsRequest {
     pub fn new(canister_id: CanisterId) -> Self {
         Self {
             canister_id: canister_id.into(),
+            filter: None,
+        }
+    }
+
+    pub fn new_with_filter(canister_id: CanisterId, filter: FetchCanisterLogsFilter) -> Self {
+        Self {
+            canister_id: canister_id.into(),
+            filter: Some(filter),
         }
     }
 
