@@ -171,8 +171,8 @@ class BMCInfo:
     username: str
     password: str
     network_image_url: str
-    guestos_ipv6_address: Optional[IPv6Address] = None
-    hostos_ipv6_address: Optional[IPv6Address] = None
+    guestos_ipv6_address: IPv6Address
+    hostos_ipv6_address: IPv6Address
 
     def __post_init__(self):
         def assert_not_empty(name: str, x: Any) -> None:
@@ -209,10 +209,6 @@ class Ipv4Args:
 
 
 def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
-    if len(row) == 3:
-        ip_address, username, password = row
-        return BMCInfo(ip_address, username, password, network_image_url)
-
     if len(row) == 4:
         ip_address, username, password, guestos_ipv6_address = row
         hostos_ipv6_address = guestos_ipv6_address.replace("6801", "6800", 1)
