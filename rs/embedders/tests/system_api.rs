@@ -1619,9 +1619,8 @@ fn test_on_low_wasm_memory_grow_wasm_memory_all_status_changes() {
 
 #[test]
 fn test_on_low_wasm_memory_grow_stable_memory() {
-    // When memory_allocation is provided, hook condition can be triggered if:
+    // Growing stable memory cannot trigger hook condition even if
     // memory_allocation - used_stable_memory - used_wasm_memory < wasm_memory_threshold
-    // Hence growing stable memory can trigger hook condition.
     let wasm_memory_threshold = NumBytes::new(GIB as u64);
     let wasm_memory_limit = None;
     let memory_allocation = Some(NumBytes::new(3 * GIB as u64));
@@ -1647,7 +1646,7 @@ fn test_on_low_wasm_memory_grow_stable_memory() {
         max_allowed_memory_size + 1,
         grow_wasm_memory,
         OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::Ready,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
     );
 
     // Without `memory_allocation`, hook condition is not satisfied.
