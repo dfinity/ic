@@ -115,13 +115,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-          sparse-checkout: ".github/scripts/determine-initial-guest-os-versions.py"
+          sparse-checkout: "ci/scripts/determine-initial-guest-os-versions.py"
       - id: generate
         name: Fetch beginning versions for qualification
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT=$(python .github/scripts/determine-initial-guest-os-versions.py)
+          OUTPUT=$(python ci/scripts/determine-initial-guest-os-versions.py)
           echo "output=$OUTPUT" >> $GITHUB_OUTPUT
 
   guest-os-qualification:
