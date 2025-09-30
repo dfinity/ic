@@ -3327,20 +3327,15 @@ impl FetchCanisterLogsRange {
         Self { start, end }
     }
 
-    /// Returns the start of the range (inclusive).
-    pub fn start(&self) -> u64 {
-        self.start
+    /// Returns the length of the range.
+    /// If user provides an `end` value below `start`, the length is 0.
+    fn len(&self) -> u64 {
+        self.end.saturating_sub(self.start)
     }
 
     /// Returns the end of the range (exclusive).
-    pub fn end(&self) -> u64 {
+    fn sanitized_end(&self) -> u64 {
         self.start + self.len()
-    }
-
-    /// Returns the length of the range.
-    /// If user provides an `end` value below `start`, the length is 0.
-    pub fn len(&self) -> u64 {
-        self.end.saturating_sub(self.start)
     }
 
     /// Returns true if the range is empty.
@@ -3350,7 +3345,7 @@ impl FetchCanisterLogsRange {
 
     /// Returns true if the range contains the given value.
     pub fn contains(&self, value: u64) -> bool {
-        self.start <= value && value < self.end()
+        self.start <= value && value < self.sanitized_end()
     }
 }
 
