@@ -6,8 +6,8 @@ use std::path::Path;
 
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified
 pub fn generate_fixtures(fixtures_dir: &Path) -> Result<()> {
-    generate_fixture_for_config(fixtures_dir, "hostos", generate_default_hostos_config())?;
-    generate_fixture_for_config(fixtures_dir, "guestos", generate_default_guestos_config())?;
+    generate_fixture_for_config(fixtures_dir, "hostos", generate_hostos_config())?;
+    generate_fixture_for_config(fixtures_dir, "guestos", generate_guestos_config())?;
 
     Ok(())
 }
@@ -43,11 +43,11 @@ where
     let existing_json = fs::read_to_string(existing_fixture_path)?;
     let new_json = serde_json::to_string_pretty(new_config)?;
 
-    // Compare the JSON strings - if they're different, the config structure or default values have changed
+    // Compare the JSON strings - if they're different, the config structure or values have changed
     Ok(existing_json != new_json)
 }
 
-fn generate_default_hostos_config() -> HostOSConfig {
+fn generate_hostos_config() -> HostOSConfig {
     let network_settings = NetworkSettings {
         ipv6_config: Ipv6Config::Fixed(FixedIpv6Config {
             address: "2a00:fb01:400:200::1/64".to_string(),
@@ -92,16 +92,16 @@ fn generate_default_hostos_config() -> HostOSConfig {
     }
 }
 
-fn generate_default_guestos_config() -> GuestOSConfig {
+fn generate_guestos_config() -> GuestOSConfig {
     let sev_cert_chain_pem = "-----BEGIN CERTIFICATE-----\
                                      -----END CERTIFICATE-----"
         .to_string();
-    let default_hostos_config = generate_default_hostos_config();
+    let hostos_config = generate_hostos_config();
     GuestOSConfig {
         config_version: CONFIG_VERSION.to_string(),
-        network_settings: default_hostos_config.network_settings,
-        icos_settings: default_hostos_config.icos_settings,
-        guestos_settings: default_hostos_config.guestos_settings,
+        network_settings: hostos_config.network_settings,
+        icos_settings: hostos_config.icos_settings,
+        guestos_settings: hostos_config.guestos_settings,
         guest_vm_type: GuestVMType::Default,
         upgrade_config: GuestOSUpgradeConfig {
             peer_guest_vm_address: Some("2a00:fb01:400:200:6801:95ff:fed7:d475".parse().unwrap()),
