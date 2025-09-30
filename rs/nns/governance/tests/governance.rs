@@ -37,6 +37,11 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance::governance::MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE;
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
+use ic_nns_governance::storage::reset_stable_memory;
+use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
@@ -127,11 +132,6 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-
-#[cfg(feature = "tla")]
-use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
-use ic_nns_governance::storage::reset_stable_memory;
-use ic_nns_governance::timer_tasks::schedule_tasks;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
