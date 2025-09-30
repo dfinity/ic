@@ -14,7 +14,7 @@ use crate::{
         nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
         node_software_version::NodeSoftwareVersion,
         port_allocator::AddrType,
-        resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
+        resource::AllocatedVm,
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
@@ -709,6 +709,8 @@ fn create_setupos_config_image(
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from);
 
+    let vm_spec = nested_vm.get_vm_spec()?;
+
     setupos_image_config::create_setupos_config(
         &config_dir,
         &data_dir,
@@ -723,9 +725,9 @@ fn create_setupos_config_image(
         DeploymentConfig {
             nns_urls: Some(nns_url.clone()),
             nns_public_key_override: Some(nns_public_key_override.to_string()),
-            memory_gb: Some((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).get() as u32),
+            memory_gb: Some((vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32),
             cpu: Some(cpu.to_string()),
-            nr_of_vcpus: Some((HOSTOS_VCPUS_PER_VM / 2).get() as u32),
+            nr_of_vcpus: Some((vm_spec.v_cpus / 2) as u32),
             mgmt_mac: Some(mac.to_string()),
             deployment_environment: Some(DeploymentEnvironment::Testnet),
         },

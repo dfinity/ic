@@ -25,8 +25,8 @@ use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        nested::NestedVm,
-        nested::{HasNestedVms, NestedNodes},
+        ic::{NrOfVCPUs, VmResources},
+        nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
     },
@@ -39,6 +39,8 @@ use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{Logger, info};
 use tokio::task::JoinSet;
+
+pub const NNS_RECOVERY_VM_VCPUS: NrOfVCPUs = NrOfVCPUs::new(8);
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
@@ -132,9 +134,16 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new(&host_vm_names)
-        .setup_and_start(&env)
-        .unwrap();
+    NestedNodes::new_with_resources(
+        &host_vm_names,
+        VmResources {
+            vcpus: Some(NNS_RECOVERY_VM_VCPUS),
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: None,
+        },
+    )
+    .setup_and_start(&env)
+    .unwrap();
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
