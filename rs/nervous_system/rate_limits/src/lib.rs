@@ -119,8 +119,22 @@ pub struct RateLimiter<K, S> {
 // Convenience type alias for the common in-memory case
 pub type InMemoryRateLimiter<K> = RateLimiter<K, InMemoryCapacityStorage<K>>;
 
+impl<K: Ord + Clone + Debug + Storable> InMemoryRateLimiter<K> {
+    pub fn new_in_memory(config: RateLimiterConfig) -> Self {
+        Self::new(config, InMemoryCapacityStorage::default())
+    }
+}
+
 // Convenience type alias for the stable structures case
 pub type StableRateLimiter<K, Memory> = RateLimiter<K, StableMemoryCapacityStorage<K, Memory>>;
+
+impl<K: Ord + Clone + Debug + Storable, Memory: ic_stable_structures::Memory>
+    StableRateLimiter<K, Memory>
+{
+    pub fn new_stable(config: RateLimiterConfig, memory: Memory) -> Self {
+        Self::new(config, StableMemoryCapacityStorage::new(memory))
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 struct ReservationData {
@@ -150,7 +164,7 @@ pub enum RateLimiterError {
 }
 
 impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S> {
-    pub fn new(config: RateLimiterConfig, capacity_storage: S) -> Self {
+    fn new(config: RateLimiterConfig, capacity_storage: S) -> Self {
         Self {
             config,
             reservations: Arc::new(Mutex::new(BTreeMap::new())),

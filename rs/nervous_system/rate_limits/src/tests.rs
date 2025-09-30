@@ -6,15 +6,12 @@ use ic_stable_structures::{
 
 #[test]
 fn test_rate_limiter_just_reservations() {
-    let mut rate_limiter = RateLimiter::new(
-        RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(10),
-            max_capacity: 10,
-            max_reservations: 1000,
-        },
-        InMemoryCapacityStorage::default(),
-    );
+    let mut rate_limiter = RateLimiter::new_in_memory(RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(10),
+        max_capacity: 10,
+        max_reservations: 1000,
+    });
 
     let now = SystemTime::now();
 
@@ -74,15 +71,12 @@ fn test_rate_limiter_just_reservations() {
 
 #[test]
 fn test_token_bucket_replenishment() {
-    let mut rate_limiter = RateLimiter::new(
-        RateLimiterConfig {
-            add_capacity_amount: 2, // Add 2 capacity every 10 seconds
-            add_capacity_interval: Duration::from_secs(10),
-            max_capacity: 10,
-            max_reservations: 1000,
-        },
-        InMemoryCapacityStorage::default(),
-    );
+    let mut rate_limiter = RateLimiter::new_in_memory(RateLimiterConfig {
+        add_capacity_amount: 2, // Add 2 capacity every 10 seconds
+        add_capacity_interval: Duration::from_secs(10),
+        max_capacity: 10,
+        max_reservations: 1000,
+    });
 
     let now = SystemTime::now();
 
@@ -134,15 +128,12 @@ fn test_token_bucket_replenishment() {
 
 #[test]
 fn test_max_reservations() {
-    let mut rate_limiter = RateLimiter::new(
-        RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(100),
-            max_capacity: 10,
-            max_reservations: 4,
-        },
-        InMemoryCapacityStorage::default(),
-    );
+    let mut rate_limiter = RateLimiter::new_in_memory(RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(100),
+        max_capacity: 10,
+        max_reservations: 4,
+    });
 
     let now = SystemTime::now();
 
@@ -161,16 +152,15 @@ fn test_max_reservations() {
 fn test_stable_rate_limiter() {
     let memory_manager = MemoryManager::init(DefaultMemoryImpl::default());
     let capacity_memory = memory_manager.get(MemoryId::new(0));
-    let capacity_storage = StableMemoryCapacityStorage::new(capacity_memory);
 
-    let mut rate_limiter = RateLimiter::new(
+    let mut rate_limiter = RateLimiter::new_stable(
         RateLimiterConfig {
             add_capacity_amount: 1,
             add_capacity_interval: Duration::from_secs(100),
             max_capacity: 10,
             max_reservations: 1000,
         },
-        capacity_storage,
+        capacity_memory,
     );
 
     let now = SystemTime::now();
@@ -202,15 +192,12 @@ fn test_stable_rate_limiter() {
 
 #[test]
 fn test_reservation_not_found() {
-    let mut rate_limiter = RateLimiter::new(
-        RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(100),
-            max_capacity: 10,
-            max_reservations: 4,
-        },
-        InMemoryCapacityStorage::default(),
-    );
+    let mut rate_limiter = RateLimiter::new_in_memory(RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(100),
+        max_capacity: 10,
+        max_reservations: 4,
+    });
 
     let now = SystemTime::now();
 

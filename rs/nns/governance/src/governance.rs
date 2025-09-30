@@ -1557,18 +1557,15 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
 }
 
 fn new_rate_limiter() -> InMemoryRateLimiter<String> {
-    RateLimiter::new(
-        RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE),
-            max_capacity: MAX_NEURON_CREATION_SPIKE,
-            // It should not be possible to have more than MAX_NEURON_CREATION_SPIKE_RESERVATIONS
-            // because there is only one reservation space being used.
-            // But we don't want to hit that error, so we add an extra one.
-            max_reservations: MAX_NEURON_CREATION_SPIKE + 1,
-        },
-        InMemoryCapacityStorage::default(),
-    )
+    RateLimiter::new_in_memory(RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE),
+        max_capacity: MAX_NEURON_CREATION_SPIKE,
+        // It should not be possible to have more than MAX_NEURON_CREATION_SPIKE_RESERVATIONS
+        // because there is only one reservation space being used.
+        // But we don't want to hit that error, so we add an extra one.
+        max_reservations: MAX_NEURON_CREATION_SPIKE + 1,
+    })
 }
 
 impl Governance {
