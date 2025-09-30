@@ -269,7 +269,7 @@ pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 /// A key for the neuron rate limiter, to make sure all add_neuron operations are limited
 /// in the same limit.
-const NEURON_RATE_LIMITER_KEY: String = "ADD_NEURON".to_string();
+const NEURON_RATE_LIMITER_KEY: &str = "ADD_NEURON";
 
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
@@ -2371,7 +2371,7 @@ impl Governance {
 
         let neuron_limit_reservation = self.rate_limiter.try_reserve(
             self.env.now_system_time(),
-            NEURON_RATE_LIMITER_KEY.clone(),
+            NEURON_RATE_LIMITER_KEY.to_string(),
             1,
         )?;
 
@@ -3079,7 +3079,7 @@ impl Governance {
     ) -> Result<NeuronId, GovernanceError> {
         let neuron_limit_reservation = self.rate_limiter.try_reserve(
             self.env.now_system_time(),
-            NEURON_RATE_LIMITER_KEY.clone(),
+            NEURON_RATE_LIMITER_KEY.to_string(),
             1,
         )?;
 
@@ -6139,7 +6139,7 @@ impl Governance {
     ) -> Result<NeuronId, GovernanceError> {
         let neuron_limit_reservation = self.rate_limiter.try_reserve(
             self.env.now_system_time(),
-            NEURON_RATE_LIMITER_KEY.clone(),
+            NEURON_RATE_LIMITER_KEY.to_string(),
             1,
         )?;
 

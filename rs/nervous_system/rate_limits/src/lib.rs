@@ -288,7 +288,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         let mut usage = self
             .capacity_storage
             .remove(&key)
-            .unwrap_or_else(|| CapacityUsageRecord {
+            .unwrap_or(CapacityUsageRecord {
                 last_capacity_drip: now,
                 capacity_used: 0,
             });
