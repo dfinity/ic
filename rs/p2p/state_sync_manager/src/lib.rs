@@ -51,6 +51,7 @@ const ADVERT_BROADCAST_TIMEOUT: Duration =
     ADVERT_BROADCAST_INTERVAL.saturating_sub(Duration::from_secs(2));
 
 pub fn build_state_sync_manager<T: Send + 'static>(
+    node_id: NodeId,
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
@@ -77,6 +78,7 @@ pub fn build_state_sync_manager<T: Send + 'static>(
 
     let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics_registry);
     let manager = StateSyncManager {
+        node_id,
         log: log.clone(),
         rt: rt_handle.clone(),
         metrics: state_sync_manager_metrics,
@@ -88,6 +90,7 @@ pub fn build_state_sync_manager<T: Send + 'static>(
 }
 
 pub struct StateSyncManager<T> {
+    node_id: NodeId,
     log: ReplicaLogger,
     rt: Handle,
     metrics: StateSyncManagerMetrics,
@@ -190,6 +193,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 &self.rt,
                 self.metrics.ongoing_state_sync_metrics.clone(),
                 Arc::new(Mutex::new(chunkable)),
+                self.node_id,
                 advert.id.clone(),
                 transport,
             );
@@ -265,7 +269,7 @@ mod tests {
     use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{Height, crypto::CryptoHash};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, node_test_id};
     use mockall::Sequence;
     use prost::Message;
     use tokio::{runtime::Runtime, sync::Notify};
@@ -350,6 +354,7 @@ mod tests {
                 advert_receiver: handler_rx,
                 ongoing_state_sync: None,
                 metrics,
+                node_id: node_test_id(0),
                 state_sync: Arc::new(s) as Arc<_>,
                 rt: rt.handle().clone(),
             };

@@ -76,17 +76,25 @@ impl XorDistance {
 pub(crate) struct ChunksToDownload(BTreeMap<XorDistance, (ChunkId, bool)>);
 
 impl ChunksToDownload {
+    pub(crate) fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+
     // Add chunks to the chunks to download list
     pub(crate) fn add_chunks(
         &mut self,
         node_id: NodeId,
         artifact_id: StateSyncArtifactId,
         chunks: impl Iterator<Item = ChunkId>,
-    ) {
+    ) -> usize {
+        let mut added = 0;
         for chunk in chunks {
             let xor_distance = XorDistance::new(node_id, artifact_id.clone(), chunk);
             self.0.insert(xor_distance, (chunk, false));
+            added += 1;
         }
+
+        added
     }
 
     pub(crate) fn next_chunk_to_download(&mut self) -> Option<ChunkId> {

@@ -418,18 +418,16 @@ pub fn create_node(
         disconnected: Arc::new(AtomicBool::new(false)),
     });
 
+    let node_id = NodeId::from(PrincipalId::new_node_test_id(node_num));
+
     let (router, manager) = ic_state_sync_manager::build_state_sync_manager(
+        node_id.clone(),
         &log,
         &MetricsRegistry::default(),
         rt,
         state_sync.clone(),
     );
-    let transport = transport_router.add_peer(
-        NodeId::from(PrincipalId::new_node_test_id(node_num)),
-        router,
-        link.0,
-        link.1,
-    );
+    let transport = transport_router.add_peer(node_id, router, link.0, link.1);
     let shutdown = manager.start(Arc::new(transport));
     (state_sync, shutdown)
 }

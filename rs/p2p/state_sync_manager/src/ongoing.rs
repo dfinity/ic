@@ -11,14 +11,16 @@
 //!  - Add downloaded chunk to state.
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.
+use crate::{metrics::OngoingStateSyncMetrics, utils::XorDistance};
+use crate::{
+    routes::{build_chunk_handler_request, parse_chunk_handler_response},
+    utils::ChunksToDownload,
+};
 use std::{
     collections::{HashMap, hash_map::Entry},
     sync::{Arc, Mutex},
     time::Duration,
 };
-
-use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
-use crate::{metrics::OngoingStateSyncMetrics, utils::XorDistance};
 
 use ic_base_types::NodeId;
 use ic_http_endpoints_async_utils::JoinMap;
@@ -49,13 +51,14 @@ struct OngoingStateSync {
     artifact_id: StateSyncArtifactId,
     metrics: OngoingStateSyncMetrics,
     transport: Arc<dyn Transport>,
+    node_id: NodeId,
     // Peer management
     new_peers_rx: Receiver<(NodeId, Option<XorDistance>)>,
     // Peers that advertised state and the number of outstanding chunk downloads to that peer.
     active_downloads: HashMap<NodeId, u64>,
     // Download management
     allowed_downloads: usize,
-    chunks_to_download: Box<dyn Iterator<Item = ChunkId> + Send>,
+    chunks_to_download: ChunksToDownload,
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
 }
@@ -76,6 +79,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     rt: &Handle,
     metrics: OngoingStateSyncMetrics,
     tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
+    node_id: NodeId,
     artifact_id: StateSyncArtifactId,
     transport: Arc<dyn Transport>,
 ) -> OngoingStateSyncHandle {
@@ -86,10 +90,11 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         artifact_id: artifact_id.clone(),
         metrics,
         transport,
+        node_id,
         new_peers_rx,
         active_downloads: HashMap::new(),
         allowed_downloads: 0,
-        chunks_to_download: Box::new(std::iter::empty()),
+        chunks_to_download: ChunksToDownload::new(),
         downloading_chunks: JoinMap::new(),
     };
 
@@ -132,7 +137,7 @@ impl OngoingStateSync {
                 }
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
-                        Ok((result, _)) => {
+                        Ok((result, chunk)) => {
                             // We do a saturating sub here because it can happen (in rare cases) that a peer that just joined this sync
                             // was previously removed from the sync and still had outstanding downloads. As a consequence there is the possibiliy
                             // of an underflow. In the case where we close old download task while having active downloads we might start to
@@ -141,6 +146,8 @@ impl OngoingStateSync {
                             self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
                             self.handle_downloaded_chunk_result(result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
+
+                            self.chunks_to_download.download_finished(chunk);
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -234,7 +241,7 @@ impl OngoingStateSync {
         }
         let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
         for _ in 0..available_download_capacity {
-            match self.chunks_to_download.next() {
+            match self.chunks_to_download.next_chunk_to_download() {
                 Some(chunk) if !self.downloading_chunks.contains(&chunk) => {
                     // Select random peer weighted proportional to active downloads.
                     // Peers with less active downloads are more likely to be selected.
@@ -259,19 +266,22 @@ impl OngoingStateSync {
                 }
                 Some(_) => {}
                 None => {
-                    // If we store chunks in self.chunks_to_download we will eventually initiate  and
+                    // If we store chunks in self.chunks_to_download we will eventually initiate and
                     // by filtering with the current in flight request we avoid double download.
-                    // TODO: Evaluate performance impact of this since on mainnet it is possible
-                    // that `chunks_to_download` returns 1Million elements.
-                    let mut v = Vec::new();
-                    for c in tracker.lock().unwrap().chunks_to_download() {
-                        if !self.downloading_chunks.contains(&c) {
-                            v.push(c);
-                        }
-                    }
+                    let chunks_to_download = tracker
+                        .lock()
+                        .unwrap()
+                        .chunks_to_download()
+                        .filter(|chunk| !self.downloading_chunks.contains(chunk));
+
+                    let added = self.chunks_to_download.add_chunks(
+                        self.node_id,
+                        self.artifact_id.clone(),
+                        chunks_to_download,
+                    );
+
                     self.metrics.chunks_to_download_calls_total.inc();
-                    self.metrics.chunks_to_download_total.inc_by(v.len() as u64);
-                    self.chunks_to_download = Box::new(v.into_iter());
+                    self.metrics.chunks_to_download_total.inc_by(added as u64);
                 }
             }
         }
@@ -371,7 +381,7 @@ mod tests {
     use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{Height, crypto::CryptoHash};
-    use ic_types_test_utils::ids::NODE_1;
+    use ic_types_test_utils::ids::{NODE_1, node_test_id};
     use prost::Message;
     use tokio::runtime::Runtime;
 
@@ -408,6 +418,7 @@ mod tests {
                 rt.handle(),
                 OngoingStateSyncMetrics::new(&MetricsRegistry::default()),
                 Arc::new(Mutex::new(Box::new(c))),
+                node_test_id(0),
                 StateSyncArtifactId {
                     height: Height::from(1),
                     hash: CryptoHash(vec![]),
@@ -445,6 +456,7 @@ mod tests {
                 rt.handle(),
                 OngoingStateSyncMetrics::new(&MetricsRegistry::default()),
                 Arc::new(Mutex::new(Box::new(c))),
+                node_test_id(0),
                 StateSyncArtifactId {
                     height: Height::from(1),
                     hash: CryptoHash(vec![]),
@@ -484,6 +496,7 @@ mod tests {
                 rt.handle(),
                 OngoingStateSyncMetrics::new(&MetricsRegistry::default()),
                 Arc::new(Mutex::new(Box::new(c))),
+                node_test_id(0),
                 StateSyncArtifactId {
                     height: Height::from(1),
                     hash: CryptoHash(vec![]),
