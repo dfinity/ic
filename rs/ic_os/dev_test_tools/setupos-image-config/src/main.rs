@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, Error};
 use clap::Parser;
+use config::setupos::config_ini::ConfigIniSettings;
 use tempfile::NamedTempFile;
 
 use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
@@ -25,6 +26,9 @@ struct Cli {
 
     #[arg(long)]
     node_operator_private_key: Option<PathBuf>,
+
+    #[arg(long)]
+    nns_public_key_override: Option<PathBuf>,
 
     #[arg(long, value_delimiter = ',')]
     public_keys: Option<Vec<String>>,
@@ -52,7 +56,34 @@ async fn main() -> Result<(), Error> {
 
     // Update config.ini
     let config_ini = NamedTempFile::with_prefix("config.ini")?;
-    write_config(config_ini.path(), &cli.config_ini).context("failed to write config file")?;
+    let settings = {
+        let ConfigIni {
+            node_reward_type,
+            ipv6_prefix,
+            ipv6_prefix_length,
+            ipv6_gateway,
+            ipv4_address,
+            ipv4_gateway,
+            ipv4_prefix_length,
+            domain_name,
+            enable_trusted_execution_environment,
+            verbose,
+        } = cli.config_ini;
+
+        ConfigIniSettings {
+            ipv6_prefix,
+            ipv6_prefix_length,
+            ipv6_gateway,
+            ipv4_address,
+            ipv4_gateway,
+            ipv4_prefix_length,
+            domain_name,
+            verbose,
+            node_reward_type,
+            enable_trusted_execution_environment,
+        }
+    };
+    write_config(config_ini.path(), &settings).context("failed to write config file")?;
     config
         .write_file(config_ini.path(), Path::new("/config.ini"))
         .await
@@ -99,9 +130,7 @@ async fn main() -> Result<(), Error> {
     // Update SSH keys
     if let Some(ks) = cli.public_keys {
         let public_keys = NamedTempFile::with_prefix("public_keys")?;
-        write_public_keys(public_keys.path(), ks)
-            .await
-            .context("failed to write public keys")?;
+        write_public_keys(public_keys.path(), ks).context("failed to write public keys")?;
 
         config
             .write_file(public_keys.path(), Path::new("/ssh_authorized_keys/admin"))
@@ -139,7 +168,6 @@ async fn main() -> Result<(), Error> {
     deployment_json.write_all(previous_deployment.as_bytes())?;
     fs::set_permissions(deployment_json.path(), Permissions::from_mode(0o644))?;
     update_deployment(deployment_json.path(), &cli.deployment)
-        .await
         .context("failed to write deployment config file")?;
     data.write_file(deployment_json.path(), Path::new("/deployment.json"))
         .await
