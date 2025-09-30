@@ -2546,7 +2546,8 @@ impl Governance {
 
         // Commit the usage from reservation now that we are not going to remove the neuron
         self.rate_limiter
-            .commit(self.env.now_system_time(), neuron_limit_reservation);
+            .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .expect("Reservation should not be missing");
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
         let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
@@ -3277,7 +3278,8 @@ impl Governance {
 
         // Commit the reservation now that the neuron can no longer be deleted.
         self.rate_limiter
-            .commit(self.env.now_system_time(), neuron_limit_reservation);
+            .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .expect("Reservation should not be missing");
 
         // Get the neurons again, but this time mutable references.
         self.with_neuron_mut(id, |parent_neuron| {
@@ -6196,7 +6198,8 @@ impl Governance {
 
         // Commit the reservation now that the neuron can no longer be deleted.
         self.rate_limiter
-            .commit(self.env.now_system_time(), neuron_limit_reservation);
+            .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .expect("Reservation should not be missing");
 
         let result = self.with_neuron_mut(&nid, |neuron| {
             // Adjust the stake.

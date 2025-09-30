@@ -146,6 +146,7 @@ pub enum RateLimiterError {
     NotEnoughCapacity,
     InvalidArguments(String),
     MaxReservationsReached,
+    ReservationNotFound,
 }
 
 impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S> {
@@ -172,7 +173,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
             ));
         }
 
-        let mut reservations = self.reservations.lock().unwrap();
+        let reservations = self.reservations.lock().unwrap();
         // validate that system can handle more reservations
         let used_reservations: u64 = reservations
             .len()
@@ -189,23 +190,14 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
             .map(|(_, data)| data.capacity)
             .sum();
 
-        // Update token bucket capacity and get current committed usage
-        let committed_capacity = if let Some(usage_record) = self.capacity_storage.get(&key) {
-            let mut usage = usage_record;
-            update_capacity(
-                &mut usage,
-                now,
-                self.config.add_capacity_amount,
-                self.config.add_capacity_interval,
-            );
-            // Update the storage with the modified usage
-            self.capacity_storage.upsert(key.clone(), usage.clone());
-            usage.capacity_used
-        } else {
-            0
-        };
+        // Drop this borrow so we can borrow mutably to get usage
+        drop(reservations);
+
+        let committed_capacity =
+            self.with_capacity_usage_record(key.clone(), now, |usage| usage.capacity_used);
 
         if reserved_capacity + committed_capacity + requested_capacity <= self.config.max_capacity {
+            let mut reservations = self.reservations.lock().unwrap();
             // Only allocate global index on successful reservation
             let index = self.next_index;
             self.next_index += 1;
@@ -228,31 +220,30 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         }
     }
 
-    pub fn commit(&mut self, now: SystemTime, reservation: Reservation<K>) {
+    pub fn commit(
+        &mut self,
+        now: SystemTime,
+        reservation: Reservation<K>,
+    ) -> Result<(), RateLimiterError> {
         let reservation_data = if let Ok(mut reservations) = self.reservations.lock() {
             if let Some(reservation_data) =
                 reservations.remove(&(reservation.key.clone(), reservation.index))
             {
                 reservation_data
             } else {
-                return;
+                return Err(RateLimiterError::ReservationNotFound);
             }
         } else {
-            return;
+            return Err(RateLimiterError::ReservationNotFound);
         };
 
-        let add_capacity_amount = self.config.add_capacity_amount;
-        let add_capacity_interval = self.config.add_capacity_interval;
         self.with_capacity_usage_record(reservation.key.clone(), now, |usage| {
-            // Update token bucket capacity
-            update_capacity(usage, now, add_capacity_amount, add_capacity_interval);
-
-            // TODO DO NOT MERGE - should this throw an error if the reservation cannot be found
-            // How do we handle that?
             usage.capacity_used = usage
                 .capacity_used
                 .saturating_add(reservation_data.capacity);
         });
+
+        Ok(())
     }
 
     // Internal helper to correctly deal with memory usage.
@@ -270,6 +261,14 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
                 last_capacity_drip: now,
                 capacity_used: 0,
             });
+
+        // Update token bucket capacity so that it's always accurate when retrieved.
+        update_capacity(
+            &mut usage,
+            now,
+            self.config.add_capacity_amount,
+            self.config.add_capacity_interval,
+        );
 
         let result = f(&mut usage);
         // We only insert the record if there's something in it.

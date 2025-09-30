@@ -1,4 +1,8 @@
 use super::*;
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    memory_manager::{MemoryId, MemoryManager},
+};
 
 #[test]
 fn test_rate_limiter_just_reservations() {
@@ -84,7 +88,9 @@ fn test_token_bucket_replenishment() {
 
     // Use up 8 capacity
     let reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 8).unwrap();
-    rate_limiter.commit(now, reservation1);
+    rate_limiter
+        .commit(now, reservation1)
+        .expect("Could not commit");
 
     // Should only have 2 capacity left
     let over_limit = rate_limiter.try_reserve(now, "Foo".to_string(), 3);
@@ -95,7 +101,9 @@ fn test_token_bucket_replenishment() {
 
     // Can still reserve 2
     let reservation2 = rate_limiter.try_reserve(now, "Foo".to_string(), 2).unwrap();
-    rate_limiter.commit(now, reservation2);
+    rate_limiter
+        .commit(now, reservation2)
+        .expect("Could not commit");
 
     // Now we're at full capacity (10/10 used), nothing more should work
     let fully_used = rate_limiter.try_reserve(now, "Foo".to_string(), 1);
@@ -151,11 +159,6 @@ fn test_max_reservations() {
 
 #[test]
 fn test_stable_rate_limiter() {
-    use ic_stable_structures::{
-        DefaultMemoryImpl,
-        memory_manager::{MemoryId, MemoryManager},
-    };
-
     let memory_manager = MemoryManager::init(DefaultMemoryImpl::default());
     let capacity_memory = memory_manager.get(MemoryId::new(0));
     let capacity_storage = StableMemoryCapacityStorage::new(capacity_memory);
@@ -180,7 +183,9 @@ fn test_stable_rate_limiter() {
     assert_eq!(reservation1.key, "stable_key".to_string());
 
     // Commit the reservation
-    rate_limiter.commit(now, reservation1);
+    rate_limiter
+        .commit(now, reservation1)
+        .expect("Could not commit");
 
     // Verify the usage is stored
     let usage = rate_limiter.capacity_storage.get(&"stable_key".to_string());
@@ -193,4 +198,39 @@ fn test_stable_rate_limiter() {
         reservation2,
         Err(RateLimiterError::NotEnoughCapacity)
     ));
+}
+
+#[test]
+fn test_reservation_not_found() {
+    let mut rate_limiter = RateLimiter::new(
+        RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(100),
+            max_capacity: 10,
+            max_reservations: 4,
+        },
+        InMemoryCapacityStorage::default(),
+    );
+
+    let now = SystemTime::now();
+
+    let reservation1 = rate_limiter.try_reserve(now, "Foo".to_string(), 1).unwrap();
+
+    assert_eq!(
+        rate_limiter
+            .commit(
+                now,
+                Reservation {
+                    key: "Bar".to_string(),
+                    index: 1,
+                    reservations_map: Arc::downgrade(&rate_limiter.reservations)
+                }
+            )
+            .unwrap_err(),
+        RateLimiterError::ReservationNotFound
+    );
+
+    rate_limiter
+        .commit(now, reservation1)
+        .expect("Could not commit found reservation");
 }
