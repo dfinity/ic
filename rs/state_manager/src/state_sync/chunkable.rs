@@ -1419,10 +1419,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             Arc::new(meta_manifest.clone()),
                         );
                         self.state = DownloadState::Complete;
-                        self.state_sync_refs
-                            .cache
-                            .write()
-                            .register_successful_sync(self.height);
                         Ok(())
                     } else {
                         let state_sync_file_group = build_file_group_chunks(&manifest);
@@ -1616,11 +1612,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         Arc::new(meta_manifest.clone()),
                     );
                     self.state = DownloadState::Complete;
-
-                    self.state_sync_refs
-                        .cache
-                        .write()
-                        .register_successful_sync(self.height);
 
                     // Delay delivery of artifact
                     #[cfg(feature = "malicious_code")]
