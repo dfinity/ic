@@ -596,16 +596,13 @@ impl CanisterState {
     /// Updates status of `OnLowWasmMemory` hook.
     pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
         self.system_state
-            .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
+            .update_on_low_wasm_memory_hook_status(self.wasm_memory_usage());
     }
 
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
     pub fn is_low_wasm_memory_hook_condition_satisfied(&self) -> bool {
         self.system_state
-            .is_low_wasm_memory_hook_condition_satisfied(
-                self.memory_usage(),
-                self.wasm_memory_usage(),
-            )
+            .is_low_wasm_memory_hook_condition_satisfied(self.wasm_memory_usage())
     }
 }
 

@@ -1199,10 +1199,6 @@ impl SandboxSafeSystemState {
         if !should_check || old_memory_usage >= new_memory_usage {
             return Ok(());
         }
-        // Note that currently the memory usage of a canister cannot
-        // exceed its reserved limit. The `Reserved(_)` case is
-        // actually unreachable here, but we still handle it to keep
-        // this code robust.
         let threshold = self.cycles_account_manager.freeze_threshold_cycles(
             self.freeze_threshold,
             self.memory_allocation,
@@ -1357,20 +1353,15 @@ impl SandboxSafeSystemState {
 
     /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
     ///
-    /// 1. In the case of `memory_allocation`
-    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
-    /// 2. Without memory allocation
-    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_status_of_low_wasm_memory_hook_condition(
         &mut self,
         wasm_memory_limit: Option<NumBytes>,
-        memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
         let is_condition_satisfied = is_low_wasm_memory_hook_condition_satisfied(
-            memory_usage,
             wasm_memory_usage,
             wasm_memory_limit,
             self.wasm_memory_threshold,
@@ -1684,37 +1675,32 @@ mod tests {
         for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
             for wasm_memory_limit in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
             {
-                for memory_usage_without_wasm_memory in [0, GIB] {
-                    for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-                        let mut state = helper_create_state_for_hook_status(wasm_memory_threshold);
+                for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                    let mut state = helper_create_state_for_hook_status(wasm_memory_threshold);
 
-                        assert_eq!(
-                            state
-                                .system_state_modifications
-                                .on_low_wasm_memory_hook_condition_check_result,
-                            None
-                        );
+                    assert_eq!(
+                        state
+                            .system_state_modifications
+                            .on_low_wasm_memory_hook_condition_check_result,
+                        None
+                    );
 
-                        let memory_usage = wasm_memory_usage + memory_usage_without_wasm_memory;
+                    state.update_status_of_low_wasm_memory_hook_condition(
+                        wasm_memory_limit.map(|m| m.into()),
+                        wasm_memory_usage.into(),
+                    );
 
-                        state.update_status_of_low_wasm_memory_hook_condition(
-                            wasm_memory_limit.map(|m| m.into()),
-                            memory_usage.into(),
-                            wasm_memory_usage.into(),
-                        );
-
-                        assert_eq!(
-                            state
-                                .system_state_modifications
-                                .on_low_wasm_memory_hook_condition_check_result
-                                .unwrap(),
-                            helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
-                                wasm_memory_threshold,
-                                wasm_memory_limit,
-                                wasm_memory_usage
-                            )
-                        );
-                    }
+                    assert_eq!(
+                        state
+                            .system_state_modifications
+                            .on_low_wasm_memory_hook_condition_check_result
+                            .unwrap(),
+                        helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+                            wasm_memory_threshold,
+                            wasm_memory_limit,
+                            wasm_memory_usage
+                        )
+                    );
                 }
             }
         }

@@ -944,6 +944,11 @@ impl MemoryUsage {
 
     /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
+    /// If the canister has memory allocation, then this function only allocates
+    /// bytes for extra memory usage beyond the memory allocation.
+    /// Nevertheless, this function always increases `current_usage`
+    /// by the full amount of extra memory usage.
+    ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
     /// if the subnet memory limit would be exceeded.
     ///
@@ -1006,7 +1011,6 @@ impl MemoryUsage {
 
                 sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
                     self.wasm_memory_limit,
-                    self.current_usage,
                     self.wasm_memory_usage,
                 );
 

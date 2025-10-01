@@ -253,11 +253,10 @@ impl TaskQueue {
 
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
-/// `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
 ///
 /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
 pub fn is_low_wasm_memory_hook_condition_satisfied(
-    memory_usage: NumBytes,
     wasm_memory_usage: NumBytes,
     wasm_memory_limit: Option<NumBytes>,
     wasm_memory_threshold: NumBytes,
@@ -268,18 +267,13 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
     let wasm_memory_limit =
         wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
 
-    debug_assert!(
-        wasm_memory_usage <= memory_usage,
-        "Wasm memory usage {wasm_memory_usage} is greater that memory usage {memory_usage}."
-    );
-
     // Conceptually we can think that the remaining Wasm memory is
     // equal to `wasm_memory_limit - wasm_memory_usage` and that should
     // be compared with `wasm_memory_threshold` when checking for
     // the condition for the hook. However, since `wasm_memory_limit`
     // is ignored in some executions as stated above it is possible
-    // that `wasm_memory_usage` is greater than `wasm_capacity` and to
-    // avoid overflowing subtraction we adopted inequality.
+    // that `wasm_memory_usage` is greater than `wasm_memory_limit` and to
+    // avoid overflowing subtraction we adjusted the inequality.
     wasm_memory_limit < wasm_memory_usage + wasm_memory_threshold
 }
 
