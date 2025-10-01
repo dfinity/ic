@@ -544,13 +544,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .nodes()
         .filter(|n| n.node_id != upload_node.node_id)
         .collect::<Vec<_>>();
-    let mut admin_ssh_sessions =
-        disable_ssh_access_to_nodes(&nodes_except_upload_node, SSH_USERNAME)
-            .expect("Failed to disable admin SSH access to nodes");
-    admin_ssh_sessions.insert(
-        upload_node.node_id,
-        upload_node.block_on_ssh_session().unwrap(),
-    );
+    let admin_ssh_sessions = disable_ssh_access_to_nodes(&nodes_except_upload_node, SSH_USERNAME)
+        .expect("Failed to disable admin SSH access to nodes");
 
     let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
     for node in nodes_except_upload_node {
