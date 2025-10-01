@@ -98,6 +98,7 @@ pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
 }
 
 /// Assert that the given node has deleted its state within the next 5 minutes.
+/// Reuses the provided SSH session if given, otherwise creates a new one.
 pub fn assert_node_is_unassigned_with_ssh_session(
     node: &IcNodeSnapshot,
     existing_session: Option<&Session>,
