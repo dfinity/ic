@@ -307,9 +307,10 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: nns_subnet.subnet_id,
         upgrade_version: Some(working_version.clone()),
-        replay_until_height: Some(highest_certification_share_height),
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
+        add_and_bless_upgrade_version: Some(true),
+        replay_until_height: Some(highest_certification_share_height),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
@@ -585,11 +586,6 @@ fn local_recovery(
         .upgrade_version
         .map(|v| format!("--upgrade-version {v} "))
         .unwrap_or_default();
-    let maybe_replay_until_height = subnet_recovery_tool
-        .params
-        .replay_until_height
-        .map(|h| format!("--replay-until-height {h} "))
-        .unwrap_or_default();
     let maybe_upgrade_image_url = subnet_recovery_tool
         .params
         .upgrade_image_url
@@ -599,6 +595,16 @@ fn local_recovery(
         .params
         .upgrade_image_hash
         .map(|h| format!("--upgrade-image-hash {h} "))
+        .unwrap_or_default();
+    let maybe_add_and_bless_upgrade_version = subnet_recovery_tool
+        .params
+        .add_and_bless_upgrade_version
+        .map(|b| format!("--add-and-bless-upgrade-version {b} "))
+        .unwrap_or_default();
+    let maybe_replay_until_height = subnet_recovery_tool
+        .params
+        .replay_until_height
+        .map(|h| format!("--replay-until-height {h} "))
         .unwrap_or_default();
     let maybe_download_pool_node = subnet_recovery_tool
         .params
@@ -630,9 +636,10 @@ fn local_recovery(
         nns-recovery-same-nodes \
         --subnet-id {subnet_id} \
         {maybe_upgrade_version}\
-        {maybe_replay_until_height}\
         {maybe_upgrade_image_url}\
         {maybe_upgrade_image_hash}\
+        {maybe_add_and_bless_upgrade_version}\
+        {maybe_replay_until_height}\
         {maybe_download_pool_node}\
         --admin-access-location local \
         {maybe_keep_downloaded_state}\
