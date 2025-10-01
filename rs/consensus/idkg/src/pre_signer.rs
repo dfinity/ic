@@ -278,29 +278,27 @@ impl IDkgPreSignerImpl {
         let results = self.thread_pool.install(|| {
             dealings
                 .into_par_iter()
-                .filter(|(id, signed_dealing)| {
-                    id.dealing_hash().map_or_else(
-                        || {
-                            self.metrics
-                                .pre_sign_errors_inc("create_support_id_dealing_hash");
-                            warn!(
-                                self.log,
-                                "send_dealing_support(): Failed to get dealing hash: {:?}", id
-                            );
-                            false
-                        },
-                        |dealing_hash| {
-                            !self.has_node_issued_dealing_support(
-                                idkg_pool,
-                                &signed_dealing.idkg_dealing().transcript_id,
-                                &signed_dealing.dealer_id(),
-                                &self.node_id,
-                                &dealing_hash,
-                            )
-                        },
-                    )
-                })
                 .filter_map(|(id, signed_dealing)| {
+                    let Some(dealing_hash) = id.dealing_hash() else {
+                        self.metrics
+                            .pre_sign_errors_inc("create_support_id_dealing_hash");
+                        warn!(
+                            self.log,
+                            "send_dealing_support(): Failed to get dealing hash: {:?}", id
+                        );
+                        return None;
+                    };
+
+                    if self.has_node_issued_dealing_support(
+                        idkg_pool,
+                        &signed_dealing.idkg_dealing().transcript_id,
+                        &signed_dealing.dealer_id(),
+                        &self.node_id,
+                        &dealing_hash,
+                    ) {
+                        return None;
+                    }
+
                     let dealing = signed_dealing.idkg_dealing();
                     // Look up the transcript params for the dealing
                     let Some(transcript_params_ref) =
