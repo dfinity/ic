@@ -7,11 +7,10 @@ to run them and baseline results for comparing new changes.
 Quick Start
 -----------
 
-1. To run all benchmarks and compare them to the committed baseline
-   in a dev container on the `zh1-spm34` host:
+1. To run all benchmarks and compare them to the committed baseline:
 
    ```sh
-   HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+   ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
    ```
 
    The summary will be generated in the `summary.txt` file.
@@ -19,7 +18,7 @@ Quick Start
    To run only the Embedders Heap benchmarks for `wasm32` query reads:
 
    ```sh
-   INCLUDE=heap FILTER=wasm32_query_read HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh
+   INCLUDE=heap FILTER=wasm32_query_read ./rs/execution_environment/benches/run-all-benchmarks.sh
    ```
 
 2. To update the baseline:
@@ -79,16 +78,13 @@ Both the baseline results and new change benchmarks should be run on the same ho
 The benchmark scripts enforce this and will not compare results produced on
 different hosts.
 
-The best candidates for running the benchmarks are the `zh1-spm34` or `dm1-dll46` hosts.
+The best candidate for running the benchmarks is the `zh1-spm34` host.
 
-If running the benchmarks in a dev container, the hostname must be set explicitly:
+Running the benchmarks in a dev container is also supported:
 
    ```sh
-   HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+   ./ci/container/container-run.sh ./rs/execution_environment/benches/run-all-benchmarks.sh
    ```
-
-This is required because the dev container hostname is statically set
-to `devenv-container`.
 
 Adding New Benchmarks
 ---------------------

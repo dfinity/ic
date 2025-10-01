@@ -4,7 +4,7 @@
 //! process several requests concurrently.
 
 use crate::{
-    Event, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, EventType, RequestState, ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -158,7 +158,15 @@ pub async fn process_controllers_changed(
         }
     }
 
-    // TODO: target has enough cycles
+    if source_status.cycles < CYCLES_COST_PER_MIGRATION {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: format!(
+                "Source does not have sufficient cycles: {} < {}.",
+                source_status.cycles, CYCLES_COST_PER_MIGRATION
+            ),
+        });
+    }
 
     // Determine history length of source
     get_canister_info(request.source)
@@ -342,7 +350,7 @@ pub async fn process_all_failed() {
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
 // TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
-async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infallible> {
+async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Infallible> {
     let RequestState::Failed { request, reason } = request else {
         println!("Error: list_failed returned bad variant");
         return ProcessingResult::NoProgress;
@@ -369,7 +377,7 @@ async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infall
         return ProcessingResult::NoProgress;
     }
     // We successfully returned controllership.
-    ProcessingResult::Success(Event::Failed { request, reason })
+    ProcessingResult::Success(EventType::Failed { request, reason })
 }
 
 pub async fn process_all_succeeded() {
@@ -380,7 +388,7 @@ pub async fn process_all_succeeded() {
     for request in requests.into_iter() {
         remove_request(&request);
         if let RequestState::RestoredControllers { request } = request {
-            let event = Event::Succeeded { request };
+            let event = EventType::Succeeded { request };
             insert_event(event);
         }
     }
@@ -474,7 +482,7 @@ impl ProcessingResult<RequestState, RequestState> {
 }
 
 // Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
-impl ProcessingResult<Event, Infallible> {
+impl ProcessingResult<EventType, Infallible> {
     fn transition(self, old_state: RequestState) {
         match self {
             ProcessingResult::Success(event) => {

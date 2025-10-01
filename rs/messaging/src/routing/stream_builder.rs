@@ -426,14 +426,14 @@ impl StreamBuilderImpl {
                                 }
                             }
 
-                            dst_stream_entry.or_default().push(msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            dst_stream_entry.or_default().push(msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
                     };
                 }
