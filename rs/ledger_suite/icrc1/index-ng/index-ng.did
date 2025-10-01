@@ -137,6 +137,11 @@ type Status = record {
   num_blocks_synced : BlockIndex
 };
 
+type SyncStatus = record {
+  sync_active : bool;
+  sync_error : opt text
+};
+
 type FeeCollectorRanges = record {
   ranges : vec record { Account; vec record { BlockIndex; BlockIndex } }
 }
@@ -148,5 +153,6 @@ service : (index_arg : opt IndexArg) -> {
   icrc1_balance_of : (Account) -> (Tokens) query;
   ledger_id : () -> (principal) query;
   list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
-  status : () -> (Status) query
+  status : () -> (Status) query;
+  sync_status : () -> (SyncStatus) query
 }
