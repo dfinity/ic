@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
+- The function `start_server` only downloads the PocketIC server binary
+  if no path to the PocketIC server binary is provided explicitly.
+
+### Removed
+- The constant `EXPECTED_SERVER_VERSION`: semantic version is now used instead of a fixed expected PocketIC server version.
 
 
 

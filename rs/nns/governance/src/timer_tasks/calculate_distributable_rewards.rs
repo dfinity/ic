@@ -44,7 +44,6 @@ fn delay_until_next_run(
 
     // We want the difference between next and now.  If it's in the past, we want to run
     // immediately
-    // @todo maybe we should just simplifiy it
     Duration::from_secs(next.saturating_sub(now))
 }
 
