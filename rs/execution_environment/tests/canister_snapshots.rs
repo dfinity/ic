@@ -1005,10 +1005,11 @@ fn load_canister_snapshot_works_on_another_canister() {
 fn canister_snapshots_and_memory_allocation() {
     let env = StateMachine::new();
 
+    // We first fill the subnet with canisters having 100 GiB of memory allocation each.
     let mut canisters = vec![];
     loop {
         let settings = CanisterSettingsArgsBuilder::new()
-            .with_memory_allocation(100_000_000_000)
+            .with_memory_allocation(100 << 30)
             .build();
         match env.create_canister_with_cycles_impl(None, Cycles::zero(), Some(settings)) {
             Ok(WasmResult::Reply(bytes)) => {
@@ -1023,6 +1024,26 @@ fn canister_snapshots_and_memory_allocation() {
         }
     }
 
+    // Now we unset the memory allocation of the last canister, i.e.,
+    // make its memory allocation best-effort.
+    // Since this canister is the only canister with best-effort memory allocation
+    // and the other canisters do not exceed their memory allocation of 100 GiB,
+    // it is effectively still guaranteed that this last canister can grow
+    // its memory usage up to 100 GiB.
+    let best_effort_canister_id = canisters.last().unwrap();
+    env.update_settings(
+        best_effort_canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(0)
+            .build(),
+    )
+    .unwrap();
+
+    // For each canister (including the last best-effort canister),
+    // we deploy the universal canister WASM,
+    // grow stable memory to 40 GiB, and take a canister snapshot.
+    // This should succeed because the overall memory usage is ~80 GiB
+    // which is well within the memory allocation of 100 GiB.
     for canister_id in canisters {
         env.install_existing_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
             .unwrap();
