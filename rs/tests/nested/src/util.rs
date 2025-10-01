@@ -19,7 +19,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error as RegistryTransportError;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{InternetComputer, Subnet},
         ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
         nested::NestedVm,
         test_env::TestEnv,
@@ -46,12 +46,6 @@ use slog::{Logger, info};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
-
-pub const LIGHTWEIGHT_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(8)),
-    memory_kibibytes: None,
-    boot_image_minimal_size_gibibytes: None,
-};
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
 pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast: bool) {
@@ -80,7 +74,6 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
     install_nns_and_check_progress(env.topology_snapshot());
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
-        .with_vm_resources(LIGHTWEIGHT_VM_RESOURCES)
         .start(env)
         .expect("failed to setup ic-gateway");
 }

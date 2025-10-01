@@ -2,18 +2,12 @@ use std::{net::Ipv6Addr, path::Path};
 
 use anyhow::Result;
 use ic_system_test_driver::driver::{
-    ic::{NrOfVCPUs, VmResources},
     test_env::TestEnv,
     test_env_api::{SshSession, get_dependency_path, scp_send_to},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
 
 const UNIVERSAL_VM_NAME: &str = "upstreams";
-const UNIVERSAL_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(8)),
-    memory_kibibytes: None,
-    boot_image_minimal_size_gibibytes: None,
-};
 
 const UPSTREAMS: [&str; 2] = ["download.dfinity.systems", "download.dfinity.network"];
 
@@ -30,7 +24,6 @@ pub fn get_upstreams_uvm_ipv6(env: &TestEnv) -> Ipv6Addr {
 
 pub fn setup_upstreams_uvm(env: &TestEnv) {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_vm_resources(UNIVERSAL_VM_RESOURCES)
         .with_config_img(get_dependency_path(
             std::env::var("IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH").unwrap_or_else(|_| {
                 panic!("IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH environment variable not found")
