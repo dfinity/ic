@@ -15,7 +15,6 @@ import shutil
 import signal as _signal  # noqa
 import subprocess
 import sys
-import tempfile
 import time
 import typing
 import urllib.parse
@@ -383,12 +382,23 @@ class ReproducibilityVerifier:
                 raise RuntimeError(f"Refusing to clean manually specified base cache directory {base_cache_dir}")
             self.base_cache_dir = base_cache_dir
         else:
-            self.base_cache_dir = base_cache_dir or Path(os.path.expanduser("~/.cache/repro-check"))
-            if clean_base_cache_dir and base_cache_dir.is_dir():
-                shutil.rmtree(base_cache_dir)
+            # Use repository-local temp directory to avoid filesystem linking issues
+            repo_root = self._find_repo_root()
+            self.base_cache_dir = repo_root / ".cache" / "repro-check"
+            if clean_base_cache_dir and self.base_cache_dir.is_dir():
+                shutil.rmtree(self.base_cache_dir)
         self.cache_for_this_hash: Path = Path()
 
         self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=9)
+
+    def _find_repo_root(self) -> Path:
+        """Find the root of the git repository."""
+        current = Path.cwd()
+        while current != current.parent:
+            if (current / ".git").exists():
+                return current
+            current = current.parent
+        raise RuntimeError("Could not find git repository root")
 
     # --------------------------------------------------------------------------
     # ENVIRONMENT CHECKS
@@ -648,15 +658,22 @@ class ReproducibilityVerifier:
 
         out_dir = tmpdir / "disk-images" / self.git_hash
 
-        yield Dirs(
-            tmpdir,
-            out_dir,
-            out_dir / "cdn-img",
-            out_dir / "dev-img",
-            out_dir / "proposal-img",
-        )
-        if not keep_temp:
-            cleanup()
+        try:
+            yield Dirs(
+                tmpdir,
+                out_dir,
+                out_dir / "cdn-img",
+                out_dir / "dev-img",
+                out_dir / "proposal-img",
+            )
+            # Only cleanup on successful completion
+            if not keep_temp:
+                cleanup()
+        except Exception:
+            # On failure, keep the temp directory for debugging unless explicitly requested to clean
+            if not keep_temp:
+                logger.info(f"Verification failed. Temporary directory kept for debugging: {tmpdir}")
+            raise
 
     # --------------------------------------------------------------------------
     # Verification steps
