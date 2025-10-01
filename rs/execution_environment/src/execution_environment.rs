@@ -1585,6 +1585,7 @@ impl ExecutionEnvironment {
                                     ),
                                 ))
                             } else {
+                                request.payment -= fetch_canister_logs_fee; // Charge for the request.
                                 FetchCanisterLogsRequest::decode(payload)
                                     .and_then(|args| {
                                         fetch_canister_logs(
