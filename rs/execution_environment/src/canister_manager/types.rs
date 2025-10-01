@@ -756,7 +756,7 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "canister-metadata-no-wasm-module".to_string(),
             },
             CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
-                suggestion: "The canister has no metadata section with the given name.".to_string(),
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
                 doc_link: "canister-metadata-section-not-found".to_string(),
             },
         }
