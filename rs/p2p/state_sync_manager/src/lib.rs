@@ -134,6 +134,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
         cancellation: CancellationToken,
         transport: Arc<dyn Transport>,
     ) {
+        // Include partial state sync progress in the adverts, if it exists
         let partial_state = if let Some(state_sync) = &self.ongoing_state_sync {
             state_sync
                 .partial_state
@@ -256,27 +257,51 @@ impl<T: 'static + Send> StateSyncManager<T> {
         );
 
         let mut futures = vec![];
-        for state_id in available_states {
-            // Unreliable broadcast of adverts to all current peers.
-            for (peer_id, _) in transport.peers() {
-                let request = build_advert_handler_request(state_id.clone(), None);
-                let transport_c = transport.clone();
-                let cancellation_c = cancellation.clone();
-                futures.push(async move {
-                    select! {
-                        _ = tokio::time::timeout(
-                            ADVERT_BROADCAST_TIMEOUT,
-                            // TODO: NET-1748
-                            transport_c.rpc(&peer_id, request)) => {}
-                        () = cancellation_c.cancelled() => {}
-                    }
-                });
+        // Unreliable broadcast of adverts to all current peers.
+        for (peer_id, _) in transport.peers() {
+            for state_id in &available_states {
+                futures.push(send_advert(
+                    peer_id.clone(),
+                    transport.clone(),
+                    state_id.clone(),
+                    None,
+                    cancellation.clone(),
+                ));
+            }
+
+            // Send adverts for incomplete state
+            if let Some((state_id, partial_state)) = &partial_state {
+                futures.push(send_advert(
+                    peer_id.clone(),
+                    transport.clone(),
+                    state_id.clone(),
+                    Some(partial_state.clone()),
+                    cancellation.clone(),
+                ));
             }
         }
+
         let _ = join_all(futures).await;
     }
 }
 
+fn send_advert(
+    peer_id: NodeId,
+    transport: Arc<dyn Transport>,
+    state_id: StateSyncArtifactId,
+    partial_state: Option<XorDistance>,
+    cancellation: CancellationToken,
+) -> impl Future<Output = ()> {
+    let request = build_advert_handler_request(state_id.clone(), partial_state.clone());
+    async move {
+        select! {
+            _ = tokio::time::timeout(
+                ADVERT_BROADCAST_TIMEOUT,
+                transport.rpc(&peer_id, request)) => {}
+            () = cancellation.cancelled() => {}
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use axum::{http::StatusCode, response::Response};
