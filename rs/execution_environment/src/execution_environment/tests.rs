@@ -4,12 +4,11 @@ use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
-    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
-    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod, IC_00,
-    LogVisibilityV2, MasterPublicKeyId, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
-    SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
+    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
+    FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
     UploadChunkArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
@@ -798,13 +797,8 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let mut test = ExecutionTestBuilder::new().build();
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
-    let memory_allocation = NumBytes::from(450);
     let canister = test
-        .create_canister_with_allocation(
-            Cycles::new(1_000_000_000_000),
-            None,
-            Some(memory_allocation.get()),
-        )
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), None, None)
         .unwrap();
     test.install_canister(canister, binary).unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
@@ -823,7 +817,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let seconds_per_day = 24 * 3600;
     assert_eq!(
         csr.idle_cycles_burned_per_day(),
-        (memory_allocation.get() as u128
+        (csr.memory_size().get() as u128
             * seconds_per_day
             * test
                 .cycles_account_manager()
@@ -4397,92 +4391,5 @@ fn cannot_accept_cycles_after_replying() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles + (transferred_cycles / 2u64)
-    );
-}
-
-fn helper_upload_chunk(test: &mut ExecutionTest, canister_id: CanisterId, chunk: Vec<u8>) {
-    let upload_args = UploadChunkArgs {
-        canister_id: canister_id.into(),
-        chunk,
-    };
-    let result = test.subnet_message("upload_chunk", upload_args.encode());
-    assert!(result.is_ok());
-}
-
-fn helper_clear_chunk(test: &mut ExecutionTest, canister_id: CanisterId) {
-    let clear_args = ClearChunkStoreArgs {
-        canister_id: canister_id.into(),
-    };
-    let result = test.subnet_message("clear_chunk_store", clear_args.encode());
-    assert!(result.is_ok());
-    // Verify chunk store contains no data.
-    assert!(
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .wasm_chunk_store
-            .keys()
-            .next()
-            .is_none()
-    );
-}
-
-#[test]
-fn upload_and_clear_chunk_updates_hook_condition() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_caller(own_subnet, caller_canister)
-        .build();
-
-    let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
-
-    test.subnet_message(
-        Method::UpdateSettings,
-        UpdateSettingsArgs {
-            canister_id: canister_id.get(),
-            settings: CanisterSettingsArgsBuilder::new()
-                .with_wasm_memory_limit(100_000_000)
-                .with_memory_allocation(9_000_000)
-                .with_wasm_memory_threshold(5_000_000)
-                .build(),
-            sender_canister_version: None,
-        }
-        .encode(),
-    )
-    .unwrap();
-
-    assert_eq!(
-        test.canister_state_mut(canister_id)
-            .system_state
-            .task_queue
-            .peek_hook_status(),
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
-    );
-
-    let chunk = vec![1, 2, 3, 4, 5];
-    helper_upload_chunk(&mut test, canister_id, chunk);
-
-    assert_eq!(
-        test.canister_state_mut(canister_id)
-            .system_state
-            .task_queue
-            .peek_hook_status(),
-        OnLowWasmMemoryHookStatus::Ready
-    );
-
-    helper_clear_chunk(&mut test, canister_id);
-
-    assert_eq!(
-        test.canister_state_mut(canister_id)
-            .system_state
-            .task_queue
-            .peek_hook_status(),
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
     );
 }
