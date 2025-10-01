@@ -470,13 +470,13 @@ impl IDkgPreSignerImpl {
 
                         // Assume validation will succeed from here, for now.
                         validators_optimistic.insert(support.sig_share.signer);
-                        return Some((transcript_params_ref, id, support));
+                        Some((transcript_params_ref, id, support))
                     }
                     Action::Drop => {
                         ret.push(IDkgChangeAction::RemoveUnvalidated(id));
-                        return None;
+                        None
                     }
-                    Action::Defer => return None,
+                    Action::Defer => None,
                 }
             })
             .collect();
@@ -531,13 +531,13 @@ impl IDkgPreSignerImpl {
                         ));
                     };
 
-                    return self.crypto_verify_dealing_support(
+                    self.crypto_verify_dealing_support(
                         id,
                         &transcript_params,
                         signed_dealing,
                         support,
                         idkg_pool.stats(),
-                    );
+                    )
 
                 } else {
                     // If the dealer_id in the share is invalid, drop it.
@@ -549,7 +549,7 @@ impl IDkgPreSignerImpl {
                             "validate_dealing_support(): Missing hash, invalid dealer: {:?}",
                             support
                         );
-                        return Some(IDkgChangeAction::RemoveUnvalidated(id));
+                        Some(IDkgChangeAction::RemoveUnvalidated(id))
                     } else {
                         // If the share points to a different dealing hash than what we
                         // have for the same <transcript Id, dealer Id>, drop it. This is
@@ -575,7 +575,7 @@ impl IDkgPreSignerImpl {
                             return Some(IDkgChangeAction::RemoveUnvalidated(id));
                         }
                         // Else: Support for a dealing we don't have yet, defer it
-                        return None;
+                        None
                     }
                 }
             }).collect()
