@@ -41,9 +41,10 @@ rust_library(
 
 system_test_nns(
     name = "nr_broken_dfinity_node_perf",
+    # tags = ["long_test"],
+    srcs = ["nr_broken_dfinity_node.rs"],
     env = ENV,
     flaky = True,
-    # tags = ["long_test"],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
@@ -60,12 +61,13 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_large_perf",
-    enable_head_nns_variant = False,
-    env = ENV,
-    flaky = True,
     # tags = [
     #     "system_test_large",
     # ],
+    srcs = ["nr_large.rs"],
+    enable_head_nns_variant = False,
+    env = ENV,
+    flaky = True,
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
@@ -82,9 +84,10 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_local_perf",
+    # tags = ["long_test"],
+    srcs = ["nr_local.rs"],
     env = ENV,
     flaky = True,
-    # tags = ["long_test"],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
@@ -99,9 +102,10 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_remote_perf",
+    # tags = ["long_test"],
+    srcs = ["nr_remote.rs"],
     env = ENV,
     flaky = True,
-    # tags = ["long_test"],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
