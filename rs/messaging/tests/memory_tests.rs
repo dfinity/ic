@@ -48,6 +48,7 @@ pub fn seed_rng(env: &StateMachine, canister: CanisterId, seed: u64) {
     env.execute_ingress(canister, "seed_rng", msg).unwrap();
 }
 
+/// Quick and dirty test for the new `split` function.
 #[test]
 fn split_test() {
     use crate::common::install_canister;
