@@ -473,7 +473,7 @@ impl MemoryAllocation {
 
 impl fmt::Display for MemoryAllocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.0.display())
     }
 }
 
