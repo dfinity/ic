@@ -21,17 +21,17 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
-    CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
-    CanisterStatusType, ChunkHash, Global, GlobalTimer, Method as Ic00Method,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkReply,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
+    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Global, GlobalTimer,
+    Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
+    SnapshotSource, StoredChunksReply, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_replicated_state::canister_state::execution_state::SandboxMemory;
+use ic_replicated_state::canister_state::execution_state::{CustomSectionType, SandboxMemory};
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     CHUNK_SIZE, ChunkValidationResult, WasmChunkHash,
 };
@@ -143,6 +143,7 @@ impl CanisterManager {
             Err(_)
             | Ok(Ic00Method::CreateCanister)
             | Ok(Ic00Method::CanisterInfo)
+            | Ok(Ic00Method::CanisterMetadata)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
@@ -1122,6 +1123,43 @@ impl CanisterManager {
         ))
     }
 
+    /// Gets the metadata of the canister.
+    pub(crate) fn get_canister_metadata(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+        section_name: &str,
+    ) -> Result<CanisterMetadataResponse, CanisterManagerError> {
+        let execution_state = canister.execution_state.as_ref().ok_or(
+            CanisterManagerError::CanisterMetadataNoWasmModule {
+                canister_id: canister.canister_id(),
+            },
+        )?;
+        let custom_section = execution_state
+            .metadata
+            .get_custom_section(section_name)
+            .ok_or(CanisterManagerError::CanisterMetadataSectionNotFound {
+                canister_id: canister.canister_id(),
+                section_name: section_name.to_string(),
+            })?;
+
+        let is_sender_controller = canister.controllers().contains(&sender);
+        let can_non_controller_read_section = match custom_section.visibility() {
+            CustomSectionType::Public => true,
+            CustomSectionType::Private => false,
+        };
+        if is_sender_controller || can_non_controller_read_section {
+            Ok(CanisterMetadataResponse::new(
+                custom_section.content().to_vec(),
+            ))
+        } else {
+            Err(CanisterManagerError::CanisterMetadataSectionNotFound {
+                canister_id: canister.canister_id(),
+                section_name: section_name.to_string(),
+            })
+        }
+    }
+
     /// Permanently deletes a canister from `ReplicatedState`.
     ///
     /// The canister must be `Stopped` and only the controller of the canister
@@ -2009,6 +2047,7 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         resource_saturation: &ResourceSaturation,
         long_execution_already_in_progress: &IntCounter,
+        snapshot_exists_without_associated_canister: &IntCounter,
     ) -> (Result<CanisterState, CanisterManagerError>, NumInstructions) {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
@@ -2042,15 +2081,41 @@ impl CanisterManager {
                 );
             }
             Some(snapshot) => {
-                // Verify the provided snapshot id belongs to this canister.
-                if snapshot.canister_id() != canister_id {
-                    return (
-                        Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                            canister_id,
-                            snapshot_id,
-                        }),
-                        NumInstructions::new(0),
-                    );
+                // Verify the provided `snapshot_id` belongs to a canister controlled by the sender.
+                // Only perform the check if target canister to load the snapshot
+                // is not the same as the one owning the snapshot.
+                let snapshot_canister_id = snapshot.canister_id();
+                if snapshot_canister_id != canister_id {
+                    match state.canister_state(&snapshot_canister_id) {
+                        None => {
+                            // The below case should never happen as if the snapshot still exists, it
+                            // should be associated with an existing canister. If it happens, it indicates
+                            // a bug, so log an error message for investigation.
+                            snapshot_exists_without_associated_canister.inc();
+                            error!(
+                                self.log,
+                                "[EXC-BUG]: Canister {} does not exist although there's a snapshot {} associated with it.",
+                                snapshot_canister_id,
+                                snapshot_id,
+                            );
+                            return (
+                                Err(CanisterManagerError::CanisterNotFound(snapshot_canister_id)),
+                                NumInstructions::new(0),
+                            );
+                        }
+                        Some(canister_state) => {
+                            if !canister_state.controllers().contains(&sender) {
+                                return (
+                                    Err(CanisterManagerError::CanisterSnapshotNotController {
+                                        sender,
+                                        canister_id,
+                                        snapshot_id,
+                                    }),
+                                    NumInstructions::new(0),
+                                );
+                            }
+                        }
+                    }
                 }
                 snapshot
             }
@@ -2144,8 +2209,45 @@ impl CanisterManager {
             }
 
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
-            new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
-            new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
+
+            if canister_id == snapshot.canister_id() {
+                new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
+                new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
+            } else {
+                let new_stable_memory = match Memory::try_from((
+                    &execution_snapshot.stable_memory,
+                    Arc::clone(&self.fd_factory),
+                )) {
+                    Ok(memory) => memory,
+                    Err(_) => {
+                        return (
+                            Err(CanisterManagerError::CanisterSnapshotNotLoadable {
+                                canister_id,
+                                snapshot_id,
+                            }),
+                            instructions_used,
+                        );
+                    }
+                };
+                new_execution_state.stable_memory = new_stable_memory;
+
+                let new_wasm_memory = match Memory::try_from((
+                    &execution_snapshot.wasm_memory,
+                    Arc::clone(&self.fd_factory),
+                )) {
+                    Ok(memory) => memory,
+                    Err(_) => {
+                        return (
+                            Err(CanisterManagerError::CanisterSnapshotNotLoadable {
+                                canister_id,
+                                snapshot_id,
+                            }),
+                            instructions_used,
+                        );
+                    }
+                };
+                new_execution_state.wasm_memory = new_wasm_memory;
+            }
             (instructions_used, Some(new_execution_state))
         };
 
@@ -2239,6 +2341,14 @@ impl CanisterManager {
             validated_cycles_and_memory_usage,
         );
 
+        // The canister ID from which the snapshot was loaded in case
+        // it is different from the target canister ID.
+        let from_canister_id = if snapshot.canister_id() == canister_id {
+            None
+        } else {
+            Some(snapshot.canister_id())
+        };
+
         // Increment canister version.
         new_canister.system_state.canister_version += 1;
         new_canister.system_state.add_canister_change(
@@ -2249,6 +2359,7 @@ impl CanisterManager {
                 snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
                 snapshot.source(),
+                from_canister_id,
             ),
         );
         state

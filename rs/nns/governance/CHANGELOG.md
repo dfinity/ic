@@ -10,6 +10,7 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
 # 2025-09-19: Proposal 138583
 
 https://dashboard.internetcomputer.org/proposal/138583
@@ -18,6 +19,20 @@ https://dashboard.internetcomputer.org/proposal/138583
 
 * Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
   proposal.
+
+# 2025-09-12: Proposal 138475
+
+https://dashboard.internetcomputer.org/proposal/138475
+
+## Added
+
+* Added a new proposal type `DeregisterKnownNeuron` without enabling it (behind feature flag).
+
+* Enable FulfillSubnetRentalRequest proposals. The main effect of such proposals
+  is the creation of an EXCLUSIVE subnet, meaning that only ONE principal is
+  allowed to create canisters in the subnet. For details, see
+  https://forum.dfinity.org/t/subnet-rental-canister-work-on-next-phase-has-started/52803
+  (This is also discussed under the heading "Swiss subnet".)
 
 # 2025-09-05: Proposal 138369
 

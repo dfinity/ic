@@ -427,8 +427,6 @@ system_test_nns(
     },
     tags = [
         "colocate",
-        # TODO: Investigate test failures
-        #"system_test_large",
         "manual",
     ],
     test_timeout = "eternal",
