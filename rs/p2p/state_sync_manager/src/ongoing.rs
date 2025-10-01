@@ -55,7 +55,7 @@ struct OngoingStateSync {
     // Peer management
     new_peers_rx: Receiver<(NodeId, Option<XorDistance>)>,
     // Peers that advertised state and the number of outstanding chunk downloads to that peer.
-    peer_state: HashMap<NodeId, (u64, Option<XorDistance>)>,
+    active_downloads: HashMap<NodeId, u64>,
     // Download management
     allowed_downloads: usize,
     chunks_to_download: ChunksToDownload,
@@ -96,7 +96,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         transport,
         node_id,
         new_peers_rx,
-        peer_state: HashMap::new(),
+        active_downloads: HashMap::new(),
         allowed_downloads: 0,
         chunks_to_download: ChunksToDownload::new(),
         partial_state: partial_state.clone(),
@@ -128,30 +128,19 @@ impl OngoingStateSync {
                     break
                 },
                 Some((new_peer, partial_state)) = self.new_peers_rx.recv() => {
+                    // For now, adverts with a partial state are ignored
                     if partial_state.is_some() {
                         info!(self.log, "STATE_SYNC: Received a partial state advert");
+                        continue;
                     }
 
-                    match self.peer_state.entry(new_peer) {
-                    Entry::Vacant(entry) => {
-                        info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
-                        entry.insert((0, partial_state));
+                    if let Entry::Vacant(e) = self.active_downloads.entry(new_peer) {
+                        info!(self.log, "STATE_SYNC: Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
+                        e.insert(0);
                         self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
                         self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
-                    },
-                    Entry::Occupied(mut entry) => {
-                        let entry = entry.get_mut();
-                        if let Some(partial_state) = partial_state {
-                            if entry.1 < Some(partial_state.clone()) {
-                                info!(self.log, "Updating peers {} XorDistnace", new_peer);
-                                entry.1 = Some(partial_state);
-                            }
-                        } else {
-                            info!(self.log, "Updating peer {} to full state", new_peer);
-                            entry.1 = None;
-                        }
                     }
-                }},
+                }
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
                         Ok((result, chunk)) => {
@@ -160,7 +149,7 @@ impl OngoingStateSync {
                             // of an underflow. In the case where we close old download task while having active downloads we might start to
                             // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
                             // 5-10min when state sync restarts.
-                            self.peer_state.entry(result.peer_id).and_modify(|v| { v.0 = v.0.saturating_sub(1) });
+                            self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
                             self.handle_downloaded_chunk_result(result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
 
@@ -185,7 +174,7 @@ impl OngoingStateSync {
             }
 
             debug_assert!(
-                self.peer_state.len() * PARALLEL_CHUNK_DOWNLOADS == self.allowed_downloads
+                self.active_downloads.len() * PARALLEL_CHUNK_DOWNLOADS == self.allowed_downloads
             );
 
             // Collect metrics
@@ -194,11 +183,11 @@ impl OngoingStateSync {
                 .set(self.allowed_downloads as i64);
             self.metrics
                 .peers_serving_state
-                .set(self.peer_state.len() as i64);
-            if self.peer_state.is_empty() {
+                .set(self.active_downloads.len() as i64);
+            if self.active_downloads.is_empty() {
                 info!(
                     self.log,
-                    "STATE_SYNC: Stopping ongoing state sync because no peers.",
+                    "STATE_SYNC: Stopping ongoing state sync because no peers."
                 );
                 break;
             }
@@ -219,9 +208,9 @@ impl OngoingStateSync {
             // Received chunk
             Ok(()) => {}
             Err(DownloadChunkError::NoContent) => {
-                if self.peer_state.remove(&peer_id).is_some() {
-                    info!(self.log, "STATE_SYNC: Peer returned no content");
+                if self.active_downloads.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
+                    info!(self.log, "STATE_SYNC: Peer returned no content");
                 }
             }
             Err(DownloadChunkError::RequestError { chunk_id, err }) => {
@@ -229,7 +218,7 @@ impl OngoingStateSync {
                     self.log,
                     "Failed to download chunk {} from {}: {} ", chunk_id, peer_id, err
                 );
-                if self.peer_state.remove(&peer_id).is_some() {
+                if self.active_downloads.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
                 }
             }
@@ -248,31 +237,28 @@ impl OngoingStateSync {
             .allowed_downloads
             .saturating_sub(self.downloading_chunks.len());
 
-        if self.peer_state.is_empty() {
+        if self.active_downloads.is_empty() {
             return;
         }
 
         let mut small_rng = SmallRng::from_entropy();
         let max_active_downloads = self
-            .peer_state
+            .active_downloads
             .values()
-            .map(|(active_downloads, _)| active_downloads)
             .max()
             .expect("Peers not empty");
-        let mut peers = Vec::with_capacity(self.peer_state.len());
-        let mut weights = Vec::with_capacity(self.peer_state.len());
-        for (peer, (active_downloads, partial_state)) in &self.peer_state {
-            if partial_state.is_none() {
-                peers.push(*peer);
-                // Add one such that all peers can get selected.
-                weights.push(max_active_downloads - active_downloads + 1);
-            }
+        let mut peers = Vec::with_capacity(self.active_downloads.len());
+        let mut weights = Vec::with_capacity(self.active_downloads.len());
+        for (peer, active_downloads) in &self.active_downloads {
+            peers.push(*peer);
+            // Add one such that all peers can get selected.
+            weights.push(max_active_downloads - active_downloads + 1);
         }
         info!(
             self.log,
             "STATE_SYNC: Spawning chunks to download from {} out of {} peers",
             peers.len(),
-            self.peer_state.len(),
+            self.active_downloads.len(),
         );
 
         let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
@@ -283,12 +269,11 @@ impl OngoingStateSync {
                     // Peers with less active downloads are more likely to be selected.
                     let peer_id = *peers.get(dist.sample(&mut small_rng)).expect("Is present");
 
-                    self.peer_state.entry(peer_id).and_modify(|v| v.0 += 1);
                     info!(
                         self.log,
                         "STATE_SYNC: Spawning download chunk {} for peer {}", chunk, peer_id
                     );
-
+                    self.active_downloads.entry(peer_id).and_modify(|v| *v += 1);
                     self.downloading_chunks.spawn_on(
                         chunk,
                         self.metrics
