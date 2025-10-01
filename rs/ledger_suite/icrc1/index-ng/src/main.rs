@@ -595,10 +595,6 @@ pub async fn build_index() -> Option<()> {
     Some(())
 }
 
-fn sync_stopped() -> bool {
-    TIMER_ID.with(|tid| *tid.borrow()).is_none()
-}
-
 async fn fetch_blocks_via_get_blocks() -> Result<u64, ()> {
     let mut num_indexed = 0;
     let next_id = with_blocks(|blocks| blocks.len());
@@ -719,7 +715,7 @@ fn stop_timer_with_error(error: String) {
 fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()> {
     measure_span(&PROFILING_DATA, "append_blocks", move || {
         assert!(
-            !sync_stopped(),
+            TIMER_ID.with(|tid| *tid.borrow()).is_some(),
             "Trying to append a block, even though the sync is stopped."
         );
 
