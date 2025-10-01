@@ -535,10 +535,11 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         Some(DataLocation::Remote(download_node.0.get_ip_addr()));
     subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
 
-    // Mirror production setup by removing admin SSH access from all nodes except the upload node
+    // Mirror production setup by removing admin SSH access from all nodes except the upload and
+    // download nodes
     info!(
         logger,
-        "Remove admin SSH access from all nodes except the upload node"
+        "Remove admin SSH access from all nodes except the upload and download nodes"
     );
     let nodes_except_upload_download_nodes = app_subnet
         .nodes()
@@ -553,8 +554,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     for node in nodes_except_upload_download_nodes {
         wait_until_authentication_fails(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
     }
-    // Ensure we can still SSH into the upload node with the admin key
+    // Ensure we can still SSH into the upload and download nodes with the admin key
     wait_until_authentication_is_granted(&upload_node.get_ip_addr(), SSH_USERNAME, &admin_auth);
+    wait_until_authentication_is_granted(&download_node.0.get_ip_addr(), SSH_USERNAME, &admin_auth);
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
