@@ -3132,7 +3132,6 @@ impl StateMachine {
             )
             .with_subnet_size(self.nodes.len())
             .with_subnet_seed(seed)
-            .with_subnet_id(ic_test_utilities_types::ids::subnet_test_id(1221))
             .with_registry_data_provider(self.registry_data_provider.clone())
             .build_with_subnets(
                 (*self.pocket_xnet.read().unwrap())
@@ -3175,13 +3174,13 @@ impl StateMachine {
 
         // Perform on the split on `env`, which requires preserving the `prev_state_hash`
         // (as opposed to MVP subnet splitting where it is adjusted manually).
-        let (height, state) = self.state_manager.take_tip();
+        let (height, state) = env.state_manager.take_tip();
         let prev_state_hash = state.metadata.prev_state_hash.clone();
-        let mut state = state.split(self.get_subnet_id(), &routing_table, None)?;
+        let mut state = state.split(env.get_subnet_id(), &routing_table, None)?;
         state.metadata.prev_state_hash = prev_state_hash;
         state.after_split();
 
-        self.state_manager.commit_and_certify(
+        env.state_manager.commit_and_certify(
             state,
             height.increment(),
             CertificationScope::Full,
