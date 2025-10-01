@@ -34,8 +34,13 @@ use url::Url;
 pub const CONFIG_VERSION: &str = "1.10.0";
 
 /// List of field paths that have been removed and should not be reused.
-pub static RESERVED_FIELD_PATHS: &[&str] =
-    &["icos_settings.logging", "icos_settings.use_nns_public_key"];
+pub static RESERVED_FIELD_PATHS: &[&str] = &[
+    "icos_settings.logging",
+    "icos_settings.use_nns_public_key",
+    "hostos_settings.vm_cpu",
+    "hostos_settings.vm_memory",
+    "hostos_settings.vm_nr_of_vcpus",
+];
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -148,35 +153,11 @@ pub struct ICOSDevSettings {}
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct HostOSSettings {
     #[serde(default)]
     pub hostos_dev_settings: HostOSDevSettings,
-    #[deprecated(note = "Please use hostos_dev_settings")]
-    pub vm_memory: u32,
-    #[deprecated(note = "Please use hostos_dev_settings")]
-    pub vm_cpu: String,
-    #[deprecated(note = "Please use hostos_dev_settings")]
-    #[serde(default = "default_vm_nr_of_vcpus")]
-    pub vm_nr_of_vcpus: u32,
     pub verbose: bool,
-}
-
-impl Default for HostOSSettings {
-    fn default() -> Self {
-        #[allow(deprecated)]
-        HostOSSettings {
-            vm_memory: Default::default(),
-            vm_cpu: Default::default(),
-            vm_nr_of_vcpus: default_vm_nr_of_vcpus(),
-            verbose: Default::default(),
-            hostos_dev_settings: Default::default(),
-        }
-    }
-}
-
-const fn default_vm_nr_of_vcpus() -> u32 {
-    64
 }
 
 /// HostOS development configuration. These settings are strictly used for development images.
@@ -336,33 +317,6 @@ mod tests {
     use super::*;
     use serde_json::Value;
     use std::collections::HashSet;
-
-    #[test]
-    fn test_vm_nr_of_vcpus_deserialization() -> Result<(), Box<dyn std::error::Error>> {
-        #[allow(deprecated)]
-        {
-            // Test with vm_nr_of_vcpus specified
-            let json = r#"{
-                "vm_memory": 16,
-                "vm_cpu": "host",
-                "vm_nr_of_vcpus": 4,
-                "verbose": true
-            }"#;
-            let settings: HostOSSettings = serde_json::from_str(json)?;
-            assert_eq!(settings.vm_nr_of_vcpus, 4);
-
-            // Test without vm_nr_of_vcpus (should use default)
-            let json = r#"{
-                "vm_memory": 16,
-                "vm_cpu": "host",
-                "verbose": true
-            }"#;
-            let settings: HostOSSettings = serde_json::from_str(json)?;
-            assert_eq!(settings.vm_nr_of_vcpus, 64);
-        }
-
-        Ok(())
-    }
 
     #[test]
     fn test_guest_vm_type_forward_compatibility() -> Result<(), Box<dyn std::error::Error>> {
