@@ -13,7 +13,7 @@ use ic_consensus_system_test_utils::{
         AuthMean, get_updatesubnetpayload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted,
     },
-    upgrade::assert_assigned_replica_version,
+    upgrade::{assert_assigned_replica_version, bless_replica_version},
 };
 use ic_recovery::{
     RecoveryArgs, get_node_metrics,
@@ -69,6 +69,7 @@ pub struct SetupConfig {
 pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
+    pub add_and_bless_upgrade_version: bool,
 }
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
@@ -201,10 +202,24 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         "NNS is healthy - message stored and read successfully"
     );
 
-    let ic_version = get_guestos_img_version();
-    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
+    let current_version = get_guestos_img_version();
+    info!(logger, "Current GuestOS version: {:?}", &current_version);
     // identifies the version of the replica after the recovery
-    let working_version = get_guestos_update_img_version();
+    let upgrade_version = get_guestos_update_img_version();
+    let upgrade_image_url = get_guestos_update_img_url();
+    let upgrade_image_hash = get_guestos_update_img_sha256();
+    let guest_launch_measurements = get_guestos_launch_measurements();
+    if !cfg.add_and_bless_upgrade_version {
+        // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
+        block_on(bless_replica_version(
+            &nns_node,
+            &upgrade_version,
+            &logger,
+            upgrade_image_hash.clone(),
+            guest_launch_measurements,
+            vec![upgrade_image_url.to_string()],
+        ));
+    }
 
     let recovery_dir = get_dependency_path("rs/tests");
     let output_dir = env.get_path("recovery_output");
@@ -295,7 +310,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
-        replica_version: Some(ic_version),
+        replica_version: Some(current_version),
         admin_key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
@@ -306,10 +321,10 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // ahead of time.
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: nns_subnet.subnet_id,
-        upgrade_version: Some(working_version.clone()),
-        upgrade_image_url: Some(get_guestos_update_img_url()),
-        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
-        add_and_bless_upgrade_version: Some(true),
+        upgrade_version: Some(upgrade_version.clone()),
+        upgrade_image_url: Some(upgrade_image_url),
+        upgrade_image_hash: Some(upgrade_image_hash),
+        add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
         replay_until_height: Some(highest_certification_share_height),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
@@ -402,7 +417,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             .expect("Could not obtain updated registry.")
             .root_subnet();
     for node in nns_subnet.nodes() {
-        assert_assigned_replica_version(&node, &working_version, env.logger());
+        assert_assigned_replica_version(&node, &upgrade_version, env.logger());
         node.await_status_is_healthy().unwrap_or_else(|_| {
             panic!(
                 "Node {} ({:?}) did not become healthy after the recovery",
