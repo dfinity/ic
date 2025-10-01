@@ -529,7 +529,7 @@ fn test_unknown_block() {
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 
-    let status = sync_status(&env, index_id);
+    let status = sync_status(env, index_id);
     assert!(status.sync_active);
     assert!(status.sync_error.is_none());
 
@@ -550,8 +550,8 @@ fn test_unknown_block() {
     assert_eq!(icrc1_balance_of(env, index_id, TA1), 1_000u64);
     assert_eq!(icrc1_balance_of(env, index_id, TA2), 0u64);
 
-    let status = sync_status(&env, index_id);
-    assert_eq!(status.sync_active, false);
+    let status = sync_status(env, index_id);
+    assert!(!status.sync_active);
     assert_eq!(
         status.sync_error,
         Some("Unknown block at index 1.".to_string())

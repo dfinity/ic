@@ -113,10 +113,10 @@ thread_local! {
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
 
     /// The ID of the block sync timer. `None` means the sync is stopped due to an error.
-    static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(None);
+    static TIMER_ID: RefCell<Option<TimerId>> = const { RefCell::new(None) };
 
     /// The description of the error encountered during block sync.
-    static SYNC_ERROR: RefCell<Option<String>> = RefCell::new(None);
+    static SYNC_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
