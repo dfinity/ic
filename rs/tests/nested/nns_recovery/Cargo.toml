@@ -23,16 +23,16 @@ path = "common.rs"
 
 [[bin]]
 name = "ic-systest-nested-nns-recovery-broken-dfinity-node"
-path = "nr_broken_dfinity_node.rs"
+path = "nr_broken_dfinity_node_perf.rs"
 
 [[bin]]
 name = "ic-systest-nested-nns-recovery-large"
-path = "nr_large.rs"
+path = "nr_large_perf.rs"
 
 [[bin]]
 name = "ic-systest-nested-nns-recovery-local"
-path = "nr_local.rs"
+path = "nr_local_perf.rs"
 
 [[bin]]
 name = "ic-systest-nested-nns-recovery-remote"
-path = "nr_remote.rs"
+path = "nr_remote_perf.rs"
