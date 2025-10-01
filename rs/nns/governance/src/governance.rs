@@ -12,7 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled,
+    is_known_neuron_voting_history_enabled, is_neuron_indexes_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -3342,31 +3342,36 @@ impl Governance {
         new_followees: Followees,
     ) -> Result<HashMap<i32, Followees>, GovernanceError> {
         let controller = neuron.controller();
+        let hotkeys: &Vec<PrincipalId> = neuron.hot_keys.as_ref();
         let mut updated_followees = topic_to_followees.clone();
         if new_followees.followees.is_empty() {
             // If the new followees list is empty, remove the entry for the topic.
             updated_followees.remove(&topic);
         } else {
-            // @todo add a check on `ENABLE_NEURON_INDEXES`
             // Otherwise, update the entry with the new followees list.
-            // A new can follow another neuron if:
-            // 1. the followee neuron is a public neuron
-            // 2. or if the followee neuron is a private neuron, they share a controller.
-            // If in the list of followees, there is any follow relationship
-            // the doesn't adhere to the aforementioned rules, return a GovernanceError.
-            let is_valid_followees = new_followees.followees.iter().all(|followee| {
-                if let Ok(followee_neuron) = self.with_neuron(&followee, |neuron| neuron.clone()) {
-                    followee_neuron.visibility() == Visibility::Public
-                        || followee_neuron.controller() == controller
-                } else {
-                    false
+            if is_neuron_indexes_enabled() {
+                // A new can follow another neuron if:
+                // 1. the followee neuron is a public neuron
+                // 2. or if the followee neuron is a private neuron, they share a controller.
+                // If in the list of followees, there is any follow relationship
+                // the doesn't adhere to the aforementioned rules, return a GovernanceError.
+                let is_valid_followees = new_followees.followees.iter().all(|followee| {
+                    if let Ok(followee_neuron) =
+                        self.with_neuron(&followee, |neuron| neuron.clone())
+                    {
+                        followee_neuron.visibility() == Visibility::Public
+                            || followee_neuron.controller() == controller
+                            || hotkeys.contains(&followee_neuron.controller())
+                    } else {
+                        false
+                    }
+                });
+                if !is_valid_followees {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "One or more follow relationships are not valid.",
+                    ));
                 }
-            });
-            if !is_valid_followees {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "One or more follow relationships are not valid.",
-                ));
             }
 
             updated_followees.insert(topic, new_followees);
