@@ -20,11 +20,11 @@ fn setup(env: TestEnv) {
 
 fn test(env: TestEnv) {
     let log = env.logger();
-    let nns_node = env.get_first_healthy_system_node_snapshot();
-    stop_node(&log, &nns_node);
+    let node = env.get_first_healthy_system_node_snapshot();
+    stop_node(&log, &node);
     info!(log, "Sleeping for 10 seconds...");
     std::thread::sleep(Duration::from_secs(10));
-    start_node(&log, &nns_node);
+    start_node(&log, &node);
 }
 
 fn main() -> Result<()> {
