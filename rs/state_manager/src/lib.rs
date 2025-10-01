@@ -11,24 +11,24 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    checkpoint::{flush_canister_snapshots_and_page_maps, PageMapType},
+    checkpoint::{PageMapType, flush_canister_snapshots_and_page_maps},
     manifest::compute_bundled_manifest,
     state_sync::{
         chunkable::cache::StateSyncCache,
         types::{FileGroupChunks, Manifest, MetaManifest},
     },
-    tip::{flush_tip_channel, spawn_tip_thread, PageMapToFlush, TipRequest},
+    tip::{PageMapToFlush, TipRequest, flush_tip_channel, spawn_tip_thread},
 };
 use crossbeam_channel::Sender;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
-    hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
+    hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
     lazy_tree::materialize::materialize_partial,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{
-    recompute_digest, Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness,
+    Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::ChunkId;
@@ -39,19 +39,20 @@ use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
     StateHashError, StateManager, StateReader, TransientStateHashError::*,
 };
-use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, debug, error, fatal, info, warn};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    page_map::{PersistenceError, StorageMetrics},
     ReplicatedState,
+    page_map::{PersistenceError, StorageMetrics},
 };
-use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, StateLayout};
+use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, error::LayoutError};
 use ic_sys::fs::Clobber;
 use ic_types::{
+    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::BatchSummary,
     consensus::certification::Certification,
     crypto::CryptoHash,
@@ -59,9 +60,8 @@ use ic_types::{
     state_manager::{StateManagerError, StateManagerResult},
     state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
-use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
+use ic_utils_thread::{JoinOnDrop, deallocator_thread::DeallocatorThread};
 use ic_wasm_types::ModuleLoadingStatus;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
@@ -73,8 +73,8 @@ use std::os::unix::io::RawFd;
 use std::os::unix::prelude::IntoRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant, SystemTime};
 use std::{
@@ -1423,10 +1423,12 @@ impl StateManagerImpl {
             .collect();
 
         // Make sure the snapshots' order is maintained in initialization.
-        debug_assert!(snapshots
-            .iter()
-            .zip(snapshots.iter().skip(1))
-            .all(|(s0, s1)| s0.height < s1.height));
+        debug_assert!(
+            snapshots
+                .iter()
+                .zip(snapshots.iter().skip(1))
+                .all(|(s0, s1)| s0.height < s1.height)
+        );
 
         let last_snapshot_height = snapshots.back().map_or(0, |s| s.height.get() as i64);
 
@@ -2189,14 +2191,18 @@ impl StateManagerImpl {
             let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
 
             // All checkpoints to keep should exist on disk.
-            debug_assert!(checkpoint_heights_to_keep
-                .iter()
-                .all(|h| unfiltered_checkpoint_heights.contains(h)));
+            debug_assert!(
+                checkpoint_heights_to_keep
+                    .iter()
+                    .all(|h| unfiltered_checkpoint_heights.contains(h))
+            );
 
             // If the in-memory states that Consensus ask to keep exist in the beginning, they should be all retained.
-            debug_assert!(existing_extra_inmemory_heights_to_keep
-                .iter()
-                .all(|h| state_heights.contains(h)));
+            debug_assert!(
+                existing_extra_inmemory_heights_to_keep
+                    .iter()
+                    .all(|h| state_heights.contains(h))
+            );
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));

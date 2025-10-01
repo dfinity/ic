@@ -1,21 +1,22 @@
 use crate::{
-    manifest::{build_file_group_chunks, filter_out_zero_chunks, DiffScript},
-    state_sync::types::{
-        decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
-        ManifestChunkIndex, MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
-        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
-    },
+    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, IncompleteStateReader, LABEL_COPY_CHUNKS,
+    LABEL_FETCH, LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK,
+    LABEL_FETCH_STATE_CHUNK, LABEL_HARDLINK_FILES, LABEL_PREALLOCATE,
+    LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
+    manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
     state_sync::StateSync,
-    IncompleteStateReader, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
-    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_FETCH,
-    LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
+    state_sync::types::{
+        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks,
+        MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, Manifest, ManifestChunkIndex, MetaManifest,
+        StateSyncChunk, StateSyncMessage, decode_manifest, decode_meta_manifest,
+        state_sync_chunk_type,
+    },
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
-use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
-use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
+use ic_logger::{ReplicaLogger, debug, error, fatal, info, trace, warn};
+use ic_state_layout::{CheckpointLayout, ReadOnly, RwPolicy, StateLayout, error::LayoutError};
 use ic_sys::mmap::ScopedMmap;
-use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
+use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -294,16 +295,18 @@ impl IncompleteState {
                 use std::os::unix::fs::MetadataExt;
 
                 // Writable source files should originate from state_sync_cache, not from existing checkpoints which are already readonly.
-                debug_assert!(!src
-                    .parent()
-                    .unwrap()
-                    .iter()
-                    .any(|p| p.as_bytes() == b"checkpoint"));
-                debug_assert!(src
-                    .parent()
-                    .unwrap()
-                    .iter()
-                    .any(|p| p.as_bytes().starts_with(b"state_sync_cache")));
+                debug_assert!(
+                    !src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes() == b"checkpoint")
+                );
+                debug_assert!(
+                    src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes().starts_with(b"state_sync_cache"))
+                );
 
                 // Writable source files should be newly fetched, not already hardlinked from anywhere else.
                 debug_assert_eq!(src_metadata.nlink(), 1);
