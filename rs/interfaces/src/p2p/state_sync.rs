@@ -67,6 +67,9 @@ pub trait Chunkable<T> {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
     /// Delivers the corresponding chunk.
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
+
+    /// Returns true, if the call to chunks_to_download returns the chunks of the base layer
+    fn is_base_layer(&self) -> bool;
 }
 
 pub trait StateSyncClient: Send + Sync {

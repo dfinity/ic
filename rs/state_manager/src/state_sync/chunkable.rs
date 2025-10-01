@@ -1201,13 +1201,21 @@ fn maliciously_alter_chunk_data(
 impl Chunkable<StateSyncMessage> for IncompleteState {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         match self.state {
-            DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
+            DownloadState::Blank => {
+                info!(self.log, "STATE_SYNC: Serving meta manifest");
+                Box::new(std::iter::once(META_MANIFEST_CHUNK))
+            }
             DownloadState::Prep {
                 meta_manifest: _,
                 manifest_in_construction: _,
                 ref manifest_chunks,
             } => {
                 let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
+                info!(
+                    self.log,
+                    "STATE_SYNC: Serving {} meta manifest chunks",
+                    ids.len()
+                );
                 Box::new(ids.into_iter())
             }
             DownloadState::Loading {
@@ -1221,6 +1229,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     .iter()
                     .map(|id| ChunkId::new(*id as u32))
                     .collect();
+                info!(self.log, "STATE_SYNC: Serving {} state chunks", ids.len());
                 Box::new(ids.into_iter())
             }
             DownloadState::Complete => Box::new(std::iter::empty()),
@@ -1637,6 +1646,15 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                 Ok(())
             }
+        }
+    }
+
+    fn is_base_layer(&self) -> bool {
+        match self.state {
+            DownloadState::Blank => false,
+            DownloadState::Prep { .. } => false,
+            DownloadState::Loading { .. } => true,
+            DownloadState::Complete => true,
         }
     }
 }

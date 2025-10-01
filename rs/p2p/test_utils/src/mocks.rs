@@ -54,6 +54,7 @@ mock! {
     impl<T> Chunkable<T> for Chunkable<T> {
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
         fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
+        fn is_base_layer(&self) -> bool;
     }
 }
 

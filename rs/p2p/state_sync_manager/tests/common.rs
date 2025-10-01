@@ -297,6 +297,10 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
 
         Ok(())
     }
+
+    fn is_base_layer(&self) -> bool {
+        self.chunk_sets[0].is_empty() && self.chunk_sets[1].is_empty()
+    }
 }
 
 #[derive(Clone, Default)]
@@ -333,6 +337,10 @@ impl Chunkable<StateSyncMessage> for SharableMockChunkable {
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
+    }
+
+    fn is_base_layer(&self) -> bool {
+        self.mock.lock().unwrap().is_base_layer()
     }
 }
 

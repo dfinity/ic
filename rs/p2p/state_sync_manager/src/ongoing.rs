@@ -60,6 +60,7 @@ struct OngoingStateSync {
     allowed_downloads: usize,
     chunks_to_download: ChunksToDownload,
     partial_state: Arc<RwLock<Option<XorDistance>>>,
+    is_base_layer: bool,
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
 }
@@ -100,6 +101,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         allowed_downloads: 0,
         chunks_to_download: ChunksToDownload::new(),
         partial_state: partial_state.clone(),
+        is_base_layer: false,
         downloading_chunks: JoinMap::new(),
     };
 
@@ -154,8 +156,11 @@ impl OngoingStateSync {
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
 
                             self.chunks_to_download.download_finished(chunk);
-                            let new_partial_state = self.chunks_to_download.next_xor_distance();
-                            *self.partial_state.write().await = new_partial_state;
+
+                            if self.is_base_layer {
+                                let new_partial_state = self.chunks_to_download.next_xor_distance();
+                                *self.partial_state.write().await = new_partial_state;
+                            }
 
                             info!(self.log, "STATE_SYNC: Finished downloading chunk {}", chunk);
                         }
@@ -296,9 +301,9 @@ impl OngoingStateSync {
                 None => {
                     // If we store chunks in self.chunks_to_download we will eventually initiate and
                     // by filtering with the current in flight request we avoid double download.
+                    let tracker = tracker.lock().await;
+
                     let chunks_to_download = tracker
-                        .lock()
-                        .await
                         .chunks_to_download()
                         .filter(|chunk| !self.downloading_chunks.contains(chunk));
 
@@ -308,10 +313,17 @@ impl OngoingStateSync {
                         chunks_to_download,
                     );
 
-                    info!(
-                        self.log,
-                        "STATE_SYNC: Requesting new chunks, added {}", added
-                    );
+                    if added != 0 {
+                        info!(
+                            self.log,
+                            "STATE_SYNC: Requesting new chunks, added {}", added
+                        );
+                    }
+
+                    if added == 0 && !self.is_base_layer && tracker.is_base_layer() {
+                        info!(self.log, "STATE_SYNC: Starting to download base layer");
+                        self.is_base_layer = true;
+                    }
 
                     self.metrics.chunks_to_download_calls_total.inc();
                     self.metrics.chunks_to_download_total.inc_by(added as u64);
@@ -444,6 +456,7 @@ mod tests {
             let mut c = MockChunkable::<TestMessage>::default();
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
+            c.expect_is_base_layer().returning(|| false);
 
             let rt = Runtime::new().unwrap();
             let ongoing = start_ongoing_state_sync(
@@ -480,6 +493,7 @@ mod tests {
             let mut c = MockChunkable::<TestMessage>::default();
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
+            c.expect_is_base_layer().returning(|| false);
             c.expect_add_chunk()
                 .return_const(Err(AddChunkError::Invalid));
 
@@ -521,6 +535,7 @@ mod tests {
             // Endless iterator
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
+            c.expect_is_base_layer().returning(|| false);
             c.expect_add_chunk().return_const(Ok(()));
 
             let rt = Runtime::new().unwrap();
