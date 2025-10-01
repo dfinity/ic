@@ -468,8 +468,7 @@ async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, ()> {
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            let error = format!("[get_blocks_from_ledger] failed to get blocks: {}", err);
-            stop_timer_with_error(error);
+            log!(P0, "[get_blocks_from_ledger] failed to get blocks: {}", err);
             Err(())
         }
     }
@@ -493,8 +492,11 @@ async fn get_blocks_from_archive(
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            let error = format!("[get_blocks_from_archive] failed to get blocks: {}", err);
-            stop_timer_with_error(error);
+            log!(
+                P0,
+                "[get_blocks_from_archive] failed to get blocks: {}",
+                err
+            );
             Err(())
         }
     }
@@ -518,11 +520,11 @@ async fn icrc3_get_blocks_from_ledger(start: u64) -> Result<GetBlocksResult, ()>
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            let error = format!(
+            log!(
+                P0,
                 "[icrc3_get_blocks_from_ledger] failed to get blocks: {}",
                 err
             );
-            stop_timer_with_error(error);
             Err(())
         }
     }
@@ -540,11 +542,11 @@ async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Result<GetB
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            let error = format!(
+            log!(
+                P0,
                 "[icrc3_get_blocks_from_archive] failed to get blocks: {}",
                 err
             );
-            stop_timer_with_error(error);
             Err(())
         }
     }
