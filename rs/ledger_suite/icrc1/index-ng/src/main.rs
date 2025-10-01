@@ -450,7 +450,7 @@ where
         .map_err(|err| format!("failed to candid decode the output: {err}"))
 }
 
-async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
+async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, ()> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = GetBlocksRequest {
         start: Nat::from(start),
@@ -466,17 +466,18 @@ async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(P0, "[get_blocks_from_ledger] failed to get blocks: {}", err);
-            None
+            let error = format!("[get_blocks_from_ledger] failed to get blocks: {}", err);
+            stop_timer_with_error(error);
+            Err(())
         }
     }
 }
 
 async fn get_blocks_from_archive(
     archived: &ArchivedRange<QueryBlockArchiveFn>,
-) -> Option<BlockRange> {
+) -> Result<BlockRange, ()> {
     let req = GetBlocksRequest {
         start: archived.start.clone(),
         length: archived.length.clone(),
@@ -490,19 +491,16 @@ async fn get_blocks_from_archive(
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
-                "[get_blocks_from_archive] failed to get blocks: {}",
-                err
-            );
-            None
+            let error = format!("[get_blocks_from_archive] failed to get blocks: {}", err);
+            stop_timer_with_error(error);
+            Err(())
         }
     }
 }
 
-async fn icrc3_get_blocks_from_ledger(start: u64) -> Option<GetBlocksResult> {
+async fn icrc3_get_blocks_from_ledger(start: u64) -> Result<GetBlocksResult, ()> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = vec![GetBlocksRequest {
         start: Nat::from(start),
@@ -518,19 +516,19 @@ async fn icrc3_get_blocks_from_ledger(start: u64) -> Option<GetBlocksResult> {
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
+            let error = format!(
                 "[icrc3_get_blocks_from_ledger] failed to get blocks: {}",
                 err
             );
-            None
+            stop_timer_with_error(error);
+            Err(())
         }
     }
 }
 
-async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Option<GetBlocksResult> {
+async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Result<GetBlocksResult, ()> {
     let res = measured_call(
         "build_index.icrc3_get_blocks_from_archive.encode",
         "build_index.icrc3_get_blocks_from_archive.decode",
@@ -540,14 +538,14 @@ async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Option<GetB
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
+            let error = format!(
                 "[icrc3_get_blocks_from_archive] failed to get blocks: {}",
                 err
             );
-            None
+            stop_timer_with_error(error);
+            Err(())
         }
     }
 }
