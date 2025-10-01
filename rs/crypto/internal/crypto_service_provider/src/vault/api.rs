@@ -893,6 +893,20 @@ impl AsRef<[u8]> for IDkgDealingInternalBytes {
     }
 }
 
+// An enum used to efficiently send an [`IDkgTranscriptOperationInternal`] to the vault.
+// It acts as intermediate type between the high-level
+// [`IDkgTranscriptOperation`] and the low-level
+// [`IDkgTranscriptOperationInternal`] in that it (1) is significantly
+// smaller than an `IDkgTranscriptOperation` and (2) contains all the raw data
+// necessary to construct an `IDkgTranscriptOperationInternal` from it.
+// Using this enum rather than [`IDkgTranscriptOperationInternal`] in the vault
+// API has the benefit that the expensive point deserialization that happens
+// upon deserialization of [`IDkgTranscriptOperationInternal`] is only done
+// once (i.e., in the vault) rather than twice (i.e., once in the crypto
+// component to construct the [`IDkgTranscriptOperationInternal`], and once in
+// the vault via the deserialization with serde::Deserialize that the tarpc
+// RPC framework automatically does behind the scenes upon receiving the RPC
+// call).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum IDkgTranscriptOperationInternalBytes {
     Random,
