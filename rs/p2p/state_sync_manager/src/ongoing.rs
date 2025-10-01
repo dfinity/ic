@@ -128,6 +128,10 @@ impl OngoingStateSync {
                     break
                 },
                 Some((new_peer, partial_state)) = self.new_peers_rx.recv() => {
+                    if partial_state.is_some() {
+                        info!(self.log, "STATE_SYNC: Received a partial state advert");
+                    }
+
                     match self.peer_state.entry(new_peer) {
                     Entry::Vacant(entry) => {
                         info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
@@ -164,6 +168,8 @@ impl OngoingStateSync {
                             let new_partial_state = self.chunks_to_download.next_xor_distance().await;
                             *self.partial_state.write().await = new_partial_state;
 
+                            info!(self.log, "STATE_SYNC: Finished downloading chunk {}", chunk);
+
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -190,7 +196,10 @@ impl OngoingStateSync {
                 .peers_serving_state
                 .set(self.peer_state.len() as i64);
             if self.peer_state.is_empty() {
-                info!(self.log, "Stopping ongoing state sync because no peers.",);
+                info!(
+                    self.log,
+                    "STATE_SYNC: Stopping ongoing state sync because no peers.",
+                );
                 break;
             }
         }
@@ -211,6 +220,7 @@ impl OngoingStateSync {
             Ok(()) => {}
             Err(DownloadChunkError::NoContent) => {
                 if self.peer_state.remove(&peer_id).is_some() {
+                    info!(self.log, "STATE_SYNC: Peer returned no content");
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
                 }
             }
@@ -258,6 +268,13 @@ impl OngoingStateSync {
                 weights.push(max_active_downloads - active_downloads + 1);
             }
         }
+        info!(
+            self.log,
+            "STATE_SYNC: Spawning chunks to download from {} out of {} peers",
+            peers.len(),
+            self.peer_state.len(),
+        );
+
         let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
         for _ in 0..available_download_capacity {
             match self.chunks_to_download.next_chunk_to_download().await {
@@ -267,6 +284,11 @@ impl OngoingStateSync {
                     let peer_id = *peers.get(dist.sample(&mut small_rng)).expect("Is present");
 
                     self.peer_state.entry(peer_id).and_modify(|v| v.0 += 1);
+                    info!(
+                        self.log,
+                        "STATE_SYNC: Spawning download chunk {} for peer {}", chunk, peer_id
+                    );
+
                     self.downloading_chunks.spawn_on(
                         chunk,
                         self.metrics
@@ -298,6 +320,11 @@ impl OngoingStateSync {
                         .clone()
                         .add_chunks(self.node_id, self.artifact_id.clone(), chunks_to_download)
                         .await;
+
+                    info!(
+                        self.log,
+                        "STATE_SYNC: Requesting new chunks, added {}", added
+                    );
 
                     self.metrics.chunks_to_download_calls_total.inc();
                     self.metrics.chunks_to_download_total.inc_by(added as u64);
