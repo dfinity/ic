@@ -580,7 +580,7 @@ fn memory_taken_by_canister_history() {
 
     // Memory for two canister changes.
     let canister_history_memory: usize =
-        size_of::<CanisterChange>() + (size_of::<CanisterChange>() + 4 * size_of::<PrincipalId>());
+        2 * (size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>());
 
     // Push two canister changes into canister history.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
@@ -603,10 +603,16 @@ fn memory_taken_by_canister_history() {
     assert_execution_memory_taken(canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
-    // Test fixed memory allocation.
+    // Test small fixed memory allocation.
+    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::from(2));
+    assert_execution_memory_taken(canister_history_memory, &fixture);
+    assert_canister_history_memory_taken(canister_history_memory, &fixture);
+
+    // Test large fixed memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::from(888));
-    assert_execution_memory_taken(888 + canister_history_memory, &fixture);
+    assert_execution_memory_taken(888, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Reset canister memory allocation.
