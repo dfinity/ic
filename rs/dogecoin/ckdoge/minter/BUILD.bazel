@@ -30,9 +30,18 @@ rust_library(
     ],
 )
 
+filegroup(
+        name = "test_vectors",
+        srcs = glob(["test_vectors/**"])
+)
+
 rust_test(
     name = "unit_tests",
     crate = ":ckdoge_minter_lib",
+    data = [":test_vectors"],
+    env = {
+        "TEST_VECTORS": "$(locations :test_vectors)",
+    },
     deps = [
         # Keep sorted.
     ],
