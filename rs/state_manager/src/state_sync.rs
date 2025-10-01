@@ -3,15 +3,15 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
     manifest::build_file_group_chunks,
     state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
+    StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::p2p::state_sync::{
     Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, fatal, info, warn};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
@@ -111,6 +111,7 @@ impl StateSync {
         }
     }
 
+    // Try to get `StateSyncMessage` using IncompleteStateReader.
     fn get_from_incomplete_state(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
         let path = self
             .state_manager
@@ -139,7 +140,11 @@ impl StateSync {
         }
     }
 
-    pub fn get(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
+    // Try to get `StateSyncMessage` from complete states (checkpoints).
+    pub fn get_from_complete_state(
+        &self,
+        msg_id: &StateSyncArtifactId,
+    ) -> Option<StateSyncMessage> {
         let mut file_group_to_populate: Option<Arc<FileGroupChunks>> = None;
 
         let state_sync_message = self
@@ -355,7 +360,9 @@ impl StateSyncClient for StateSync {
 
     /// Blocking. Makes synchronous file system calls.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
-        let msg = self.get_from_incomplete_state(id).or(self.get(id))?;
+        let msg = self
+            .get_from_incomplete_state(id)
+            .or(self.get_from_complete_state(id))?;
         msg.get_chunk(chunk_id)
     }
 }
