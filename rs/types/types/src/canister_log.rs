@@ -114,9 +114,6 @@ pub struct CanisterLog {
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
     /// The collected sizes are used to expose per-round memory usage metrics
     /// and the record is cleared at the end of the round.
-    /// This field is skipped during (de)serialization as it's only relevant
-    /// at the end of an execution round.
-    #[serde(skip)]
     delta_log_sizes: VecDeque<usize>,
 }
 
