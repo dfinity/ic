@@ -44,6 +44,8 @@ rust_test(
     },
     deps = [
         # Keep sorted.
+        "@crate_index//:assert_matches",
+        "@crate_index//:serde_json",
     ],
 )
 

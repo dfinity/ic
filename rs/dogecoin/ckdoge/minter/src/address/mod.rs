@@ -15,6 +15,7 @@ const DOGE_TESTNET_P2SH_PREFIX: u8 = 196;
 const DOGE_REGTEST_PREFIX: u8 = 111;
 const DOGE_REGTEST_P2SH_PREFIX: u8 = 196;
 
+#[derive(Eq, PartialEq, Debug)]
 pub enum DogecoinAddress {
     P2pkh([u8; 20]),
     P2sh([u8; 20]),

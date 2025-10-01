@@ -26,6 +26,7 @@ sha2 = { workspace = true }
 assert_matches = { workspace = true }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
 pocket-ic = {path = "../../../../packages/pocket-ic"}
+serde_json = { workspace = true }
 
 [features]
 self_check = []
