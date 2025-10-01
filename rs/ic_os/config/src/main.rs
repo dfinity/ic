@@ -135,8 +135,18 @@ pub fn main() -> Result<()> {
 
             let setupos_settings = SetupOSSettings;
 
+            // Only allow choosing VM memory for dev.
+            #[cfg(feature = "dev")]
+            let memory = deployment_json_settings
+                .vm_resources
+                .memory
+                .unwrap_or(PROD_GUEST_VM_MEMORY);
+
+            #[cfg(not(feature = "dev"))]
+            let memory = PROD_GUEST_VM_MEMORY;
+
             let hostos_settings = HostOSSettings {
-                vm_memory: deployment_json_settings.vm_resources.memory,
+                vm_memory: memory,
                 vm_cpu: deployment_json_settings.vm_resources.cpu,
                 vm_nr_of_vcpus: deployment_json_settings.vm_resources.nr_of_vcpus,
                 verbose,

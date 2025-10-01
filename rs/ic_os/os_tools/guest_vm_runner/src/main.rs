@@ -871,7 +871,7 @@ mod tests {
                 icos_dev_settings: Default::default(),
             },
             hostos_settings: HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,

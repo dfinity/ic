@@ -77,7 +77,7 @@ fn generate_default_hostos_config() -> HostOSConfig {
     };
 
     let hostos_settings = HostOSSettings {
-        vm_memory: 4096,
+        vm_memory: 42,
         vm_cpu: "kvm".to_string(),
         vm_nr_of_vcpus: 64,
         verbose: false,

@@ -188,7 +188,7 @@ mod tests {
                 icos_dev_settings: Default::default(),
             },
             hostos_settings: HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
@@ -272,7 +272,7 @@ mod tests {
         test_vm_config(
             "guestos_vm_qemu.xml",
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 ..HostOSSettings::default()
@@ -288,7 +288,7 @@ mod tests {
         test_vm_config(
             "upgrade_guestos.xml",
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 42,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 64,
                 ..HostOSSettings::default()
@@ -304,7 +304,7 @@ mod tests {
         test_vm_config(
             "guestos_vm_kvm.xml",
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 42,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
                 ..HostOSSettings::default()
@@ -320,7 +320,7 @@ mod tests {
         test_vm_config(
             "guestos_vm_sev.xml",
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 42,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
                 ..HostOSSettings::default()

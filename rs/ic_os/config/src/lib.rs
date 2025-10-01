@@ -77,7 +77,7 @@ mod tests {
         };
         let setupos_settings = SetupOSSettings;
         let hostos_settings = HostOSSettings {
-            vm_memory: 490,
+            vm_memory: 42,
             vm_cpu: "kvm".to_string(),
             vm_nr_of_vcpus: 64,
             verbose: false,

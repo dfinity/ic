@@ -38,6 +38,8 @@ pub static RESERVED_FIELD_NAMES: &[&str] = &[];
 
 pub type ConfigMap = HashMap<String, String>;
 
+pub const PROD_GUEST_VM_MEMORY: u32 = 490;
+
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -322,7 +324,7 @@ mod tests {
     fn test_vm_nr_of_vcpus_deserialization() -> Result<(), Box<dyn std::error::Error>> {
         // Test with vm_nr_of_vcpus specified
         let json = r#"{
-            "vm_memory": 4096,
+            "vm_memory": 42,
             "vm_cpu": "host",
             "vm_nr_of_vcpus": 4,
             "verbose": true
@@ -332,7 +334,7 @@ mod tests {
 
         // Test without vm_nr_of_vcpus (should use default)
         let json = r#"{
-            "vm_memory": 4096,
+            "vm_memory": 42,
             "vm_cpu": "host",
             "verbose": true
         }"#;
@@ -403,7 +405,7 @@ mod tests {
             },
             setupos_settings: SetupOSSettings,
             hostos_settings: HostOSSettings {
-                vm_memory: 0,
+                vm_memory: 42,
                 vm_cpu: String::new(),
                 vm_nr_of_vcpus: 0,
                 verbose: false,
