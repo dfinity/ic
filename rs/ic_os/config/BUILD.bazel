@@ -3,6 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
+exports_files([
+    "templates/ic.json5.template",
+])
+
 DEPENDENCIES = [
     # Keep sorted.
     ":build_script",
@@ -60,6 +64,7 @@ rust_library(
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
+        "//rs/orchestrator:__pkg__",
     ],
     deps = DEPENDENCIES,
 )

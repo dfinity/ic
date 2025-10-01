@@ -10,7 +10,7 @@ use crate::{
     canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
-        system_state::{CanisterOutputQueuesIterator, push_input},
+        system_state::{CanisterOutputQueuesIterator, CyclesUseCase, push_input},
     },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
 };
@@ -30,7 +30,9 @@ use ic_types::{
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
-    messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    messages::{
+        CallbackId, CanisterMessage, Ingress, MessageId, Refund, RequestOrResponse, Response,
+    },
     time::CoarseTime,
 };
 use ic_validate_eq::ValidateEq;
@@ -928,10 +930,6 @@ impl ReplicatedState {
     /// Pushes a `RequestOrResponse` into the induction pool (canister or subnet
     /// input queue).
     ///
-    /// The messages from the same subnet get pushed into the local subnet
-    /// queue, while the messages from the other subnets get pushed to the inter
-    /// subnet queues.
-    ///
     /// On success, returns `Ok(true)` if the message was successfully inducted; or
     /// `Ok(false)` if the message was a best-effort response that was silently
     /// dropped.
@@ -1012,6 +1010,21 @@ impl ReplicatedState {
             canister.push_ingress(msg);
         }
         Ok(())
+    }
+
+    /// Credits the cycles in `refund` to the recipient canister's balance.
+    ///
+    /// Returns `true` if the recipient canister exists and was credited, `false`
+    /// otherwise.
+    pub fn credit_refund(&mut self, refund: &Refund) -> bool {
+        if let Some(canister) = self.canister_states.get_mut(&refund.recipient()) {
+            canister
+                .system_state
+                .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);
+            true
+        } else {
+            false
+        }
     }
 
     /// Extracts the next inter-canister or ingress message (round-robin) from

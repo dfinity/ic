@@ -171,16 +171,19 @@ fn test(env: TestEnv) {
         )
         .await;
 
-        let _topology = topology
+        let topology = topology
             .block_for_newer_registry_version()
             .await
             .expect("Failed to wait for new topology version");
         env.sync_with_prometheus();
 
         // Wait for the new nodes to report healthy
-        for node in new_nodes.clone() {
-            node.await_status_is_healthy()
-                .expect("Nodes failed to come up healthy")
+        for subnet in topology.subnets() {
+            for node in subnet.nodes() {
+                node.await_status_is_healthy_async()
+                    .await
+                    .expect("Nodes failed to come up healthy")
+            }
         }
         info!(logger, "All newly joined nodes report healthy");
 

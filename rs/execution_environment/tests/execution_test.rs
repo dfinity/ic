@@ -8,10 +8,10 @@ use ic_config::{
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method, Payload, SignWithECDSAArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs,
+    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs, DerivationPath,
+    EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
@@ -3023,4 +3023,50 @@ fn large_ipc_call_fails() {
         for single message execution."
     );
     err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, &expected_error);
+}
+
+#[test]
+fn get_canister_metadata() {
+    let env = StateMachine::new();
+    let canister_with_metadata = env.install_canister_wat(
+        r#"(module
+(memory $memory 1)
+(export "memory" (memory $memory))
+(@custom "icp:public my_public_section" "my_public_section_value")
+)"#,
+        vec![],
+        None,
+    );
+    let universal_canister =
+        create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister_with_metadata, "my_public_section".to_string())
+            .encode();
+
+    // Call the canister metadata method through an inter-canister call should succeed.
+    let get_canister_metadata = wasm()
+        .call_simple(
+            IC_00,
+            Method::CanisterMetadata,
+            call_args().other_side(canister_metadata_args.clone()),
+        )
+        .build();
+    let res = env
+        .execute_ingress(universal_canister, "update", get_canister_metadata)
+        .unwrap();
+    let reply = match res {
+        WasmResult::Reply(blob) => blob,
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
+    };
+    let response = CanisterMetadataResponse::decode(&reply).unwrap();
+    assert_eq!(response.value(), b"my_public_section_value");
+
+    // Call the canister metadata method through an ingress message should fail.
+    let err = env
+        .execute_ingress(IC_00, Method::CanisterMetadata, canister_metadata_args)
+        .unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterRejectedMessage,
+        "Only canisters can call ic00 method canister_metadata",
+    );
 }
