@@ -3089,7 +3089,7 @@ impl StateMachine {
     /// - Create a new `StateMachine` using this `state_dir` and the provided `seed`.
     /// - Generate a new routing table that reflects the split.
     /// - Use this routing table to perform the split on both state machines respectively.
-    /// - Adapt the registry with the new routing tabler and append the subnet to the subnets list.
+    /// - Adapt the registry with the new routing table and append the subnet to the subnets list.
     ///
     /// Returns an error if there is no XNet layer or if splitting the state fails.
     pub fn split(
