@@ -153,12 +153,11 @@ impl OngoingStateSync {
                             self.handle_downloaded_chunk_result(result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
 
-                            self.chunks_to_download.download_finished(chunk).await;
-                            let new_partial_state = self.chunks_to_download.next_xor_distance().await;
+                            self.chunks_to_download.download_finished(chunk);
+                            let new_partial_state = self.chunks_to_download.next_xor_distance();
                             *self.partial_state.write().await = new_partial_state;
 
                             info!(self.log, "STATE_SYNC: Finished downloading chunk {}", chunk);
-
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -264,7 +263,7 @@ impl OngoingStateSync {
 
         let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
         for _ in 0..available_download_capacity {
-            match self.chunks_to_download.next_chunk_to_download().await {
+            match self.chunks_to_download.next_chunk_to_download() {
                 Some(chunk) if !self.downloading_chunks.contains(&chunk) => {
                     // Select random peer weighted proportional to active downloads.
                     // Peers with less active downloads are more likely to be selected.
@@ -303,11 +302,11 @@ impl OngoingStateSync {
                         .chunks_to_download()
                         .filter(|chunk| !self.downloading_chunks.contains(chunk));
 
-                    let added = self
-                        .chunks_to_download
-                        .clone()
-                        .add_chunks(self.node_id, self.artifact_id.clone(), chunks_to_download)
-                        .await;
+                    let added = self.chunks_to_download.add_chunks(
+                        self.node_id,
+                        self.artifact_id.clone(),
+                        chunks_to_download,
+                    );
 
                     info!(
                         self.log,

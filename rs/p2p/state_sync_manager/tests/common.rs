@@ -259,7 +259,7 @@ impl FakeChunkable {
 impl Chunkable<StateSyncMessage> for FakeChunkable {
     /// Returns iterator for chunks to download.
     /// Tries to first download metamanifest, then manifest and then chunks. Does not advance if previous didn't complete.
-    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId> + Send> {
+    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         let mut to_download = Vec::new();
         for set in self.chunk_sets.iter() {
             for chunk in set.iter() {
@@ -326,7 +326,7 @@ impl SharableMockChunkable {
 }
 
 impl Chunkable<StateSyncMessage> for SharableMockChunkable {
-    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId> + Send> {
+    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         self.chunks_to_download_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunks_to_download()
     }

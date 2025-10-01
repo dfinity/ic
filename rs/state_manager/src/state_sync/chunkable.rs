@@ -1199,7 +1199,7 @@ fn maliciously_alter_chunk_data(
 }
 
 impl Chunkable<StateSyncMessage> for IncompleteState {
-    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId> + Send> {
+    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         match self.state {
             DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
             DownloadState::Prep {
