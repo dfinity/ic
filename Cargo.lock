@@ -17985,6 +17985,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "consensus-upgrade-system-tests",
  "ic-agent",
  "ic-base-types",
  "ic-nns-constants",
