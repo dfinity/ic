@@ -84,6 +84,12 @@ pub struct Status {
 }
 
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct SyncStatus {
+    pub sync_active: bool,
+    pub sync_error: Option<String>,
+}
+
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct FeeCollectorRanges {
     pub ranges: Vec<(Account, Vec<(BlockIndex, BlockIndex)>)>,
 }
