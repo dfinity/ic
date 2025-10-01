@@ -7954,3 +7954,191 @@ fn create_canister_sets_default_reserved_cycles_limit() {
         )
     );
 }
+
+#[test]
+fn persist_state_to_stable_memory_during_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let data = [42, 43, 44, 45];
+
+    let check_data = |test: &mut ExecutionTest| {
+        let res = test.ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        );
+        assert_eq!(get_reply(res), data);
+    };
+
+    let pre_upgrade = wasm()
+        .stable_grow(1)
+        .push_int(0)
+        .get_global_data()
+        .stable_write_offset_blob()
+        .build();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(&data)
+            .set_pre_upgrade(pre_upgrade)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test);
+
+    let post_upgrade = wasm()
+        .stable_read(0, 4)
+        .set_global_data_from_stack()
+        .build();
+    test.upgrade_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), post_upgrade)
+        .unwrap();
+
+    check_data(&mut test);
+}
+
+const HEAP_DATA: &[u8] = &[1, 2, 3, 4];
+const STABLE_DATA: &[u8] = &[42, 43, 44, 45];
+
+fn check_data(test: &mut ExecutionTest, canister_id: CanisterId) {
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm().get_global_data().append_and_reply().build(),
+    );
+    assert_eq!(get_reply(res), HEAP_DATA);
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm().stable_read(0, 4).append_and_reply().build(),
+    );
+    assert_eq!(get_reply(res), STABLE_DATA);
+}
+
+#[test]
+fn trap_during_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let zeros = [0, 0, 0, 0];
+    let pre_upgrade = wasm()
+        .set_global_data(&zeros)
+        .stable_write(0, &zeros)
+        .trap()
+        .build();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .set_pre_upgrade(pre_upgrade)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
+
+    let err = test
+        .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    check_data(&mut test, canister_id);
+}
+
+#[test]
+fn trap_during_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let zeros = [0, 0, 0, 0];
+    let pre_upgrade = wasm()
+        .set_global_data(&zeros)
+        .stable_write(0, &zeros)
+        .build();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .set_pre_upgrade(pre_upgrade)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
+
+    let err = test
+        .upgrade_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm()
+                .set_global_data(&zeros)
+                .stable_write(0, &zeros)
+                .trap()
+                .build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    check_data(&mut test, canister_id);
+}
+
+#[test]
+fn trap_during_reinstall() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
+
+    let err = test
+        .reinstall_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm().trap().build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    check_data(&mut test, canister_id);
+}
+
+#[test]
+fn set_heap_and_stable_memory_during_reinstall() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.reinstall_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
+}

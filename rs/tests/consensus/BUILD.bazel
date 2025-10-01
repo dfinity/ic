@@ -48,6 +48,7 @@ system_test(
         "k8s",
         "long_test",
     ],
+    test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,

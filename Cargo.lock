@@ -7622,6 +7622,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rayon",
  "rstest",
  "serde_cbor",
  "slog",
@@ -11412,6 +11413,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-tools-neuron-subaccount"
+version = "0.9.0"
+dependencies = [
+ "clap 4.5.27",
+ "hex",
+ "ic-base-types",
+ "ic-nervous-system-common",
+ "ic-nns-constants",
+ "icp-ledger",
+]
+
+[[package]]
 name = "ic-networking-subnet-update-workload"
 version = "0.9.0"
 dependencies = [
@@ -12069,6 +12082,7 @@ dependencies = [
  "async-trait",
  "candid",
  "candid_parser",
+ "chrono",
  "futures",
  "futures-util",
  "ic-base-types",
@@ -12106,6 +12120,7 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "chrono",
  "ic-base-types",
  "ic-nervous-system-proto",
  "rewards-calculation",
@@ -18528,6 +18543,7 @@ dependencies = [
  "backoff",
  "candid",
  "clap 4.5.27",
+ "config",
  "env-file-reader",
  "exec",
  "get_if_addrs",
@@ -19226,11 +19242,13 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
+ "ic-registry-transport",
  "ic-sns-wasm",
  "ic-transport-types",
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
+ "prost 0.13.4",
  "registry-canister",
  "reqwest 0.12.15",
  "schemars",
@@ -19316,7 +19334,9 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-handler-root",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
@@ -20928,7 +20948,6 @@ dependencies = [
  "chrono",
  "ic-base-types",
  "ic-protobuf",
- "ic-types",
  "itertools 0.12.1",
  "maplit",
  "rust_decimal",

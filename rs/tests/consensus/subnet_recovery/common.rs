@@ -422,8 +422,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
-    let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(SSH_USERNAME))
-        .expect("Couldn't read public key");
+    let ssh_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
+    let readonly_pub_key =
+        file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(SSH_USERNAME))
+            .expect("Couldn't read public key");
 
     let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
@@ -432,7 +434,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
         replica_version: Some(initial_version.clone()),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
+        admin_key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: cfg.local_recovery,
@@ -469,7 +471,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
-        pub_key: (!cfg.corrupt_cup).then_some(pub_key),
+        readonly_pub_key: (!cfg.corrupt_cup).then_some(readonly_pub_key),
+        readonly_key_file: Some(ssh_priv_key_path),
         download_method: None, // We will set this after breaking/halting the subnet, see below
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
@@ -639,8 +642,8 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         .replay_until_height
         .map(|h| format!("--replay-until-height {h} "))
         .unwrap_or_default();
-    let pub_key = subnet_recovery.params.pub_key.unwrap();
-    let pub_key = pub_key.trim();
+    let readonly_pub_key = subnet_recovery.params.readonly_pub_key.unwrap();
+    let readonly_pub_key = readonly_pub_key.trim();
 
     let command = format!(
         r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
@@ -649,7 +652,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         app-subnet-recovery \
         --subnet-id {subnet_id} \
         {maybe_replay_until_height}\
-        --pub-key "{pub_key}" \
+        --readonly-pub-key "{readonly_pub_key}" \
         --download-method local \
         --upload-method local \
         --wait-for-cup-node {node_ip} \
@@ -685,8 +688,7 @@ fn break_subnet(
     for node in faulty_nodes {
         // simulate subnet failure by breaking the replica process, but not the orchestrator
         recovery
-            .execute_ssh_command(
-                "admin",
+            .execute_admin_ssh_command(
                 node.get_ip_addr(),
                 "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
             )

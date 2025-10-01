@@ -596,11 +596,6 @@ impl CanisterState {
         system_state.drop_in_progress_management_calls_after_split();
     }
 
-    /// Appends the given log to the canister log.
-    pub fn append_log(&mut self, other: &mut CanisterLog) {
-        self.system_state.canister_log.append(other);
-    }
-
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
         self.system_state.canister_log.clear();
