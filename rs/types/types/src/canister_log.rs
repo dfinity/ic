@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 /// The maximum allowed size of a canister log buffer.
 pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
-/// Upper bound on how many delta log sizes we retain.
+/// Upper bound on how many delta log sizes is retained.
 /// Prevents unbounded growth of `delta_log_sizes`.
 const DELTA_LOG_SIZES_CAP: usize = 100;
 
@@ -114,7 +114,6 @@ pub struct CanisterLog {
     /// Multiple logs can be appended in one round (e.g., from heartbeat, timers, or message execution).
     /// The collected sizes are used to expose per-round memory usage metrics
     /// and the record is cleared at the end of the round.
-    #[validate_eq(Ignore)]
     delta_log_sizes: VecDeque<usize>,
 }
 
