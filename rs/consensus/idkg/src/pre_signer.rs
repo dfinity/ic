@@ -200,7 +200,7 @@ impl IDkgPreSignerImpl {
                             return Some(IDkgChangeAction::HandleInvalid(
                                 id,
                                 format!("Dealing from unexpected node: {signed_dealing}"),
-                            ))
+                            ));
                         }
 
                         if self.has_dealer_issued_dealing(
@@ -213,7 +213,7 @@ impl IDkgPreSignerImpl {
                             return Some(IDkgChangeAction::HandleInvalid(
                                 id,
                                 format!("Duplicate dealing: {signed_dealing}"),
-                            ))
+                            ));
                         }
 
                         let Some(transcript_params) = self.resolve_ref(
