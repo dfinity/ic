@@ -716,8 +716,8 @@ def inject_config_into_image(
 
     image_part = f"--image-path {img_path}"
     reward_part = f"--node-reward-type {node_reward_type}"
-    prefix_part = f"--ipv6-prefix {ipv6_prefix}"
-    prefix_part = "--ipv6-prefix-length 64"
+    prefix_part = f"--ipv6-prefix {ipv6_prefix} "
+    prefix_part += "--ipv6-prefix-length 64"
     gateway_part = f"--ipv6-gateway {ipv6_gateway}"
     ipv4_part = ""
     if ipv4_args:

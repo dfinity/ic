@@ -70,7 +70,7 @@ pub fn write_config(path: &Path, cfg: &ConfigIniSettings) -> Result<(), Error> {
     let ConfigIniSettings {
         node_reward_type,
         ipv6_prefix,
-        ipv6_prefix_length: _,
+        ipv6_prefix_length,
         ipv6_gateway,
         ipv4_address,
         ipv4_gateway,
@@ -87,6 +87,7 @@ pub fn write_config(path: &Path, cfg: &ConfigIniSettings) -> Result<(), Error> {
     // Always write 4 segments, even if our prefix is less.
     assert!(format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok());
     writeln!(&mut f, "ipv6_prefix={ipv6_prefix}")?;
+    writeln!(&mut f, "ipv6_prefix_length={ipv6_prefix_length}")?;
     writeln!(&mut f, "ipv6_gateway={ipv6_gateway}")?;
 
     if let (Some(ipv4_address), Some(ipv4_gateway), Some(ipv4_prefix_length), Some(domain)) =

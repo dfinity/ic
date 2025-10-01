@@ -77,9 +77,6 @@ struct DeploymentConfig {
     #[arg(long)]
     nns_urls: Option<Url>,
 
-    #[arg(long, allow_hyphen_values = true)]
-    nns_public_key_override: Option<String>,
-
     #[arg(long)]
     memory_gb: Option<u32>,
 
@@ -293,7 +290,8 @@ async fn main() -> Result<(), Error> {
     println!("{updated_deployment}");
 
     // Update NNS key
-    if let Some(public_key) = cli.deployment.nns_public_key_override {
+    if let Some(path) = cli.nns_public_key_override {
+        let public_key = std::fs::read_to_string(path)?;
         let mut nns_key = NamedTempFile::with_prefix("nns_key")?;
         write!(&mut nns_key, "{public_key}")?;
         fs::set_permissions(nns_key.path(), Permissions::from_mode(0o644))?;
