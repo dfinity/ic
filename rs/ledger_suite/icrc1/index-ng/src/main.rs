@@ -582,7 +582,7 @@ pub async fn build_index() -> Option<()> {
         GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
         GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
     };
-    if let Some(num_indexed) = num_indexed {
+    if let Ok(num_indexed) = num_indexed {
         let retrieve_blocks_from_ledger_interval =
             with_state(|state| state.retrieve_blocks_from_ledger_interval());
         log!(
@@ -599,7 +599,7 @@ fn sync_stopped() -> bool {
     TIMER_ID.with(|tid| *tid.borrow()).is_none()
 }
 
-async fn fetch_blocks_via_get_blocks() -> Option<u64> {
+async fn fetch_blocks_via_get_blocks() -> Result<u64, ()> {
     let mut num_indexed = 0;
     let next_id = with_blocks(|blocks| blocks.len());
     let res = get_blocks_from_ledger(next_id).await?;
@@ -616,19 +616,15 @@ async fn fetch_blocks_via_get_blocks() -> Option<u64> {
             next_archived_txid += res.blocks.len();
             num_indexed += res.blocks.len();
             remaining -= res.blocks.len();
-            if !append_blocks(res.blocks) {
-                return None;
-            }
+            append_blocks(res.blocks)?;
         }
     }
     num_indexed += res.blocks.len();
-    if !append_blocks(res.blocks) {
-        return None;
-    }
-    Some(num_indexed as u64)
+    append_blocks(res.blocks)?;
+    Ok(num_indexed as u64)
 }
 
-async fn fetch_blocks_via_icrc3() -> Option<u64> {
+async fn fetch_blocks_via_icrc3() -> Result<u64, ()> {
     // The current number of blocks is also the id of the next
     // block to query from the Ledger.
     let previous_num_blocks = with_blocks(|blocks| blocks.len());
@@ -653,13 +649,12 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
             // one, i.e. next_id + num_indexed
             let expected_id = with_blocks(|blocks| blocks.len());
             if arg.start != expected_id {
-                log!(
-                    P0,
+                let error = format!(
                     "[fetch_blocks_via_icrc3]: wrong start index in archive args. Expected: {} actual: {}",
-                    expected_id,
-                    arg.start,
+                    expected_id, arg.start,
                 );
-                return None;
+                stop_timer_with_error(error);
+                return Err(());
             }
 
             let archived = ArchivedBlocks {
@@ -670,14 +665,14 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
 
             // sanity check: the index does not support nested archives
             if !res.archived_blocks.is_empty() {
-                log!(
-                    P0,
+                let error = format!(
                     "[fetch_blocks_via_icrc3]: The archive callback {:?} with arg {:?} returned one or more archived blocks and the index is currently not supporting nested archived blocks. Archived blocks returned are {:?}",
                     callback.clone(),
                     arg.clone(),
                     res.archived_blocks,
                 );
-                return None;
+                stop_timer_with_error(error);
+                return Err(());
             }
 
             // change `arg` for the next iteration
@@ -691,11 +686,15 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
     append_icrc3_blocks(res.blocks)?;
     let num_blocks = with_blocks(|blocks| blocks.len());
     match num_blocks.checked_sub(previous_num_blocks) {
-        None => panic!(
-            "The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state",
-            num_blocks, previous_num_blocks
-        ),
-        Some(new_blocks_indexed) => Some(new_blocks_indexed),
+        None => {
+            let error = format!(
+                "The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state",
+                num_blocks, previous_num_blocks
+            );
+            stop_timer_with_error(error);
+            Err(())
+        }
+        Some(new_blocks_indexed) => Ok(new_blocks_indexed),
     }
 }
 
@@ -717,7 +716,7 @@ fn stop_timer_with_error(error: String) {
     SYNC_ERROR.with(|sync_error| *sync_error.borrow_mut() = Some(error));
 }
 
-fn append_block(block_index: BlockIndex64, block: GenericBlock) -> bool {
+fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()> {
     measure_span(&PROFILING_DATA, "append_blocks", move || {
         assert!(
             !sync_stopped(),
@@ -731,7 +730,7 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> bool {
                 stop_timer_with_error(format!(
                     "Unable to decode generic block at index {block_index}. Error: {e}"
                 ));
-                return false;
+                return Err(());
             }
         };
 
@@ -741,13 +740,13 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> bool {
                 stop_timer_with_error(format!(
                     "Unable to decode encoded block at index {block_index}. Error: {e}"
                 ));
-                return false;
+                return Err(());
             }
         };
         let decoded_hash = Block::<Tokens>::block_hash(&decoded_block.clone().encode());
         if original_hash != decoded_hash.as_slice() {
             stop_timer_with_error(format!("Unknown block at index {block_index}."));
-            return false;
+            return Err(());
         }
 
         // append the encoded block to the block log
@@ -770,25 +769,22 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> bool {
         // change the balance of the involved accounts
         process_balance_changes(block_index, &decoded_block);
 
-        // Adding block was successful
-        true
+        Ok(())
     })
 }
 
-fn append_blocks(new_blocks: Vec<GenericBlock>) -> bool {
+fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), ()> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
     for block in new_blocks {
-        if !append_block(block_index, block) {
-            return false;
-        }
+        append_block(block_index, block)?;
         block_index += 1;
     }
-    true
+    Ok(())
 }
 
-fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
+fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), ()> {
     let mut blocks = vec![];
     let start_id = with_blocks(|blocks| blocks.len());
     for BlockWithId { id, block } in new_blocks {
@@ -800,16 +796,14 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
                 expected_id, id
             );
             stop_timer_with_error(error);
-            return None;
+            return Err(());
         }
         // This conversion is safe as `Value`
         // can represent any `ICRC3Value`.
         blocks.push(Value::from(block));
     }
-    if !append_blocks(blocks) {
-        return None;
-    }
-    Some(())
+    append_blocks(blocks)?;
+    Ok(())
 }
 
 fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
