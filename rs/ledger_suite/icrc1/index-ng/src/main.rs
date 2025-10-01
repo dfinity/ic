@@ -111,6 +111,12 @@ thread_local! {
     /// Cache of the canister, i.e. ephemeral data that doesn't need to be
     /// persistent between upgrades
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
+
+    /// The ID of the block sync timer. `None` means the sync is stopped due to an error.
+    static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(None);
+
+    /// The description of the error encountered during block sync.
+    static SYNC_ERROR: RefCell<Option<String>> = RefCell::new(None);
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -584,11 +590,11 @@ pub async fn build_index() -> Option<()> {
         num_indexed,
         retrieve_blocks_from_ledger_interval
     );
-    // Schedule the next index timer
-    set_build_index_timer(with_state(|state| {
-        state.retrieve_blocks_from_ledger_interval()
-    }));
     Some(())
+}
+
+fn sync_stopped() -> bool {
+    TIMER_ID.with(|tid| *tid.borrow()).is_none()
 }
 
 async fn fetch_blocks_via_get_blocks() -> Option<u64> {
@@ -606,14 +612,15 @@ async fn fetch_blocks_via_get_blocks() -> Option<u64> {
             };
             let res = get_blocks_from_archive(&archived).await?;
             next_archived_txid += res.blocks.len();
-            num_indexed += res.blocks.len();
             remaining -= res.blocks.len();
-            append_blocks(res.blocks);
+            num_indexed += append_blocks(res.blocks);
+            if sync_stopped() {
+                return Some(num_indexed);
+            }
         }
     }
-    num_indexed += res.blocks.len();
-    append_blocks(res.blocks);
-    Some(num_indexed as u64)
+    num_indexed += append_blocks(res.blocks);
+    Some(num_indexed)
 }
 
 async fn fetch_blocks_via_icrc3() -> Option<u64> {
@@ -687,18 +694,56 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
     }
 }
 
-fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer(after, || {
+fn set_build_index_timer(after: Duration) {
+    let timer_id = ic_cdk_timers::set_timer_interval(after, || {
         ic_cdk::spawn(async {
             let _ = build_index().await;
         })
-    })
+    });
+    TIMER_ID.with(|tid| *tid.borrow_mut() = Some(timer_id));
 }
 
-fn append_block(block_index: BlockIndex64, block: GenericBlock) {
+fn stop_timer_with_error(error: String) {
+    log!(P0, "{}", error);
+    if let Some(timer_id) = TIMER_ID.with(|tid| *tid.borrow()) {
+        ic_cdk_timers::clear_timer(timer_id);
+        TIMER_ID.with(|tid| *tid.borrow_mut() = None);
+    }
+    SYNC_ERROR.with(|sync_error| *sync_error.borrow_mut() = Some(error));
+}
+
+fn append_block(block_index: BlockIndex64, block: GenericBlock) -> bool {
     measure_span(&PROFILING_DATA, "append_blocks", move || {
+        assert!(
+            !sync_stopped(),
+            "Trying to append a block, even though the sync is stopped."
+        );
+
         let original_hash = block.hash();
-        let block = generic_block_to_encoded_block_or_trap(block_index, block);
+        let block = match generic_block_to_encoded_block(block) {
+            Ok(block) => block,
+            Err(e) => {
+                stop_timer_with_error(format!(
+                    "Unable to decode generic block at index {block_index}. Error: {e}"
+                ));
+                return false;
+            }
+        };
+
+        let decoded_block = match Block::<Tokens>::decode(block.clone()) {
+            Ok(block) => block,
+            Err(e) => {
+                stop_timer_with_error(format!(
+                    "Unable to decode encoded block at index {block_index}. Error: {e}"
+                ));
+                return false;
+            }
+        };
+        let decoded_hash = Block::<Tokens>::block_hash(&decoded_block.clone().encode());
+        if original_hash != decoded_hash.as_slice() {
+            stop_timer_with_error(format!("Unknown block at index {block_index}."));
+            return false;
+        }
 
         // append the encoded block to the block log
         with_blocks(|blocks| {
@@ -706,12 +751,6 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) {
                 .append(&block.0)
                 .unwrap_or_else(|_| trap("no space left"))
         });
-
-        let decoded_block = decode_encoded_block_or_trap(block_index, block);
-        let decoded_hash = Block::<Tokens>::block_hash(&decoded_block.clone().encode());
-        if original_hash != decoded_hash.as_slice() {
-            trap(format!("Unknown block at index {block_index}."));
-        }
 
         // add the block idx to the indices
         with_account_block_ids(|account_block_ids| {
@@ -725,17 +764,25 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) {
 
         // change the balance of the involved accounts
         process_balance_changes(block_index, &decoded_block);
-    });
+
+        // Adding block was successful
+        true
+    })
 }
 
-fn append_blocks(new_blocks: Vec<GenericBlock>) {
+fn append_blocks(new_blocks: Vec<GenericBlock>) -> u64 {
+    let mut num_indexed = 0;
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
     for block in new_blocks {
-        append_block(block_index, block);
+        if !append_block(block_index, block) {
+            break;
+        }
+        num_indexed += 1;
         block_index += 1;
     }
+    num_indexed
 }
 
 fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
@@ -745,19 +792,20 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
         // sanity check
         let expected_id = start_id + blocks.len() as u64;
         if id != expected_id {
-            log!(
-                P0,
+            let error = format!(
                 "[fetch_blocks_via_icrc3]: wrong block index returned by ledger. Expected: {} actual: {}",
-                expected_id,
-                id,
+                expected_id, id
             );
+            stop_timer_with_error(error);
             return None;
         }
         // This conversion is safe as `Value`
         // can represent any `ICRC3Value`.
         blocks.push(Value::from(block));
     }
-    append_blocks(blocks);
+    if blocks.len() as u64 > append_blocks(blocks) {
+        return None;
+    }
     Some(())
 }
 
@@ -874,17 +922,6 @@ fn credit(block_index: BlockIndex64, account: Account, amount: Tokens) {
             ic_cdk::trap(format!("Block {block_index} caused an overflow for account {account} when calculating balance {balance} + amount {amount}"))
         })
     });
-}
-
-fn generic_block_to_encoded_block_or_trap(
-    block_index: BlockIndex64,
-    block: GenericBlock,
-) -> EncodedBlock {
-    generic_block_to_encoded_block(block).unwrap_or_else(|e| {
-        trap(format!(
-            "Unable to decode generic block at index {block_index}. Error: {e}"
-        ))
-    })
 }
 
 fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block<Tokens> {
