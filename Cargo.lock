@@ -14039,6 +14039,7 @@ dependencies = [
  "ciborium",
  "clap 4.5.27",
  "ed25519-dalek",
+ "fs_extra",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
