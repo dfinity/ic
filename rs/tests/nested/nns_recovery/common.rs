@@ -10,8 +10,9 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::{
-        AuthMean, get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_fails, wait_until_authentication_is_granted,
+        AuthMean, disable_ssh_access_to_nodes, get_updatesubnetpayload_with_keys,
+        update_subnet_record, wait_until_authentication_fails,
+        wait_until_authentication_is_granted,
     },
     upgrade::assert_assigned_replica_version,
 };
@@ -295,7 +296,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
     let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
         .expect("Failed to read admin SSH private key");
-    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
     info!(
         logger,
         "Remove admin SSH access from all NNS nodes except the DFINITY-owned node"
@@ -304,22 +304,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .nodes()
         .filter(|n| n.node_id != dfinity_owned_node.node_id)
         .collect::<Vec<_>>();
-    for node in nodes_except_dfinity_owned {
-        info!(
-            logger,
-            "Disabling admin SSH access on node {} ({:?})",
-            node.node_id,
-            node.get_ip_addr()
-        );
+    let _ = disable_ssh_access_to_nodes(&nodes_except_dfinity_owned, SSH_USERNAME)
+        .expect("Failed to disable admin SSH access to nodes");
 
-        node.block_on_bash_script("rm /var/lib/admin/.ssh/authorized_keys")
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to disable admin SSH access on node {} ({:?})",
-                    node.node_id,
-                    node.get_ip_addr()
-                )
-            });
+    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
+    for node in nodes_except_dfinity_owned {
         wait_until_authentication_fails(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
     }
     // Ensure we can still SSH into the DFINITY-owned node with the admin key

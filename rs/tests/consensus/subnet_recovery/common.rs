@@ -33,13 +33,16 @@ use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::assert_node_is_unassigned,
+    node::assert_node_is_unassigned_with_ssh_session,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
         install_nns_and_check_progress, store_message,
     },
     set_sandbox_env_vars,
-    ssh_access::execute_bash_command,
+    ssh_access::{
+        AuthMean, disable_ssh_access_to_nodes, execute_bash_command,
+        wait_until_authentication_fails, wait_until_authentication_is_granted,
+    },
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
     },
@@ -425,6 +428,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
     let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
+    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
+        .expect("Failed to read admin SSH private key");
 
     // Generate a new readonly keypair
     env.ssh_keygen(READONLY_USERNAME)
@@ -479,7 +484,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
         readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
-        readonly_key_file: Some(ssh_readonly_priv_key_path),
+        readonly_key_file: Some(ssh_readonly_priv_key_path.clone()),
         download_method: None, // We will set this after breaking/halting the subnet, see below
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
@@ -517,6 +522,30 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         )
     }
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
+
+    // Mirror production setup by removing admin SSH access from all nodes except the upload node
+    info!(
+        logger,
+        "Remove admin SSH access from all nodes except the upload node"
+    );
+    let nodes_except_upload_node = app_subnet
+        .nodes()
+        .filter(|n| n.node_id != upload_node.node_id)
+        .collect::<Vec<_>>();
+    let mut admin_ssh_sessions =
+        disable_ssh_access_to_nodes(&nodes_except_upload_node, SSH_USERNAME)
+            .expect("Failed to disable admin SSH access to nodes");
+    admin_ssh_sessions.insert(
+        upload_node.node_id,
+        upload_node.block_on_ssh_session().unwrap(),
+    );
+
+    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
+    for node in nodes_except_upload_node {
+        wait_until_authentication_fails(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
+    }
+    // Ensure we can still SSH into the upload node with the admin key
+    wait_until_authentication_is_granted(&upload_node.get_ip_addr(), SSH_USERNAME, &admin_auth);
 
     let download_node = select_download_node(&app_subnet, &logger);
 
@@ -605,9 +634,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         logger,
         "Making sure unassigned nodes deleted their state..."
     );
-    topology_snapshot
-        .unassigned_nodes()
-        .for_each(|n| assert_node_is_unassigned(&n, &logger));
+    topology_snapshot.unassigned_nodes().for_each(|n| {
+        assert_node_is_unassigned_with_ssh_session(&n, admin_ssh_sessions.get(&n.node_id), &logger);
+    });
 }
 
 fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger: &Logger) {

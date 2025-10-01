@@ -1,5 +1,6 @@
 /// SSH Key Utilities
 use ic_system_test_driver::{
+    driver::test_env_api::{IcNodeSnapshot, SshSession as _},
     nns::{
         get_governance_canister, submit_external_proposal_with_test_id,
         vote_execute_proposal_assert_executed, vote_execute_proposal_assert_failed,
@@ -9,7 +10,7 @@ use ic_system_test_driver::{
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
-use ic_types::{SubnetId, time::current_time};
+use ic_types::{NodeId, SubnetId, time::current_time};
 use openssh_keys::PublicKey;
 use registry_canister::mutations::{
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
@@ -18,6 +19,7 @@ use registry_canister::mutations::{
 use reqwest::Url;
 use ssh2::Session;
 use std::{
+    collections::HashMap,
     io::{Read, Write},
     net::{IpAddr, TcpStream},
     time::Duration,
@@ -120,6 +122,45 @@ pub fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthM
             _ => {}
         }
     }
+}
+
+/// Disables the establiment of new SSH connections to the given nodes for the given account. This
+/// is done by deleting the `authorized_keys` file in the corresponding directory.
+/// The sessions that are used to perform this operation can still be used to execute further
+/// commands on the nodes. This function thus returns a map from node IDs to SSH sessions that can
+/// be used for this purpose.
+pub fn disable_ssh_access_to_nodes(
+    nodes: &[IcNodeSnapshot],
+    account: &str,
+) -> Result<HashMap<NodeId, Session>, String> {
+    let mut sessions = HashMap::new();
+    for node in nodes {
+        let session = node.block_on_ssh_session().map_err(|e| {
+            format!(
+                "Failed to establish SSH session to node {} ({:?}): {}",
+                node.node_id,
+                node.get_ip_addr(),
+                e
+            )
+        })?;
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("rm /var/lib/{account}/.ssh/authorized_keys"),
+        )
+        .map_err(|e| {
+            format!(
+                "Failed to disable {} SSH access on node {} ({:?}): {}",
+                account,
+                node.node_id,
+                node.get_ip_addr(),
+                e
+            )
+        })?;
+
+        sessions.insert(node.node_id, session);
+    }
+
+    Ok(sessions)
 }
 
 pub fn get_updatesubnetpayload_with_keys(
