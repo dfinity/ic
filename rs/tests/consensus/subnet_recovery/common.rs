@@ -523,6 +523,18 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     }
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
+    let download_node = select_download_node(&app_subnet, &logger);
+
+    if cfg.corrupt_cup {
+        info!(logger, "Corrupting the latest CUP on all nodes");
+        corrupt_latest_cup(&app_subnet, subnet_recovery.get_recovery_api(), &logger);
+        assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
+    }
+
+    subnet_recovery.params.download_method =
+        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
+    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
+
     // Mirror production setup by removing admin SSH access from all nodes except the upload node
     info!(
         logger,
@@ -546,18 +558,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     }
     // Ensure we can still SSH into the upload node with the admin key
     wait_until_authentication_is_granted(&upload_node.get_ip_addr(), SSH_USERNAME, &admin_auth);
-
-    let download_node = select_download_node(&app_subnet, &logger);
-
-    if cfg.corrupt_cup {
-        info!(logger, "Corrupting the latest CUP on all nodes");
-        corrupt_latest_cup(&app_subnet, subnet_recovery.get_recovery_api(), &logger);
-        assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
-    }
-
-    subnet_recovery.params.download_method =
-        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
-    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
