@@ -340,7 +340,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         upgrade_version,
                         url,
                         hash,
-                        params.add_and_bless_upgrade_version.unwrap_or(false),
+                        params.add_and_bless_upgrade_version == Some(true),
                         self.params.replay_until_height,
                         !self.interactive(),
                     )?))
