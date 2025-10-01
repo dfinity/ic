@@ -21,39 +21,43 @@ impl Registry {
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
     ) {
-        let caller = dfn_core::api::caller();
-        self.update_node_operator_config_directly_(caller, payload)
+        self.do_update_node_operator_config_directly_(payload)
+            .unwrap()
     }
 
-    fn update_node_operator_config_directly_(
+    fn do_update_node_operator_config_directly_(
         &mut self,
-        caller: PrincipalId,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
-    ) {
+    ) -> Result<(), String> {
         println!("{LOG_PREFIX}do_update_node_operator_config_directly: {payload:?}");
 
         // 1. Look up the record of the requested target NodeOperatorRecord.
         let node_operator_id = payload
             .node_operator_id
-            .expect("No Node Operator specified in the payload");
+            .ok_or("No Node Operator specified in the payload".to_string())?;
+
         let node_operator_record_key = make_node_operator_record_key(node_operator_id).into_bytes();
         let node_operator_record_vec = &self
             .get(&node_operator_record_key, self.latest_version())
-            .unwrap_or_else(|| {
-                panic!(
-                    "{LOG_PREFIX}Node Operator record with ID {node_operator_id} not found in the registry."
-                )
-            })
+            .ok_or(
+                format!("{LOG_PREFIX}Node Operator record with ID {node_operator_id} not found in the registry.")
+            )?
             .value;
 
         let mut node_operator_record =
-            NodeOperatorRecord::decode(node_operator_record_vec.as_slice()).unwrap();
+            NodeOperatorRecord::decode(node_operator_record_vec.as_slice())
+                .map_err(|e| format!("{e:?}"))?;
 
         // 2. Make sure that the caller is authorized to make the requested changes to node_operator_record.
-        assert_eq!(
-            caller,
-            PrincipalId::try_from(&node_operator_record.node_provider_principal_id).unwrap()
-        );
+
+        let caller = dfn_core::api::caller();
+        if caller
+            != PrincipalId::try_from(&node_operator_record.node_provider_principal_id).unwrap()
+        {
+            return Err(format!(
+                "Caller {caller} not equal to the node_provider_princpal_id for this record."
+            ));
+        }
 
         // 3. Check Rate Limits
         // TODO DO NOT MERGE
@@ -61,11 +65,14 @@ impl Registry {
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
             .node_provider_id
-            .expect("No Node Provider specified in the payload");
-        assert_ne!(
-            node_provider_id, node_operator_id,
-            "The Node Operator ID cannot be the same as the Node Provider ID: {node_operator_id}"
-        );
+            .ok_or("No Node Provider specified in the payload".to_string())?;
+
+        if node_provider_id == node_operator_id {
+            return Err(format!(
+                "The Node Operator ID cannot be the same as the Node Provider ID: {node_operator_id}"
+            ));
+        }
+
         node_operator_record.node_provider_principal_id = node_provider_id.to_vec();
 
         // 5. Set and execute the mutation
@@ -77,6 +84,8 @@ impl Registry {
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        Ok(())
     }
 }
 
@@ -93,4 +102,22 @@ pub struct UpdateNodeOperatorConfigDirectlyPayload {
     /// The principal id of this node's provider.
     #[prost(message, optional, tag = "2")]
     pub node_provider_id: Option<PrincipalId>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::test_helpers::invariant_compliant_registry;
+
+    #[test]
+    fn test_update_node_operator_config_directly_is_rate_limited() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let request = UpdateNodeOperatorConfigDirectlyPayload {
+            node_operator_id: None,
+            node_provider_id: None,
+        };
+
+        registry.do_update_node_operator_config_directly(request);
+    }
 }
