@@ -129,7 +129,7 @@ impl Mapping {
     }
 
     /// See the comments of `PageMap::get_checkpoint_memory_instructions()`.
-    pub fn get_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_memory_instructions(&self) -> MemoryInstructions<'_> {
         let num_pages = (self.mmap.len() / PAGE_SIZE) as u64;
 
         MemoryInstructions {
@@ -190,7 +190,7 @@ impl Checkpoint {
     }
 
     /// See the comments of `PageMap::get_checkpoint_memory_instructions()`.
-    pub fn get_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_memory_instructions(&self) -> MemoryInstructions<'_> {
         self.mapping.as_ref().map_or(
             MemoryInstructions {
                 range: PageIndex::new(0)..PageIndex::new(u64::MAX),

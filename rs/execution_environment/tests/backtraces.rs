@@ -35,7 +35,6 @@ core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-_wasm_backtrace_canister::ic0_trap
 ic_cdk_executor::in_executor_context
 canister_update ic0_trap
 "#;

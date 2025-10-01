@@ -35,9 +35,9 @@ struct SplitArgs {
     #[clap(long)]
     dir: PathBuf,
 
-    /// The path to a private key to be considered for SSH connections
+    /// The path to a private key to be considered for admin SSH connections
     #[clap(long)]
-    key_file: Option<PathBuf>,
+    admin_key_file: Option<PathBuf>,
 
     /// Flag to enter test mode
     #[clap(long)]
@@ -148,7 +148,7 @@ fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
         dir: args.dir,
         nns_url: args.nns_url,
         replica_version: args.replica_version,
-        key_file: args.key_file,
+        admin_key_file: args.admin_key_file,
         test_mode: args.test,
         skip_prompts: args.skip_prompts,
         use_local_binaries: args.use_local_binaries,

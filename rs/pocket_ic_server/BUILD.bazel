@@ -8,6 +8,7 @@ LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//packages/ic-error-types",
+    "//packages/icrc-ledger-types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
@@ -41,7 +42,9 @@ LIB_DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
+    "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
@@ -170,7 +173,7 @@ HEAD_NNS_CANISTER_DATA = [
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     "//rs/ledger_suite/icp/index:ic-icp-index-canister",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/nns/handlers/root/impl:root-canister",
@@ -184,7 +187,7 @@ HEAD_NNS_CANISTER_DATA = [
 HEAD_NNS_CANISTER_ENV = {
     "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
-    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "ICP_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/index:ic-icp-index-canister)",
     "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256)",
     "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location //rs/nns/governance:governance-canister-test)",
@@ -387,7 +390,6 @@ rust_test(
 
 rust_test(
     name = "bitcoin_integration_tests",
-    size = "small",
     srcs = [
         "tests/bitcoin_integration_tests.rs",
     ],

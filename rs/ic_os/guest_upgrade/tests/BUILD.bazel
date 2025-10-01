@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_test(
+    name = "guest_upgrade_tests",
+    srcs = glob(["src/**/*.rs"]),
+    tags = ["requires-network"],
+    deps = [
+        "//rs/ic_os/attestation",
+        "//rs/ic_os/attestation/testing",
+        "//rs/ic_os/config_types",
+        "//rs/ic_os/guest_upgrade/client:lib",
+        "//rs/ic_os/guest_upgrade/server",
+        "//rs/ic_os/guest_upgrade/shared",
+        "//rs/ic_os/sev",
+        "//rs/ic_os/vsock/vsock_lib",
+        "//rs/interfaces/registry",
+        "//rs/protobuf",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:rustls",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)

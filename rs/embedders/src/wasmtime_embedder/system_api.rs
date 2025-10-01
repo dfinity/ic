@@ -1083,14 +1083,14 @@ impl MemoryUsage {
             new_message_usage,
         )?;
 
-        if message_memory_usage.guaranteed_response.get() != 0 {
-            if let Err(_err) = self.subnet_available_memory.try_decrement(
+        if message_memory_usage.guaranteed_response.get() != 0
+            && let Err(_err) = self.subnet_available_memory.try_decrement(
                 NumBytes::new(0),
                 message_memory_usage.guaranteed_response,
                 NumBytes::new(0),
-            ) {
-                return Err(HypervisorError::OutOfMemory);
-            }
+            )
+        {
+            return Err(HypervisorError::OutOfMemory);
         }
 
         self.allocated_message_memory += message_memory_usage;
@@ -3977,7 +3977,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
-        const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
+        const MAX_ERROR_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
             let message = valid_subslice(

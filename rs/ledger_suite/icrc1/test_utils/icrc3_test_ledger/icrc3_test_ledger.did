@@ -117,6 +117,14 @@ type ICRC3DataCertificate = record {
   hash_tree : blob
 };
 
+// The value returned from the [icrc1_metadata] endpoint.
+type MetadataValue = variant {
+  Nat : nat;
+  Int : int;
+  Text : text;
+  Blob : blob
+};
+
 service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
@@ -131,4 +139,6 @@ service : () -> {
     icrc10_supported_standards : () -> (vec StandardRecord) query;
 
     get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;
+
+    icrc1_metadata : () -> (vec record { text; MetadataValue }) query;    
 }
