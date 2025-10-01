@@ -1,13 +1,10 @@
 pub mod common;
 
-use candid::{Decode, Encode};
 use common::{
     DebugInfo, KB, MB, SubnetPair, SubnetPairConfig, arb_canister_config,
     induct_from_head_of_stream, stream_snapshot,
 };
-use ic_state_machine_tests::{StateMachine, subnet_id_from, two_subnets_simple};
 use ic_types::{
-    CanisterId,
     ingress::{IngressState, IngressStatus},
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
 };
