@@ -2545,7 +2545,7 @@ impl Governance {
         }
 
         // Commit the usage from reservation now that we are not going to remove the neuron
-        if let Err(e) = self
+        if let Err(_) = self
             .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
         {
@@ -3282,7 +3282,7 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        if let Err(e) = self
+        if let Err(_) = self
             .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
         {
@@ -6207,7 +6207,7 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        if let Err(e) = self
+        if let Err(_) = self
             .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
         {

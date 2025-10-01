@@ -12,7 +12,7 @@ use std::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CapacityUsageRecord {
+struct CapacityUsageRecord {
     last_capacity_drip: SystemTime,
     capacity_used: u64,
 }
