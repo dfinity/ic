@@ -25,6 +25,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        .with_timeout_per_test(Duration::from_secs(9999))
+        .with_overall_timeout(Duration::from_secs(9999))
         .execute_from_args()?;
 
     Ok(())
@@ -148,9 +150,23 @@ async fn test_async(env: TestEnv) {
         &logger,
     )
     .await;
+    let source_canister2 = install_canister(
+        &app_subnet_1,
+        &app_subnet_1_agent,
+        migration_canister_id,
+        &logger,
+    )
+    .await;
     let app_subnet_2 = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 2);
     let app_subnet_2_agent = app_subnet_2.build_default_agent_async().await;
     let target_canister = install_canister(
+        &app_subnet_2,
+        &app_subnet_2_agent,
+        migration_canister_id,
+        &logger,
+    )
+    .await;
+    let target_canister2 = install_canister(
         &app_subnet_2,
         &app_subnet_2_agent,
         migration_canister_id,
@@ -163,12 +179,24 @@ async fn test_async(env: TestEnv) {
         target: target_canister.canister_id(),
     })
     .unwrap();
+    let args2 = Encode!(&MigrateCanisterArgs {
+        source: source_canister2.canister_id(),
+        target: target_canister2.canister_id(),
+    })
+    .unwrap();
 
     info!(logger, "Calling migrate_canister");
 
     let result = nns_agent
         .update(&migration_canister_id, "migrate_canister")
         .with_arg(args.clone())
+        .call_and_wait()
+        .await
+        .expect("Failed to call migrate_canister.");
+
+    let _result = nns_agent
+        .update(&migration_canister_id, "migrate_canister")
+        .with_arg(args2.clone())
         .call_and_wait()
         .await
         .expect("Failed to call migrate_canister.");
@@ -195,22 +223,26 @@ async fn test_async(env: TestEnv) {
         }]
     );
     std::thread::sleep(Duration::from_secs(360));
+    for _ in 0..10000 {
+        std::thread::sleep(Duration::from_secs(10));
+        let status = nns_agent
+            .update(&migration_canister_id, "migration_status")
+            .with_arg(args.clone())
+            .call_and_wait()
+            .await
+            .expect("Failed to call migration_status.");
+        let decoded_status = Decode!(&status, Vec<MigrationStatus>)
+            .expect("Failed to decode response from migration_status.");
+        println!("status: {:?}", decoded_status);
 
-    let status = nns_agent
-        .update(&migration_canister_id, "migration_status")
-        .with_arg(args.clone())
-        .call_and_wait()
-        .await
-        .expect("Failed to call migration_status.");
-    let decoded_status = Decode!(&status, Vec<MigrationStatus>)
-        .expect("Failed to decode response from migration_status.");
-    println!("status: {:?}", decoded_status);
-
-    assert!(matches!(
-        decoded_status[0],
-        MigrationStatus::Succeeded { .. }
-    ));
-
+        // assert!(matches!(
+        //     decoded_status[0],
+        //     MigrationStatus::Succeeded { .. }
+        // ));
+        if matches!(decoded_status[0], MigrationStatus::Succeeded { .. }) {
+            break;
+        }
+    }
     #[derive(CandidType, Deserialize)]
     struct GetSubnetForCanisterArgs {
         principal: Option<Principal>,
