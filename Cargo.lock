@@ -19250,6 +19250,7 @@ dependencies = [
  "registry-canister",
  "reqwest 0.12.15",
  "schemars",
+ "semver",
  "serde",
  "serde_bytes",
  "serde_cbor",
