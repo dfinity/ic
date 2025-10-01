@@ -1087,7 +1087,11 @@ mod tests {
                     });
                     msg
                 };
-                check_state(&idkg_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
+                check_state(
+                    &idkg_pool,
+                    std::slice::from_ref(&msg_id_2),
+                    std::slice::from_ref(&msg_id_1),
+                );
 
                 let result = idkg_pool.apply(vec![
                     IDkgChangeAction::MoveToValidated(msg_2),
@@ -1137,7 +1141,7 @@ mod tests {
                 };
                 check_state(
                     &idkg_pool,
-                    &[msg_id_3.clone()],
+                    std::slice::from_ref(&msg_id_3),
                     &[msg_id_1.clone(), msg_id_2.clone()],
                 );
 
@@ -1148,7 +1152,11 @@ mod tests {
                     matches!(&result.transmits[0], ArtifactTransmit::Abort(x) if *x == msg_id_1)
                 );
                 assert!(result.poll_immediately);
-                check_state(&idkg_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
+                check_state(
+                    &idkg_pool,
+                    std::slice::from_ref(&msg_id_3),
+                    std::slice::from_ref(&msg_id_2),
+                );
 
                 let result =
                     idkg_pool.apply(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
@@ -1180,7 +1188,7 @@ mod tests {
                     });
                     msg_id
                 };
-                check_state(&idkg_pool, &[msg_id.clone()], &[]);
+                check_state(&idkg_pool, std::slice::from_ref(&msg_id), &[]);
 
                 let result = idkg_pool.apply(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
                 assert!(result.transmits.is_empty());
@@ -1205,7 +1213,7 @@ mod tests {
                     });
                     msg_id
                 };
-                check_state(&idkg_pool, &[msg_id.clone()], &[]);
+                check_state(&idkg_pool, std::slice::from_ref(&msg_id), &[]);
 
                 idkg_pool.apply(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,
@@ -1231,7 +1239,7 @@ mod tests {
                     idkg_pool.apply(change_set);
                     msg_id
                 };
-                check_state(&idkg_pool, &[], &[msg_id.clone()]);
+                check_state(&idkg_pool, &[], std::slice::from_ref(&msg_id));
 
                 idkg_pool.apply(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,

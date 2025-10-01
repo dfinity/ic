@@ -167,7 +167,8 @@ impl RewardsDistribution {
                             .saturating_add(reward_e8s),
                     );
                 } else {
-                    neuron.maturity_e8s_equivalent += reward_e8s;
+                    neuron.maturity_e8s_equivalent =
+                        neuron.maturity_e8s_equivalent.saturating_add(reward_e8s);
                 }
             }) {
                 Ok(_) => {}
@@ -188,7 +189,7 @@ impl RewardsDistribution {
 }
 
 impl Storable for RewardsDistributionInProgress {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
     }
 

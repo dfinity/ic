@@ -254,7 +254,7 @@ fn cmd_get_recovery_cup(
         chain_key_initializations: vec![],
     };
 
-    let cup = ic_consensus::make_registry_cup_from_cup_contents(
+    let cup = ic_consensus_cup_utils::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,

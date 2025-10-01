@@ -42,6 +42,10 @@ HTTP_ENDPOINTS_DEPS = [
     "//rs/http_endpoints/test_agent",
     "//rs/tests/consensus/utils",
     "//rs/types/types",
+    "//rs/universal_canister/lib",
+    "@crate_index//:candid",
+    "@crate_index//:maplit",
+    "@crate_index//:serde_cbor",
     "@crate_index//:url",
 ]
 
@@ -423,8 +427,6 @@ system_test_nns(
     },
     tags = [
         "colocate",
-        # TODO: Investigate test failures
-        #"system_test_large",
         "manual",
     ],
     test_timeout = "eternal",

@@ -42,9 +42,9 @@ pub struct RecoveryToolArgs {
     #[clap(long, default_value = "/var/lib/ic/data")]
     pub dir: PathBuf,
 
-    /// The path to a private key to be considered for SSH connections
+    /// The path to a private key to be considered for admin SSH connections
     #[clap(long)]
-    pub key_file: Option<PathBuf>,
+    pub admin_key_file: Option<PathBuf>,
 
     /// Flag to enter test mode
     #[clap(long)]

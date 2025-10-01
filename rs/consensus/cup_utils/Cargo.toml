@@ -1,0 +1,23 @@
+[package]
+name = "ic-consensus-cup-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-consensus-idkg = { path = "../idkg" }
+ic-consensus-dkg = { path = "../dkg" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-types = { path = "../../types/types" }
+phantom_newtype = { path = "../../phantom_newtype" }
+slog = { workspace = true }
+
+[dev-dependencies]
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+prost = { workspace = true }

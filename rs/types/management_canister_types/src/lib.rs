@@ -71,6 +71,7 @@ fn decoder_config() -> DecoderConfig {
 pub enum Method {
     CanisterStatus,
     CanisterInfo,
+    CanisterMetadata,
     CreateCanister,
     DeleteCanister,
     DepositCycles,
@@ -327,6 +328,7 @@ impl CanisterControllersChangeRecord {
 ///         taken_from_canister : reserved;
 ///         metadata_upload : reserved;
 ///    };
+///    from_canister_id : opt principal;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -335,6 +337,7 @@ pub struct CanisterLoadSnapshotRecord {
     snapshot_id: SnapshotId,
     taken_at_timestamp: u64,
     source: SnapshotSource,
+    from_canister_id: Option<CanisterId>,
 }
 
 impl CanisterLoadSnapshotRecord {
@@ -343,12 +346,14 @@ impl CanisterLoadSnapshotRecord {
         snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
         source: SnapshotSource,
+        from_canister_id: Option<CanisterId>,
     ) -> Self {
         Self {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
             source,
+            from_canister_id,
         }
     }
 
@@ -366,6 +371,10 @@ impl CanisterLoadSnapshotRecord {
 
     pub fn source(&self) -> SnapshotSource {
         self.source
+    }
+
+    pub fn from_canister_id(&self) -> Option<CanisterId> {
+        self.from_canister_id
     }
 }
 
@@ -437,6 +446,11 @@ pub struct RenameToRecord {
 ///     canister_version: nat64;
 ///     snapshot_id: blob;
 ///     taken_at_timestamp: nat64;
+///     source : variant {
+///       taken_from_canister : reserved;
+///       metadata_upload : reserved;
+///     };
+///     from_canister_id: opt principal;
 ///   };
 ///   settings_change : record {
 ///     controllers : opt vec principal;
@@ -494,12 +508,14 @@ impl CanisterChangeDetails {
         snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
         source: SnapshotSource,
+        from_canister_id: Option<CanisterId>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
             source,
+            from_canister_id,
         })
     }
 
@@ -703,6 +719,62 @@ impl CanisterInfoResponse {
 
 impl Payload<'_> for CanisterInfoResponse {}
 
+/// `CandidType` for `CanisterMetadataRequest`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   name : text;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterMetadataRequest {
+    canister_id: PrincipalId,
+    name: String,
+}
+
+impl CanisterMetadataRequest {
+    pub fn new(canister_id: CanisterId, name: String) -> CanisterMetadataRequest {
+        CanisterMetadataRequest {
+            canister_id: canister_id.into(),
+            name,
+        }
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Payload<'_> for CanisterMetadataRequest {}
+
+/// `CandidType` for `CanisterMetadataResponse`
+/// ```text
+/// record {
+///   value : blob;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterMetadataResponse {
+    #[serde(with = "serde_bytes")]
+    value: Vec<u8>,
+}
+
+impl CanisterMetadataResponse {
+    pub fn new(value: Vec<u8>) -> Self {
+        Self { value }
+    }
+
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+}
+
+impl Payload<'_> for CanisterMetadataResponse {}
+
 impl From<&CanisterChangeOrigin> for pb_canister_state_bits::canister_change::ChangeOrigin {
     fn from(item: &CanisterChangeOrigin) -> Self {
         match item {
@@ -799,6 +871,9 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             canister_load_snapshot.source,
                         )
                         .into(),
+                        from_canister_id: canister_load_snapshot
+                            .from_canister_id
+                            .map(|x| x.get().into()),
                     },
                 )
             }
@@ -913,11 +988,18 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                             ))
                         })?,
                 )?;
+
+                let from_canister_id = match canister_load_snapshot.from_canister_id {
+                    Some(id) => Some(CanisterId::unchecked_from_principal(id.try_into()?)),
+                    None => None,
+                };
+
                 Ok(CanisterChangeDetails::load_snapshot(
                     canister_load_snapshot.canister_version,
                     snapshot_id,
                     canister_load_snapshot.taken_at_timestamp,
                     source,
+                    from_canister_id,
                 ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
@@ -3285,15 +3367,70 @@ pub struct NodeMetricsHistoryResponse {
 
 impl Payload<'_> for NodeMetricsHistoryResponse {}
 
+/// Exclusive range for fetching canister logs `[start, end)`.
+/// It's used both for `idx` and `timestamp_nanos` based filtering.
+/// If `end` is below `start`, the range is considered empty.
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct FetchCanisterLogsRange {
+    start: u64, // Inclusive.
+    end: u64,   // Exclusive, values below `start` are ignored.
+}
+
+impl Payload<'_> for FetchCanisterLogsRange {}
+
+impl FetchCanisterLogsRange {
+    /// Creates a new range from `start` (inclusive) to `end` (exclusive).
+    pub fn new(start: u64, end: u64) -> Self {
+        Self { start, end }
+    }
+
+    /// Returns the length of the range.
+    /// If user provides an `end` value below `start`, the length is 0.
+    fn len(&self) -> u64 {
+        self.end.saturating_sub(self.start)
+    }
+
+    /// Returns the end of the range (exclusive).
+    fn sanitized_end(&self) -> u64 {
+        self.start + self.len()
+    }
+
+    /// Returns true if the range is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns true if the range contains the given value.
+    pub fn contains(&self, value: u64) -> bool {
+        self.start <= value && value < self.sanitized_end()
+    }
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum FetchCanisterLogsFilter {
+    #[serde(rename = "by_idx")]
+    ByIdx(FetchCanisterLogsRange),
+
+    #[serde(rename = "by_timestamp_nanos")]
+    ByTimestampNanos(FetchCanisterLogsRange),
+}
+
+impl Payload<'_> for FetchCanisterLogsFilter {}
+
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text
 /// record {
 ///     canister_id: principal;
+///     filter: opt variant {
+///       by_idx: record { start: nat64; end: nat64 };
+///       by_timestamp_nanos: record { start: nat64; end: nat64 };
+///     }
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRequest {
     pub canister_id: PrincipalId,
+    pub filter: Option<FetchCanisterLogsFilter>,
 }
 
 impl Payload<'_> for FetchCanisterLogsRequest {}
@@ -3302,6 +3439,14 @@ impl FetchCanisterLogsRequest {
     pub fn new(canister_id: CanisterId) -> Self {
         Self {
             canister_id: canister_id.into(),
+            filter: None,
+        }
+    }
+
+    pub fn new_with_filter(canister_id: CanisterId, filter: FetchCanisterLogsFilter) -> Self {
+        Self {
+            canister_id: canister_id.into(),
+            filter: Some(filter),
         }
     }
 
