@@ -2545,9 +2545,10 @@ impl Governance {
         }
 
         // Commit the usage from reservation now that we are not going to remove the neuron
-        if let Err(_) = self
+        if self
             .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .is_err()
         {
             println!(
                 "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
@@ -3282,9 +3283,10 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        if let Err(_) = self
+        if self
             .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .is_err()
         {
             println!(
                 "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
@@ -6207,9 +6209,10 @@ impl Governance {
         }
 
         // Commit the reservation now that the neuron can no longer be deleted.
-        if let Err(_) = self
+        if self
             .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .is_err()
         {
             println!(
                 "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
