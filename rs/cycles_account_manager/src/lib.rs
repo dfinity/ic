@@ -29,6 +29,7 @@ use ic_types::{
     PrincipalId, SubnetId,
     batch::CanisterCyclesCostSchedule,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngress},
 };
 use prometheus::IntCounter;
@@ -1369,6 +1370,34 @@ impl CyclesAccountManager {
     /// when the canister doesn't have it set in the settings.
     pub fn default_reserved_balance_limit(&self) -> Cycles {
         self.config.default_reserved_balance_limit
+    }
+
+    pub fn fetch_canister_logs_fee(
+        &self,
+        response_size: usize,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                (self.config.fetch_canister_logs_base_fee
+                    + self.config.fetch_canister_logs_per_byte_fee * response_size)
+                    * subnet_size
+            }
+        }
+    }
+
+    pub fn max_fetch_canister_logs_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.fetch_canister_logs_fee(
+            MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
+            subnet_size,
+            cost_schedule,
+        )
     }
 }
 
