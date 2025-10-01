@@ -3,15 +3,15 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
     manifest::build_file_group_chunks,
     state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
+    StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::p2p::state_sync::{
     Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, fatal, info, warn};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
@@ -112,7 +112,11 @@ impl StateSync {
     }
 
     // Try to get `StateSyncMessage` using IncompleteStateReader.
-    fn get_from_incomplete_state(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
+    fn get_from_incomplete_state(
+        &self,
+        msg_id: &StateSyncArtifactId,
+        chunk_id: ChunkId,
+    ) -> Option<StateSyncMessage> {
         let path = self
             .state_manager
             .state_layout
@@ -120,7 +124,9 @@ impl StateSync {
 
         let incomplete_state_readers = self.state_sync_refs.incomplete_state_readers.read();
         let incomplete_state_reader = incomplete_state_readers.get(&msg_id.height)?;
-        if incomplete_state_reader.root_hash == msg_id.hash.clone().into() {
+        if incomplete_state_reader.root_hash == msg_id.hash.clone().into()
+            && incomplete_state_reader.chunks.contains(&chunk_id)
+        {
             let manifest = incomplete_state_reader.manifest.clone();
             let meta_manifest = Arc::new(incomplete_state_reader.meta_manifest.clone());
             let state_sync_file_group =
@@ -361,7 +367,7 @@ impl StateSyncClient for StateSync {
     /// Blocking. Makes synchronous file system calls.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         let msg = self
-            .get_from_incomplete_state(id)
+            .get_from_incomplete_state(id, chunk_id)
             .or(self.get_from_complete_state(id))?;
         msg.get_chunk(chunk_id)
     }

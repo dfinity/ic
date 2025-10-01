@@ -2619,6 +2619,12 @@ fn can_serve_chunks_from_incomplete_state() {
                     .chunk(&id, ChunkId::new(FILE_CHUNK_ID_OFFSET as u32 + 2))
                     .is_some()
             );
+            // Omited chunk is not served.
+            assert!(
+                dst_state_sync
+                    .chunk(&id, ChunkId::new(FILE_CHUNK_ID_OFFSET as u32 + 1))
+                    .is_none()
+            );
         })
     })
 }
