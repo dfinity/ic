@@ -567,9 +567,6 @@ impl SystemMetadata {
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
 
-        // Keep the previous state hash; required for splits at height > 0.
-        res.prev_state_hash = self.prev_state_hash;
-
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
         // `self.batch_time`.
