@@ -109,35 +109,6 @@ pub struct InternalHttpQueryHandler {
     query_cache: query_cache::QueryCache,
 }
 
-#[derive(Clone)]
-struct HttpQueryHandlerMetrics {
-    pub height_diff_during_query_scheduling: Histogram,
-}
-
-impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
-        Self {
-            height_diff_during_query_scheduling: metrics_registry.register(
-                Histogram::with_opts(histogram_opts!(
-                    "execution_query_height_diff_during_query_scheduling",
-                    "The height difference between the latest certified height before query scheduling and state height used for execution",
-                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
-                    labels! {"query_type".to_string() => namespace.to_string()}
-                )).unwrap(),
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-/// Struct that is responsible for handling queries sent by user.
-pub(crate) struct HttpQueryHandler {
-    internal: Arc<InternalHttpQueryHandler>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    query_scheduler: QueryScheduler,
-    metrics: Arc<HttpQueryHandlerMetrics>,
-}
-
 impl InternalHttpQueryHandler {
     pub fn new(
         log: ReplicaLogger,
@@ -208,6 +179,7 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        self.config.fetch_canister_logs_filter,
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
@@ -297,6 +269,35 @@ impl InternalHttpQueryHandler {
         }
         result
     }
+}
+
+#[derive(Clone)]
+struct HttpQueryHandlerMetrics {
+    pub height_diff_during_query_scheduling: Histogram,
+}
+
+impl HttpQueryHandlerMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
+        Self {
+            height_diff_during_query_scheduling: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_height_diff_during_query_scheduling",
+                    "The height difference between the latest certified height before query scheduling and state height used for execution",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+                    labels! {"query_type".to_string() => namespace.to_string()}
+                )).unwrap(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+/// Struct that is responsible for handling queries sent by user.
+pub(crate) struct HttpQueryHandler {
+    internal: Arc<InternalHttpQueryHandler>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    query_scheduler: QueryScheduler,
+    metrics: Arc<HttpQueryHandlerMetrics>,
 }
 
 impl HttpQueryHandler {

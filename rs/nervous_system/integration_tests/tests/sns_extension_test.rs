@@ -132,6 +132,7 @@ async fn do_test_treasury_manager() {
                     initial_treasury_allocation_icp_e8s,
                     initial_treasury_allocation_sns_e8s,
                 ),
+                network: None,
             },
             &agent,
         )
@@ -437,6 +438,7 @@ async fn run_existing_extension_wasm_rejected_test() {
             proposal_url: proposal_url.clone(),
             summary: summary.clone(),
             extension_init: extension_init.clone(),
+            network: None,
         },
         &agent,
     )
@@ -673,6 +675,7 @@ async fn test_upgrade_extension() {
                     initial_treasury_allocation_icp_e8s,
                     initial_treasury_allocation_sns_e8s,
                 ),
+                network: None,
             },
             &agent,
         )

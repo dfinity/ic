@@ -65,6 +65,7 @@ members = [
     "rs/config",
     "rs/consensus",
     "rs/consensus/certification",
+    "rs/consensus/cup_utils",
     "rs/consensus/dkg",
     "rs/consensus/idkg",
     "rs/consensus/mocks",
@@ -176,6 +177,10 @@ members = [
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
     "rs/ic_os/grub",
+    "rs/ic_os/guest_upgrade/client",
+    "rs/ic_os/guest_upgrade/server",
+    "rs/ic_os/guest_upgrade/shared",
+    "rs/ic_os/guest_upgrade/tests",
     "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
@@ -269,6 +274,7 @@ members = [
     "rs/nervous_system/timers",
     "rs/nervous_system/timer_task",
     "rs/nervous_system/timestamp",
+    "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
@@ -523,6 +529,8 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/ic_os/remote_attestation/shared",
+    "rs/ic_os/remote_attestation/server",
 ]
 
 resolver = "2"
@@ -800,6 +808,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
     "std",
     "brotli",
+    "tls12",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
@@ -854,6 +863,7 @@ tonic = "0.12.3"
 tonic-build = "0.12.3"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
+    "add-extension",
     "cors",
     "limit",
     "trace",
@@ -896,4 +906,3 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
-

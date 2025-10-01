@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-09-26: Proposal 138718
+
+http://dashboard.internetcomputer.org/proposal/138718
+
+## Added
+
+- Whitelisted the migration canister to call `migrate_canisters`
+
+
 # 2025-09-05: Proposal 138371
 
 http://dashboard.internetcomputer.org/proposal/138371

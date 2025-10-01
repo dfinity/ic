@@ -152,7 +152,7 @@ impl RegistryClientImpl {
     fn check_version(
         &self,
         version: RegistryVersion,
-    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
+    ) -> Result<RwLockReadGuard<'_, CacheState>, RegistryClientError> {
         let cache_state = self.cache.read().unwrap();
         if version > cache_state.latest_version {
             return Err(RegistryClientError::VersionNotAvailable { version });

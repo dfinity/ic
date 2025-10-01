@@ -7,7 +7,7 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg as dkg;
-use ic_consensus_idkg as idkg;
+use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
     RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -46,6 +46,7 @@ use ic_types::{
     state_manager::StateManagerError,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -64,6 +65,9 @@ const LOG_EVERY_N_SECONDS: i32 = 60;
 /// The time, after which we will load a CUP even if we
 /// where holding it back before, to give recomputation a chance during catch up.
 const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
+
+/// The maximum number of threads used to validate payloads in parallel.
+const MAX_VALIDATION_THREADS: usize = 8;
 
 /// Possible transient validation failures.
 #[derive(Debug)]
@@ -670,6 +674,16 @@ impl RankMap {
     }
 }
 
+/// Builds a rayon thread pool with the given number of threads.
+fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
+}
+
 /// Validator holds references to components required for artifact validation.
 /// It implements validation functions for all consensus artifacts which are
 /// called by `on_state_change` in round-robin manner.
@@ -682,6 +696,7 @@ pub struct Validator {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    thread_pool: Arc<ThreadPool>,
     log: ReplicaLogger,
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
@@ -713,6 +728,7 @@ impl Validator {
             state_manager,
             message_routing,
             dkg_pool,
+            thread_pool: build_thread_pool(MAX_VALIDATION_THREADS),
             log,
             metrics,
             schedule: RoundRobin::default(),
@@ -1042,19 +1058,19 @@ impl Validator {
             // validated through a notarization. We skip the block instead
             // of removing it because a higher-rank proposal might still
             // be notarized in the future.
-            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height()) {
-                if proposal.rank() > min_rank {
-                    let id = proposal.get_id();
-                    if self.unvalidated_for_too_long(pool_reader, &id) {
-                        warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                              self.log,
-                              "Due a valid proposal with a lower rank {}, /
-                              skipping validating the proposal: {:?} with rank {}",
-                              min_rank.0, id, proposal.rank().0
-                        );
-                    }
-                    continue;
+            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height())
+                && proposal.rank() > min_rank
+            {
+                let id = proposal.get_id();
+                if self.unvalidated_for_too_long(pool_reader, &id) {
+                    warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                          self.log,
+                          "Due a valid proposal with a lower rank {}, /
+                          skipping validating the proposal: {:?} with rank {}",
+                          min_rank.0, id, proposal.rank().0
+                    );
                 }
+                continue;
             }
 
             let Ok(parent) = get_notarized_parent(pool_reader, &proposal) else {
@@ -1282,6 +1298,7 @@ impl Validator {
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
+            self.thread_pool.as_ref(),
             pool_reader,
             self.state_manager.as_ref(),
             &proposal.context,

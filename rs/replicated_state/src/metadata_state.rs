@@ -26,7 +26,7 @@ use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response},
+    messages::{CanisterCall, MessageId, Payload, RejectContext, Response, StreamMessage},
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
@@ -567,9 +567,6 @@ impl SystemMetadata {
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
 
-        // Keep the previous state hash; required for splits at height > 0.
-        res.prev_state_hash = self.prev_state_hash;
-
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
         // `self.batch_time`.
@@ -815,7 +812,7 @@ impl SystemMetadata {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
-    messages: StreamIndexedQueue<RequestOrResponse>,
+    messages: StreamIndexedQueue<StreamMessage>,
 
     /// Index of the next expected reverse stream message.
     ///
@@ -843,7 +840,7 @@ impl Default for Stream {
         let messages = Default::default();
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
@@ -861,8 +858,8 @@ impl Default for Stream {
 
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
-    pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
-        let messages_size_bytes = Self::size_bytes(&messages);
+    pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
@@ -876,11 +873,11 @@ impl Stream {
 
     /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
-        messages: StreamIndexedQueue<RequestOrResponse>,
+        messages: StreamIndexedQueue<StreamMessage>,
         signals_end: StreamIndex,
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
@@ -911,7 +908,7 @@ impl Stream {
     }
 
     /// Returns a reference to the message queue.
-    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
+    pub fn messages(&self) -> &StreamIndexedQueue<StreamMessage> {
         &self.messages
     }
 
@@ -931,18 +928,21 @@ impl Stream {
     }
 
     /// Appends the given message to the tail of the stream.
-    pub fn push(&mut self, message: RequestOrResponse) {
+    pub fn push(&mut self, message: StreamMessage) {
         self.messages_size_bytes += message.count_bytes();
-        if let RequestOrResponse::Response(response) = &message {
-            if !response.is_best_effort() {
-                *self
-                    .guaranteed_response_counts
-                    .entry(response.respondent)
-                    .or_insert(0) += 1;
-            }
+        if let StreamMessage::Response(response) = &message
+            && !response.is_best_effort()
+        {
+            *self
+                .guaranteed_response_counts
+                .entry(response.respondent)
+                .or_insert(0) += 1;
         }
         self.messages.push(message);
-        debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+        debug_assert_eq!(
+            Self::calculate_size_bytes(&self.messages),
+            self.messages_size_bytes
+        );
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
             self.guaranteed_response_counts
@@ -955,7 +955,7 @@ impl Stream {
         &mut self,
         new_begin: StreamIndex,
         reject_signals: &VecDeque<RejectSignal>,
-    ) -> Vec<(RejectReason, RequestOrResponse)> {
+    ) -> Vec<(RejectReason, StreamMessage)> {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -986,23 +986,26 @@ impl Stream {
 
             // Deduct every discarded message from the stream's byte size.
             self.messages_size_bytes -= msg.count_bytes();
-            debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+            debug_assert_eq!(
+                Self::calculate_size_bytes(&self.messages),
+                self.messages_size_bytes
+            );
 
-            if let RequestOrResponse::Response(response) = &msg {
-                if !response.is_best_effort() {
-                    match self
-                        .guaranteed_response_counts
-                        .get_mut(&response.respondent)
-                    {
-                        Some(0) | None => {
-                            debug_assert!(false);
-                            self.guaranteed_response_counts.remove(&response.respondent);
-                        }
-                        Some(1) => {
-                            self.guaranteed_response_counts.remove(&response.respondent);
-                        }
-                        Some(count) => *count -= 1,
+            if let StreamMessage::Response(response) = &msg
+                && !response.is_best_effort()
+            {
+                match self
+                    .guaranteed_response_counts
+                    .get_mut(&response.respondent)
+                {
+                    Some(0) | None => {
+                        debug_assert!(false);
+                        self.guaranteed_response_counts.remove(&response.respondent);
                     }
+                    Some(1) => {
+                        self.guaranteed_response_counts.remove(&response.respondent);
+                    }
+                    Some(count) => *count -= 1,
                 }
             }
             debug_assert_eq!(
@@ -1012,11 +1015,11 @@ impl Stream {
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
-            if let Some(reject_signal) = reject_signals.peek() {
-                if reject_signal.index == index {
-                    rejected_messages.push((reject_signal.reason, msg));
-                    reject_signals.next();
-                }
+            if let Some(reject_signal) = reject_signals.peek()
+                && reject_signal.index == index
+            {
+                rejected_messages.push((reject_signal.reason, msg));
+                reject_signals.next();
             }
         }
         rejected_messages
@@ -1058,20 +1061,20 @@ impl Stream {
     }
 
     /// Calculates the estimated byte size of the given messages.
-    fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
+    fn calculate_size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 
     fn calculate_guaranteed_response_counts(
-        messages: &StreamIndexedQueue<RequestOrResponse>,
+        messages: &StreamIndexedQueue<StreamMessage>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut result = BTreeMap::new();
         for (_, msg) in messages.iter() {
-            if let RequestOrResponse::Response(response) = msg {
-                // We only count guaranteed responses
-                if !response.is_best_effort() {
-                    *result.entry(response.respondent).or_insert(0) += 1;
-                }
+            // We only count guaranteed responses
+            if let StreamMessage::Response(response) = msg
+                && !response.is_best_effort()
+            {
+                *result.entry(response.respondent).or_insert(0) += 1;
             }
         }
         result
@@ -1148,20 +1151,20 @@ impl IngressHistoryState {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
-        if let IngressStatus::Known { state, .. } = &status {
-            if state.is_terminal() {
-                let timeout = time + MAX_INGRESS_TTL;
+        if let IngressStatus::Known { state, .. } = &status
+            && state.is_terminal()
+        {
+            let timeout = time + MAX_INGRESS_TTL;
 
-                // Reset `self.next_terminal_time` in case it is after the current timeout
-                // and the entry is completed or failed.
-                if self.next_terminal_time > timeout && state.is_terminal_with_payload() {
-                    self.next_terminal_time = timeout;
-                }
-                Arc::make_mut(&mut self.pruning_times)
-                    .entry(timeout)
-                    .or_default()
-                    .insert(message_id.clone());
+            // Reset `self.next_terminal_time` in case it is after the current timeout
+            // and the entry is completed or failed.
+            if self.next_terminal_time > timeout && state.is_terminal_with_payload() {
+                self.next_terminal_time = timeout;
             }
+            Arc::make_mut(&mut self.pruning_times)
+                .entry(timeout)
+                .or_default()
+                .insert(message_id.clone());
         }
         self.memory_usage += status.payload_bytes();
         let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
