@@ -1,22 +1,22 @@
-use candid::Reserved;
+use candid::{Decode, Reserved};
 use canister_test::WasmResult;
 use ic_base_types::SnapshotId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, Global,
-    GlobalTimer, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs,
+    CanisterChangeDetails, CanisterIdRecord, CanisterSettingsArgsBuilder,
+    CanisterSnapshotDataOffset, Global, GlobalTimer, LoadCanisterSnapshotArgs,
+    OnLowWasmMemoryHookStatus, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
-use ic_types::CanisterId;
+use ic_types::{CanisterId, Cycles};
 
 // Asserts that two snapshots are equal modulo their source, timestamp, and canister version (transient values).
 fn assert_snapshot_eq(
@@ -999,4 +999,43 @@ fn load_canister_snapshot_works_on_another_canister() {
             Some(canister_id_1),
         ),
     );
+}
+
+#[test]
+fn canister_snapshots_and_memory_allocation() {
+    let env = StateMachine::new();
+
+    let mut canisters = vec![];
+    loop {
+        let settings = CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(100_000_000_000)
+            .build();
+        match env.create_canister_with_cycles_impl(None, Cycles::zero(), Some(settings)) {
+            Ok(WasmResult::Reply(bytes)) => {
+                let canister_id = Decode!(&bytes, CanisterIdRecord).unwrap().get_canister_id();
+                canisters.push(canister_id);
+            }
+            Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
+            Err(err) => {
+                assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+                break;
+            }
+        }
+    }
+
+    for canister_id in canisters {
+        env.install_existing_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
+            .unwrap();
+        env.execute_ingress(
+            canister_id,
+            "update",
+            wasm().stable64_grow(655360).reply().build(),
+        )
+        .unwrap(); // 40 GiB
+        let args = TakeCanisterSnapshotArgs {
+            canister_id: canister_id.get(),
+            replace_snapshot: None,
+        };
+        env.take_canister_snapshot(args).unwrap();
+    }
 }
