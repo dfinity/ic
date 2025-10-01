@@ -579,17 +579,19 @@ pub async fn build_index() -> Option<()> {
         });
     });
     let num_indexed = match find_get_blocks_method().await {
-        GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await?,
-        GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await?,
+        GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
+        GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
     };
-    let retrieve_blocks_from_ledger_interval =
-        with_state(|state| state.retrieve_blocks_from_ledger_interval());
-    log!(
-        P1,
-        "Indexed: {} waiting : {:?}",
-        num_indexed,
-        retrieve_blocks_from_ledger_interval
-    );
+    if let Some(num_indexed) = num_indexed {
+        let retrieve_blocks_from_ledger_interval =
+            with_state(|state| state.retrieve_blocks_from_ledger_interval());
+        log!(
+            P1,
+            "Indexed: {} waiting : {:?}",
+            num_indexed,
+            retrieve_blocks_from_ledger_interval
+        );
+    }
     Some(())
 }
 
@@ -612,15 +614,18 @@ async fn fetch_blocks_via_get_blocks() -> Option<u64> {
             };
             let res = get_blocks_from_archive(&archived).await?;
             next_archived_txid += res.blocks.len();
+            num_indexed += res.blocks.len();
             remaining -= res.blocks.len();
-            num_indexed += append_blocks(res.blocks);
-            if sync_stopped() {
-                return Some(num_indexed);
+            if !append_blocks(res.blocks) {
+                return None;
             }
         }
     }
-    num_indexed += append_blocks(res.blocks);
-    Some(num_indexed)
+    num_indexed += res.blocks.len();
+    if !append_blocks(res.blocks) {
+        return None;
+    }
+    Some(num_indexed as u64)
 }
 
 async fn fetch_blocks_via_icrc3() -> Option<u64> {
@@ -770,19 +775,17 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> bool {
     })
 }
 
-fn append_blocks(new_blocks: Vec<GenericBlock>) -> u64 {
-    let mut num_indexed = 0;
+fn append_blocks(new_blocks: Vec<GenericBlock>) -> bool {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
     for block in new_blocks {
         if !append_block(block_index, block) {
-            break;
+            return false;
         }
-        num_indexed += 1;
         block_index += 1;
     }
-    num_indexed
+    true
 }
 
 fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
@@ -803,7 +806,7 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
         // can represent any `ICRC3Value`.
         blocks.push(Value::from(block));
     }
-    if blocks.len() as u64 > append_blocks(blocks) {
+    if !append_blocks(blocks) {
         return None;
     }
     Some(())
