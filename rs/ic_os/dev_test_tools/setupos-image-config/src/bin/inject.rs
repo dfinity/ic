@@ -51,7 +51,7 @@ async fn main() -> Result<(), Error> {
     println!("{previous_config}");
 
     // Update config.ini
-    let config_ini = NamedTempFile::new()?;
+    let config_ini = NamedTempFile::with_prefix("config.ini")?;
     write_config(config_ini.path(), &cli.config_ini).context("failed to write config file")?;
     config
         .write_file(config_ini.path(), Path::new("/config.ini"))
@@ -98,7 +98,7 @@ async fn main() -> Result<(), Error> {
 
     // Update SSH keys
     if let Some(ks) = cli.public_keys {
-        let public_keys = NamedTempFile::new()?;
+        let public_keys = NamedTempFile::with_prefix("public_keys")?;
         write_public_keys(public_keys.path(), ks)
             .await
             .context("failed to write public keys")?;
@@ -135,7 +135,7 @@ async fn main() -> Result<(), Error> {
     println!("{previous_deployment}");
 
     // Update deployment.json
-    let mut deployment_json = NamedTempFile::new()?;
+    let mut deployment_json = NamedTempFile::with_prefix("deployment.json")?;
     deployment_json.write_all(previous_deployment.as_bytes())?;
     fs::set_permissions(deployment_json.path(), Permissions::from_mode(0o644))?;
     update_deployment(deployment_json.path(), &cli.deployment)
@@ -156,7 +156,7 @@ async fn main() -> Result<(), Error> {
 
     // Update NNS key
     if let Some(public_key) = cli.deployment.nns_public_key_override {
-        let mut nns_key = NamedTempFile::new()?;
+        let mut nns_key = NamedTempFile::with_prefix("nns_key")?;
         write!(&mut nns_key, "{public_key}")?;
         fs::set_permissions(nns_key.path(), Permissions::from_mode(0o644))?;
 

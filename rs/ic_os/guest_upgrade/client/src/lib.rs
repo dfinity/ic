@@ -1,6 +1,7 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use attestation::attestation_package::generate_attestation_package;
+use attestation::custom_data::DerEncodedCustomData;
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::GuestOSConfig;
@@ -114,12 +115,12 @@ impl DiskEncryptionKeyExchangeClientAgent {
         my_public_key_der: &[u8],
         server_public_key_der: &[u8],
     ) -> Result<()> {
-        let custom_data = GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(my_public_key_der)
                 .expect("Could not encode public key"),
             server_tls_public_key: OctetStringRef::new(server_public_key_der)
                 .expect("Could not encode server public key"),
-        };
+        });
         let my_attestation_package = generate_attestation_package(
             self.sev_firmware.as_mut(),
             self.guestos_config

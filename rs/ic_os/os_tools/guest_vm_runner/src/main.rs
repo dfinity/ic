@@ -366,7 +366,8 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
-        let config_media = NamedTempFile::new().context("Failed to create config media file")?;
+        let config_media = NamedTempFile::with_prefix("config_media")
+            .context("Failed to create config media file")?;
 
         println!("Extracting direct boot dependencies");
         let direct_boot = prepare_direct_boot(self.guest_vm_type, self.partition_provider.as_ref())
@@ -648,7 +649,7 @@ mod tests {
             "Tar returned error"
         );
 
-        let guestos_device = NamedTempFile::new().unwrap();
+        let guestos_device = NamedTempFile::with_prefix("guestos_device").unwrap();
         std::fs::rename(tempdir.path().join("disk.img"), guestos_device.path()).unwrap();
 
         guestos_device

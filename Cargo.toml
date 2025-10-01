@@ -274,6 +274,7 @@ members = [
     "rs/nervous_system/timers",
     "rs/nervous_system/timer_task",
     "rs/nervous_system/timestamp",
+    "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
@@ -528,6 +529,8 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/ic_os/remote_attestation/shared",
+    "rs/ic_os/remote_attestation/server",
 ]
 
 resolver = "2"
@@ -809,6 +812,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
