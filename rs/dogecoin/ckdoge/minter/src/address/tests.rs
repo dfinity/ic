@@ -34,6 +34,23 @@ fn should_parse_valid_addresses() {
     }
 }
 
+#[test]
+fn should_fail_to_parse_invalid_addresses() {
+    const ALL_NETWORKS: [Network; 3] = [Network::Mainnet, Network::Testnet, Network::Regtest];
+
+    let test_cases: Vec<_> = test_vectors::<Vec<Vec<InvalidKey>>>(INVALID_BASE58_KEYS)
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    assert_eq!(test_cases.len(), 50);
+
+    for test_case in test_cases {
+        for network in &ALL_NETWORKS {
+            assert_matches!(DogecoinAddress::parse(&test_case.0, network), Err(_));
+        }
+    }
+}
+
 fn test_vectors<T: DeserializeOwned>(filename: &str) -> T {
     // Return something like
     // "rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_invalid.json rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_valid.json"
@@ -99,3 +116,6 @@ enum AddressType {
     #[serde(rename = "script")]
     Script,
 }
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+struct InvalidKey(String);
