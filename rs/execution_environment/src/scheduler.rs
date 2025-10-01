@@ -2273,6 +2273,7 @@ fn get_instructions_limits_for_subnet_message(
         Ok(method) => match method {
             CanisterStatus
             | CanisterInfo
+            | CanisterMetadata
             | CreateCanister
             | DeleteCanister
             | DepositCycles
