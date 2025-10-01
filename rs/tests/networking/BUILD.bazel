@@ -51,8 +51,9 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
+        "dynamic_testnet",
         "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.,
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +

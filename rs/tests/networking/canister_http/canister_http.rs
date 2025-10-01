@@ -227,16 +227,17 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         sudo mv "$ipv6" ipv6
         sudo chmod -R 755 ipv6
 
-        echo "Setting up httpbin on port 20443 ..."
+        echo "Setting up httpbin on port 443 ..."
         docker load -i /config/httpbin.tar
         sudo docker run \
             --rm \
             -d \
-            -p 20443:80 \
+            --network host \
+            -u root \
             -v "$(pwd)/ipv6":/certs \
             --name httpbin \
             httpbin:image \
-            --cert-file /certs/cert.pem --key-file /certs/key.pem --port 80
+            --cert-file /certs/cert.pem --key-file /certs/key.pem --port 443
     "#
         ))
         .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
