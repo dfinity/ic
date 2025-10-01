@@ -3161,7 +3161,7 @@ impl StateMachine {
             )
             .expect("ranges are not well formed");
 
-        // Perform on the split on `self`.
+        // Perform the split on `self`.
         let (height, state) = self.state_manager.take_tip();
         let mut state = state.split(self.get_subnet_id(), &routing_table, None)?;
         state.after_split();
@@ -3173,7 +3173,7 @@ impl StateMachine {
             None,
         );
 
-        // Perform on the split on `env`, which requires preserving the `prev_state_hash`
+        // Perform the split on `env`, which requires preserving the `prev_state_hash`
         // (as opposed to MVP subnet splitting where it is adjusted manually).
         let (height, state) = env.state_manager.take_tip();
         let prev_state_hash = state.metadata.prev_state_hash.clone();
