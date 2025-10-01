@@ -30,6 +30,7 @@ ic-management-canister-types = { workspace = true }
 ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
 schemars = "0.8.16"
+semver = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
