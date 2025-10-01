@@ -11,6 +11,7 @@ pub(super) struct FetchStrippedConsensusArtifactMetrics {
     pub(super) total_block_assembly_duration: Histogram,
     pub(super) active_ingress_message_downloads: IntGauge,
     pub(super) total_ingress_message_download_errors: IntCounterVec,
+    pub(super) op_duration: HistogramVec,
 }
 
 #[derive(Copy, Clone)]
@@ -63,6 +64,12 @@ impl FetchStrippedConsensusArtifactMetrics {
                     "The total number of errors occurred while downloading \
                     missing ingress messages",
                     &["error"],
+            ),
+            op_duration: metrics_registry.histogram_vec(
+                    "ic_stripped_consensus_artifact_downloader_op_duration_seconds",
+                    "test test",
+                    decimal_buckets_with_zero(-4, 1),
+                    &["op"],
             ),
         }
     }

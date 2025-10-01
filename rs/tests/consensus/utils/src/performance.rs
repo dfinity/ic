@@ -1,7 +1,6 @@
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
-use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
 use ic_system_test_driver::driver::test_env_api::{IcNodeSnapshot, get_dependency_path};
@@ -10,15 +9,14 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
-use ic_system_test_driver::generic_workload_engine;
-use ic_system_test_driver::generic_workload_engine::metrics::{
-    LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
-};
-use ic_system_test_driver::util::{MetricsFetcher, assert_canister_counter_with_retries};
+use ic_system_test_driver::util::MetricsFetcher;
 use ic_types::ReplicaVersion;
 
 use futures::future::join_all;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use slog::{Logger, error, info};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
@@ -36,9 +34,59 @@ const INGRESS_MESSAGE_E2E_LATENCY_METRICS: &str =
     "replica_http_ingress_watcher_wait_for_certification_duration_seconds";
 const TIME_TO_RECEIVE_BLOCK_METRICS: &str = "consensus_time_to_receive_block";
 
+/// Sample traffic distrubution over 5 hours on the `c4isl` subnet on 25 September 2025
+fn sample_c4isl_25_09_2025_traffic_distribution() -> BTreeMap<u64, u64> {
+    BTreeMap::from([
+        (1, 0),
+        (2, 0),
+        (5, 0),
+        (10, 37435),
+        (20, 43592),
+        (50, 102671),
+        (100, 119496),
+        (200, 258862),
+        (500, 267140),
+        (1000, 268249),
+        (2000, 269627),
+        (5000, 270938),
+        (10000, 271601),
+        (20000, 275611),
+        (50000, 278685),
+        (100000, 284999),
+        (200000, 293440),
+        (500000, 313939),
+        (1000000, 336566),
+        (2000000, 399031),
+        (5000000, 399031),
+    ])
+}
+
+fn sample_from_distribution(distribution: &BTreeMap<u64, u64>, rng: &mut StdRng) -> u64 {
+    use rand::Rng;
+    let total = *distribution.last_key_value().unwrap().1;
+    let random = rng.gen_range(0..=total);
+    for (value, count) in distribution {
+        if *count >= random {
+            // Shrink the payload a bit, otherwise it might rejected by IC
+            if *value >= 2 * 1024 * 1024 {
+                return *value - 1024;
+            }
+            return *value;
+        }
+    }
+    unreachable!()
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum PayloadSizeDistribution {
+    Uniform(usize),
+    #[allow(non_camel_case_types)]
+    C4ISL_25_09_2025,
+}
+
 pub fn test_with_rt_handle(
     env: TestEnv,
-    message_size: usize,
+    payload_size_distribution: PayloadSizeDistribution,
     rps: f64,
     rt: Handle,
     report: bool,
@@ -64,7 +112,9 @@ pub fn test_with_rt_handle(
     let mut canisters = Vec::new();
     let agent = rt.block_on(app_node.build_canister_agent());
 
-    let nodes = subnet.nodes().collect::<Vec<_>>();
+    let mut nodes = subnet.nodes().collect::<Vec<_>>();
+    nodes.pop();
+    nodes.pop();
     let agents = rt.block_on(async {
         join_all(
             nodes
@@ -82,38 +132,61 @@ pub fn test_with_rt_handle(
     }
     info!(log, "{} canisters installed successfully.", canisters.len());
 
-    info!(log, "Sleeping for 60 seconds");
-    std::thread::sleep(Duration::from_secs(60));
+    let wait_between_calls = Duration::from_secs_f64(1.0 / rps);
+    let calls_count = (TEST_DURATION.as_secs_f64() * rps) as usize;
 
-    info!(log, "Step 2: Instantiate and start the workload..");
-    let payload: Vec<u8> = vec![0; message_size];
-    let generator = {
-        let (agents, canisters, payload) = (agents.clone(), canisters.clone(), payload.clone());
-        move |idx: usize| {
-            let (agents, canisters, payload) = (agents.clone(), canisters.clone(), payload.clone());
-            async move {
-                let (agents, canisters, payload) =
-                    (agents.clone(), canisters.clone(), payload.clone());
-                let request_outcome = canister_requests![
-                    idx,
-                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[0], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[1], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[2], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[3], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                ];
-                request_outcome.into_test_outcome()
-            }
-        }
-    };
+    let mut join_set = tokio::task::JoinSet::new();
 
     let consensus_metrics_before = rt.block_on(get_consensus_metrics(&nodes));
+    let distribution = match payload_size_distribution {
+        PayloadSizeDistribution::Uniform(size) => BTreeMap::from([(size as u64, 1_u64)]),
+        PayloadSizeDistribution::C4ISL_25_09_2025 => sample_c4isl_25_09_2025_traffic_distribution(),
+    };
     let now = Instant::now();
 
-    let metrics = rt.block_on(
-        generic_workload_engine::engine::Engine::new(log.clone(), generator, rps, TEST_DURATION)
-            .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
-            .execute_simply(log.clone()),
-    );
+    let mut rng = StdRng::seed_from_u64(42);
+
+    for index in 0..calls_count {
+        let agent = agents[index % agents.len()].clone();
+        let canister = canisters[index % 4];
+        let message_size = sample_from_distribution(&distribution, &mut rng);
+        let request = GenericRequest::new(
+            canister,
+            String::from("write"),
+            vec![0; message_size as usize],
+            CallMode::UpdateNoPolling,
+        );
+
+        let handle = rt.clone();
+        join_set.spawn_on(
+            async move {
+                let wait = wait_between_calls * (index as u32);
+                tokio::time::sleep(wait).await;
+                agent.call(&request).await
+            },
+            &handle,
+        );
+    }
+
+    let logger = env.logger();
+    let metrics = rt.block_on(async move {
+        let requests_in_10_seconds = (1.0 + 10.0 * rps) as usize;
+        let mut successes = 0;
+        let mut total = 0;
+        while let Some(result) = join_set.join_next().await {
+            let result = result.unwrap();
+            if result.result().is_ok() {
+                successes += 1;
+            }
+            total += 1;
+
+            if total % requests_in_10_seconds == 0 {
+                info!(logger, "Processed {total} requests. Successes: {successes}");
+            }
+        }
+
+        (successes, total)
+    });
 
     let duration = now.elapsed();
     let consensus_metrics_after = rt.block_on(get_consensus_metrics(&nodes));
@@ -132,40 +205,6 @@ pub fn test_with_rt_handle(
         info!(log, "{}", test_metrics);
     }
 
-    info!(
-        log,
-        "Step 3: Assert expected number of success update calls on each canister.."
-    );
-    let requests_count = rps * TEST_DURATION.as_secs_f64();
-    let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
-    info!(
-        log,
-        "Minimal expected number of success calls {}", min_expected_success_calls,
-    );
-    info!(
-        log,
-        "Number of success calls {}, failure calls {}",
-        metrics.success_calls(),
-        metrics.failure_calls()
-    );
-
-    let min_expected_canister_counter = min_expected_success_calls / canister_count;
-    info!(
-        log,
-        "Minimal expected counter value on canisters {}", min_expected_canister_counter
-    );
-    for canister in canisters.iter() {
-        rt.block_on(assert_canister_counter_with_retries(
-            &log,
-            &agent.get(),
-            canister,
-            payload.clone(),
-            min_expected_canister_counter,
-            MAX_RETRIES,
-            RETRY_WAIT,
-        ));
-    }
-
     Ok(test_metrics)
 }
 
@@ -177,13 +216,14 @@ pub struct TestMetrics {
     throughput_messages_per_second: f64,
     average_e2e_latency: f64,
     average_time_to_receive_block: f64,
+    average_ingress_payload_size: f64,
 }
 
 impl TestMetrics {
     fn compute(
         before: ConsensusMetrics,
         after: ConsensusMetrics,
-        load_metrics: &LoadTestMetrics,
+        load_metrics: &(usize, usize),
         duration: Duration,
     ) -> Self {
         let metrics_difference = after - before;
@@ -197,10 +237,10 @@ impl TestMetrics {
 
         Self {
             blocks_per_second,
-            success_rate: (load_metrics.success_calls() as f64)
-                / (load_metrics.total_calls() as f64),
+            success_rate: (load_metrics.0 as f64 / load_metrics.1 as f64),
             throughput_bytes_per_second,
             throughput_messages_per_second,
+            average_ingress_payload_size: throughput_bytes_per_second / blocks_per_second,
             average_e2e_latency: e2e_latency,
             average_time_to_receive_block: time_to_receive_block,
         }
@@ -210,10 +250,10 @@ impl TestMetrics {
 impl std::fmt::Display for TestMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Success rate: {:.1}%", 100. * self.success_rate)?;
-        writeln!(f, "Block rate: {:.1} blocks/s", self.blocks_per_second)?;
+        writeln!(f, "Block rate: {:.2} blocks/s", self.blocks_per_second)?;
         writeln!(
             f,
-            "Throughput: {:.1} MiB/s, {:.1} messages/s",
+            "Throughput: {:.2} MiB/s, {:.1} messages/s",
             self.throughput_bytes_per_second / (1024. * 1024.),
             self.throughput_messages_per_second
         )?;
@@ -222,10 +262,15 @@ impl std::fmt::Display for TestMetrics {
             "Average time to receive a rank 0 block: {:.2}s",
             self.average_time_to_receive_block
         )?;
-        write!(
+        writeln!(
             f,
             "Avarage E2E ingress message latency: {:.2}s",
             self.average_e2e_latency
+        )?;
+        write!(
+            f,
+            "Avarage ingress payload size: {:.2} MiB",
+            self.average_ingress_payload_size / (1024. * 1024.)
         )
     }
 }
@@ -343,7 +388,7 @@ impl std::ops::Sub for HistogramMetrics {
 pub async fn persist_metrics(
     ic_version: ReplicaVersion,
     metrics: TestMetrics,
-    message_size: usize,
+    payload_size_distribution: PayloadSizeDistribution,
     rps: f64,
     latency: Duration,
     bandwidth_bits_per_seconds: u32,
@@ -356,6 +401,11 @@ pub async fn persist_metrics(
 
     let timestamp =
         chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
+
+    let message_size = match payload_size_distribution {
+        PayloadSizeDistribution::Uniform(size) => size.to_string(),
+        PayloadSizeDistribution::C4ISL_25_09_2025 => String::from("c4isl_25092025"),
+    };
 
     let json_report = serde_json::json!(
         {

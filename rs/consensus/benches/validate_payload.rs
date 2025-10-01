@@ -387,6 +387,7 @@ fn serialization_benchmark(criterion: &mut Criterion) {
         (2_000, 4_000, "2000x4KB"),
         (1, 4_000_000, "1x4MB"),
         (1, 8_000_000, "1x8MB"),
+        (64, 500_000, "64x500KB"),
     ] {
         run_test(
             |now: Time, _: &mut ConsensusPoolImpl, _: &dyn PayloadBuilder| {

@@ -162,6 +162,8 @@ impl IngressSelector for IngressManager {
                 let queue = &mut canister_queues.get_mut(&canister_id).unwrap();
                 while let Some(msg) = queue.msgs.last() {
                     let ingress = &msg.msg.signed_ingress;
+                    let ingress_size = ingress.count_bytes();
+
                     let result = self.validate_ingress(
                         IngressMessageId::from(ingress),
                         ingress,
@@ -185,10 +187,10 @@ impl IngressSelector for IngressManager {
                         }
                     };
 
-                    let ingress_size = ingress.count_bytes();
-
                     // Break criterion #1: global byte limit
                     if (accumulated_size + ingress_size) as u64 > byte_limit.get() {
+                        //                        queue.msgs.pop();
+                        //                        continue;
                         break 'outer;
                     }
 

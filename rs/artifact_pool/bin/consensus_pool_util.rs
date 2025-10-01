@@ -113,7 +113,7 @@ fn open_consensus_pool(path: &str, read_only: bool) -> UncachedConsensusPoolImpl
     let path = PathBuf::from(path);
     let mut config = ArtifactPoolConfig::new(path);
     config.persistent_pool_read_only = read_only;
-    UncachedConsensusPoolImpl::new(config, log)
+    UncachedConsensusPoolImpl::new(config, todo!(), log)
 }
 
 fn open_certification_pool(path: &str, read_only: bool) -> CertificationPoolImpl {

@@ -11,6 +11,7 @@ use ic_interfaces::{
 };
 use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::decimal_buckets;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::dkg::DkgSummary;
@@ -44,6 +45,7 @@ use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
     Transaction, WriteFlags,
 };
+use prometheus::{HistogramVec, histogram_opts, labels};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
@@ -96,6 +98,7 @@ pub(crate) struct PersistentHeightIndexedPool<T> {
     artifacts: Database,
     indices: Vec<(TypeKey, Database)>,
     log: ReplicaLogger,
+    metrics: LmdbPoolMetrics,
 }
 
 /// A trait for loading/saving pool artifacts (of ArtifactKind). It allows a
@@ -114,9 +117,11 @@ pub(crate) struct PersistentHeightIndexedPool<T> {
 ///    ArtifactKind. It can be casted into individual messages using TryFrom.
 ///
 /// 3. Individual message type.
-pub(crate) trait PoolArtifact: Sized {
+trait PoolArtifact: Sized {
     /// The set of [`TypeKey`]s, one for each individual message type.
     const TYPE_KEYS: &'static [TypeKey];
+
+    const DB_NAME: &'static str;
 
     /// Type of the object to store.
     type ObjectType;
@@ -140,6 +145,7 @@ pub(crate) trait PoolArtifact: Sized {
         db_env: Arc<Environment>,
         artifacts: Database,
         tx: &RoTransaction,
+        metrics: &LmdbPoolMetrics,
         log: &ReplicaLogger,
     ) -> lmdb::Result<T>
     where
@@ -415,6 +421,31 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
 
 ///////////////////////////// Generic Pool /////////////////////////////
 
+#[derive(Clone)]
+struct LmdbPoolMetrics {
+    operation_duration: HistogramVec,
+}
+
+impl LmdbPoolMetrics {
+    fn new(registry: &MetricsRegistry, db_name: &str) -> Self {
+        Self {
+            operation_duration: registry.register(
+                HistogramVec::new(
+                    histogram_opts!(
+                        "lmdb_pool_operation_duration_seconds",
+                        "The time it took to perform an operation on the given pool",
+                        // 0.1ms - 5s
+                        decimal_buckets(-4, 0),
+                        labels! { "db_name".to_string() => db_name.to_string()}
+                    ),
+                    &["op", "artifact_type"],
+                )
+                .unwrap(),
+            ),
+        }
+    }
+}
+
 /// Collection of generic pool functions, indexed by Artifact type.
 impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     /// Return a persistent pool located the given directory path.
@@ -423,6 +454,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     fn new(
         path: &Path,
         read_only: bool,
+        registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> PersistentHeightIndexedPool<Artifact> {
         let db_env = create_db_env(path, read_only, (Artifact::TYPE_KEYS.len() + 2) as c_uint);
@@ -473,6 +505,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
             artifacts,
             indices,
             log,
+            metrics: LmdbPoolMetrics::new(registry, Artifact::DB_NAME),
         }
     }
 
@@ -532,13 +565,21 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         let db_env = self.db_env.clone();
         let log = self.log.clone();
         let artifacts = self.artifacts;
+        let metrics = self.metrics.clone();
         Box::new(LMDBIterator::new(
             db_env.clone(),
             index_db,
             min_key,
             max_key,
             move |tx: &RoTransaction<'_>, key: &[u8]| {
-                Artifact::load_as::<Message>(&IdKey::from(key), db_env.clone(), artifacts, tx, &log)
+                Artifact::load_as::<Message>(
+                    &IdKey::from(key),
+                    db_env.clone(),
+                    artifacts,
+                    tx,
+                    &metrics,
+                    &log,
+                )
             },
             self.log.clone(),
         ))
@@ -554,6 +595,11 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     where
         Artifact: PoolArtifact<ObjectType = PoolObject>,
     {
+        let _timer = self
+            .metrics
+            .operation_duration
+            .with_label_values(&["insert", key.type_key.as_ref()])
+            .start_timer();
         self.tx_insert_prepare(tx, key)?;
         Artifact::save(&key.id_key, value, self.artifacts, tx, &self.log)
     }
@@ -593,6 +639,11 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
 
     /// Remove the pool object of the given type/height/id key.
     fn tx_remove(&self, tx: &mut RwTransaction, key: &ArtifactKey) -> lmdb::Result<()> {
+        let _timer = self
+            .metrics
+            .operation_duration
+            .with_label_values(&["remove", key.type_key.as_ref()])
+            .start_timer();
         if let Err(err) = tx.del(self.artifacts, &key.id_key, None) {
             // skip the removal if it is not found in artifacts
             return if lmdb::Error::NotFound == err {
@@ -995,6 +1046,8 @@ impl PoolArtifact for ConsensusMessage {
     // an Index DB for this type of artifacts.
     const TYPE_KEYS: &'static [TypeKey] = &CONSENSUS_KEYS;
 
+    const DB_NAME: &'static str = "consensus_pool";
+
     type ObjectType = ValidatedConsensusArtifact;
     type Id = ConsensusMessageId;
 
@@ -1053,11 +1106,16 @@ impl PoolArtifact for ConsensusMessage {
         db_env: Arc<Environment>,
         artifacts: Database,
         tx: &RoTransaction,
+        metrics: &LmdbPoolMetrics,
         log: &ReplicaLogger,
     ) -> lmdb::Result<T>
     where
         <T as TryFrom<Self>>::Error: Debug,
     {
+        let _timer = metrics
+            .operation_duration
+            .with_label_values(&["load", key.type_key().unwrap().as_ref()])
+            .start_timer();
         let artifact = tx_get_validated_consensus_artifact(key, artifacts, tx, log)?;
 
         let msg = match artifact.msg {
@@ -1133,12 +1191,13 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
     pub fn new_consensus_pool(
         config: LMDBConfig,
         read_only: bool,
+        registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> PersistentHeightIndexedPool<ConsensusMessage> {
         let mut path = config.persistent_pool_validated_persistent_db_path;
         path.push("consensus");
         std::fs::create_dir_all(path.as_path()).ok();
-        PersistentHeightIndexedPool::new(path.as_path(), read_only, log)
+        PersistentHeightIndexedPool::new(path.as_path(), read_only, registry, log)
     }
 
     fn tx_mutate(
@@ -1258,6 +1317,7 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
                 self.db_env.clone(),
                 self.artifacts,
                 &tx,
+                &self.metrics,
                 &self.log
             ),
             self.log,
@@ -1421,6 +1481,8 @@ impl TryFrom<ArtifactKey> for CertificationMessageId {
 impl PoolArtifact for CertificationMessage {
     const TYPE_KEYS: &'static [TypeKey] = &CERTIFICATION_KEYS;
 
+    const DB_NAME: &'static str = "certification_pool";
+
     type ObjectType = CertificationMessage;
     type Id = CertificationMessageId;
 
@@ -1445,8 +1507,12 @@ impl PoolArtifact for CertificationMessage {
         _db_env: Arc<Environment>,
         artifacts: Database,
         tx: &RoTransaction,
+        metrics: &LmdbPoolMetrics,
         log: &ReplicaLogger,
     ) -> lmdb::Result<T> {
+        let _timer = metrics
+            .operation_duration
+            .with_label_values(&["load", key.type_key().unwrap().as_ref()]);
         let bytes = tx.get(artifacts, &key)?;
         let msg = log_err!(
             bincode::deserialize::<Self::ObjectType>(bytes),
@@ -1467,12 +1533,13 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
     pub fn new_certification_pool(
         config: LMDBConfig,
         read_only: bool,
+        registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> PersistentHeightIndexedPool<CertificationMessage> {
         let mut path = config.persistent_pool_validated_persistent_db_path;
         path.push("certification");
         std::fs::create_dir_all(path.as_path()).ok();
-        PersistentHeightIndexedPool::new(path.as_path(), read_only, log)
+        PersistentHeightIndexedPool::new(path.as_path(), read_only, registry, log)
     }
 
     fn insert_message<T: HasTypeKey + Into<CertificationMessage> + CryptoHashable + HasHeight>(
@@ -1532,6 +1599,7 @@ impl crate::certification_pool::MutablePoolSection
                 self.db_env.clone(),
                 self.artifacts,
                 &tx,
+                &self.metrics,
                 &self.log
             ),
             self.log,

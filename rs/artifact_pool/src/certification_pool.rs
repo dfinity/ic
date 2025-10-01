@@ -133,6 +133,7 @@ impl CertificationPoolImpl {
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_certification_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
+                    &metrics_registry,
                     log.clone(),
                 ),
             ) as Box<_>,

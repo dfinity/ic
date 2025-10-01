@@ -19,6 +19,13 @@ macro_rules! systest {
             |env| ($function(env, $arg)),
         )
     };
+
+    ($function:path; $arg_1:expr_2021, $arg_2:expr_2021) => {
+        ic_system_test_driver::driver::dsl::TestFunction::new(
+            &format!("{}({:?}, {:?})", std::stringify!($function), $arg_1, $arg_2),
+            |env| ($function(env, $arg_1, $arg_2)),
+        )
+    };
 }
 
 pub struct SystemTestGroup {

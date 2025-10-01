@@ -234,7 +234,11 @@ impl Player {
             artifact_pool_config.persistent_pool_read_only = true;
             let consensus_pool = ConsensusPoolImpl::from_uncached(
                 NodeId::from(PrincipalId::new_anonymous()),
-                UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
+                UncachedConsensusPoolImpl::new(
+                    artifact_pool_config,
+                    &metrics_registry,
+                    log.clone(),
+                ),
                 MetricsRegistry::new(),
                 log.clone(),
                 time_source,

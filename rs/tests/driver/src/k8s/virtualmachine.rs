@@ -239,6 +239,7 @@ pub async fn destroy_vm(name: &str) -> Result<()> {
 }
 
 async fn action_vm(name: &str, action: Action) -> Result<()> {
+    println!("Performing action {} on VM {name}", action.as_ref());
     let client = Client::try_default().await?;
 
     (|| async {
