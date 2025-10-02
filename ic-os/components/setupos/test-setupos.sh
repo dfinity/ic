@@ -83,11 +83,11 @@ function test_detect_hardware_generation() {
 
 function test_detect_hardware_generation_helper() {
     local expected_result="$1"
-    local FAKE_NODE_REWARD_TYPE="$2"
+    local fake_node_reward_type="$2"
     local expected_hardware_generation="$3"
     echo "Running test: test_detect_hardware_generation for Gen${expected_hardware_generation}"
 
-    function get_config_value() { echo "$FAKE_NODE_REWARD_TYPE"; }
+    function get_config_value() { echo "$fake_node_reward_type"; }
     HARDWARE_GENERATION=""
 
     if [ "$expected_result" -eq 0 ]; then
