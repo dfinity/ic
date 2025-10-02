@@ -10245,6 +10245,7 @@ dependencies = [
  "icrc-ledger-types",
  "leb128",
  "num-traits",
+ "serde",
  "serde_bytes",
 ]
 

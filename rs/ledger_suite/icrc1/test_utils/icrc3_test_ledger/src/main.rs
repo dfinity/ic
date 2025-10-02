@@ -1,11 +1,12 @@
-use candid::{Nat, candid_method};
+use candid::{Nat, Principal, candid_method};
+use ic_cdk::call::{Call, CallErrorExt, RejectCode};
 use ic_cdk::{init, query, update};
 use ic_certification::{
     HashTree,
     hash_tree::{Label, empty, fork, label, leaf},
 };
 use ic_icrc1::endpoints::StandardRecord;
-use ic_icrc3_test_ledger::AddBlockResult;
+use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
@@ -14,15 +15,22 @@ use icrc_ledger_types::icrc3::blocks::{
 };
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::{cell::RefCell, ops::Range};
 
 type BlockStorage = BTreeMap<u64, ICRC3Value>;
+
+#[derive(Clone)]
+struct ArchiveInfo {
+    pub archive_id: Principal,
+    pub block_range: Range<u64>,
+}
 
 thread_local! {
     static BLOCKS: RefCell<BlockStorage> = const { RefCell::new(BTreeMap::new()) };
     static NEXT_BLOCK_ID: RefCell<u64> = const { RefCell::new(0) };
     static ICRC3_ENABLED: RefCell<bool> = const { RefCell::new(true) };
+    static ARCHIVES: RefCell<Vec<ArchiveInfo>> = const { RefCell::new(vec![]) };
 }
 
 /// Add a block to the ledger storage
@@ -43,6 +51,86 @@ pub fn add_block(block: ICRC3Value) -> AddBlockResult {
     });
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
     result
+}
+
+/// Add a block to the ledger storage
+#[candid_method(update)]
+#[update]
+pub fn set_next_block_id(block_id: u64) {
+    NEXT_BLOCK_ID.with(|next_id| {
+        let mut next_id = next_id.borrow_mut();
+        if block_id != *next_id {
+            assert_eq!(*next_id, 0);
+            *next_id = block_id;
+        }
+    });
+}
+
+/// Archive the oldest `num_blocks` to the archive at given `archive_id`.
+#[candid_method(update)]
+#[update]
+pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
+    let mut blocks_to_archive = vec![];
+
+    BLOCKS.with(|blocks| {
+        let mut blocks = blocks.borrow_mut();
+        while !blocks.is_empty() && (blocks_to_archive.len() as u64) < args.num_blocks {
+            blocks_to_archive.push(blocks.pop_first().unwrap());
+        }
+    });
+
+    if blocks_to_archive.is_empty() {
+        return 0;
+    }
+
+    let first_block_index = blocks_to_archive.first().unwrap().0;
+    let last_block_index = blocks_to_archive.last().unwrap().0;
+
+    ARCHIVES.with(|archives| {
+        let mut archives = archives.borrow_mut();
+        let last_archive = archives.last().cloned();
+        match last_archive {
+            Some(archive) => {
+                if archive.archive_id == args.archive_id {
+                    let updated_archive = ArchiveInfo {
+                        block_range: archive.block_range.start..last_block_index + 1,
+                        ..archive
+                    };
+                    let last_idx = archives.len() - 1;
+                    archives[last_idx] = updated_archive;
+                } else {
+                    archives.push(ArchiveInfo {
+                        archive_id: args.archive_id,
+                        block_range: first_block_index..last_block_index + 1,
+                    });
+                }
+            }
+            None => archives.push(ArchiveInfo {
+                archive_id: args.archive_id,
+                block_range: first_block_index..last_block_index + 1,
+            }),
+        };
+    });
+
+    Call::unbounded_wait(args.archive_id, "set_next_block_id")
+        .with_arg(&first_block_index)
+        .await
+        .expect("failed to set the initial block id")
+        .candid::<()>()
+        .expect("Failed decoding empty result");
+
+    for block in &blocks_to_archive {
+        let result = Call::unbounded_wait(args.archive_id, "add_block")
+            .with_arg(&block.1)
+            .await
+            .expect("failed to add block to archive")
+            .candid::<AddBlockResult>()
+            .expect("Could not decode AddBlockResult")
+            .expect("adding block failed");
+        assert_eq!(result, Nat::from(block.0));
+    }
+
+    blocks_to_archive.len() as u64
 }
 
 #[query]

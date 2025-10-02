@@ -23,6 +23,7 @@ ic-icrc1 = { path = "../.." }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 leb128 = { workspace = true }
 num-traits = { workspace = true }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]

@@ -125,6 +125,11 @@ type MetadataValue = variant {
   Blob : blob
 };
 
+type ArchiveBlocksArgs = record {
+  archive_id : principal;
+  num_blocks : nat64
+};
+
 service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
@@ -143,4 +148,8 @@ service : () -> {
     icrc1_metadata : () -> (vec record { text; MetadataValue }) query;    
 
     set_icrc3_enabled : (bool) -> ();
+
+    archive_blocks : (ArchiveBlocksArgs) -> (nat64);
+
+    set_next_block_id : (nat64) -> ();
 }
