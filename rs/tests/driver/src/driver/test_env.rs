@@ -17,7 +17,7 @@ use std::time::Duration;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::pot_dsl::TestPath;
 
-use crate::driver::constants::SUBREPORT_LOG_PREFIX;
+use crate::driver::constants::{SSH_USERNAME, SUBREPORT_LOG_PREFIX};
 
 use super::farm::HostFeature;
 
@@ -329,12 +329,17 @@ fn append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
 
 pub trait SshKeyGen {
     /// Generates an SSH key-pair for the given user and stores it in self.
-    fn ssh_keygen(&self, username: &str) -> Result<()>;
+    fn ssh_keygen_for_user(&self, username: &str) -> Result<()>;
+
+    /// Generates a key-pair for the default user.
+    fn ssh_keygen(&self) -> Result<()> {
+        self.ssh_keygen_for_user(SSH_USERNAME)
+    }
 }
 
 impl SshKeyGen for TestEnv {
     /// Generates an SSH key-pair for the given user and stores it in the TestEnv.
-    fn ssh_keygen(&self, username: &str) -> Result<()> {
+    fn ssh_keygen_for_user(&self, username: &str) -> Result<()> {
         let ssh_authorized_pub_keys_dir = self.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
         let ssh_authorized_priv_key_dir = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
 

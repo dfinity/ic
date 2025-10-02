@@ -1275,8 +1275,7 @@ impl HasGroupSetup for TestEnv {
                 }
             };
             group_setup.write_attribute(self);
-            self.ssh_keygen(SSH_USERNAME)
-                .expect("ssh key generation failed");
+            self.ssh_keygen().expect("ssh key generation failed");
             emit_group_event(&log, &group_setup.infra_group_name);
         }
     }

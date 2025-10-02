@@ -113,7 +113,7 @@ impl UniversalVm {
         let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
 
-        env.ssh_keygen(SSH_USERNAME)?;
+        env.ssh_keygen()?;
         let res_request =
             get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.infra_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request, env)?;

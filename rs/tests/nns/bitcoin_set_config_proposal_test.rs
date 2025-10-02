@@ -10,7 +10,6 @@ use ic_nns_test_utils::governance::{
     bitcoin_set_config_by_proposal, invalid_bitcoin_set_config_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
@@ -38,7 +37,7 @@ fn main() -> Result<()> {
 }
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(SSH_USERNAME).expect("ssh-keygen failed");
+    env.ssh_keygen().expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .use_specified_ids_allocation_range()

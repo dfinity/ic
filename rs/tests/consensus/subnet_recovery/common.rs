@@ -433,7 +433,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
 
     // Generate a new readonly keypair
-    env.ssh_keygen(READONLY_USERNAME)
+    env.ssh_keygen_for_user(READONLY_USERNAME)
         .expect("ssh-keygen failed for readonly key");
     let ssh_readonly_priv_key_path = ssh_authorized_priv_keys_dir.join(READONLY_USERNAME);
     let ssh_readonly_pub_key_path = ssh_authorized_pub_keys_dir.join(READONLY_USERNAME);

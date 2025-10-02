@@ -167,7 +167,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
 
     // Generate a new backup keypair
-    env.ssh_keygen(BACKUP_USERNAME)
+    env.ssh_keygen_for_user(BACKUP_USERNAME)
         .expect("ssh-keygen failed for backup key");
     let ssh_backup_priv_key_path = ssh_authorized_priv_keys_dir.join(BACKUP_USERNAME);
     let ssh_backup_priv_key = std::fs::read_to_string(&ssh_backup_priv_key_path)
