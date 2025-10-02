@@ -4,3 +4,28 @@ on:
   pull_request:
     branches-ignore:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
+
+jobs:
+  ci-main:
+    name: CI Main
+    uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
+    if: github.event.pull_request.head.repo.full_name == github.repository
+  
+  ci-pr-only:
+    name: CI PR Only
+    uses: ./.github/workflows/ci-pr-only.yml
+    secrets: inherit
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+  pocked-ic-tests-windows:
+    name: PocketIC Windows
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    secrets: inherit
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+  external-contributor:
+    name: External Contributor Workflow
+    uses: ./.github/workflows/external-contributor.yml
+    secrets: inherit
+    if: github.event.pull_request.head.repo.full_name != github.repository
