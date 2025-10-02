@@ -30,7 +30,7 @@ jobs:
 
       - name: Lookup Slack channel
         id: lookup
-        if: steps.get-reviewers.outputs.result != '""'
+  #      if: steps.get-reviewers.outputs.result != '""'
         run: |
           TEAM=${{ steps.get-reviewers.outputs.result }}
           CHANNEL=$(jq -r --arg team "$TEAM" '.[$team]' https://raw.githubusercontent.com/dfinity/ic/master/.github/workflows/team-channels.json)
