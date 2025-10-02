@@ -37,6 +37,11 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance::governance::MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE;
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
+use ic_nns_governance::storage::reset_stable_memory;
+use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
@@ -124,15 +129,9 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::once,
-    ops::Div,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-
-#[cfg(feature = "tla")]
-use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
-use ic_nns_governance::storage::reset_stable_memory;
-use ic_nns_governance::timer_tasks::schedule_tasks;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -5055,6 +5054,7 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
 #[test]
 fn test_rate_limiting_neuron_creation() {
     let current_peak = MAX_NEURON_CREATION_SPIKE;
+    let minimum_wait_for_capacity_increase = MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE;
 
     // Some neurons with maturity and stake so we can spawn and split
     let staked_neurons = (1..=(current_peak - 1))
@@ -5138,7 +5138,7 @@ fn test_rate_limiting_neuron_creation() {
 
     // Claim another neuron, which should then fail
     let controller = PrincipalId::new_user_test_id(101);
-    let nonce = 0;
+    let nonce = 1;
     let new_neuron_subaccount = ledger::compute_neuron_staking_subaccount(controller, nonce);
     let mut driver = driver.with_ledger_accounts(vec![fake::FakeAccount {
         id: AccountIdentifier::new(
@@ -5165,12 +5165,29 @@ fn test_rate_limiting_neuron_creation() {
     }
 
     // Advance time by just enough to reset the rate limit
-    driver.advance_time_by(3600.div(current_peak));
-    gov.run_periodic_tasks().now_or_never().unwrap();
+    driver.advance_time_by(minimum_wait_for_capacity_increase + 1);
 
     // Now we should be able to again claim a neuron.
-    let controller = PrincipalId::new_user_test_id(100);
-    let nonce = 0;
+    // NOTE: IT IS ESSENTIAL that something is different about these parameters, or the call
+    // will succeed because that neuron had already been claimed.
+    let controller = PrincipalId::new_user_test_id(102);
+    let nonce = 2;
+    let amount_e8s = 10 * E8;
+    let new_neuron_subaccount = ledger::compute_neuron_staking_subaccount(controller, nonce);
+    driver = driver.with_ledger_accounts(vec![fake::FakeAccount {
+        id: AccountIdentifier::new(
+            ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+            Some(new_neuron_subaccount),
+        ),
+        amount_e8s,
+    }]);
+
+    let result: ManageNeuronResponse = claim_neuron_by_memo(&mut gov, controller, nonce);
+    result.panic_if_error(&format!("Could not claim neuron with nonce: {nonce}!"));
+
+    // But we should only be able to create one after that time period.
+    let controller = PrincipalId::new_user_test_id(103);
+    let nonce = 3;
     let amount_e8s = 10 * E8;
     let new_neuron_subaccount = ledger::compute_neuron_staking_subaccount(controller, nonce);
     driver.with_ledger_accounts(vec![fake::FakeAccount {
@@ -5182,7 +5199,19 @@ fn test_rate_limiting_neuron_creation() {
     }]);
 
     let result: ManageNeuronResponse = claim_neuron_by_memo(&mut gov, controller, nonce);
-    result.panic_if_error("Could not claim neuron!");
+    match result.command {
+        Some(CommandResponse::Error(e)) => {
+            assert_eq!(
+                e,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::Unavailable,
+                    "Reached maximum number of neurons that can be created in this hour. \
+                        Please wait and try again later."
+                )
+            )
+        }
+        r => panic!("We did not get a rate limited response!, {r:?}"),
+    }
 }
 
 #[test]
@@ -11061,27 +11090,7 @@ lazy_static! {
     };
 }
 
-const BASKET_COUNT: u64 = 3;
-
 lazy_static! {
-    static ref SWAP_PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
-        sns_token_e8s: 70_000 * E8,
-        min_icp_e8s: 2 * E8,
-        max_icp_e8s: 42_000 * E8,
-        min_direct_participation_icp_e8s: Some(2 * E8),
-        max_direct_participation_icp_e8s: Some(42_000 * E8),
-        min_participant_icp_e8s: BASKET_COUNT * 2 * E8,
-        max_participant_icp_e8s: 42_000 * E8,
-        min_participants: 1,
-        swap_due_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS + 2 * ONE_DAY_SECONDS,
-        neuron_basket_construction_parameters: Some(
-            sns_swap_pb::NeuronBasketConstructionParameters {
-                count: BASKET_COUNT,
-                dissolve_delay_interval_seconds: 7890000, // 3 months
-            },
-        ),
-        sale_delay_seconds: None,
-    };
 
     // Collectively, the Neurons' Fund neurons have 100e-8 ICP in maturity.
     // Neurons 1 and 2 belong to principal(1); neuron 3 belongs to principal(2).
@@ -11745,6 +11754,9 @@ lazy_static! {
     );
 }
 
+//TODO: this is displayed as dead code even though it is used
+//in `lazy_static!`
+#[allow(dead_code)]
 const NEURONS_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 
 /// Failure when settling the Neurons' fund should result in the Lifecycle remaining

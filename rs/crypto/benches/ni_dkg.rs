@@ -3,9 +3,6 @@ use criterion::measurement::Measurement;
 use criterion::{
     BenchmarkGroup, BenchmarkId, Criterion, SamplingMode, criterion_group, criterion_main,
 };
-
-use rand::CryptoRng;
-
 use ic_base_types::RegistryVersion;
 use ic_crypto_test_utils_ni_dkg::{
     NiDkgTestEnvironment, RandomNiDkgConfig, create_dealing, create_dealings, create_transcript,
@@ -18,9 +15,11 @@ use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgDealing, NiDkgTag, NiDkgTranscript, config::NiDkgConfig,
 };
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashSet};
+
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
 
 criterion_main!(benches);
 criterion_group!(benches, crypto_nidkg_benchmarks,);
@@ -32,6 +31,7 @@ fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name().to_string());
         group
+            .warm_up_time(WARMUP_TIME)
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 

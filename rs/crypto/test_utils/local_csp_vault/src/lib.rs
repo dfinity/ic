@@ -157,7 +157,7 @@ mock! {
         fn idkg_load_transcript(
             &self,
             algorithm_id: AlgorithmId,
-            dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+            dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
             context_data: Vec<u8>,
             receiver_index: NodeIndex,
             key_id: KeyId,

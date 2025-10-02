@@ -3,7 +3,7 @@ use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Principal};
-use clap::{Args, Parser, ValueEnum};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use create_subnet::ProposeToCreateSubnetCmd;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
@@ -191,7 +191,6 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 
 /// Common command-line options for `ic-admin`.
 #[derive(Parser)]
-#[clap(version = "1.0")]
 struct Opts {
     #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app"
     )]
@@ -3718,7 +3717,8 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
-    let opts: Opts = Opts::parse();
+    let matches = Opts::command().version(env!("VERSION")).get_matches();
+    let opts = Opts::from_arg_matches(&matches).unwrap();
 
     let reachable_nns_urls = find_reachable_nns_urls(opts.nns_urls.clone()).await;
 

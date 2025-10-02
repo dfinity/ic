@@ -407,16 +407,16 @@ fn compute_remote_dkg_data(
         let target = config_group
             .first()
             .map(|config| config.dkg_id().target_subnet);
-        if let Some(NiDkgTargetSubnet::Remote(id)) = target {
-            if failed_target_ids.contains(&id) {
-                for config in config_group.iter() {
-                    new_transcripts.insert(
-                        config.dkg_id().clone(),
-                        Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
-                    );
-                }
-                return false;
+        if let Some(NiDkgTargetSubnet::Remote(id)) = target
+            && failed_target_ids.contains(&id)
+        {
+            for config in config_group.iter() {
+                new_transcripts.insert(
+                    config.dkg_id().clone(),
+                    Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
+                );
             }
+            return false;
         }
         true
     });

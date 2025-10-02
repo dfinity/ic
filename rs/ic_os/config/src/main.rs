@@ -1,14 +1,10 @@
 use anyhow::Result;
-use clap::{Args, Parser, Subcommand};
-use config::generate_testnet_config::{
-    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
-};
+use clap::{Parser, Subcommand};
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
-use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::path::{Path, PathBuf};
@@ -43,13 +39,9 @@ pub enum Commands {
     GenerateICConfig {
         #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
         guestos_config_json_path: PathBuf,
-        #[arg(long, default_value = config::DEFAULT_IC_JSON5_TEMPLATE_PATH, value_name = "ic.json5.template")]
-        template_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
     },
-    /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
-    GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
 }
 
 #[derive(Parser)]
@@ -57,86 +49,6 @@ pub enum Commands {
 struct ConfigArgs {
     #[command(subcommand)]
     command: Option<Commands>,
-}
-
-#[derive(Args)]
-pub struct GenerateTestnetConfigClapArgs {
-    #[arg(long)]
-    pub ipv6_config_type: Option<Ipv6ConfigType>,
-    #[arg(long)]
-    pub deterministic_prefix: Option<String>,
-    #[arg(long)]
-    pub deterministic_prefix_length: Option<u8>,
-    #[arg(long)]
-    pub deterministic_gateway: Option<String>,
-    #[arg(long)]
-    pub fixed_address: Option<String>,
-    #[arg(long)]
-    pub fixed_gateway: Option<String>,
-    #[arg(long)]
-    pub ipv4_address: Option<String>,
-    #[arg(long)]
-    pub ipv4_gateway: Option<String>,
-    #[arg(long)]
-    pub ipv4_prefix_length: Option<u8>,
-    #[arg(long)]
-    pub domain_name: Option<String>,
-
-    // ICOSSettings arguments
-    #[arg(long)]
-    pub node_reward_type: Option<String>,
-    #[arg(long)]
-    pub mgmt_mac: Option<MacAddr6>,
-    #[arg(long)]
-    pub deployment_environment: Option<DeploymentEnvironment>,
-    #[arg(long)]
-    pub enable_trusted_execution_environment: Option<bool>,
-    #[arg(long)]
-    pub use_nns_public_key: Option<bool>,
-    #[arg(long)]
-    pub nns_urls: Option<Vec<String>>,
-    #[arg(long)]
-    pub use_node_operator_private_key: Option<bool>,
-    #[arg(long)]
-    pub use_ssh_authorized_keys: Option<bool>,
-
-    // GuestOSSettings arguments
-    #[arg(long)]
-    pub inject_ic_crypto: Option<bool>,
-    #[arg(long)]
-    pub inject_ic_state: Option<bool>,
-    #[arg(long)]
-    pub inject_ic_registry_local_store: Option<bool>,
-
-    // GuestOSDevSettings arguments
-    #[arg(long)]
-    pub backup_retention_time_seconds: Option<u64>,
-    #[arg(long)]
-    pub backup_purging_interval_seconds: Option<u64>,
-    #[arg(long)]
-    pub malicious_behavior: Option<String>,
-    #[arg(long)]
-    pub query_stats_epoch_length: Option<u64>,
-    #[arg(long)]
-    pub bitcoind_addr: Option<String>,
-    #[arg(long)]
-    pub dogecoind_addr: Option<String>,
-    #[arg(long)]
-    pub jaeger_addr: Option<String>,
-    #[arg(long)]
-    pub socks_proxy: Option<String>,
-    #[arg(long)]
-    pub hostname: Option<String>,
-    #[arg(long)]
-    pub generate_ic_boundary_tls_cert: Option<String>,
-
-    // GuestOSRecoveryConfig arguments
-    #[arg(long)]
-    pub recovery_hash: Option<String>,
-
-    // Output path
-    #[arg(long)]
-    pub guestos_config_json_path: PathBuf,
 }
 
 pub fn main() -> Result<()> {
@@ -212,7 +124,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.deployment_environment,
                 logging: Logging {},
-                use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
+                use_nns_public_key: false,
                 nns_urls: deployment_json_settings.nns.urls.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
                     .exists(),
@@ -286,60 +198,13 @@ pub fn main() -> Result<()> {
         }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
-            template_path,
             output_path,
         }) => {
-            println!(
-                "Generating IC configuration from template: {}",
-                template_path.display()
-            );
+            println!("Generating IC configuration");
             let guestos_config: GuestOSConfig =
                 config::deserialize_config(&guestos_config_json_path)?;
 
-            generate_ic_config::generate_ic_config(&guestos_config, &template_path, &output_path)
-        }
-        Some(Commands::GenerateTestnetConfig(clap_args)) => {
-            // Convert `clap_args` into `GenerateTestnetConfigArgs`
-            let args = GenerateTestnetConfigArgs {
-                ipv6_config_type: clap_args.ipv6_config_type,
-                deterministic_prefix: clap_args.deterministic_prefix,
-                deterministic_prefix_length: clap_args.deterministic_prefix_length,
-                deterministic_gateway: clap_args.deterministic_gateway,
-                fixed_address: clap_args.fixed_address,
-                fixed_gateway: clap_args.fixed_gateway,
-                ipv4_address: clap_args.ipv4_address,
-                ipv4_gateway: clap_args.ipv4_gateway,
-                ipv4_prefix_length: clap_args.ipv4_prefix_length,
-                domain_name: clap_args.domain_name,
-                node_reward_type: clap_args.node_reward_type,
-                mgmt_mac: clap_args.mgmt_mac,
-                deployment_environment: clap_args.deployment_environment,
-                use_nns_public_key: clap_args.use_nns_public_key,
-                nns_urls: clap_args.nns_urls,
-                enable_trusted_execution_environment: clap_args
-                    .enable_trusted_execution_environment,
-                use_node_operator_private_key: clap_args.use_node_operator_private_key,
-                use_ssh_authorized_keys: clap_args.use_ssh_authorized_keys,
-                inject_ic_crypto: clap_args.inject_ic_crypto,
-                inject_ic_state: clap_args.inject_ic_state,
-                inject_ic_registry_local_store: clap_args.inject_ic_registry_local_store,
-                recovery_hash: clap_args.recovery_hash,
-                backup_retention_time_seconds: clap_args.backup_retention_time_seconds,
-                backup_purging_interval_seconds: clap_args.backup_purging_interval_seconds,
-                malicious_behavior: clap_args.malicious_behavior,
-                query_stats_epoch_length: clap_args.query_stats_epoch_length,
-                bitcoind_addr: clap_args.bitcoind_addr,
-                dogecoind_addr: clap_args.dogecoind_addr,
-                jaeger_addr: clap_args.jaeger_addr,
-                socks_proxy: clap_args.socks_proxy,
-                hostname: clap_args.hostname,
-                generate_ic_boundary_tls_cert: clap_args.generate_ic_boundary_tls_cert,
-            };
-
-            serialize_and_write_config(
-                &clap_args.guestos_config_json_path,
-                &generate_testnet_config(args)?,
-            )
+            generate_ic_config::generate_ic_config(&guestos_config, &output_path)
         }
         None => {
             println!("No command provided. Use --help for usage information.");

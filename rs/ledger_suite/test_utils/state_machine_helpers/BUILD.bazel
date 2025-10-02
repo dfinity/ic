@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
-    "//rs/rosetta-api/icp/test_utils",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
