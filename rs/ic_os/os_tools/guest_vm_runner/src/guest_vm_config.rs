@@ -197,11 +197,7 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
-            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 42,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
                 verbose: false,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 42,
@@ -287,11 +283,7 @@ mod tests {
     fn test_generate_vm_config_qemu() {
         test_vm_config(
             "guestos_vm_qemu.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 42,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 42,
                     vm_cpu: "qemu".to_string(),
@@ -309,11 +301,7 @@ mod tests {
     fn test_generate_vm_config_upgrade_guestos() {
         test_vm_config(
             "upgrade_guestos.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 42,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 64,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 42,
                     vm_cpu: "qemu".to_string(),
@@ -331,11 +319,7 @@ mod tests {
     fn test_generate_vm_config_kvm() {
         test_vm_config(
             "guestos_vm_kvm.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 42,
-                vm_cpu: "kvm".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 42,
                     vm_cpu: "qemu".to_string(),
@@ -353,11 +337,7 @@ mod tests {
     fn test_generate_vm_config_sev() {
         test_vm_config(
             "guestos_vm_sev.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 42,
-                vm_cpu: "kvm".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 42,
                     vm_cpu: "qemu".to_string(),
