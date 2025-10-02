@@ -260,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_bootstrap_success() {
+    fn test_process_bootstrap_normal() {
         let temp_dir = TempDir::new().unwrap();
         let bootstrap_tar = create_test_bootstrap_tar(&temp_dir);
 
@@ -441,7 +441,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        // Create test files and directories
+        // Create dev config files
         fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
         fs::write(
             extracted_dir.join("ic_crypto").join("key.pem"),
@@ -465,7 +465,6 @@ mod tests {
         )
         .unwrap();
 
-        // Create nns_public_key_override file
         fs::write(
             extracted_dir.join("nns_public_key_override.pem"),
             "override_nns_key",
@@ -523,7 +522,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        // Create state injection files
+        // Create dev config files
         fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
         fs::write(
             extracted_dir.join("ic_crypto").join("key.pem"),
@@ -544,8 +543,6 @@ mod tests {
             "test_registry_data",
         )
         .unwrap();
-
-        // Create nns_public_key_override file
         fs::write(
             extracted_dir.join("nns_public_key_override.pem"),
             "override_nns_key",
@@ -556,7 +553,7 @@ mod tests {
         let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
         assert!(result.is_ok());
 
-        // Verify that the override key was not copied
+        // Verify that dev files were not copied
         assert!(!state_root.join("data/nns_public_key.pem").exists());
         assert!(!state_root.join("data/nns_public_key_override.pem").exists());
         assert!(!state_root.join("crypto").join("key.pem").exists());
