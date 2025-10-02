@@ -9,9 +9,6 @@ jobs:
     name: Notify Slack
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       # Sanitize PR title for Slack (<, >, &)
       - name: Sanitize PR title
         id: sanitize
