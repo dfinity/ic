@@ -1581,6 +1581,7 @@ impl ExecutionEnvironment {
                                         cost_schedule,
                                     );
 
+                                // Check there are sufficient cycles to cover the worst-case execution cost.
                                 let response = if request.payment < max_fetch_canister_logs_fee {
                                     Err(UserError::new(
                                         ErrorCode::CanisterRejectedMessage,
@@ -1610,6 +1611,7 @@ impl ExecutionEnvironment {
                                                     registry_settings.subnet_size,
                                                     cost_schedule,
                                                 );
+                                            // There are enough cycles, deduct the actual fee from paid cycles and refund the rest.
                                             msg.deduct_cycles(actual_fee);
                                             (response_bytes, None)
                                         })
