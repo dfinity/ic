@@ -193,6 +193,8 @@ impl Storable for Account {
 
 /// Maps a `Principal` to a `Subaccount`.
 /// Can be used to create a separate `Subaccount` for each `Principal`.
+/// Note that no canonical mapping exists from `Principal` to `Subaccount` - this is just one
+/// possible mapping.
 pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
     let mut subaccount = [0; 32];
     let principal = principal.as_slice();
@@ -202,7 +204,8 @@ pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
 }
 
 /// Maps a `Subaccount` to a `Principal`.
-/// Reverse of `principal_to_subaccount` above.
+/// Reverse of `principal_to_subaccount` above - if the `Subaccount` contains a `Principal` that
+/// was converted using another mechanism than `principal_to_subaccount`, the result may be invalid.
 ///
 /// # Panics
 /// Panics if the `Subaccount` does not contain a valid `Principal`.
@@ -213,6 +216,8 @@ pub fn subaccount_to_principal(subaccount: Subaccount) -> Principal {
 }
 
 /// Tries to map a `Subaccount` to a `Principal`.
+/// Reverse of `principal_to_subaccount` above - if the `Subaccount` contains a `Principal` that
+/// was converted using another mechanism than `principal_to_subaccount`, the result may be invalid.
 ///
 /// # Errors
 /// * `PrincipalError::BytesTooLong()` if the length of the principal (`subaccount[0]`) is larger
