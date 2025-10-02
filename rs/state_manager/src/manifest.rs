@@ -720,22 +720,14 @@ fn hash_plan(
 
     let mut chunk_actions: Vec<ChunkAction> = Vec::new();
 
-    eprintln!("Base Manifest: {}", base_manifest);
     for FileWithSize(relative_path, size_bytes) in files.iter() {
         let num_chunks = count_chunks(*size_bytes, max_chunk_size);
         if let Some(base_index) = get_base_index(relative_path, base_manifest)
             && files_with_same_inodes.contains(relative_path)
         {
-            eprintln!(
-                "Relative path: {}; size: {}; num_chunks: {}",
-                relative_path.display(),
-                size_bytes,
-                num_chunks,
-            );
             for i in 0..num_chunks {
                 let action = {
                     let chunk = &base_manifest.chunk_table[base_index + i];
-                    eprintln!("chunk: {:#?}", &chunk);
 
                     debug_assert_eq!(
                         &base_manifest.file_table[chunk.file_index as usize].relative_path,
