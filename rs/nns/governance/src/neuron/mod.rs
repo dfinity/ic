@@ -24,9 +24,10 @@ pub fn combine_aged_stakes(
     if x_stake_e8s == 0 && y_stake_e8s == 0 {
         (0, 0)
     } else {
-        let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
-            + y_stake_e8s as u128 * y_age_seconds as u128)
-            / (x_stake_e8s as u128 + y_stake_e8s as u128);
+        let total_age_seconds: u128 = ((x_stake_e8s as u128)
+            .saturating_mul(x_age_seconds as u128)
+            .saturating_add((y_stake_e8s as u128).saturating_mul(y_age_seconds as u128)))
+            / ((x_stake_e8s as u128).saturating_add(y_stake_e8s as u128));
 
         // Note that age is adjusted in proportion to the stake, but due to the
         // discrete nature of u64 numbers, some resolution is lost due to the
@@ -34,7 +35,10 @@ pub fn combine_aged_stakes(
         // the age remain constant after this operation. However, in the end, the
         // most that can be lost due to rounding from the actual age, is always
         // less than 1 second, so this is not a problem.
-        (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
+        (
+            x_stake_e8s.saturating_add(y_stake_e8s),
+            total_age_seconds as u64,
+        )
     }
 }
 

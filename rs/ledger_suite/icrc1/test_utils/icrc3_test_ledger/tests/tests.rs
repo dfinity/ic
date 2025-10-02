@@ -5,6 +5,7 @@ use ic_certification::{
     Certificate, HashTree,
     hash_tree::{HashTreeNode, Label, LookupResult, SubtreeLookupResult, empty},
 };
+use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc3_test_ledger::AddBlockResult;
@@ -529,4 +530,50 @@ fn test_icrc3_get_tip_certificate() {
     assert_eq!(result1, Nat::from(1u64));
     let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
     check_tip_certificate(cert, canister_id, Some((1, block1.clone().hash().to_vec())));
+}
+
+fn get_supported_standards(env: &StateMachine, canister_id: CanisterId) -> Vec<StandardRecord> {
+    Decode!(
+        &env.query(
+            canister_id,
+            "icrc1_supported_standards",
+            Encode!(&()).unwrap()
+        )
+        .expect("failed to get supported standards")
+        .bytes(),
+        Vec<StandardRecord>
+    )
+    .expect("failed to decode icrc1_supported_standards response")
+}
+
+fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
+    Decode!(
+        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
+            .expect("failed to set_icrc3_enabled")
+            .bytes(),
+        ()
+    )
+    .expect("failed to decode set_icrc3_enabled response")
+}
+
+#[test]
+fn test_supported_standards() {
+    let (env, canister_id) = setup_icrc3_test_ledger();
+
+    // By default icrc3 should be enabled
+    let standards = get_supported_standards(&env, canister_id);
+    assert_eq!(standards.len(), 2);
+    assert_eq!(standards[0].name, "ICRC-3");
+    assert_eq!(standards[1].name, "ICRC-10");
+
+    set_icrc3_enabled(&env, canister_id, false);
+    let standards = get_supported_standards(&env, canister_id);
+    assert_eq!(standards.len(), 1);
+    assert_eq!(standards[0].name, "ICRC-10");
+
+    set_icrc3_enabled(&env, canister_id, true);
+    let standards = get_supported_standards(&env, canister_id);
+    assert_eq!(standards.len(), 2);
+    assert_eq!(standards[0].name, "ICRC-3");
+    assert_eq!(standards[1].name, "ICRC-10");
 }

@@ -11,7 +11,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::{
     Cycles,
-    messages::{MessageId, RequestOrResponse},
+    messages::{MessageId, StreamMessage},
     xnet::StreamHeader,
 };
 use proptest::prop_compose;
@@ -628,11 +628,11 @@ pub fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
         .expect("Installing random-traffic-test-canister failed")
 }
 
-/// Returns a snapshot of an XNet stream as a stream header and a vec of messages.
+/// Returns a snapshot of a XNet stream as a stream header and a vec of messages.
 pub fn stream_snapshot(
     from_subnet: &StateMachine,
     to_subnet: &StateMachine,
-) -> Option<(StreamHeader, Vec<RequestOrResponse>)> {
+) -> Option<(StreamHeader, Vec<StreamMessage>)> {
     from_subnet
         .get_latest_state()
         .get_stream(&to_subnet.get_subnet_id())

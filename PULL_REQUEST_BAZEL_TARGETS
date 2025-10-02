@@ -38,7 +38,7 @@
 # Tip: to test which files matches <PATTERN> you can use the following:
 # git ls-files | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
 #
-# Run `ci/bazel-scripts/targets.py check` to see the matches for every pattern
+# Run `ci/scripts/targets.py check` to see the matches for every pattern
 # and to check the correctness of this file. This is also run automatically by
 # the check-pull-request-bazel-targets job on CI.
 
@@ -52,6 +52,8 @@ mainnet-icos-revisions.json
   //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
   //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
   //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_colocate
+
+ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_test
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
 *ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test
@@ -75,8 +77,6 @@ rs/backup/*.rs //rs/tests/consensus/backup/...
                           //rs/tests/nested/nns_recovery/...
 
 *guestos-recovery-upgrader* //rs/tests/nested/nns_recovery/...
-# TODO(NODE-1707): re-enable this test after next weekly release
-# //rs/tests/nested:recovery_upgrader_test
 
 rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
                      //rs/tests/consensus:subnet_splitting_test_colocate
