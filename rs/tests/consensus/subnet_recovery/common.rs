@@ -430,6 +430,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
     let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
         .expect("Failed to read admin SSH private key");
+    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
 
     // Generate a new readonly keypair
     env.ssh_keygen(READONLY_USERNAME)
@@ -543,14 +544,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     );
     let nodes_except_upload_download_nodes = app_subnet
         .nodes()
-        // TODO (CON-1590): upload_node and download_(state_)node will be the same
+        // TODO (CON-1590): Replace upload + download(_state) node by single entity (a DFINITY-owned node)
         .filter(|n| n.node_id != upload_node.node_id && n.node_id != download_node.0.node_id)
         .collect::<Vec<_>>();
     let admin_ssh_sessions =
         disable_ssh_access_to_nodes(&nodes_except_upload_download_nodes, SSH_USERNAME)
             .expect("Failed to disable admin SSH access to nodes");
 
-    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
     for node in nodes_except_upload_download_nodes {
         wait_until_authentication_fails(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
     }

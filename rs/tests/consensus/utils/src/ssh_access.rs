@@ -134,6 +134,7 @@ pub fn disable_ssh_access_to_nodes(
     account: &str,
 ) -> Result<HashMap<NodeId, Session>, String> {
     let mut sessions = HashMap::new();
+
     for node in nodes {
         let session = node.block_on_ssh_session().map_err(|e| {
             format!(

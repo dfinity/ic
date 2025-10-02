@@ -158,11 +158,13 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let subnet_size = nns_subnet.nodes().count();
     let nns_node = nns_subnet.nodes().next().unwrap();
 
-    // Mirror production setup by granting backup SSH access to all NNS nodes to a specific SSH key.
-    // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
-    // the latest certified height of the subnet.
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+
+    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
+    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
+        .expect("Failed to read admin SSH private key");
+    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
 
     // Generate a new backup keypair
     env.ssh_keygen(BACKUP_USERNAME)
@@ -175,6 +177,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let ssh_backup_pub_key = std::fs::read_to_string(&ssh_backup_pub_key_path)
         .expect("Failed to read backup SSH public key");
 
+    // Mirror production setup by granting backup SSH access to all NNS nodes to a specific SSH key.
+    // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
+    // the latest certified height of the subnet.
     info!(logger, "Update the registry with the backup key");
     let payload = get_updatesubnetpayload_with_keys(
         nns_subnet.subnet_id,
@@ -293,9 +298,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     // Mirror production setup by removing admin SSH access from all nodes except the DFINITY-owned node
-    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
-    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
-        .expect("Failed to read admin SSH private key");
     info!(
         logger,
         "Remove admin SSH access from all NNS nodes except the DFINITY-owned node"
@@ -307,7 +309,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let _ = disable_ssh_access_to_nodes(&nodes_except_dfinity_owned, SSH_USERNAME)
         .expect("Failed to disable admin SSH access to nodes");
 
-    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
     for node in nodes_except_dfinity_owned {
         wait_until_authentication_fails(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
     }
