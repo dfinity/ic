@@ -310,6 +310,10 @@ mod tests {
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
     use crate::mutations::common::test::TEST_NODE_ID;
+    use crate::rate_limits::{
+        commit_node_operator_reservation, get_available_node_operator_capacity,
+        try_reserve_node_operator_capacity,
+    };
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -1047,6 +1051,51 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             "[Registry] do_add_node: Error parsing node type from payload: Invalid node type: invalid_type"
+        );
+    }
+
+    #[test]
+    fn test_do_add_node_fails_when_rate_limits_exceeded() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_id.to_vec(),
+            node_provider_principal_id: node_provider_id.to_vec(),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+            ..Default::default()
+        };
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        let (payload, _) = prepare_add_node_payload(1);
+
+        // Exhaust the rate limit capacity
+        let available = get_available_node_operator_capacity(format!("{node_provider_id}"), now);
+        let reservation =
+            try_reserve_node_operator_capacity(now, format!("{node_provider_id}"), available)
+                .unwrap();
+        commit_node_operator_reservation(now, reservation).unwrap();
+
+        let error = registry
+            .do_add_node_(payload, node_operator_id, now)
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            "Rate Limit Capacity exceeded. Please wait and try again later."
         );
     }
 }

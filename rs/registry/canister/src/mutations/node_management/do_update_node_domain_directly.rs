@@ -73,6 +73,10 @@ impl Registry {
 
 #[cfg(test)]
 mod tests {
+    use crate::rate_limits::{
+        commit_node_operator_reservation, get_available_node_operator_capacity,
+        try_reserve_node_operator_capacity,
+    };
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
         mutations::{
@@ -289,5 +293,49 @@ mod tests {
         );
         let node_record = registry.get_node_or_panic(node_id);
         assert_eq!(node_record.domain, new_domain);
+    }
+
+    #[test]
+    fn test_do_update_node_domain_directly_fails_when_rate_limits_exceeded() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        // Add node to registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+            1, // mutation id
+            1, // node count
+        );
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
+                .expect("failed to get the node operator id");
+
+        let payload = UpdateNodeDomainDirectlyPayload {
+            node_id,
+            domain: Some("example.com".to_string()),
+        };
+
+        // Exhaust the rate limit capacity
+        let available = get_available_node_operator_capacity(format!("{node_operator_id}"), now);
+        let reservation =
+            try_reserve_node_operator_capacity(now, format!("{node_operator_id}"), available)
+                .unwrap();
+        commit_node_operator_reservation(now, reservation).unwrap();
+
+        let error = registry
+            .do_update_node_domain_directly_(payload, node_operator_id, now)
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            "Rate Limit Capacity exceeded. Please wait and try again later."
+        );
     }
 }

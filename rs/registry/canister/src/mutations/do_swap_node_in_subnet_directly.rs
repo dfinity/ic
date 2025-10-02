@@ -6,6 +6,7 @@ use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
+use crate::{flags::is_node_swapping_enabled, registry::Registry};
 use crate::{
     flags::{
         is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
@@ -14,7 +15,6 @@ use crate::{
     mutations::node_management::common::find_subnet_for_node,
     registry::Registry,
 };
-use crate::{flags::is_node_swapping_enabled, registry::Registry};
 use ic_nervous_system_time_helpers::now_system_time;
 
 impl Registry {
@@ -162,6 +162,10 @@ mod tests {
             },
         },
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
+        rate_limits::{
+            commit_node_operator_reservation, get_available_node_operator_capacity,
+            try_reserve_node_operator_capacity,
+        },
         registry::Registry,
     };
     use prost::Message;
@@ -441,5 +445,29 @@ mod tests {
         );
 
         //TODO(DRE-548): Add assertions that the swap has been made
+    }
+
+    #[test]
+    fn test_do_swap_node_in_subnet_directly_fails_when_rate_limits_exceeded() {
+        let mut registry = Registry::new();
+
+        let _temp = temporarily_enable_node_swapping();
+
+        let now = now_system_time();
+        let caller = PrincipalId::new_user_test_id(1);
+        let payload = valid_payload();
+
+        // Exhaust the rate limit capacity
+        let available = get_available_node_operator_capacity(format!("{caller}"), now);
+        let reservation =
+            try_reserve_node_operator_capacity(now, format!("{caller}"), available).unwrap();
+        commit_node_operator_reservation(now, reservation).unwrap();
+
+        let error = registry.swap_nodes_inner(payload, caller, now).unwrap_err();
+
+        assert_eq!(
+            error,
+            "Rate Limit Capacity exceeded. Please wait and try again later."
+        );
     }
 }
