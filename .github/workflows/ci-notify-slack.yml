@@ -1,7 +1,8 @@
 name: PR Slack Notification
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [review_requested]
 
 jobs:
   notify-slack:
@@ -30,7 +31,7 @@ jobs:
 
       - name: Lookup Slack channel
         id: lookup
-  #      if: steps.get-reviewers.outputs.result != '""'
+        if: steps.get-reviewers.outputs.result != '""'
         run: |
           TEAM=${{ steps.get-reviewers.outputs.result }}
           curl -sSL https://raw.githubusercontent.com/dfinity/ic/master/.github/workflows/team-channels.json -o team-channels.json
@@ -41,7 +42,7 @@ jobs:
           MESSAGE: ":github: `${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title }}>"
 
       - name: Post to a Slack channel
-    #    if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
+        if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
         id: slack
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
