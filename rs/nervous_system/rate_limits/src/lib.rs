@@ -222,19 +222,10 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
             return Err(RateLimiterError::MaxReservationsReached);
         }
 
-        // Get all reservations for this key to calculate current usage
-        let reserved_capacity: u64 = reservations
-            .range((key.clone(), 0)..(key.clone(), u64::MAX))
-            .map(|(_, data)| data.capacity)
-            .sum();
-
         // Drop this borrow so we can borrow mutably to get usage
         drop(reservations);
 
-        let committed_capacity =
-            self.with_capacity_usage_record(key.clone(), now, |usage| usage.capacity_used);
-
-        if reserved_capacity + committed_capacity + requested_capacity <= self.config.max_capacity {
+        if requested_capacity <= self.get_available_capacity(key.clone(), now) {
             let mut reservations = self.reservations.lock().unwrap();
             // Only allocate global index on successful reservation
             let index = self.next_index;
@@ -282,6 +273,24 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         });
 
         Ok(())
+    }
+
+    pub fn get_available_capacity(&mut self, key: K, now: SystemTime) -> u64 {
+        let committed_capacity =
+            self.with_capacity_usage_record(key.clone(), now, |usage| usage.capacity_used);
+
+        let reservations = self.reservations.lock().unwrap();
+
+        // Get all reservations for this key to calculate current usage
+        let reserved_capacity: u64 = reservations
+            .range((key.clone(), 0)..(key.clone(), u64::MAX))
+            .map(|(_, data)| data.capacity)
+            .sum();
+
+        self.config
+            .max_capacity
+            .saturating_sub(reserved_capacity)
+            .saturating_sub(committed_capacity)
     }
 
     // Internal helper to correctly deal with memory usage.
