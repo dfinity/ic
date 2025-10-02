@@ -569,7 +569,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     // node as the download node.
     if !cfg.local_recovery
         && subnet_recovery.params.readonly_pub_key.is_some()
-        && download_node.0 != upload_node
+        && download_node.0.node_id != upload_node.node_id
     {
         info!(
             logger,
