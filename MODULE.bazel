@@ -855,7 +855,7 @@ filegroup(
 )
 
 http_archive(
-    name = "bitcoin_core_linux_arm64",
+    name = "bitcoin_core_linux_aarch64",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 filegroup(
