@@ -1603,13 +1603,14 @@ impl ExecutionEnvironment {
                                         })
                                         .map(|resp| {
                                             let response_bytes = Encode!(&resp).unwrap();
-                                            Arc::make_mut(request).payment -= self
+                                            let actual_fee = self
                                                 .cycles_account_manager
                                                 .fetch_canister_logs_fee(
                                                     NumBytes::new(response_bytes.len() as u64),
                                                     registry_settings.subnet_size,
                                                     cost_schedule,
                                                 );
+                                            msg.deduct_cycles(actual_fee);
                                             (response_bytes, None)
                                         })
                                 };
