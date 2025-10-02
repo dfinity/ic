@@ -671,6 +671,7 @@ pub fn file_chunk_range(chunk_table: &[ChunkInfo], file_index: usize) -> Range<u
     start..end
 }
 
+/// Returns the index of the first chunk of the file in base_manifest (if any).
 fn get_base_index(relative_path: &Path, base_manifest: &Manifest) -> Option<usize> {
     let base_file_index = base_manifest
         .file_table
@@ -769,6 +770,7 @@ fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAc
     vec![ChunkAction::Recompute; chunks_total]
 }
 
+/// Returns relative paths of files with the same inodes in the `checkpoint` and `manifest_delta`.
 fn files_with_same_inodes(
     log: &ReplicaLogger,
     manifest_delta: &ManifestDelta,
@@ -781,14 +783,6 @@ fn files_with_same_inodes(
         &manifest_delta.base_manifest,
         max_chunk_size
     ));
-    // The `max_chunk_size` is set to 1 MiB currently and the assertion below meets.
-    // Note that currently the code does not support changing `max_chunk_size`
-    // without adding explicit code for backward compatibility.
-    assert_eq!(
-        max_chunk_size as usize % PAGE_SIZE,
-        0,
-        "chunk size must be a multiple of page size for incremental computation to work correctly"
-    );
 
     // The files with the same inode and device IDs are hardlinks, hence contain exactly the same
     // data.
