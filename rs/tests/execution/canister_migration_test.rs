@@ -17,6 +17,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
+use ic_universal_canister::wasm;
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
@@ -249,4 +250,17 @@ async fn test_async(env: TestEnv) {
         subnet_id.unwrap(),
         app_subnet_2.subnet_id().unwrap().get().0
     );
+
+    // assert that "source" canister responds
+    let mgr = ManagementCanister::create(&app_subnet_2_agent);
+    mgr.start_canister(&source_canister.canister_id())
+        .await
+        .unwrap();
+    let data = [4, 2];
+    let res = source_canister
+        .update(wasm().reply_data(&data))
+        .await
+        .unwrap();
+    println!("res {:?}", res);
+    assert_eq!(data, &res[0..2]);
 }
