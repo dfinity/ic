@@ -388,13 +388,17 @@ impl IDkgPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
-        let mut optimistic_validators: BTreeMap<_, BTreeSet<NodeId>> = BTreeMap::new();
+        let mut optimistic_dealing_supports: BTreeMap<_, BTreeSet<NodeId>> = BTreeMap::new();
         let valid_dealing_supports = self.validated_dealing_supports.read().unwrap();
+
+        // Change actions to be returned
         let mut ret = Vec::new();
+        // Select the unvalidated support to be cryptographically verified in this iteration
         let unvalidated_supports: Vec<_> = idkg_pool
             .unvalidated()
             .dealing_support()
             .filter_map(|(id, support)| {
+                // Drop shares which already exist in the validated cache
                 let key = IDkgValidatedDealingSupportIdentifier::from(&support);
                 if valid_dealing_supports
                     .get(&key)
@@ -403,7 +407,7 @@ impl IDkgPreSignerImpl {
                 {
                     ret.push(IDkgChangeAction::HandleInvalid(
                         id,
-                        format!("Duplicate dealing support in unvalidated batch: {support}"),
+                        format!("Duplicate dealing support found in cache: {support}"),
                     ));
                     return None;
                 };
@@ -436,21 +440,28 @@ impl IDkgPreSignerImpl {
                     &support.transcript_id,
                 ) {
                     Action::Process(transcript_params_ref) => {
-                        let validators_cached = valid_dealing_supports
+                        let signers_cached = valid_dealing_supports
                             .get(&key)
                             .map(|s| s.len())
                             .unwrap_or_default();
 
-                        if validators_cached >= transcript_params_ref.verification_threshold() {
-                            // Already have enough valid supports for this dealing
+                        if signers_cached >= transcript_params_ref.verification_threshold() {
+                            // We already have enough valid supports for this dealing.
+                            // Permanently remove the support share from the unvalidated section.
                             ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                             return None;
                         }
 
-                        let validators_optimistic = optimistic_validators.entry(key).or_default();
-                        if validators_cached + validators_optimistic.len()
+                        let signers_optimistic =
+                            optimistic_dealing_supports.entry(key).or_default();
+                        if signers_cached + signers_optimistic.len()
                             >= transcript_params_ref.verification_threshold()
                         {
+                            // Assuming validation of selected shares in the current batch will succeed,
+                            // then we already have enough supports for this dealing, so we don't select more.
+                            // Do not remove the support share from the unvalidated section yet,
+                            // such that we can consider it again in the future, in case the validation
+                            // of a different selected share fails.
                             return None;
                         }
 
@@ -469,7 +480,8 @@ impl IDkgPreSignerImpl {
                         }
 
                         // Assume validation will succeed from here, for now.
-                        validators_optimistic.insert(support.sig_share.signer);
+                        signers_optimistic.insert(support.sig_share.signer);
+                        // Select this support share to be verified cryptographically
                         Some((transcript_params_ref, id, support))
                     }
                     Action::Drop => {
@@ -480,8 +492,11 @@ impl IDkgPreSignerImpl {
                 }
             })
             .collect();
+
+        // Drop the read lock on the validated support cache
         drop(valid_dealing_supports);
 
+        // Perform more expensive validations on selected shares in parallel
         let results: Vec<_> = self.thread_pool.install(|| {
             unvalidated_supports.into_par_iter().filter_map(|(params_ref, id, support)| {
                 if let Some(signed_dealing) = valid_dealings.get(&support.dealing_hash) {
