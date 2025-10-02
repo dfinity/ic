@@ -1,8 +1,9 @@
 use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId};
+use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProxyDecodeError};
 use ic_types::NodeId;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Advert {
@@ -71,11 +72,11 @@ impl XorDistance {
     }
 }
 
-pub(crate) struct ChunksToDownload(BTreeMap<XorDistance, (ChunkId, bool)>);
+pub(crate) struct ChunksToDownload(BTreeMap<XorDistance, (ChunkId, bool)>, ReplicaLogger);
 
 impl ChunksToDownload {
-    pub(crate) fn new() -> Self {
-        Self(BTreeMap::new())
+    pub(crate) fn new(log: &ReplicaLogger) -> Self {
+        Self(BTreeMap::new(), log.clone())
     }
 
     // Add chunks to the chunks to download list
@@ -88,8 +89,13 @@ impl ChunksToDownload {
         let mut added = 0;
         for chunk in chunks {
             let xor_distance = XorDistance::new(node_id, artifact_id.clone(), chunk);
-            self.0.insert(xor_distance, (chunk, false));
-            added += 1;
+
+            if let Entry::Vacant(entry) = self.0.entry(xor_distance) {
+                entry.insert((chunk, false));
+                added += 1;
+            } else {
+                info!(self.1, "STATE_SYNC: Attempt to double insert a chunk");
+            }
         }
 
         added
@@ -109,6 +115,12 @@ impl ChunksToDownload {
         if let Some(key) = self.0.iter().find(|(_, (chunk, _))| *chunk == chunk_id) {
             let key = key.0.clone();
             self.0.remove(&key);
+        }
+    }
+
+    pub(crate) fn download_failed(&mut self, chunk_id: ChunkId) {
+        if let Some(next_chunk) = self.0.iter_mut().find(|(_, (chunk, _))| chunk == &chunk_id) {
+            next_chunk.1.1 = false;
         }
     }
 

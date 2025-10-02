@@ -90,7 +90,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     let partial_state = Arc::new(RwLock::new(None));
 
     let ongoing = OngoingStateSync {
-        log,
+        log: log.clone(),
         rt: rt.clone(),
         artifact_id: artifact_id.clone(),
         metrics,
@@ -99,7 +99,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         new_peers_rx,
         peer_state: HashMap::new(),
         allowed_downloads: 0,
-        chunks_to_download: ChunksToDownload::new(),
+        chunks_to_download: ChunksToDownload::new(&log),
         partial_state: partial_state.clone(),
         is_base_layer: false,
         downloading_chunks: JoinMap::new(),
@@ -145,24 +145,22 @@ impl OngoingStateSync {
                 }
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
-                        Ok((result, chunk)) => {
+                        Ok((result, chunk_id)) => {
                             // We do a saturating sub here because it can happen (in rare cases) that a peer that just joined this sync
                             // was previously removed from the sync and still had outstanding downloads. As a consequence there is the possibiliy
                             // of an underflow. In the case where we close old download task while having active downloads we might start to
                             // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
                             // 5-10min when state sync restarts.
                             self.peer_state.entry(result.peer_id).and_modify(|(active_downloads, _)| { *active_downloads = active_downloads.saturating_sub(1) });
-                            self.handle_downloaded_chunk_result(result);
+                            self.handle_downloaded_chunk_result(chunk_id, result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
-
-                            self.chunks_to_download.download_finished(chunk);
 
                             if self.is_base_layer {
                                 let new_partial_state = self.chunks_to_download.next_xor_distance();
                                 *self.partial_state.write().await = new_partial_state;
                             }
 
-                            info!(self.log, "STATE_SYNC: Finished downloading chunk {}", chunk);
+                            info!(self.log, "STATE_SYNC: Finished downloading chunk {}", chunk_id);
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -197,25 +195,29 @@ impl OngoingStateSync {
             }
         }
         // All tracker objects must be dropped before closing the channel.
-        while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
-            self.handle_downloaded_chunk_result(finished);
+        while let Some(Ok((finished, chunk_id))) = self.downloading_chunks.join_next().await {
+            self.handle_downloaded_chunk_result(chunk_id, finished);
         }
         self.new_peers_rx.close();
     }
 
     fn handle_downloaded_chunk_result(
         &mut self,
+        chunk_id: ChunkId,
         DownloadResult { peer_id, result }: DownloadResult,
     ) {
         self.metrics.record_chunk_download_result(&result);
         match result {
             // Received chunk
-            Ok(()) => {}
+            Ok(()) => {
+                self.chunks_to_download.download_finished(chunk_id);
+            }
             Err(DownloadChunkError::NoContent) => {
                 if self.peer_state.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
                     info!(self.log, "STATE_SYNC: Peer returned no content");
                 }
+                self.chunks_to_download.download_failed(chunk_id);
             }
             Err(DownloadChunkError::RequestError { chunk_id, err }) => {
                 info!(
@@ -225,10 +227,13 @@ impl OngoingStateSync {
                 if self.peer_state.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
                 }
+                self.chunks_to_download.download_failed(chunk_id);
             }
-            Err(DownloadChunkError::Overloaded) => {}
-            Err(DownloadChunkError::Timeout) => {}
-            Err(DownloadChunkError::Cancelled) => {}
+            Err(DownloadChunkError::Overloaded)
+            | Err(DownloadChunkError::Timeout)
+            | Err(DownloadChunkError::Cancelled) => {
+                self.chunks_to_download.download_failed(chunk_id);
+            }
         }
     }
 
@@ -389,7 +394,8 @@ impl OngoingStateSync {
             chunk_id,
             err: err.to_string(),
         })
-        .and_then(std::convert::identity);
+        .flatten();
+        //.and_then(std::convert::identity);
 
         DownloadResult { peer_id, result }
     }
