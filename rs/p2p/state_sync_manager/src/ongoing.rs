@@ -342,6 +342,29 @@ impl OngoingStateSync {
         }
     }
 
+    fn choose_peer_for_chunk(&self, chunk_id: ChunkId) -> Option<NodeId> {
+        let minimally_loaded_peer = self
+            .peer_state
+            .iter()
+            // Filter out peers that have already the maximum number of downloads
+            .filter(|(_, peer_state)| peer_state.active_downloads() <= PARALLEL_CHUNK_DOWNLOADS)
+            // Filter out peers that do not serve the chunk in question
+            .filter(|&(peer_id, peer_state)| {
+                peer_state.is_chunk_served(peer_id.clone(), self.artifact_id.clone(), chunk_id)
+            })
+            // Find the peer with the lowest number of parital downloads
+            .map(|(peer_id, peer_state)| (peer_id, peer_state.active_downloads()))
+            .reduce(|(peer1, downloads1), (peer2, downloads2)| {
+                if downloads1 < downloads2 {
+                    (peer1, downloads1)
+                } else {
+                    (peer2, downloads2)
+                }
+            });
+
+        minimally_loaded_peer.map(|(peer_id, _)| peer_id.clone())
+    }
+
     async fn download_chunk_task<T: 'static + Send>(
         peer_id: NodeId,
         client: Arc<dyn Transport>,

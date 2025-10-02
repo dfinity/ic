@@ -168,6 +168,21 @@ impl PeerState {
             None => self.partial_state = Some(partial_state),
         }
     }
+
+    pub(crate) fn is_chunk_served(
+        &self,
+        peer_id: NodeId,
+        artifact_id: StateSyncArtifactId,
+        chunk_id: ChunkId,
+    ) -> bool {
+        match &self.partial_state {
+            Some(partial_state) => {
+                let distance = XorDistance::new(peer_id, artifact_id, chunk_id);
+                distance < *partial_state
+            }
+            None => true,
+        }
+    }
 }
 
 // TODO: Test XorMetric ordering
