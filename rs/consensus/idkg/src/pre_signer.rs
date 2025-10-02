@@ -2605,7 +2605,8 @@ mod tests {
                     dealing.clone(),
                 ))];
                 idkg_pool.apply(change_set);
-                artifacts.into_iter().for_each(|a| idkg_pool.insert(a));
+                artifacts.iter().cloned().for_each(|a| idkg_pool.insert(a));
+                let mut msg_ids = msg_ids.clone();
 
                 // During the first call only the first 2f+1 shares should be optimistically selected and validated
                 // The remaining f are deferred, in case the validation of an optimistically selected share fails.
@@ -2632,15 +2633,16 @@ mod tests {
                 idkg_pool.apply(change_set);
 
                 // The remaining shares should be dropped during the next iteration.
+                let mut msg_ids_1 = msg_ids.clone();
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), f);
                 for action in &change_set {
                     let IDkgChangeAction::RemoveUnvalidated(id) = action else {
                         panic!("Unexpected action: {action:?}");
                     };
-                    assert!(msg_ids.remove(id));
+                    assert!(msg_ids_1.remove(id));
                 }
-                assert!(msg_ids.is_empty());
+                assert!(msg_ids_1.is_empty());
 
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
                 assert!(
@@ -2648,6 +2650,32 @@ mod tests {
                         .validated_dealing_supports()
                         .get(&validated_id)
                         .is_some_and(|signers| signers.len() == 2 * f + 1
+                            && signers.is_subset(&node_ids.iter().cloned().collect()))
+                );
+
+                // If the cache is reset, i.e. due to a replica restart, we should validate all remaining shares instead
+                pre_signer
+                    .validated_dealing_supports
+                    .write()
+                    .unwrap()
+                    .clear();
+                let mut msg_ids_2 = msg_ids.clone();
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), f);
+                for action in &change_set {
+                    let IDkgChangeAction::MoveToValidated(msg) = action else {
+                        panic!("Unexpected action: {action:?}");
+                    };
+                    assert!(msg_ids_2.remove(&msg.message_id()));
+                }
+                assert!(msg_ids_2.is_empty());
+
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id)
+                        .is_some_and(|signers| signers.len() == f
                             && signers.is_subset(&node_ids.into_iter().collect()))
                 );
             })
@@ -2712,6 +2740,18 @@ mod tests {
                         .get(&validated_id)
                         .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
                 );
+
+                // If the cache is reset, i.e. due to a replica restart,
+                // the duplicated share should still be invalidated
+                pre_signer
+                    .validated_dealing_supports
+                    .write()
+                    .unwrap()
+                    .clear();
+
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_handle_invalid(&change_set, &msg_id));
             })
         })
     }
