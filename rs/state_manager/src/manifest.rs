@@ -27,7 +27,7 @@ use ic_state_layout::{
     BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
     UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
 };
-use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
+use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
 use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
