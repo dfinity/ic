@@ -21,6 +21,10 @@ BINARIES = {
         "url": "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-linux-amd64.tar.gz",
         "sha256": "1ea96b427dfa69a93d2915bc57669014b58d66a9ee7d761509d50b66486d42f8",
     },
+    "linux-arm64": {
+        "url": "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-linux-arm64.tar.gz",
+        "sha256": "65d6e68c6fb09c816f573b4df9c2f5e6f6cde20158810730f4629331cfc90552",
+    },
 }
 
 def _rosetta_cli_impl(repository_ctx):
