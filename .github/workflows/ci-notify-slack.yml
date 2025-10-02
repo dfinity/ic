@@ -1,7 +1,7 @@
 name: PR Slack Notification
 
 on:
-  pull_request_target:
+  pull_request_target: # used so that the slack token can be accessed from external PRs
     types: [review_requested]
 
 jobs:
@@ -9,6 +9,8 @@ jobs:
     name: Notify Slack
     runs-on: ubuntu-latest
     steps:
+      # Important! Do not re-add the checkout step if using pull_request_target
+    
       # Sanitize PR title for Slack (<, >, &)
       - name: Sanitize PR title
         id: sanitize
