@@ -1,7 +1,15 @@
+#!/bin/bash
+
+# Helper script for editing the patch file for a candid file of a test canister. In most cases, the
+# _test.did.patch file can be edited directly. However, in some cases, editing the patch file
+# manually might be less straightforward, especially if the main .did file has some changes around
+# the diff. In those cases, this script makes it easier to edit the patch file, by generating the
+# _test.did file (`--generate-test-did`), allowing the user to edit the _test.did file, and then
+# allow the user to update the patch file based on the new _test.did file (`--update-patch`).
+
 set -eEuo pipefail
 
-RUNFILES="$PWD"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
+REPO_PATH="$(git rev-parse --show-toplevel)"
 DID="$1"
 PATCH="$2"
 TEST_DID="${DID/.did/_test.did}"
@@ -13,6 +21,7 @@ TEST_DID_TEMP_PATH="${REPO_PATH}/${TEST_DID}.tmp"
 if [ "$3" == "--generate-test-did" ]; then
     DID_TEMP_FILE=$(mktemp -t did.XXXXXX)
     PATCH_TEMP_FILE=$(mktemp -t patch.XXXXXX)
+    trap "rm -f $DID_TEMP_FILE $PATCH_TEMP_FILE" EXIT
     GIT_BASE=${GIT_BASE:-master}
     echo "Using GIT_BASE=$GIT_BASE for generating $TEST_DID_TEMP_PATH"
     if ! git show $GIT_BASE:$DID >$DID_TEMP_FILE; then

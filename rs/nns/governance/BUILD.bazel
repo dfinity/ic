@@ -22,7 +22,11 @@ exports_files(
     ],
 )
 
-canister_test_did(name = "canister/governance_test.did")
+canister_test_did(
+    name = "governance_test.did",
+    canister_did = "canister/governance.did",
+    canister_test_did_patch = "canister/governance_test.did.patch",
+)
 
 # Allows temporarily disabling TLA checks from the command line;
 # just pass `--define tla_disabled=true` to your Bazel command
@@ -277,13 +281,13 @@ rust_canister(
         "canister/tla_ledger.rs",
     ],
     aliases = ALIASES,
-    compile_data = [":canister/governance_test.did"],
+    compile_data = [":governance_test.did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + [
         "//rs/tla_instrumentation:proc_macros",
     ],
-    service_file = ":canister/governance_test.did",
+    service_file = ":governance_test.did",
     visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
@@ -328,7 +332,7 @@ rust_test(
 rust_test(
     name = "canister_test_unit_test",
     srcs = glob(["canister/**/*.rs"]),
-    compile_data = [":canister/governance_test.did"],
+    compile_data = [":governance_test.did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
