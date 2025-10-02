@@ -283,6 +283,7 @@ system_test_nns(
     # The test will is long because we upgrade a subnet and then wait for a delegation to be refreshed
     # which could take more than 15 minutes in total.
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for state injection
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
@@ -298,6 +299,7 @@ system_test_nns(
     test_driver_target = ":nns_delegation_test",
     # The nns_delegation_on_app_subnet_test subtest takes ~10 minutes eating up the time budget for other tests.
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for state injection
     uses_guestos_img = True,
     uses_guestos_mainnet_nns_img = False,
     uses_guestos_update = True,

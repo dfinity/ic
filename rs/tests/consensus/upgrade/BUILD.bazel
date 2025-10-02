@@ -36,6 +36,7 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for state injection
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
@@ -65,6 +66,7 @@ system_test_nns(
         "long_test",
     ],
     test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for state injection
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
@@ -110,6 +112,7 @@ system_test_nns(
     ],
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
+    uses_dev_mainnet = True,  # necessary for state injection
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
