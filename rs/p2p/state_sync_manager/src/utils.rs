@@ -133,6 +133,43 @@ impl ChunksToDownload {
     }
 }
 
+pub(crate) struct PeerState {
+    num_downloads: usize,
+    partial_state: Option<XorDistance>,
+}
+
+impl PeerState {
+    pub(crate) fn new(partial_state: Option<XorDistance>) -> Self {
+        Self {
+            num_downloads: 0,
+            partial_state,
+        }
+    }
+
+    pub(crate) fn register_download(&mut self) {
+        self.num_downloads += 1;
+    }
+
+    pub(crate) fn deregister_download(&mut self) {
+        let _ = self.num_downloads.saturating_sub(1);
+    }
+
+    pub(crate) fn active_downloads(&self) -> usize {
+        self.num_downloads
+    }
+
+    pub(crate) fn update_partial_state(&mut self, partial_state: XorDistance) {
+        match self.partial_state {
+            Some(ref mut old_partial_state) => {
+                if &partial_state > old_partial_state {
+                    *old_partial_state = partial_state
+                }
+            }
+            None => self.partial_state = Some(partial_state),
+        }
+    }
+}
+
 // TODO: Test XorMetric ordering
 // TODO: Test Advert round trip
 // TODO: Test malformed advert parsing

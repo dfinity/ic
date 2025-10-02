@@ -11,6 +11,7 @@
 //!  - Add downloaded chunk to state.
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.
+use crate::utils::PeerState;
 use crate::{metrics::OngoingStateSyncMetrics, utils::XorDistance};
 use crate::{
     routes::{build_chunk_handler_request, parse_chunk_handler_response},
@@ -55,7 +56,7 @@ struct OngoingStateSync {
     // Peer management
     new_peers_rx: Receiver<(NodeId, Option<XorDistance>)>,
     // Peers that advertised state and the number of outstanding chunk downloads to that peer.
-    peer_state: HashMap<NodeId, (u64, Option<XorDistance>)>,
+    peer_state: HashMap<NodeId, PeerState>,
     // Download management
     allowed_downloads: usize,
     chunks_to_download: ChunksToDownload,
@@ -136,9 +137,9 @@ impl OngoingStateSync {
                         continue;
                     }
 
-                    if let Entry::Vacant(e) = self.peer_state.entry(new_peer) {
+                    if let Entry::Vacant(entry) = self.peer_state.entry(new_peer) {
                         info!(self.log, "STATE_SYNC: Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
-                        e.insert((0, partial_state));
+                        entry.insert(PeerState::new(partial_state));
                         self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
                         self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
                     }
@@ -151,7 +152,7 @@ impl OngoingStateSync {
                             // of an underflow. In the case where we close old download task while having active downloads we might start to
                             // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
                             // 5-10min when state sync restarts.
-                            self.peer_state.entry(result.peer_id).and_modify(|(active_downloads, _)| { *active_downloads = active_downloads.saturating_sub(1) });
+                            self.peer_state.entry(result.peer_id).and_modify(|peer| { peer.deregister_download();});
                             self.handle_downloaded_chunk_result(chunk_id, result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
 
@@ -254,15 +255,15 @@ impl OngoingStateSync {
         let max_active_downloads = self
             .peer_state
             .values()
-            .map(|(active_downloads, _)| active_downloads)
+            .map(|peer| peer.active_downloads())
             .max()
             .expect("Peers not empty");
         let mut peers = Vec::with_capacity(self.peer_state.len());
         let mut weights = Vec::with_capacity(self.peer_state.len());
-        for (peer, (active_downloads, _)) in &self.peer_state {
-            peers.push(*peer);
+        for (peer_id, peer) in &self.peer_state {
+            peers.push(*peer_id);
             // Add one such that all peers can get selected.
-            weights.push(max_active_downloads - active_downloads + 1);
+            weights.push(max_active_downloads - peer.active_downloads() + 1);
         }
         info!(
             self.log,
@@ -285,7 +286,7 @@ impl OngoingStateSync {
                     );
                     self.peer_state
                         .entry(peer_id)
-                        .and_modify(|(active_downloads, _)| *active_downloads += 1);
+                        .and_modify(|peer| peer.register_download());
                     self.downloading_chunks.spawn_on(
                         chunk,
                         self.metrics
