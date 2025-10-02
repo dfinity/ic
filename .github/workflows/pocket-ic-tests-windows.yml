@@ -1,10 +1,6 @@
 name: PocketIC Windows
 on:
-  pull_request:
-    paths:
-      - .github/workflows/pocket-ic-tests-windows.yml
-      - packages/pocket-ic/**
-      - rs/pocket_ic_server/**
+  workflow_call:
   schedule:
     - cron: "0 1 * * *"
 
