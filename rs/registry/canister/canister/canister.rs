@@ -996,7 +996,9 @@ fn migrate_canisters() {
 
 #[candid_method(update, rename = "migrate_canisters")]
 fn migrate_canisters_(payload: MigrateCanistersPayload) -> MigrateCanistersResponse {
-    registry_mut().do_migrate_canisters(payload)
+    let res = registry_mut().do_migrate_canisters(payload);
+    recertify_registry();
+    res
 }
 
 #[unsafe(export_name = "canister_query get_node_providers_monthly_xdr_rewards")]
