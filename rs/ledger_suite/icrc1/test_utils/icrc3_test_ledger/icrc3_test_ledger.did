@@ -141,4 +141,6 @@ service : () -> {
     get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;
 
     icrc1_metadata : () -> (vec record { text; MetadataValue }) query;    
+
+    set_icrc3_enabled : (bool) -> ();
 }
