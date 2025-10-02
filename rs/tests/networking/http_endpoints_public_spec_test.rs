@@ -32,11 +32,18 @@ Malformed HTTP request tests:
 3. Update call with wrong request type is rejected with 4xx.
 4. Update call with malformed textual representation of its effective canister ID is rejected with 4xx.
 
+
+Edge cases for (update and query call) method names:
+- empty method name (succeeds if the canister exports a method with an empty name, fails gracefully otherwise);
+- method name with spaces (succeeds if the canister exports a method whose name contains spaces, fails gracefully otherwise);
+- long method name (succeeds if the canister exports a method with a long name, fails gracefully otherwise);
+- too long method name (always fails gracefully).
+
 end::catalog[] */
 
 use anyhow::Result;
 use candid::Principal;
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_public::{query, read_state};
@@ -56,6 +63,8 @@ use ic_system_test_driver::{
 };
 use ic_types::{CanisterId, PrincipalId};
 use ic_universal_canister::wasm;
+use ic_utils::interfaces::ManagementCanister;
+use ic_utils::interfaces::management_canister::builders::InstallMode;
 use maplit::btreemap;
 use reqwest::{Response, StatusCode};
 use serde_cbor::Value;
@@ -207,7 +216,7 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
-    let subnet_replica_url = get_subnet_replica_url(&snapshot);
+    let subnet_replica_url = get_sys_subnet_replica_url(&snapshot);
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
@@ -252,7 +261,7 @@ fn malformed_http_request(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _test_ids) = get_canister_test_ids(&snapshot);
-    let subnet_replica_url = get_subnet_replica_url(&snapshot);
+    let subnet_replica_url = get_sys_subnet_replica_url(&snapshot);
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
@@ -396,6 +405,109 @@ fn malformed_http_request(env: TestEnv) {
     });
 }
 
+fn wasm_with_exported_method_name(method_name: String) -> Vec<u8> {
+    let wat = format!(
+        r#"
+(module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (func $foo
+        (call $msg_reply)
+    )
+    (memory 1)
+    (export "canister_query {}" (func $foo))
+)"#,
+        method_name
+    );
+    wat::parse_str(wat).unwrap()
+}
+
+fn method_name_edge_cases(env: TestEnv) {
+    let snapshot = env.topology_snapshot();
+    let (_primary, _sys_uc, app_uc) = get_canister_ids(&snapshot);
+    let subnet_replica_url = get_app_subnet_replica_url(&snapshot);
+    let api_bn_url = get_api_bn_url(&snapshot);
+
+    block_on(async {
+        for url in [subnet_replica_url, api_bn_url] {
+            let client = reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .build()
+                .unwrap();
+            let agent = Agent::builder()
+                .with_url(url)
+                .with_http_client(client)
+                .build()
+                .unwrap();
+            agent.fetch_root_key().await.unwrap();
+            let ic00 = ManagementCanister::create(&agent);
+            let canister_id = ic00
+                .create_canister()
+                .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(app_uc)
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0;
+
+            for method_name in [
+                "",
+                "method name with spaces",
+                &'x'.to_string().repeat(20_000),
+            ] {
+                let wasm = wasm_with_exported_method_name(method_name.to_string());
+                ic00.install_code(&canister_id, &wasm)
+                    .with_mode(InstallMode::Reinstall)
+                    .call_and_wait()
+                    .await
+                    .unwrap();
+
+                let response = agent
+                    .update(&canister_id, method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap();
+                assert!(response.is_empty());
+
+                // A trivial WASM exporting no method.
+                let trivial_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+                ic00.install_code(&canister_id, &trivial_wasm)
+                    .with_mode(InstallMode::Reinstall)
+                    .call_and_wait()
+                    .await
+                    .unwrap();
+
+                let err = agent
+                    .update(&canister_id, method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::CertifiedReject { .. }));
+
+                let too_long_method_name = 'x'.to_string().repeat(1 << 20);
+                let err = agent
+                    .update(&canister_id, too_long_method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::CertifiedReject { .. }));
+
+                let too_long_method_name = 'x'.to_string().repeat(3 << 20);
+                let err = agent
+                    .update(&canister_id, too_long_method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                match err {
+                    AgentError::HttpError(payload) => {
+                        assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
+                    }
+                    _ => panic!("Unexpected error: {:?}", err),
+                };
+            }
+        }
+    });
+}
+
 async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16 {
     let status = response.status().as_u16();
     let text = if !(200..300).contains(&status) {
@@ -457,7 +569,13 @@ fn get_socket_addr(snapshot: &TopologySnapshot) -> SocketAddr {
     SocketAddr::new(sys_node.get_ip_addr(), 8080)
 }
 
-fn get_subnet_replica_url(snapshot: &TopologySnapshot) -> Url {
+fn get_app_subnet_replica_url(snapshot: &TopologySnapshot) -> Url {
+    let (_, app_subnet) = get_subnets(snapshot);
+    let app_node = app_subnet.nodes().next().unwrap();
+    app_node.get_public_url()
+}
+
+fn get_sys_subnet_replica_url(snapshot: &TopologySnapshot) -> Url {
     let (sys_subnet, _) = get_subnets(snapshot);
     let sys_node = sys_subnet.nodes().next().unwrap();
     sys_node.get_public_url()
@@ -519,6 +637,7 @@ fn main() -> Result<()> {
         .add_test(systest!(read_time; read_state::canister::Version::V2))
         .add_test(systest!(read_time; read_state::canister::Version::V3))
         .add_test(systest!(malformed_http_request))
+        .add_test(systest!(method_name_edge_cases))
         .execute_from_args()?;
 
     Ok(())

@@ -17823,6 +17823,7 @@ dependencies = [
  "time",
  "tokio",
  "url",
+ "wat",
 ]
 
 [[package]]
