@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # Redirects script output to both the local tty and serial console for real-time monitoring and logging across different environments.
+# Necessary for logs to be visible in nested environment.
 
 set -o nounset
 set -o pipefail
