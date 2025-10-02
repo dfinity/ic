@@ -1,7 +1,10 @@
 use crate::storage::get_rate_limiter_memory;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_rate_limits::{RateLimiter, RateLimiterConfig, StableMemoryCapacityStorage};
+use ic_nervous_system_rate_limits::{
+    RateLimiter, RateLimiterConfig, RateLimiterError, Reservation, StableMemoryCapacityStorage,
+};
 use ic_stable_structures::{DefaultMemoryImpl, memory_manager::VirtualMemory};
+use std::time::SystemTime;
 use std::{cell::RefCell, time::Duration};
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
@@ -27,8 +30,18 @@ thread_local! {
     ));
 }
 
-pub fn with_node_operator_rate_limiter<R>(
+fn with_node_operator_rate_limiter<R>(
     f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
 ) -> R {
     NODE_PROVIDER_RATE_LIMITER.with_borrow_mut(f)
+}
+
+fn try_reserve_node_operatator_capacity(
+    now: SystemTime,
+    key: impl ToString,
+    requested_capacity: u64,
+) -> Result<Reservation<String>, RateLimiterError> {
+    with_node_operator_rate_limiter(|rate_limiter| {
+        rate_limiter.try_reserve(now, key.to_string(), requested_capacity)
+    })
 }

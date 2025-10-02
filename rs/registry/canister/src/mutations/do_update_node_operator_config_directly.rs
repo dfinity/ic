@@ -21,13 +21,14 @@ impl Registry {
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
     ) {
-        self.do_update_node_operator_config_directly_(payload)
+        self.do_update_node_operator_config_directly_(payload, dfn_core::api::caller())
             .unwrap()
     }
 
     fn do_update_node_operator_config_directly_(
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
+        caller: PrincipalId,
     ) -> Result<(), String> {
         println!("{LOG_PREFIX}do_update_node_operator_config_directly: {payload:?}");
 
@@ -49,8 +50,6 @@ impl Registry {
                 .map_err(|e| format!("{e:?}"))?;
 
         // 2. Make sure that the caller is authorized to make the requested changes to node_operator_record.
-
-        let caller = dfn_core::api::caller();
         if caller
             != PrincipalId::try_from(&node_operator_record.node_provider_principal_id).unwrap()
         {
@@ -108,16 +107,47 @@ pub struct UpdateNodeOperatorConfigDirectlyPayload {
 mod tests {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
+    use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
+    use maplit::btreemap;
 
     #[test]
     fn test_update_node_operator_config_directly_is_rate_limited() {
         let mut registry = invariant_compliant_registry(0);
 
-        let request = UpdateNodeOperatorConfigDirectlyPayload {
-            node_operator_id: None,
-            node_provider_id: None,
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+
+        // Make a proposal to upgrade all unassigned nodes to a new version
+        let payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_id),
+            node_provider_principal_id: Some(node_provider_id),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
         };
 
-        registry.do_update_node_operator_config_directly(request);
+        registry.do_add_node_operator(payload);
+
+        let new_np_id = PrincipalId::new_user_test_id(10_001);
+        let request = UpdateNodeOperatorConfigDirectlyPayload {
+            node_operator_id: Some(node_operator_id),
+            node_provider_id: Some(new_np_id),
+        };
+
+        // Original should be able to change this.
+        let caller = node_provider_id;
+
+        registry
+            .do_update_node_operator_config_directly_(request, caller)
+            .unwrap();
+
+        assert_eq!(
+            get_node_operator_record(&registry, node_operator_id)
+                .unwrap()
+                .node_provider_principal_id,
+            new_np_id
+        );
     }
 }
