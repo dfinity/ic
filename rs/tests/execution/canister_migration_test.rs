@@ -25,8 +25,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
-        .with_timeout_per_test(Duration::from_secs(9999))
-        .with_overall_timeout(Duration::from_secs(9999))
         .execute_from_args()?;
 
     Ok(())
@@ -206,7 +204,10 @@ async fn test_async(env: TestEnv) {
 
     assert_eq!(decoded_result, Ok(()));
 
-    info!(logger, "Calling migration_status");
+    // The migration canister has a step where it waits for 5 minutes, so we give it a minute more than that.
+    println!("Wait over 5 minutes for processing.");
+    tokio::time::sleep(Duration::from_secs(360)).await;
+
     let status = nns_agent
         .update(&migration_canister_id, "migration_status")
         .with_arg(args.clone())
@@ -216,33 +217,12 @@ async fn test_async(env: TestEnv) {
     let decoded_status = Decode!(&status, Vec<MigrationStatus>)
         .expect("Failed to decode response from migration_status.");
 
-    assert_eq!(
-        decoded_status,
-        vec![MigrationStatus::InProgress {
-            status: "Accepted".into()
-        }]
-    );
-    std::thread::sleep(Duration::from_secs(360));
-    for _ in 0..10000 {
-        std::thread::sleep(Duration::from_secs(10));
-        let status = nns_agent
-            .update(&migration_canister_id, "migration_status")
-            .with_arg(args.clone())
-            .call_and_wait()
-            .await
-            .expect("Failed to call migration_status.");
-        let decoded_status = Decode!(&status, Vec<MigrationStatus>)
-            .expect("Failed to decode response from migration_status.");
-        println!("status: {:?}", decoded_status);
+    assert!(matches!(
+        decoded_status[0],
+        MigrationStatus::Succeeded { .. }
+    ));
 
-        // assert!(matches!(
-        //     decoded_status[0],
-        //     MigrationStatus::Succeeded { .. }
-        // ));
-        if matches!(decoded_status[0], MigrationStatus::Succeeded { .. }) {
-            break;
-        }
-    }
+    // assert that the source canister is on the target subnet.
     #[derive(CandidType, Deserialize)]
     struct GetSubnetForCanisterArgs {
         principal: Option<Principal>,
