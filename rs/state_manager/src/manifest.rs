@@ -841,7 +841,7 @@ fn files_with_same_inodes(
         },
     )
     .into_iter()
-    .filter_map(|f| f)
+    .flatten()
     .collect()
 }
 

@@ -1,11 +1,11 @@
 use crate::manifest::{
-    ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript, MAX_FILE_SIZE_TO_GROUP, ManifestDelta,
-    ManifestMetrics, ManifestValidationError, RehashManifest, StateSyncVersion,
-    build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
-    file_chunk_range, files_with_same_inodes, files_with_sizes, filter_out_zero_chunks,
-    hash::ManifestHash, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
-    validate_chunk, validate_manifest, validate_manifest_internal_consistency,
-    validate_meta_manifest, validate_sub_manifest,
+    ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript, FileWithSize,
+    MAX_FILE_SIZE_TO_GROUP, ManifestDelta, ManifestMetrics, ManifestValidationError,
+    RehashManifest, StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks,
+    build_meta_manifest, compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes,
+    files_with_sizes, filter_out_zero_chunks, hash::ManifestHash, hash_plan, manifest_hash,
+    manifest_hash_v1, manifest_hash_v2, meta_manifest_hash, validate_chunk, validate_manifest,
+    validate_manifest_internal_consistency, validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
     ChunkInfo, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo, Manifest, MetaManifest,
@@ -903,14 +903,12 @@ fn test_simple_manifest_encoding_roundtrip() {
 
 #[test]
 fn test_hash_plan() {
-    //    use crate::manifest::{build_chunk_table_parallel, files_with_sizes, hash_plan, ChunkAction};
-
     let metrics_registry = MetricsRegistry::new();
     let manifest_metrics = ManifestMetrics::new(&metrics_registry);
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let base_dir = dir.path().join("base");
     let populate_checkpoint = |root: &Path| {
-        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(root).unwrap();
 
         fs::write(root.join("root.bin"), vec![2u8; 1000 * 1024])
             .expect("failed to create file 'root.bin'");
@@ -970,8 +968,6 @@ fn test_hash_plan() {
     let files_with_same_inodes = btreeset! {
         PathBuf::from("root.bin"),
     };
-
-    let reused_hash = manifest_old.chunk_table[1].hash;
 
     let build_manifest_from_hash_plan = |hash_plan| {
         let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
@@ -1093,9 +1089,7 @@ fn test_hash_plan() {
 }
 
 #[test]
-fn test_files_with_same_inodes_accounts_for_hardlinks() {
-    use crate::manifest::{FileWithSize, ManifestDelta, files_with_same_inodes};
-
+fn test_files_with_same_inodes() {
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let root = dir.path();
     let checkpoint0 = root.join("checkpoint0");
@@ -1349,7 +1343,6 @@ fn test_file_index_independent_file_hash() {
 #[test]
 fn all_same_inodes_are_detected() {
     use std::fs::File;
-    use std::fs::hard_link;
 
     let base = tmpdir("base");
     let target = tmpdir("target");
@@ -1367,7 +1360,7 @@ fn all_same_inodes_are_detected() {
     let create_same_file_in_base_and_target = |name| {
         let mut file = File::create(base.path().join(name)).unwrap();
         file.write_all(b"data").unwrap();
-        hard_link(base.path().join(name), target.path().join(name)).unwrap();
+        fs::hard_link(base.path().join(name), target.path().join(name)).unwrap();
     };
 
     create_file_in_target("a_new");
