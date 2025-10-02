@@ -22,6 +22,7 @@ type BlockStorage = BTreeMap<u64, ICRC3Value>;
 thread_local! {
     static BLOCKS: RefCell<BlockStorage> = const { RefCell::new(BTreeMap::new()) };
     static NEXT_BLOCK_ID: RefCell<u64> = const { RefCell::new(0) };
+    static ICRC3_ENABLED: RefCell<bool> = const { RefCell::new(true) };
 }
 
 /// Add a block to the ledger storage
@@ -86,16 +87,18 @@ fn construct_hash_tree() -> HashTree {
 #[query(name = "icrc1_supported_standards")]
 #[candid_method(query, rename = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    let standards = vec![
-        StandardRecord {
+    let icrc3_enabled = ICRC3_ENABLED.with(|icrc3_enabled| *icrc3_enabled.borrow());
+    let mut standards = vec![];
+    if icrc3_enabled {
+        standards.push(StandardRecord {
             name: "ICRC-3".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
-        },
-        StandardRecord {
-            name: "ICRC-10".to_string(),
-            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
-        },
-    ];
+        });
+    }
+    standards.push(StandardRecord {
+        name: "ICRC-10".to_string(),
+        url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
+    });
     standards
 }
 
@@ -179,6 +182,12 @@ fn icrc1_metadata() -> Vec<(String, MetadataValue)> {
         MetadataValue::entry("icrc1:symbol", "XTST"),
         MetadataValue::entry("icrc1:fee", 0u64),
     ]
+}
+
+#[candid_method(update)]
+#[update]
+pub fn set_icrc3_enabled(enabled: bool) {
+    ICRC3_ENABLED.with(|icrc3_enabled| *icrc3_enabled.borrow_mut() = enabled);
 }
 
 #[init]

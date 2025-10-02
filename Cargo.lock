@@ -7451,6 +7451,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ckdoge-minter"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "async-trait",
+ "candid",
+ "candid_parser",
+ "ic-cdk",
+ "ic-ckbtc-minter",
+ "ic-ckdoge-minter-test-utils",
+ "icrc-ledger-types",
+ "pocket-ic",
+ "serde",
+]
+
+[[package]]
+name = "ic-ckdoge-minter-test-utils"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-ckdoge-minter",
+ "ic-icrc1-ledger",
+ "ic-management-canister-types",
+ "icrc-ledger-types",
+ "pocket-ic",
+]
+
+[[package]]
 name = "ic-cketh-minter"
 version = "0.9.0"
 dependencies = [
@@ -7622,6 +7650,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rayon",
  "rstest",
  "serde_cbor",
  "slog",
@@ -7658,6 +7687,24 @@ dependencies = [
  "slog",
  "strum_macros 0.26.4",
  "tokio",
+]
+
+[[package]]
+name = "ic-consensus-cup-utils"
+version = "0.9.0"
+dependencies = [
+ "ic-consensus-dkg",
+ "ic-consensus-idkg",
+ "ic-crypto-test-utils-ni-dkg",
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-types",
+ "ic-types-test-utils",
+ "phantom_newtype",
+ "prost 0.13.4",
+ "slog",
 ]
 
 [[package]]
@@ -11294,6 +11341,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-rate-limits"
+version = "0.0.1"
+dependencies = [
+ "ic-stable-structures 0.6.8",
+ "serde",
+]
+
+[[package]]
 name = "ic-nervous-system-root"
 version = "0.9.0"
 dependencies = [
@@ -11391,6 +11446,18 @@ name = "ic-nervous-system-timestamp"
 version = "0.0.1"
 dependencies = [
  "time",
+]
+
+[[package]]
+name = "ic-nervous-system-tools-neuron-subaccount"
+version = "0.9.0"
+dependencies = [
+ "clap 4.5.27",
+ "hex",
+ "ic-base-types",
+ "ic-nervous-system-common",
+ "ic-nns-constants",
+ "icp-ledger",
 ]
 
 [[package]]
@@ -11586,6 +11653,7 @@ dependencies = [
  "ic-nervous-system-linear-map",
  "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
+ "ic-nervous-system-rate-limits",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-nervous-system-temporary",
@@ -12051,6 +12119,7 @@ dependencies = [
  "async-trait",
  "candid",
  "candid_parser",
+ "chrono",
  "futures",
  "futures-util",
  "ic-base-types",
@@ -12088,6 +12157,7 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "chrono",
  "ic-base-types",
  "ic-nervous-system-proto",
  "rewards-calculation",
@@ -12799,6 +12869,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-cup-utils",
  "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
@@ -12868,6 +12939,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-cup-utils",
  "ic-consensus-dkg",
  "ic-crypto",
  "ic-crypto-sha2",
@@ -14004,6 +14076,7 @@ dependencies = [
  "ciborium",
  "clap 4.5.27",
  "ed25519-dalek",
+ "fs_extra",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
@@ -14011,6 +14084,7 @@ dependencies = [
  "ic-btc-consensus",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-cup-utils",
  "ic-consensus-utils",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
@@ -14374,7 +14448,6 @@ version = "0.9.0"
 dependencies = [
  "ic-artifact-pool",
  "ic-config",
- "ic-consensus",
  "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-interfaces",
@@ -15602,7 +15675,6 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-ledger-suite-in-memory-ledger",
  "ic-ledger-suite-state-machine-helpers",
- "ic-ledger-suite-state-machine-tests",
  "ic-ledger-test-utils",
  "ic-nns-constants",
  "ic-nns-test-utils-golden-nns-state",
@@ -17950,6 +18022,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "consensus-upgrade-system-tests",
  "ic-agent",
  "ic-base-types",
  "ic-nns-constants",
@@ -18508,6 +18581,7 @@ dependencies = [
  "backoff",
  "candid",
  "clap 4.5.27",
+ "config",
  "env-file-reader",
  "exec",
  "get_if_addrs",
@@ -18518,7 +18592,7 @@ dependencies = [
  "hyper-util",
  "ic-agent",
  "ic-config",
- "ic-consensus",
+ "ic-consensus-cup-utils",
  "ic-consensus-dkg",
  "ic-crypto",
  "ic-crypto-node-key-generation",
@@ -19206,14 +19280,17 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
+ "ic-registry-transport",
  "ic-sns-wasm",
  "ic-transport-types",
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
+ "prost 0.13.4",
  "registry-canister",
  "reqwest 0.12.15",
  "schemars",
+ "semver",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -19296,7 +19373,9 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-handler-root",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
@@ -19312,6 +19391,7 @@ dependencies = [
  "ic-utils-thread",
  "ic-validator-ingress-message",
  "icp-ledger",
+ "icrc-ledger-types",
  "itertools 0.12.1",
  "libc",
  "nix 0.29.0",
@@ -20735,6 +20815,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "remote_attestation_server"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "attestation",
+ "config",
+ "config_types",
+ "ic_sev",
+ "remote_attestation_shared",
+ "sev",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
+name = "remote_attestation_shared"
+version = "0.0.0"
+dependencies = [
+ "attestation",
+ "prost 0.13.4",
+ "prost-build 0.13.4",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "rend"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20881,7 +20987,6 @@ dependencies = [
  "chrono",
  "ic-base-types",
  "ic-protobuf",
- "ic-types",
  "itertools 0.12.1",
  "maplit",
  "rust_decimal",
@@ -21052,7 +21157,6 @@ dependencies = [
  "lazy_static",
  "num-bigint 0.4.6",
  "prometheus 0.13.4",
- "proptest",
  "serde",
  "serde_bytes",
  "serde_json",

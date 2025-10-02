@@ -101,3 +101,16 @@ system_test(
         "@crate_index//:anyhow",
     ],
 )
+
+system_test(
+    name = "kill_start_test",
+    tags = ["long_test"],
+    uses_guestos_img = True,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)

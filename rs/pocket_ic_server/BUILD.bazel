@@ -8,6 +8,7 @@ LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//packages/ic-error-types",
+    "//packages/icrc-ledger-types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
@@ -41,7 +42,9 @@ LIB_DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
+    "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",

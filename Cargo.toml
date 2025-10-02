@@ -65,6 +65,7 @@ members = [
     "rs/config",
     "rs/consensus",
     "rs/consensus/certification",
+    "rs/consensus/cup_utils",
     "rs/consensus/dkg",
     "rs/consensus/idkg",
     "rs/consensus/mocks",
@@ -139,6 +140,7 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
+    "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
@@ -265,6 +267,7 @@ members = [
     "rs/nervous_system/proto",
     "rs/nervous_system/proto/protobuf_generator",
     "rs/nervous_system/proxied_canister_calls_tracker",
+    "rs/nervous_system/rate_limits",
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
@@ -273,6 +276,7 @@ members = [
     "rs/nervous_system/timers",
     "rs/nervous_system/timer_task",
     "rs/nervous_system/timestamp",
+    "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
@@ -527,6 +531,8 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/ic_os/remote_attestation/shared",
+    "rs/ic_os/remote_attestation/server",
 ]
 
 resolver = "2"
@@ -804,9 +810,11 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
     "std",
     "brotli",
+    "tls12",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
@@ -901,4 +909,3 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
-
