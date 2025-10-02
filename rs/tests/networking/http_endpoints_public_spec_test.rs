@@ -33,7 +33,7 @@ Malformed HTTP request tests:
 4. Update call with malformed textual representation of its effective canister ID is rejected with 4xx.
 
 
-Edge cases for (update and query call) method names:
+Edge cases for method names in update and query calls:
 - empty method name (succeeds if the canister exports a method with an empty name, fails gracefully otherwise);
 - method name with spaces (succeeds if the canister exports a method whose name contains spaces, fails gracefully otherwise);
 - long method name (succeeds if the canister exports a method with a long name, fails gracefully otherwise);
@@ -421,14 +421,41 @@ fn wasm_with_exported_method_name(method_name: String) -> Vec<u8> {
     wat::parse_str(wat).unwrap()
 }
 
+async fn deploy_wasm_to_fresh_canister(
+    agent: &Agent,
+    effective_canister_id: Principal,
+    wasm: &[u8],
+) -> Principal {
+    let ic00 = ManagementCanister::create(agent);
+    let canister_id = ic00
+        .create_canister()
+        .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id)
+        .call_and_wait()
+        .await
+        .unwrap()
+        .0;
+    ic00.install_code(&canister_id, wasm)
+        .with_mode(InstallMode::Reinstall)
+        .call_and_wait()
+        .await
+        .unwrap();
+    canister_id
+}
+
 fn method_name_edge_cases(env: TestEnv) {
+    let logger = env.logger();
     let snapshot = env.topology_snapshot();
+
+    // We use application subnet in this test since its ingress message size limits
+    // are much lower than the maximum allowed size of HTTP requests.
     let (_primary, _sys_uc, app_uc) = get_canister_ids(&snapshot);
     let subnet_replica_url = get_app_subnet_replica_url(&snapshot);
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
         for url in [subnet_replica_url, api_bn_url] {
+            info!(logger, "url: {}", url);
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
@@ -439,27 +466,17 @@ fn method_name_edge_cases(env: TestEnv) {
                 .build()
                 .unwrap();
             agent.fetch_root_key().await.unwrap();
-            let ic00 = ManagementCanister::create(&agent);
-            let canister_id = ic00
-                .create_canister()
-                .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(app_uc)
-                .call_and_wait()
-                .await
-                .unwrap()
-                .0;
 
             for method_name in [
                 "",
                 "method name with spaces",
                 &'x'.to_string().repeat(20_000),
             ] {
+                // We start with the successful case of a canister
+                // actually exporting a method with the given name.
                 let wasm = wasm_with_exported_method_name(method_name.to_string());
-                ic00.install_code(&canister_id, &wasm)
-                    .with_mode(InstallMode::Reinstall)
-                    .call_and_wait()
-                    .await
-                    .unwrap();
+                let canister_id =
+                    deploy_wasm_to_fresh_canister(&agent, app_uc.into(), wasm.as_slice()).await;
 
                 let response = agent
                     .update(&canister_id, method_name)
@@ -467,14 +484,16 @@ fn method_name_edge_cases(env: TestEnv) {
                     .await
                     .unwrap();
                 assert!(response.is_empty());
+                let response = agent.query(&canister_id, method_name).call().await.unwrap();
+                assert!(response.is_empty());
 
-                // A trivial WASM exporting no method.
+                // We continue with testing graceful handling of method names
+                // not exported by the canister.
+                // To this end, we use a trivial WASM exporting no method.
                 let trivial_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-                ic00.install_code(&canister_id, &trivial_wasm)
-                    .with_mode(InstallMode::Reinstall)
-                    .call_and_wait()
-                    .await
-                    .unwrap();
+                let canister_id =
+                    deploy_wasm_to_fresh_canister(&agent, app_uc.into(), trivial_wasm.as_slice())
+                        .await;
 
                 let err = agent
                     .update(&canister_id, method_name)
@@ -482,18 +501,32 @@ fn method_name_edge_cases(env: TestEnv) {
                     .await
                     .unwrap_err();
                 assert!(matches!(err, AgentError::CertifiedReject { .. }));
+                let err = agent
+                    .query(&canister_id, method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
 
+                info!(logger, "method name size: 1MiB");
                 let too_long_method_name = 'x'.to_string().repeat(1 << 20);
                 let err = agent
-                    .update(&canister_id, too_long_method_name)
+                    .update(&canister_id, &too_long_method_name)
                     .call_and_wait()
                     .await
                     .unwrap_err();
                 assert!(matches!(err, AgentError::CertifiedReject { .. }));
+                let err = agent
+                    .query(&canister_id, &too_long_method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
 
+                info!(logger, "method name size: 3MiB");
                 let too_long_method_name = 'x'.to_string().repeat(3 << 20);
                 let err = agent
-                    .update(&canister_id, too_long_method_name)
+                    .update(&canister_id, &too_long_method_name)
                     .call_and_wait()
                     .await
                     .unwrap_err();
@@ -503,6 +536,12 @@ fn method_name_edge_cases(env: TestEnv) {
                     }
                     _ => panic!("Unexpected error: {:?}", err),
                 };
+                let err = agent
+                    .query(&canister_id, &too_long_method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
             }
         }
     });
