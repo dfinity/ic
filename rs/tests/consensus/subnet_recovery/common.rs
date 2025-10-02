@@ -544,7 +544,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     );
     let nodes_except_upload_download_nodes = app_subnet
         .nodes()
-        // TODO (CON-1590): Replace upload + download(_state) node by single entity (a DFINITY-owned node)
+        // TODO (CON-1590): Replace with only upload_node
         .filter(|n| n.node_id != upload_node.node_id && n.node_id != download_node.0.node_id)
         .collect::<Vec<_>>();
     let admin_ssh_sessions =
@@ -560,6 +560,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
+        // TODO (CON-1590): Perform local recovery on upload_node
         local_recovery(&download_node.0, subnet_recovery, &logger);
     } else {
         info!(logger, "Performing remote recovery");
