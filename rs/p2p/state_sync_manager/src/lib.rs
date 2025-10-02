@@ -368,6 +368,7 @@ mod tests {
                     Ok(())
                 })
                 .in_sequence(&mut seq);
+            c.expect_is_base_layer().returning(|| false);
             s.expect_maybe_start_state_sync()
                 .once()
                 .return_once(|_| Some(Box::new(c)));

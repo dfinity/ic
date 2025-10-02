@@ -132,7 +132,7 @@ impl OngoingStateSync {
                 Some((new_peer, partial_state)) = self.new_peers_rx.recv() => {
                     // For now, adverts with a partial state are ignored
                     if partial_state.is_some() {
-                        info!(self.log, "STATE_SYNC: Received a partial state advert");
+                        info!(self.log, "STATE_SYNC: Received a partial state advert from {}", new_peer);
                         continue;
                     }
 
@@ -304,6 +304,10 @@ impl OngoingStateSync {
                 }
                 Some(_) => {}
                 None => {
+                    if self.chunks_to_download.num_entries() != 0 {
+                        return;
+                    }
+
                     // If we store chunks in self.chunks_to_download we will eventually initiate and
                     // by filtering with the current in flight request we avoid double download.
                     let tracker = tracker.lock().await;
@@ -325,7 +329,7 @@ impl OngoingStateSync {
                         );
                     }
 
-                    if added == 0 && !self.is_base_layer && tracker.is_base_layer() {
+                    if !self.is_base_layer && tracker.is_base_layer() {
                         info!(self.log, "STATE_SYNC: Starting to download base layer");
                         self.is_base_layer = true;
                     }

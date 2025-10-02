@@ -127,6 +127,10 @@ impl ChunksToDownload {
     pub(crate) fn next_xor_distance(&self) -> Option<XorDistance> {
         self.0.first_key_value().map(|(key, _)| key.clone())
     }
+
+    pub(crate) fn num_entries(&self) -> usize {
+        self.0.len()
+    }
 }
 
 // TODO: Test XorMetric ordering
