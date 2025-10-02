@@ -3611,7 +3611,10 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
         metric_vec(&[
             (
                 &[("api_type", "update"), ("memory_type", "wasm")],
-                HistogramStats { count: 1, sum: 1.0 }
+                HistogramStats {
+                    count: 1,
+                    sum: 16.0
+                }
             ),
             (
                 &[("api_type", "update"), ("memory_type", "stable")],
@@ -3677,7 +3680,7 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
                 &[("api_type", "update"), ("memory_type", "wasm")],
                 HistogramStats {
                     count: 1,
-                    sum: 262145.0 // (1GiB + 4096) / 4096
+                    sum: 262160.0 // (1GiB + 65536) / 4096
                 }
             ),
             (
@@ -9582,24 +9585,12 @@ fn page_metrics_are_recorded(
     assert_eq!(err.code(), expected_code);
 
     const OS_PAGES_PER_WASM_PAGE: f64 = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64;
-    let (
-        api_type,
-        wasm_dirty_os_pages,
-        wasm_dirty_wasm_pages,
-        wasm_accessed_os_pages,
-        wasm_accessed_wasm_pages,
-    ) = if call_type == "query" {
+    let (api_type, wasm_dirty_os_pages, wasm_dirty_wasm_pages) = if call_type == "query" {
         // At the moment, queries do not report Wasm dirty pages and over-estimate
         // Wasm accessed pages. This will be fixed in a future PR.
-        (
-            "replicated query",
-            0.0,
-            0.0,
-            384.0,
-            384.0 / OS_PAGES_PER_WASM_PAGE,
-        )
+        ("replicated query", 0.0, 0.0)
     } else {
-        ("update", 2.0, 2.0, 2.0, 2.0)
+        ("update", 32.0, 2.0)
     };
     assert_eq!(
         fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
@@ -9640,7 +9631,7 @@ fn page_metrics_are_recorded(
                 &[("api_type", api_type), ("memory_type", "wasm")],
                 HistogramStats {
                     count: 1,
-                    sum: wasm_accessed_os_pages
+                    sum: 32.0
                 }
             ),
             (
@@ -9658,7 +9649,7 @@ fn page_metrics_are_recorded(
             &[("api_type", api_type), ("memory_type", "wasm")],
             HistogramStats {
                 count: 1,
-                sum: wasm_accessed_wasm_pages
+                sum: 32.0 / OS_PAGES_PER_WASM_PAGE
             }
         )])
     );

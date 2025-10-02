@@ -17410,6 +17410,7 @@ dependencies = [
  "nix 0.24.3",
  "proptest",
  "rayon",
+ "rstest",
  "slog",
  "tempfile",
 ]
