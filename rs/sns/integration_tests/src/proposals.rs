@@ -2251,9 +2251,9 @@ fn test_intermittent_proposal_submission() {
             runtime.tick().await;
         }
 
-        // Assert that proposal 1 has disappeared.
+        // Assert that proposals 1 & 2 have disappeared.
         let proposal_ids: Vec<ProposalId> = proposals.iter().map(|p| p.id.unwrap()).collect();
-        assert_eq!(proposal_ids, vec![p3_id, p2_id]);
+        assert_eq!(proposal_ids, vec![p3_id]);
 
         Ok(())
     });
