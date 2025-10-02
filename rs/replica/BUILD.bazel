@@ -150,7 +150,7 @@ rust_test(
     crate = ":replica",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -162,7 +162,7 @@ rust_test_suite(
     data = [":replica"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [":replica_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

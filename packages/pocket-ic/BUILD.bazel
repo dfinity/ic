@@ -77,7 +77,7 @@ rust_test(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [
         # Keep sorted.
@@ -132,7 +132,7 @@ rust_test(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [
         # Keep sorted.
@@ -179,7 +179,7 @@ rust_test(
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
             # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
             "requires-network",
-            "test_macos",
+            "test_all_platforms",
             "long_test",  # The P90 of this test is over 8m for the week starting on 2025-08-20
         ],
         deps = [
@@ -222,7 +222,7 @@ rust_test(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [
         ":pocket-ic",
@@ -249,7 +249,7 @@ rust_test(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [
         ":pocket-ic",
