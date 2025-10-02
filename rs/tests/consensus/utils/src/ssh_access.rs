@@ -142,7 +142,7 @@ pub fn disable_ssh_access_to_node(
     })?;
 
     node.block_on_bash_script_from_session(
-        session,
+        &session,
         &format!("rm /var/lib/{account}/.ssh/authorized_keys"),
     )
     .map_err(|e| {
