@@ -101,27 +101,6 @@ fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
 
 /// Copy select bootstrap files from extracted directory to their destinations
 fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
-    let ic_crypto_src = extracted_dir.join("ic_crypto");
-    let ic_crypto_dst = state_root.join("crypto");
-    if ic_crypto_src.exists() {
-        println!("Installing initial crypto material");
-        copy_directory_recursive(&ic_crypto_src, &ic_crypto_dst)?;
-    }
-
-    let ic_state_src = extracted_dir.join("ic_state");
-    let ic_state_dst = state_root.join("data/ic_state");
-    if ic_state_src.exists() {
-        println!("Installing initial state");
-        copy_directory_recursive(&ic_state_src, &ic_state_dst)?;
-    }
-
-    let ic_registry_src = extracted_dir.join("ic_registry_local_store");
-    let ic_registry_dst = state_root.join("data/ic_registry_local_store");
-    if ic_registry_src.exists() {
-        println!("Setting up initial ic_registry_local_store");
-        copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
-    }
-
     let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
@@ -147,6 +126,27 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
     }
     #[cfg(feature = "dev")]
     {
+        let ic_crypto_src = extracted_dir.join("ic_crypto");
+        let ic_crypto_dst = state_root.join("crypto");
+        if ic_crypto_src.exists() {
+            println!("Installing initial crypto material");
+            copy_directory_recursive(&ic_crypto_src, &ic_crypto_dst)?;
+        }
+
+        let ic_state_src = extracted_dir.join("ic_state");
+        let ic_state_dst = state_root.join("data/ic_state");
+        if ic_state_src.exists() {
+            println!("Installing initial state");
+            copy_directory_recursive(&ic_state_src, &ic_state_dst)?;
+        }
+
+        let ic_registry_src = extracted_dir.join("ic_registry_local_store");
+        let ic_registry_dst = state_root.join("data/ic_registry_local_store");
+        if ic_registry_src.exists() {
+            println!("Setting up initial ic_registry_local_store");
+            copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
+        }
+
         let nns_key_override_src = extracted_dir.join("nns_public_key_override.pem");
         if nns_key_override_src.exists() {
             println!(
@@ -228,29 +228,6 @@ mod tests {
         fs::create_dir_all(&bootstrap_dir).unwrap();
 
         // Create test files and directories
-        fs::create_dir_all(bootstrap_dir.join("ic_crypto")).unwrap();
-        fs::write(
-            bootstrap_dir.join("ic_crypto").join("key.pem"),
-            "test_crypto_key",
-        )
-        .unwrap();
-
-        fs::create_dir_all(bootstrap_dir.join("ic_state")).unwrap();
-        fs::write(
-            bootstrap_dir.join("ic_state").join("state.dat"),
-            "test_state_data",
-        )
-        .unwrap();
-
-        fs::create_dir_all(bootstrap_dir.join("ic_registry_local_store")).unwrap();
-        fs::write(
-            bootstrap_dir
-                .join("ic_registry_local_store")
-                .join("registry.dat"),
-            "test_registry_data",
-        )
-        .unwrap();
-
         fs::write(
             bootstrap_dir.join("node_operator_private_key.pem"),
             "test_node_op_key",
@@ -272,9 +249,6 @@ mod tests {
             .args(["cf", tar_path.to_str().unwrap()])
             .current_dir(&bootstrap_dir)
             .args([
-                "./ic_crypto",
-                "./ic_state",
-                "./ic_registry_local_store",
                 "./node_operator_private_key.pem",
                 "./accounts_ssh_authorized_keys",
             ])
@@ -299,29 +273,16 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify files were copied correctly
-        assert!(state_root.join("crypto").join("key.pem").exists());
-        assert!(state_root.join("data/ic_state").join("state.dat").exists());
-        assert!(
-            state_root
-                .join("data/ic_registry_local_store")
-                .join("registry.dat")
-                .exists()
-        );
         assert!(
             config_root
                 .join("accounts_ssh_authorized_keys")
                 .join("authorized_keys")
                 .exists()
         );
-
-        // Verify file contents
-        assert_eq!(
-            fs::read_to_string(state_root.join("crypto").join("key.pem")).unwrap(),
-            "test_crypto_key"
-        );
-        assert_eq!(
-            fs::read_to_string(state_root.join("data/ic_state").join("state.dat")).unwrap(),
-            "test_state_data"
+        assert!(
+            state_root
+                .join("data/node_operator_private_key.pem")
+                .exists()
         );
     }
 
@@ -420,30 +381,6 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        // Create test files and directories
-        fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
-        fs::write(
-            extracted_dir.join("ic_crypto").join("key.pem"),
-            "test_crypto_key",
-        )
-        .unwrap();
-
-        fs::create_dir_all(extracted_dir.join("ic_state")).unwrap();
-        fs::write(
-            extracted_dir.join("ic_state").join("state.dat"),
-            "test_state_data",
-        )
-        .unwrap();
-
-        fs::create_dir_all(extracted_dir.join("ic_registry_local_store")).unwrap();
-        fs::write(
-            extracted_dir
-                .join("ic_registry_local_store")
-                .join("registry.dat"),
-            "test_registry_data",
-        )
-        .unwrap();
-
         fs::write(
             extracted_dir.join("node_operator_private_key.pem"),
             "test_node_op_key",
@@ -464,14 +401,6 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify files were copied correctly
-        assert!(state_root.join("crypto").join("key.pem").exists());
-        assert!(state_root.join("data/ic_state").join("state.dat").exists());
-        assert!(
-            state_root
-                .join("data/ic_registry_local_store")
-                .join("registry.dat")
-                .exists()
-        );
         assert!(
             state_root
                 .join("data/node_operator_private_key.pem")
@@ -485,23 +414,6 @@ mod tests {
         );
 
         // Verify file contents
-        assert_eq!(
-            fs::read_to_string(state_root.join("crypto").join("key.pem")).unwrap(),
-            "test_crypto_key"
-        );
-        assert_eq!(
-            fs::read_to_string(state_root.join("data/ic_state").join("state.dat")).unwrap(),
-            "test_state_data"
-        );
-        assert_eq!(
-            fs::read_to_string(
-                state_root
-                    .join("data/ic_registry_local_store")
-                    .join("registry.dat")
-            )
-            .unwrap(),
-            "test_registry_data"
-        );
         assert_eq!(
             fs::read_to_string(state_root.join("data/node_operator_private_key.pem")).unwrap(),
             "test_node_op_key"
@@ -529,6 +441,30 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
+        // Create test files and directories
+        fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_crypto").join("key.pem"),
+            "test_crypto_key",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("ic_state")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_state").join("state.dat"),
+            "test_state_data",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("ic_registry_local_store")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("ic_registry_local_store")
+                .join("registry.dat"),
+            "test_registry_data",
+        )
+        .unwrap();
+
         // Create nns_public_key_override file
         fs::write(
             extracted_dir.join("nns_public_key_override.pem"),
@@ -540,8 +476,35 @@ mod tests {
         let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
         assert!(result.is_ok());
 
-        // Verify that the override key was copied
+        // Verify dev files were copied correctly
+        assert!(state_root.join("crypto").join("key.pem").exists());
+        assert!(state_root.join("data/ic_state").join("state.dat").exists());
+        assert!(
+            state_root
+                .join("data/ic_registry_local_store")
+                .join("registry.dat")
+                .exists()
+        );
         assert!(state_root.join("data/nns_public_key.pem").exists());
+
+        // Verify file contents
+        assert_eq!(
+            fs::read_to_string(state_root.join("crypto").join("key.pem")).unwrap(),
+            "test_crypto_key"
+        );
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/ic_state").join("state.dat")).unwrap(),
+            "test_state_data"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                state_root
+                    .join("data/ic_registry_local_store")
+                    .join("registry.dat")
+            )
+            .unwrap(),
+            "test_registry_data"
+        );
         assert_eq!(
             fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
             "override_nns_key"
@@ -560,6 +523,28 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
+        // Create state injection files
+        fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_crypto").join("key.pem"),
+            "test_crypto_key",
+        )
+        .unwrap();
+        fs::create_dir_all(extracted_dir.join("ic_state")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_state").join("state.dat"),
+            "test_state_data",
+        )
+        .unwrap();
+        fs::create_dir_all(extracted_dir.join("ic_registry_local_store")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("ic_registry_local_store")
+                .join("registry.dat"),
+            "test_registry_data",
+        )
+        .unwrap();
+
         // Create nns_public_key_override file
         fs::write(
             extracted_dir.join("nns_public_key_override.pem"),
@@ -573,5 +558,14 @@ mod tests {
 
         // Verify that the override key was not copied
         assert!(!state_root.join("data/nns_public_key.pem").exists());
+        assert!(!state_root.join("data/nns_public_key_override.pem").exists());
+        assert!(!state_root.join("crypto").join("key.pem").exists());
+        assert!(!state_root.join("data/ic_state").join("state.dat").exists());
+        assert!(
+            !state_root
+                .join("data/ic_registry_local_store")
+                .join("registry.dat")
+                .exists()
+        );
     }
 }
