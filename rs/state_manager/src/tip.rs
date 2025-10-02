@@ -1564,7 +1564,7 @@ fn handle_compute_manifest_request(
     }
     let _timer = request_timer(metrics, "compute_manifest_rehash");
     let start = Instant::now();
-    let rehash_delta = BaseManifestInfo {
+    let rehash_manifest_info = BaseManifestInfo {
         base_manifest: manifest.clone(),
         base_checkpoint: checkpoint_layout.clone(),
         base_height: checkpoint_layout.height(),
@@ -1577,7 +1577,7 @@ fn handle_compute_manifest_request(
         state_sync_version,
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-        Some(&rehash_delta),
+        Some(&rehash_manifest_info),
         RehashManifest::Yes,
     )
     .unwrap_or_else(|err| {
