@@ -41,7 +41,7 @@ use ic_consensus_system_test_utils::{
     set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, execute_bash_command,
-        wait_until_authentication_fails, wait_until_authentication_is_granted,
+        wait_until_authentication_is_granted,
     },
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,

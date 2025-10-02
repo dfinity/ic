@@ -11,8 +11,7 @@ use ic_consensus_system_test_utils::{
     set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
-        update_subnet_record, wait_until_authentication_fails,
-        wait_until_authentication_is_granted,
+        update_subnet_record, wait_until_authentication_is_granted,
     },
     upgrade::assert_assigned_replica_version,
 };
