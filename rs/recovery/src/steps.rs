@@ -335,9 +335,11 @@ impl Step for DownloadIcStateStep {
             .chain(self.additional_excludes.iter().map(|x| x.as_str()))
             .collect();
 
+        let nb_checkpoints_to_download = 2;
         let res = ssh_helper
             .ssh(format!(
-                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');"
+                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>={tot} {{ print a[n%{tot}] }} {{ a[n++%{tot}]=$0 }}');",
+                tot = nb_checkpoints_to_download
             ))?
             .unwrap_or_default();
         res.trim().split(' ').for_each(|cp| {
