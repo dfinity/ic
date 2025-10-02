@@ -2412,7 +2412,6 @@ mod tests {
         // A dealing for a transcript that is requested by finalized block,
         // but we don't have the dealing yet(share deferred)
         let (_, support) = create_support(id_3, NODE_2, NODE_3);
-        let msg_id_3 = support.message_id();
         artifacts.push(UnvalidatedArtifact {
             message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
@@ -2452,16 +2451,36 @@ mod tests {
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                assert!(
-                    is_moved_to_validated(&change_set, &msg_id_2)
-                        || is_moved_to_validated(&change_set, &msg_id_2_dupl)
-                );
-                assert!(
-                    is_handle_invalid(&change_set, &msg_id_2)
-                        || is_handle_invalid(&change_set, &msg_id_2_dupl)
-                );
+                // Initially, we should only attempt to validate 1 of the two shares for transcript 2,
+                // as the verification threshold is 1.
+                assert_eq!(change_set.len(), 2);
+                let moved_id_2 = is_moved_to_validated(&change_set, &msg_id_2);
+                if !moved_id_2 {
+                    // If we didn't move id_2, then we must have moved the duplicate
+                    assert!(is_moved_to_validated(&change_set, &msg_id_2_dupl));
+                }
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id_2)
+                        .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
+                );
+
+                // apply the change set
+                idkg_pool.apply(change_set);
+
+                // The second share for transcript 2 should be invalidated in the next iteration, as
+                // it is a duplicate of the already validated share.
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                if moved_id_2 {
+                    is_handle_invalid(&change_set, &msg_id_2_dupl);
+                } else {
+                    is_handle_invalid(&change_set, &msg_id_2);
+                }
 
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
                 assert!(
@@ -2489,12 +2508,26 @@ mod tests {
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 4);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
-                assert!(is_handle_invalid(&change_set, &msg_id_3));
+                assert_eq!(change_set.len(), 2);
+                let invalid_id_2 = is_handle_invalid(&change_set, &msg_id_2);
+                if !invalid_id_2 {
+                    assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
+                }
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                assert!(pre_signer.validated_dealing_supports().is_empty());
 
+                // apply the change set
+                idkg_pool.apply(change_set);
+
+                // The second share for transcript 2 should be attempted to be validated in the next iteration,
+                // but fail since the parameter reference cannot be resolved.
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                if invalid_id_2 {
+                    is_handle_invalid(&change_set, &msg_id_2_dupl);
+                } else {
+                    is_handle_invalid(&change_set, &msg_id_2);
+                }
                 assert!(pre_signer.validated_dealing_supports().is_empty());
             })
         });
@@ -2549,16 +2582,17 @@ mod tests {
         // a support share(only 2f+1 shares accepted)
         let (dealing, support) = create_support(t_id, NODE_2, NODE_3);
         let validated_id = IDkgValidatedDealingSupportIdentifier::from(&support);
-        let mut msg_ids = vec![];
+        let mut msg_ids = BTreeSet::new();
         for node_id in &node_ids {
             let (_, support) = create_support(t_id, NODE_2, *node_id);
-            msg_ids.push(support.message_id());
+            msg_ids.insert(support.message_id());
             artifacts.push(UnvalidatedArtifact {
                 message: IDkgMessage::DealingSupport(support),
                 peer_id: *node_id,
                 timestamp: UNIX_EPOCH,
             });
         }
+        assert_eq!(msg_ids.len(), 3 * f + 1);
 
         // Using CryptoReturningOK only 2f + 1 shares should be accepted, the rest dropped
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -2571,20 +2605,42 @@ mod tests {
                     dealing.clone(),
                 ))];
                 idkg_pool.apply(change_set);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                artifacts.into_iter().for_each(|a| idkg_pool.insert(a));
 
+                // During the first call only the first 2f+1 shares should be optimistically selected and validated
+                // The remaining f are deferred, in case the validation of an optimistically selected share fails.
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3 * f + 1);
-                let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
-                    .into_iter()
-                    .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
+                assert_eq!(change_set.len(), 2 * f + 1);
+                for action in &change_set {
+                    let IDkgChangeAction::MoveToValidated(msg) = action else {
+                        panic!("Unexpected action: {action:?}");
+                    };
+                    assert!(msg_ids.remove(&msg.message_id()));
+                }
+                assert_eq!(msg_ids.len(), f);
+
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
                 assert!(
-                    dropped
-                        .iter()
-                        .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id)
+                        .is_some_and(|signers| signers.len() == 2 * f + 1
+                            && signers.is_subset(&node_ids.iter().cloned().collect()))
                 );
-                assert_eq!(accepted.len(), 2 * f + 1);
-                assert_eq!(dropped.len(), f);
+
+                // apply the change set
+                idkg_pool.apply(change_set);
+
+                // The remaining shares should be dropped during the next iteration.
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), f);
+                for action in &change_set {
+                    let IDkgChangeAction::RemoveUnvalidated(id) = action else {
+                        panic!("Unexpected action: {action:?}");
+                    };
+                    assert!(msg_ids.remove(id));
+                }
+                assert!(msg_ids.is_empty());
 
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
                 assert!(
