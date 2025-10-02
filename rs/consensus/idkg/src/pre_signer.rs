@@ -2816,7 +2816,7 @@ mod tests {
         assert_eq!(msg_ids.len(), 4 * f);
 
         // Using CryptoReturningOK all shares should be attempted to be validated, but the duplicates should be removed
-        // Only 2f+1 shares should end up as valid.
+        // Only 2f shares should end up as valid.
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -2829,8 +2829,8 @@ mod tests {
                 idkg_pool.apply(change_set);
                 artifacts.iter().cloned().for_each(|a| idkg_pool.insert(a));
 
-                // During the first call only the first 2f+1 shares should be optimistically selected and invalidated
-                // The remaining f are deferred.
+                // All 4f shares should be selected optimistically during the first iteration, because
+                // there are only 2f distinct signers
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 4 * f);
 
