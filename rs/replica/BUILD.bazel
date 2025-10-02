@@ -149,9 +149,7 @@ rust_test(
     aliases = ALIASES,
     crate = ":replica",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "test_all_platforms",
-    ],
+    tags = [],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -161,9 +159,7 @@ rust_test_suite(
     aliases = ALIASES,
     data = [":replica"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "test_all_platforms",
-    ],
+    tags = [],
     deps = [":replica_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
