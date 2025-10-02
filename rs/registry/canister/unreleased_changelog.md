@@ -16,5 +16,6 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
+- The `migrate_canisters` endpoint recertifies registry.
 
 ## Security
