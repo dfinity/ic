@@ -358,8 +358,8 @@ jobs:
 
           bazel_targets=(
             # make sure codebase builds for local development
-            //rs/execution_environment
-            //rs/pocket_ic_server
+            //rs/execution_environment/...
+            //rs/pocket_ic_server/...
             //publish/binaries:pocket-ic.gz
 
             # necessary artifacts & tests for pocket -ic
@@ -404,8 +404,8 @@ jobs:
 
           bazel_targets=(
             # make sure codebase builds for local development
-            //rs/execution_environment
-            //rs/pocket_ic_server
+            //rs/execution_environment/...
+            //rs/pocket_ic_server/...
             //publish/binaries:pocket-ic.gz
 
             # necessary artifacts & tests for pocket -ic
