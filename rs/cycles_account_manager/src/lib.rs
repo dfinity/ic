@@ -1374,7 +1374,7 @@ impl CyclesAccountManager {
 
     pub fn fetch_canister_logs_fee(
         &self,
-        response_size: usize,
+        response_size: NumBytes,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
@@ -1382,7 +1382,7 @@ impl CyclesAccountManager {
             CanisterCyclesCostSchedule::Free => Cycles::new(0),
             CanisterCyclesCostSchedule::Normal => {
                 (self.config.fetch_canister_logs_base_fee
-                    + self.config.fetch_canister_logs_per_byte_fee * response_size)
+                    + self.config.fetch_canister_logs_per_byte_fee * response_size.get())
                     * subnet_size
             }
         }
@@ -1394,7 +1394,7 @@ impl CyclesAccountManager {
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
         self.fetch_canister_logs_fee(
-            MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
+            NumBytes::new(MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64),
             subnet_size,
             cost_schedule,
         )

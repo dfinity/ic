@@ -1606,7 +1606,7 @@ impl ExecutionEnvironment {
                                             Arc::make_mut(request).payment -= self
                                                 .cycles_account_manager
                                                 .fetch_canister_logs_fee(
-                                                    response_bytes.len(),
+                                                    NumBytes::new(response_bytes.len() as u64),
                                                     registry_settings.subnet_size,
                                                     cost_schedule,
                                                 );
