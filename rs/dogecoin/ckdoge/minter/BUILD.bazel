@@ -31,8 +31,8 @@ rust_library(
 )
 
 filegroup(
-        name = "test_vectors",
-        srcs = glob(["test_vectors/**"])
+    name = "test_vectors",
+    srcs = glob(["test_vectors/**"]),
 )
 
 rust_test(
