@@ -223,25 +223,6 @@ pub async fn process_renamed(
         return ProcessingResult::NoProgress;
     };
 
-    // TEST
-    // call both subnets
-    let ProcessingResult::Success(source_subnet_version) =
-        get_registry_version(request.source_subnet).await
-    else {
-        return ProcessingResult::NoProgress;
-    };
-    let ProcessingResult::Success(target_subnet_version) =
-        get_registry_version(request.target_subnet).await
-    else {
-        return ProcessingResult::NoProgress;
-    };
-    println!(
-        "Registry versions: {} {}",
-        source_subnet_version, target_subnet_version
-    );
-
-    // TEST END
-
     migrate_canister(request.source, request.target_subnet)
         .await
         .map_success(|registry_version| RequestState::UpdatedRoutingTable {
@@ -276,10 +257,9 @@ pub async fn process_updated(
         return ProcessingResult::NoProgress;
     };
     println!(
-        "Registry version: {} {} {}",
+        "Registry versions: waiting for: {} source subnet: {} target subnet: {}",
         registry_version, source_subnet_version, target_subnet_version
     );
-
     if source_subnet_version < registry_version || target_subnet_version < registry_version {
         return ProcessingResult::NoProgress;
     }
