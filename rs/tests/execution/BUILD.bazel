@@ -156,7 +156,9 @@ system_test_nns(
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/nns/constants",
+        "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",

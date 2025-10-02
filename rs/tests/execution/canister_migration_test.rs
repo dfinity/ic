@@ -1,8 +1,10 @@
 use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use canister_test::Canister;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_nns_constants::MIGRATION_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
+use ic_nns_test_utils::governance::{pause_migrations, unpause_migrations};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{
@@ -132,10 +134,8 @@ async fn add_controller(
 async fn test_async(env: TestEnv) {
     let logger = env.logger();
     let migration_canister_id: Principal = MIGRATION_CANISTER_ID.into();
-    let nns_agent = env
-        .get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 0)
-        .build_default_agent_async()
-        .await;
+    let nns = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 0);
+    let nns_agent = nns.build_default_agent_async().await;
 
     let app_subnet_1 = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 1);
     let app_subnet_1_agent = app_subnet_1.build_default_agent_async().await;
@@ -156,13 +156,38 @@ async fn test_async(env: TestEnv) {
     )
     .await;
 
+    let nns_runtime = runtime_from_url(nns.get_public_url(), nns.effective_canister_id());
+    let governance_canister = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+
+    info!(logger, "Pausing migrations");
+
+    pause_migrations(&governance_canister).await;
+
     let args = Encode!(&MigrateCanisterArgs {
         source: source_canister.canister_id(),
         target: target_canister.canister_id(),
     })
     .unwrap();
 
-    info!(logger, "Calling migrate_canister");
+    info!(logger, "Calling migrate_canister on paused canister");
+
+    let result = nns_agent
+        .update(&migration_canister_id, "migrate_canister")
+        .with_arg(args.clone())
+        .call_and_wait()
+        .await
+        .expect("Failed to call migrate_canister.");
+
+    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+        .expect("Failed to decode reponse from migrate_canister.");
+
+    assert_eq!(decoded_result, Err(ValidationError::MigrationsDisabled));
+
+    info!(logger, "Unpausing migrations");
+
+    unpause_migrations(&governance_canister).await;
+
+    info!(logger, "Calling migrate_canister on unpaused canister");
 
     let result = nns_agent
         .update(&migration_canister_id, "migrate_canister")
