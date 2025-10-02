@@ -357,13 +357,8 @@ jobs:
           mkdir -p /tmp/zig-cache
 
           bazel_targets=(
-            # make sure codebase builds for local development
-            //rs/execution_environment/...
-            //rs/pocket_ic_server/...
-            //publish/binaries:pocket-ic.gz
-
-            # necessary artifacts & tests for pocket -ic
-            //packages/pocket-ic:all
+            //rs/...
+            //packages/pocket-ic/...
           )
 
           bazel \
@@ -371,7 +366,14 @@ jobs:
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
             --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
+            --build_tests_only \
             "${bazel_targets[@]}"
+
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build \
+            //publish/binaries:pocket-ic.gz
 
           mkdir -p build
           cp \
