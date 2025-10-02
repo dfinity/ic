@@ -18,12 +18,6 @@ jobs:
     secrets: inherit
     if: github.event.pull_request.head.repo.full_name == github.repository
 
-  pocked-ic-tests-windows:
-    name: PocketIC Windows
-    uses: ./.github/workflows/pocket-ic-tests-windows.yml
-    secrets: inherit
-    if: github.event.pull_request.head.repo.full_name == github.repository
-
   external-contributor:
     name: External Contributor Workflow
     uses: ./.github/workflows/external-contributor.yml
