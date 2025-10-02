@@ -8,10 +8,12 @@ use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_keys::{make_api_boundary_node_record_key, make_subnet_record_key};
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_registry_transport::{delete, insert, upsert};
 use prost::Message;
+use std::time::SystemTime;
 
 impl Registry {
     /// Removes an existing node from the registry.
@@ -20,7 +22,7 @@ impl Registry {
     pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
         let caller_id = dfn_core::api::caller();
         println!("{LOG_PREFIX}do_remove_node_directly started: {payload:?} caller: {caller_id:?}");
-        self.do_remove_node(payload.clone(), caller_id);
+        self.do_remove_node(payload.clone(), caller_id, now_system_time());
 
         println!("{LOG_PREFIX}do_remove_node_directly finished: {payload:?}");
     }
@@ -39,7 +41,12 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
     }
 
-    pub fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
+    pub fn do_remove_node(
+        &mut self,
+        payload: RemoveNodeDirectlyPayload,
+        caller_id: PrincipalId,
+        _now: SystemTime,
+    ) {
         let mutations = self.make_remove_or_replace_node_mutations(payload, caller_id, None);
         // Check invariants and apply mutations
         self.maybe_apply_mutation_internal(mutations);

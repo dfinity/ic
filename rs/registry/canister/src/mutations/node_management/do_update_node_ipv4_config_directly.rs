@@ -8,11 +8,13 @@ use ic_registry_canister_api::UpdateNodeIPv4ConfigDirectlyPayload;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
 use prost::Message;
+use std::time::SystemTime;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
 use ic_base_types::{NodeId, PrincipalId};
+use ic_nervous_system_time_helpers::now_system_time;
 
 impl Registry {
     /// Updates the IPv4 configuration of a node
@@ -27,13 +29,14 @@ impl Registry {
             "{LOG_PREFIX}do_update_ipv4_config_directly started: {payload:?} caller: {caller_id:?}"
         );
 
-        self.do_update_node_ipv4_config(payload, caller_id)
+        self.do_update_node_ipv4_config_directly_(payload, caller_id, now_system_time())
     }
 
-    fn do_update_node_ipv4_config(
+    fn do_update_node_ipv4_config_directly_(
         &mut self,
         payload: UpdateNodeIPv4ConfigDirectlyPayload,
         caller_id: PrincipalId,
+        _now: SystemTime,
     ) {
         let node_id = payload.node_id;
 

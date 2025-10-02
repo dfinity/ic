@@ -95,6 +95,10 @@ impl Registry {
             println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
+        // TODO DO NOT MERGE - how do we apply the rate limits to the new NP principal, since
+        // now there could in theory be multiple principals under NP control, thus increasing
+        // the total allowed operations for the NP.
+
         Ok(())
     }
 }

@@ -1,6 +1,5 @@
 use crate::{flags::is_chunkifying_large_values_enabled, registry::MAX_REGISTRY_DELTAS_SIZE};
 use ic_nervous_system_chunks::Chunks;
-use ic_nervous_system_rate_limits::{RateLimiter, RateLimiterConfig, StableMemoryCapacityStorage};
 use ic_registry_canister_chunkify::chunkify_composite_mutation;
 use ic_registry_transport::pb::v1::{
     HighCapacityRegistryAtomicMutateRequest, RegistryAtomicMutateRequest,

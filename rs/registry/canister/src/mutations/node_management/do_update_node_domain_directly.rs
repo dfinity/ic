@@ -1,17 +1,16 @@
 use crate::mutations::node_management::common::get_node_operator_id_for_node;
 use crate::{common::LOG_PREFIX, registry::Registry};
-
 use candid::{CandidType, Deserialize};
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
+use ic_base_types::{NodeId, PrincipalId};
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use serde::Serialize;
-
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-
-use ic_base_types::{NodeId, PrincipalId};
+use std::time::SystemTime;
 
 // Payload of the request to update the domain name of an existing node
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -28,13 +27,14 @@ impl Registry {
         println!(
             "{LOG_PREFIX}do_update_node_domain_directly started: {payload:?} caller: {caller_id:?}"
         );
-        self.do_update_node_domain(payload, caller_id);
+        self.do_update_node_domain_directly_(payload, caller_id, now_system_time());
     }
 
-    fn do_update_node_domain(
+    fn do_update_node_domain_directly_(
         &mut self,
         payload: UpdateNodeDomainDirectlyPayload,
         caller_id: PrincipalId,
+        _now: SystemTime,
     ) {
         let UpdateNodeDomainDirectlyPayload { node_id, domain } = payload;
 

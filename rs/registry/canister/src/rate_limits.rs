@@ -9,7 +9,9 @@ use std::{cell::RefCell, time::Duration};
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
-const NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY: u64 = 50;
+// Note, operations are weighted, so that some operations, such as adding a node, cost 20, while others
+// such as updating a single record, cost 1.
+const NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY: u64 = 100;
 const NODE_PROVIDER_MAX_SPIKE: u64 = NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY * 7;
 pub const NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY;

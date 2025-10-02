@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::time::SystemTime;
 
 use candid::CandidType;
 use ic_types::{NodeId, PrincipalId, SubnetId};
@@ -13,11 +14,13 @@ use crate::{
     mutations::node_management::common::find_subnet_for_node,
     registry::Registry,
 };
+use crate::{flags::is_node_swapping_enabled, registry::Registry};
+use ic_nervous_system_time_helpers::now_system_time;
 
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
     pub fn do_swap_node_in_subnet_directly(&mut self, payload: SwapNodeInSubnetDirectlyPayload) {
-        self.swap_nodes_inner(payload, dfn_core::api::caller())
+        self.swap_nodes_inner(payload, dfn_core::api::caller(), now_system_time())
             .unwrap_or_else(|e| panic!("{e}"));
     }
 
@@ -26,6 +29,7 @@ impl Registry {
         &mut self,
         payload: SwapNodeInSubnetDirectlyPayload,
         caller: PrincipalId,
+        _now: SystemTime,
     ) -> Result<(), SwapError> {
         // Check if the feature is enabled on the network.
         if !is_node_swapping_enabled() {

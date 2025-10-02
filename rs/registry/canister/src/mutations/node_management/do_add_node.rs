@@ -1,11 +1,6 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
-use std::fmt::Display;
-
-use std::net::SocketAddr;
-
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
@@ -14,6 +9,9 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
 };
 use idna::domain_to_ascii_strict;
+use std::fmt::Display;
+use std::net::SocketAddr;
+use std::time::SystemTime;
 
 use crate::mutations::node_management::{
     common::{
@@ -22,6 +20,8 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
+use crate::rate_limits::{commit_node_operator_reservation, try_reserve_node_operator_capacity};
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
@@ -35,13 +35,14 @@ impl Registry {
         // Get the caller ID and check if it is in the registry
         let caller_id = dfn_core::api::caller();
         println!("{LOG_PREFIX}do_add_node started: {payload:?} caller: {caller_id:?}");
-        self.do_add_node_(payload, caller_id)
+        self.do_add_node_(payload, caller_id, now_system_time())
     }
 
     fn do_add_node_(
         &mut self,
         payload: AddNodePayload,
         caller_id: PrincipalId,
+        _now: SystemTime,
     ) -> Result<NodeId, String> {
         let mut node_operator_record = get_node_operator_record(self, caller_id)
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
@@ -63,6 +64,8 @@ impl Registry {
         let num_removed_nodes = nodes_with_same_ip.len() as u64;
         if !nodes_with_same_ip.is_empty() {
             if nodes_with_same_ip.len() == 1 {
+                // TODO DO NOT MERGE - evaluate this behavior - this set of mutations overlaps with
+                // update of node_operator_record, which seems suspicious.
                 mutations = self.make_remove_or_replace_node_mutations(
                     RemoveNodeDirectlyPayload {
                         node_id: nodes_with_same_ip[0],
