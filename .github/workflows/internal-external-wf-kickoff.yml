@@ -1,4 +1,4 @@
-name: Internal External Workflow Kickoff
+name: Workflow Kickoff
 
 on:
   pull_request:
