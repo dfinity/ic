@@ -1,6 +1,6 @@
-use std::convert::TryFrom;
-
 use crate::{common::LOG_PREFIX, registry::Registry};
+use std::convert::TryFrom;
+use std::time::SystemTime;
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -12,6 +12,8 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 
+use crate::rate_limits::{commit_node_operator_reservation, try_reserve_node_operator_capacity};
+use ic_nervous_system_time_helpers::now_system_time;
 use prost::Message;
 
 impl Registry {
@@ -21,14 +23,19 @@ impl Registry {
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
     ) {
-        self.do_update_node_operator_config_directly_(payload, dfn_core::api::caller())
-            .unwrap()
+        self.do_update_node_operator_config_directly_(
+            payload,
+            dfn_core::api::caller(),
+            now_system_time(),
+        )
+        .unwrap()
     }
 
     fn do_update_node_operator_config_directly_(
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
         caller: PrincipalId,
+        now: SystemTime,
     ) -> Result<(), String> {
         println!("{LOG_PREFIX}do_update_node_operator_config_directly: {payload:?}");
 
@@ -59,7 +66,8 @@ impl Registry {
         }
 
         // 3. Check Rate Limits
-        // TODO DO NOT MERGE
+        let reservation = try_reserve_node_operator_capacity(now, format!("{caller}"), 1)
+            .map_err(|e| "Rate limiter error".to_string())?;
 
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
@@ -83,6 +91,9 @@ impl Registry {
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        commit_node_operator_reservation(now, reservation)
+            .map_err(|e| "Could not commit? what?".to_string())?;
 
         Ok(())
     }
@@ -108,11 +119,16 @@ mod tests {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
+    use crate::mutations::node_management::common::get_node_operator_record;
+    use crate::rate_limits::get_available_node_operator_capacity;
     use maplit::btreemap;
+    use std::time::SystemTime;
 
     #[test]
-    fn test_update_node_operator_config_directly_is_rate_limited() {
+    fn test_update_node_operator_config_directly_happy_path() {
         let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
 
         let node_operator_id = PrincipalId::new_user_test_id(1_000);
         let node_provider_id = PrincipalId::new_user_test_id(10_000);
@@ -140,14 +156,57 @@ mod tests {
         let caller = node_provider_id;
 
         registry
-            .do_update_node_operator_config_directly_(request, caller)
+            .do_update_node_operator_config_directly_(request, caller, now)
             .unwrap();
 
         assert_eq!(
-            get_node_operator_record(&registry, node_operator_id)
-                .unwrap()
-                .node_provider_principal_id,
+            PrincipalId::try_from(
+                get_node_operator_record(&registry, node_operator_id)
+                    .unwrap()
+                    .node_provider_principal_id
+            )
+            .unwrap(),
             new_np_id
         );
+    }
+
+    #[test]
+    fn test_update_node_operator_config_directly_affects_rate_limits() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+
+        // Make a proposal to upgrade all unassigned nodes to a new version
+        let payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_id),
+            node_provider_principal_id: Some(node_provider_id),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+        };
+
+        registry.do_add_node_operator(payload);
+
+        let request = UpdateNodeOperatorConfigDirectlyPayload {
+            node_operator_id: Some(node_operator_id),
+            node_provider_id: Some(node_provider_id),
+        };
+
+        // Original should be able to change this.
+        let caller = node_provider_id;
+
+        let available = get_available_node_operator_capacity(format!("{caller}"), now);
+
+        registry
+            .do_update_node_operator_config_directly_(request, caller, now)
+            .unwrap();
+
+        let next_available = get_available_node_operator_capacity(format!("{caller}"), now);
+        assert_eq!(available - 1, next_available);
     }
 }
