@@ -10,7 +10,7 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::{
-        AuthMean, disable_ssh_access_to_nodes, get_updatesubnetpayload_with_keys,
+        AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_fails,
         wait_until_authentication_is_granted,
     },
@@ -306,11 +306,15 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .nodes()
         .filter(|n| n.node_id != dfinity_owned_node.node_id)
         .collect::<Vec<_>>();
-    let _ = disable_ssh_access_to_nodes(&nodes_except_dfinity_owned, SSH_USERNAME)
-        .expect("Failed to disable admin SSH access to nodes");
-
     for node in nodes_except_dfinity_owned {
-        wait_until_authentication_fails(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
+        info!(
+            logger,
+            "Removing admin SSH access from node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+
+        let _ = disable_ssh_access_to_node(&node, SSH_USERNAME, &admin_auth).unwrap();
     }
     // Ensure we can still SSH into the DFINITY-owned node with the admin key
     wait_until_authentication_is_granted(

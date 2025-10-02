@@ -40,7 +40,7 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::{
-        AuthMean, disable_ssh_access_to_nodes, execute_bash_command,
+        AuthMean, disable_ssh_access_to_node, execute_bash_command,
         wait_until_authentication_fails, wait_until_authentication_is_granted,
     },
     subnet::{
@@ -74,7 +74,10 @@ use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::TryFrom,
+};
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 use url::Url;
@@ -537,22 +540,27 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
 
     // Mirror production setup by removing admin SSH access from all nodes except the upload and
-    // download nodes
+    // download nodes (local recovery needs admin access also to the download node).
     info!(
         logger,
         "Remove admin SSH access from all nodes except the upload and download nodes"
     );
     let nodes_except_upload_download_nodes = app_subnet
         .nodes()
-        // TODO (CON-1590): Replace with only upload_node
         .filter(|n| n.node_id != upload_node.node_id && n.node_id != download_node.0.node_id)
         .collect::<Vec<_>>();
-    let admin_ssh_sessions =
-        disable_ssh_access_to_nodes(&nodes_except_upload_download_nodes, SSH_USERNAME)
-            .expect("Failed to disable admin SSH access to nodes");
-
+    let mut admin_ssh_sessions = HashMap::new();
     for node in nodes_except_upload_download_nodes {
-        wait_until_authentication_fails(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
+        info!(
+            logger,
+            "Removing admin SSH access from node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+
+        let session = disable_ssh_access_to_node(&node, SSH_USERNAME, &admin_auth).unwrap();
+
+        admin_ssh_sessions.insert(node.node_id, session);
     }
     // Ensure we can still SSH into the upload and download nodes with the admin key
     wait_until_authentication_is_granted(&upload_node.get_ip_addr(), SSH_USERNAME, &admin_auth);
@@ -560,9 +568,19 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
-        // TODO (CON-1590): Perform local recovery on upload_node
         local_recovery(&download_node.0, subnet_recovery, &logger);
     } else {
+        // Local recovery needs admin access to the download node, but not remote recovery
+        info!(
+            logger,
+            "Additionally removing admin SSH access from the download node {} ({:?})",
+            download_node.0.node_id,
+            download_node.0.get_ip_addr()
+        );
+        let session =
+            disable_ssh_access_to_node(&download_node.0, SSH_USERNAME, &admin_auth).unwrap();
+        admin_ssh_sessions.insert(download_node.0.node_id, session);
+
         info!(logger, "Performing remote recovery");
         remote_recovery(&cfg, subnet_recovery, &logger);
     }
