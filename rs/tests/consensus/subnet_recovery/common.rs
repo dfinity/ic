@@ -562,15 +562,15 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
         admin_ssh_sessions.insert(node.node_id, session);
     }
-    // Ensure we can still SSH into the upload and download nodes with the admin key
-    wait_until_authentication_is_granted(&upload_node.get_ip_addr(), SSH_USERNAME, &admin_auth);
-    wait_until_authentication_is_granted(&download_node.0.get_ip_addr(), SSH_USERNAME, &admin_auth);
-
-    if cfg.local_recovery {
-        info!(logger, "Performing a local node recovery");
-        local_recovery(&download_node.0, subnet_recovery, &logger);
-    } else {
-        // Local recovery needs admin access to the download node, but not remote recovery
+    // Scenarios where we still need admin access to the download node are:
+    //  - Local recovery
+    //  - Cases where we cannot deploy read-only access, and we need to fall back to admin access
+    // We always need admin access to the upload node, so let us also check that it is not the same
+    // node as the download node.
+    if !cfg.local_recovery
+        && subnet_recovery.params.readonly_pub_key.is_some()
+        && download_node.0 != upload_node
+    {
         info!(
             logger,
             "Additionally removing admin SSH access from the download node {} ({:?})",
@@ -580,7 +580,20 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         let session =
             disable_ssh_access_to_node(&download_node.0, SSH_USERNAME, &admin_auth).unwrap();
         admin_ssh_sessions.insert(download_node.0.node_id, session);
+    } else {
+        // Ensure we can still SSH into the nodes where admin access wasn't removed
+        wait_until_authentication_is_granted(
+            &download_node.0.get_ip_addr(),
+            SSH_USERNAME,
+            &admin_auth,
+        );
+    }
+    wait_until_authentication_is_granted(&upload_node.get_ip_addr(), SSH_USERNAME, &admin_auth);
 
+    if cfg.local_recovery {
+        info!(logger, "Performing a local node recovery");
+        local_recovery(&download_node.0, subnet_recovery, &logger);
+    } else {
         info!(logger, "Performing remote recovery");
         remote_recovery(&cfg, subnet_recovery, &logger);
     }
