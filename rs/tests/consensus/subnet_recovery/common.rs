@@ -484,7 +484,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
         readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
-        readonly_key_file: Some(ssh_readonly_priv_key_path.clone()),
+        readonly_key_file: Some(ssh_readonly_priv_key_path),
         download_method: None, // We will set this after breaking/halting the subnet, see below
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
