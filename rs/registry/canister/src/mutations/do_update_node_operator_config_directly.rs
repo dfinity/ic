@@ -66,8 +66,7 @@ impl Registry {
         }
 
         // 3. Check Rate Limits
-        let reservation = try_reserve_node_operator_capacity(now, format!("{caller}"), 1)
-            .map_err(|e| "Rate limiter error".to_string())?;
+        let reservation = try_reserve_node_operator_capacity(now, format!("{caller}"), 1)?;
 
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
@@ -92,8 +91,9 @@ impl Registry {
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        commit_node_operator_reservation(now, reservation)
-            .map_err(|e| "Could not commit? what?".to_string())?;
+        if let Err(e) = commit_node_operator_reservation(now, reservation) {
+            println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
+        }
 
         Ok(())
     }
@@ -208,5 +208,50 @@ mod tests {
 
         let next_available = get_available_node_operator_capacity(format!("{caller}"), now);
         assert_eq!(available - 1, next_available);
+    }
+
+    #[test]
+    fn test_update_node_operator_config_directly_fails_when_rate_limits_exceeded() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+
+        // Make a proposal to upgrade all unassigned nodes to a new version
+        let payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_id),
+            node_provider_principal_id: Some(node_provider_id),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+        };
+
+        registry.do_add_node_operator(payload);
+
+        let request = UpdateNodeOperatorConfigDirectlyPayload {
+            node_operator_id: Some(node_operator_id),
+            node_provider_id: Some(node_provider_id),
+        };
+
+        // Original should be able to change this.
+        let caller = node_provider_id;
+
+        let available = get_available_node_operator_capacity(format!("{caller}"), now);
+        let reservation =
+            try_reserve_node_operator_capacity(now, format!("{caller}"), available).unwrap();
+        commit_node_operator_reservation(now, reservation).unwrap();
+
+        let error = registry
+            .do_update_node_operator_config_directly_(request, caller, now)
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            "Rate Limit Capacity exceeded. Please wait and try again later."
+        );
     }
 }

@@ -37,6 +37,7 @@ fn with_node_operator_rate_limiter<R>(
     NODE_PROVIDER_RATE_LIMITER.with_borrow_mut(f)
 }
 
+/// Try to reserve capacity for an operation that is rate limited by Node Provider
 pub fn try_reserve_node_operator_capacity(
     now: SystemTime,
     key: impl ToString,
@@ -47,6 +48,7 @@ pub fn try_reserve_node_operator_capacity(
     })
 }
 
+/// Commit the reserved usage (i.e. commit the reserved usage)
 pub fn commit_node_operator_reservation(
     now: SystemTime,
     reservation: Reservation<String>,
@@ -54,6 +56,9 @@ pub fn commit_node_operator_reservation(
     with_node_operator_rate_limiter(|rate_limiter| rate_limiter.commit(now, reservation))
 }
 
+// This function tells how much capacity is left, which is very useful for tests.  This could also
+// potentially be used in production code, but there's no use case yet.
+#[cfg(test)]
 pub fn get_available_node_operator_capacity(key: impl ToString, now: SystemTime) -> u64 {
     with_node_operator_rate_limiter(|rate_limiter| {
         rate_limiter.get_available_capacity(key.to_string(), now)

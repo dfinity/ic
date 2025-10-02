@@ -4,6 +4,7 @@
 //! enforce rate limites, which allows for a configurable amount of spikiness around the average
 //! limit desired.
 use ic_stable_structures::{StableBTreeMap, Storable};
+use std::fmt::{Display, Formatter};
 use std::{
     collections::BTreeMap,
     fmt::Debug,
@@ -23,7 +24,7 @@ pub trait CapacityUsageRecordStorage<K> {
     /// Get usage record for a key
     fn get(&self, key: &K) -> Option<CapacityUsageRecord>;
 
-    /// Insert or update usage record for a key  
+    /// Insert or update usage record for a key
     fn upsert(&mut self, key: K, record: CapacityUsageRecord);
 
     fn remove(&mut self, key: &K) -> Option<CapacityUsageRecord>;
@@ -185,6 +186,33 @@ pub enum RateLimiterError {
     InvalidArguments(String),
     MaxReservationsReached,
     ReservationNotFound,
+}
+
+impl Display for RateLimiterError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            RateLimiterError::NotEnoughCapacity => "Rate Limit Capacity exceeded. \
+                    Please wait and try again later."
+                .to_string(),
+            RateLimiterError::InvalidArguments(e) => format!("Rate Limit Invalid Arguments: {e}"),
+            RateLimiterError::MaxReservationsReached => {
+                "Maximum Open Rate Limit Reservations Reached.".to_string()
+            }
+            RateLimiterError::ReservationNotFound => {
+                "Ratelimiter has no record of the reservation \
+                passed to commit, so could not commit reservation."
+                    .to_string()
+            }
+        };
+
+        f.write_str(message.as_str())
+    }
+}
+
+impl From<RateLimiterError> for String {
+    fn from(value: RateLimiterError) -> Self {
+        format!("{value}")
+    }
 }
 
 impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S> {
