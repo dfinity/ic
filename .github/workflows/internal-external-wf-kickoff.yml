@@ -5,6 +5,10 @@ on:
     branches-ignore:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   ci-main:
     name: CI Main
