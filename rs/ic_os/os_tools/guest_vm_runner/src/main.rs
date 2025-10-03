@@ -141,7 +141,7 @@ impl VirtualMachine {
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
     ) -> Result<Self> {
-        let mut retries = 10i;
+        let mut retries = 10;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
             match domain_result {
