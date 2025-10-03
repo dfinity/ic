@@ -9,26 +9,26 @@ mod tests {
 
 use super::CheckpointError;
 use crate::{
-    BundledManifest, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
-    LABEL_VALUE_REUSED, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS,
     manifest::hash::{meta_manifest_hasher, sub_manifest_hasher},
     state_sync::types::{
-        ChunkInfo, DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
-        FileGroupChunks, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest, MetaManifest,
-        encode_manifest,
+        encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
+        DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
+    BundledManifest, ManifestMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
+    LABEL_VALUE_REUSED, NUMBER_OF_CHECKPOINT_THREADS,
 };
-use hash::{ManifestHash, chunk_hasher, file_hasher, manifest_hasher};
+use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha2::Sha256;
-use ic_logger::{ReplicaLogger, error, fatal, replica_logger::no_op_logger};
+use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{
-    BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
+    CheckpointLayout, ReadOnly, BIN_FILE, CANISTER_FILE, OVERLAY, QUEUES_FILE, SNAPSHOT_FILE,
     UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
 };
 use ic_sys::mmap::ScopedMmap;
-use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
+use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
 use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -719,12 +719,13 @@ fn hash_plan(
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 
-    let mut chunk_actions: Vec<ChunkAction> = Vec::new();
+    let mut chunk_actions: Vec<ChunkAction> =
+        Vec::with_capacity(chunks_total(files, max_chunk_size));
 
     for FileWithSize(relative_path, size_bytes) in files.iter() {
         let num_chunks = count_chunks(*size_bytes, max_chunk_size);
-        if let Some(base_index) = get_base_index(relative_path, base_manifest)
-            && files_with_same_inodes.contains(relative_path)
+        if files_with_same_inodes.contains(relative_path)
+            && let Some(base_index) = get_base_index(relative_path, base_manifest)
         {
             for i in 0..num_chunks {
                 let action = {
@@ -760,14 +761,18 @@ fn hash_plan(
     chunk_actions
 }
 
+/// Returns total amount of chunks necessary to hash given files.
+fn chunks_total(files: &[FileWithSize], max_chunk_size: u32) -> usize {
+    files
+        .iter()
+        .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
+        .sum()
+}
+
 /// Returns the trivial hash plan that instructs the caller to recompute hashes
 /// of all the chunks.
 fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAction> {
-    let chunks_total: usize = files
-        .iter()
-        .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
-        .sum();
-    vec![ChunkAction::Recompute; chunks_total]
+    vec![ChunkAction::Recompute; chunks_total(files, max_chunk_size)]
 }
 
 /// Returns relative paths of files with the same inodes in the `checkpoint` and `manifest_delta`.
@@ -864,11 +869,9 @@ pub fn compute_manifest(
         files.retain(|FileWithSize(p, _)| {
             checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
         });
-        assert!(
-            !files
-                .iter()
-                .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER))
-        );
+        assert!(!files
+            .iter()
+            .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)));
     }
 
     let chunk_actions = match opt_manifest_delta {
