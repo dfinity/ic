@@ -1,4 +1,6 @@
 use ic_types::{CanisterId, Cycles};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{
     BTreeMap, BTreeSet,
     btree_map::Entry::{Occupied, Vacant},
@@ -28,9 +30,10 @@ impl Ord for RefundPriority {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ValidateEq)]
 pub struct RefundPool {
     // Pool contents.
+    #[validate_eq(Ignore)]
     refunds: BTreeMap<CanisterId, Cycles>,
 
     /// Refund priority queue. Holds all refunds, ordered by amount.
@@ -49,7 +52,6 @@ impl RefundPool {
 
     /// Adds `cycles` to the amount to be refunded to `receiver`.
     pub fn add(&mut self, receiver: CanisterId, cycles: Cycles) {
-        debug_assert!(!cycles.is_zero());
         if cycles.is_zero() {
             return;
         }
@@ -62,14 +64,14 @@ impl RefundPool {
             }
 
             // Existing receiver, remove it from `priority_queue` and  increase the amount.
-            Occupied(entry) => {
-                let mut amount = *entry.get();
+            Occupied(mut entry) => {
+                let amount = entry.get_mut();
                 assert!(
                     self.priority_queue
-                        .remove(&RefundPriority(amount, receiver))
+                        .remove(&RefundPriority(*amount, receiver))
                 );
-                amount += cycles;
-                amount
+                *amount += cycles;
+                *amount
             }
         };
 
@@ -93,6 +95,10 @@ impl RefundPool {
 
     pub fn len(&self) -> usize {
         self.refunds.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.refunds.is_empty()
     }
 }
 

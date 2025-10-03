@@ -603,6 +603,43 @@ impl Refund {
     }
 }
 
+impl From<&Request> for Option<Refund> {
+    fn from(req: &Request) -> Option<Refund> {
+        if !req.payment.is_zero() {
+            Some(Refund {
+                recipient: req.sender,
+                amount: req.payment,
+                refund_id: None,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<&Response> for Option<Refund> {
+    fn from(resp: &Response) -> Option<Refund> {
+        if !resp.refund.is_zero() {
+            Some(Refund {
+                recipient: resp.originator,
+                amount: resp.refund,
+                refund_id: None,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<&RequestOrResponse> for Option<Refund> {
+    fn from(msg: &RequestOrResponse) -> Option<Refund> {
+        match msg {
+            RequestOrResponse::Request(req) => (&**req).into(),
+            RequestOrResponse::Response(resp) => (&**resp).into(),
+        }
+    }
+}
+
 /// Canister-to-canister message.
 ///
 /// The underlying request / response is wrapped within an `Arc`, for cheap

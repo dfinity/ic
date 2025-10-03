@@ -105,11 +105,11 @@ fn best_effort_response_to(canister_id: CanisterId) -> Response {
         .build()
 }
 
-fn time_out_messages(state: &mut ReplicatedState) -> (usize, Cycles) {
+fn time_out_messages(state: &mut ReplicatedState) -> usize {
     let metrics = FakeDropMessageMetrics::default();
-    let lost_cycles = state.time_out_messages(&metrics);
+    state.time_out_messages(&metrics);
     let timed_out_messages = metrics.timed_out_messages.borrow().values().sum();
-    (timed_out_messages, lost_cycles)
+    timed_out_messages
 }
 
 /// Fixture using `SUBNET_ID` as its own subnet ID and `CANISTER_ID` as the ID
@@ -256,22 +256,17 @@ impl ReplicatedStateFixture {
             .local_sender_schedule()
     }
 
-    fn time_out_messages(&mut self) -> (usize, Cycles) {
+    fn time_out_messages(&mut self) -> usize {
         time_out_messages(&mut self.state)
     }
 
-    fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) -> (usize, NumBytes, Cycles) {
+    fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) -> (usize, NumBytes) {
         let metrics = FakeDropMessageMetrics::default();
-        let lost_cycles = self
-            .state
+        self.state
             .enforce_best_effort_message_limit(limit, &metrics);
         let shed_messages = metrics.shed_messages.borrow().values().sum();
         let shed_message_bytes: usize = metrics.shed_message_bytes.borrow().values().sum();
-        (
-            shed_messages,
-            (shed_message_bytes as u64).into(),
-            lost_cycles,
-        )
+        (shed_messages, (shed_message_bytes as u64).into())
     }
 
     fn canister_balance(&self, canister_id: &CanisterId) -> Option<Cycles> {
@@ -896,7 +891,8 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
 
     // Time out everything, then check that subnet input schedules are as expected.
     fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
-    assert_eq!((3, Cycles::zero()), fixture.time_out_messages());
+    assert_eq!(3, fixture.time_out_messages());
+    assert!(fixture.state.refunds().is_empty());
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
@@ -929,7 +925,11 @@ fn time_out_messages_in_subnet_queues() {
     // Time out the first request.
     let second_request_deadline = CoarseTime::from_secs_since_unix_epoch(1001);
     fixture.state.metadata.batch_time = second_request_deadline.into();
-    assert_eq!((1, Cycles::new(13)), fixture.time_out_messages());
+    assert_eq!(1, fixture.time_out_messages());
+    assert_eq!(
+        [(CANISTER_ID, Cycles::new(13))],
+        *fixture.state.take_all_refunds()
+    );
 
     // Second request should still be in the queue.
     assert_matches!(
@@ -961,33 +961,34 @@ fn enforce_best_effort_message_limit() {
     }
 
     assert_eq!(
-        (0, 0.into(), Cycles::zero()),
+        (0, 0.into()),
         fixture.enforce_best_effort_message_limit(u64::MAX.into()),
     );
+    assert!(fixture.state.refunds().is_empty());
 
     let best_effort_memory_usage = fixture.state.best_effort_message_memory_taken();
     assert_eq!(
-        (0, 0.into(), Cycles::zero()),
+        (0, 0.into()),
         fixture.enforce_best_effort_message_limit(best_effort_memory_usage),
     );
+    assert!(fixture.state.refunds().is_empty());
 
     // Enforce a limit equal to the mean message size. This should shed everything
     // but the first message we enqueued.
     let mean_message_size = best_effort_memory_usage / 4;
     assert_eq!(
-        (
-            3,
-            message_sizes[1] + message_sizes[2] + message_sizes[3],
-            Cycles::new((1 << 1) + (1 << 2) + (1 << 3))
-        ),
+        (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
         fixture.enforce_best_effort_message_limit(mean_message_size),
     );
+    let expected_refunds = [(CANISTER_ID, Cycles::new((1 << 1) + (1 << 2) + (1 << 3)))];
+    assert_eq!(expected_refunds, *fixture.state.take_all_refunds());
 
     // A second identical call should be a no-op.
     assert_eq!(
-        (0, 0.into(), Cycles::zero()),
+        (0, 0.into()),
         fixture.enforce_best_effort_message_limit(mean_message_size),
     );
+    assert!(fixture.state.refunds().is_empty());
 
     // Pop the remaining message.
     assert!(fixture.pop_input().is_some());
@@ -1525,7 +1526,7 @@ fn iter_with_stale_entries_terminates(
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
         Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
-    let timed_out_messages = time_out_messages(&mut replicated_state).0;
+    let timed_out_messages = time_out_messages(&mut replicated_state);
 
     // Just consume all output messages.
     //
@@ -1553,7 +1554,7 @@ fn peek_next_loop_with_stale_entries_terminates(
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
         Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
-    let timed_out_messages = time_out_messages(&mut replicated_state).0;
+    let timed_out_messages = time_out_messages(&mut replicated_state);
 
     let mut output_iter = replicated_state.output_into_iter();
 

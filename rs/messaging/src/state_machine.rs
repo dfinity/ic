@@ -11,10 +11,9 @@ use ic_interfaces::time_source::system_time_now;
 use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::Batch;
-use ic_types::{ExecutionRound, NumBytes};
+use ic_types::{Cycles, ExecutionRound, NumBytes};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -123,11 +122,7 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
-        let lost_cycles = state.time_out_messages(&self.metrics);
-        state
-            .metadata
-            .subnet_metrics
-            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
+        state.time_out_messages(&self.metrics);
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
@@ -207,15 +202,21 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Shed enough messages to stay below the best-effort message memory limit.
-        let lost_cycles = state_after_stream_builder.enforce_best_effort_message_limit(
+        state_after_stream_builder.enforce_best_effort_message_limit(
             self.best_effort_message_memory_capacity,
             &self.metrics,
         );
-        state_after_stream_builder
-            .metadata
-            .subnet_metrics
-            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
+
+        // Take out any refunds in the refund pool and observe them as lost cycles.
+        if !state_after_stream_builder.refunds().is_empty() {
+            let mut lost_cycles = Cycles::new(0);
+            state_after_stream_builder.take_refunds(|_, amount| {
+                lost_cycles += *amount;
+                true
+            });
+            state_after_stream_builder.observe_lost_cycles_due_to_dropped_messages(lost_cycles);
+        }
 
         state_after_stream_builder
     }

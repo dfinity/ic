@@ -113,6 +113,10 @@ message Refund {
   optional uint64 refund_id = 3;
 }
 
+message Refunds {
+  repeated Refund refunds = 1;
+}
+
 message StreamMessage {
   oneof message {
     Request request = 1;

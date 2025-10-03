@@ -987,9 +987,9 @@ impl SystemState {
 
     /// Pushes a `RequestOrResponse` into the induction pool.
     ///
-    /// If the message is a `Request`, reserves a slot in the corresponding
-    /// output queue for the eventual response; and the maximum memory size and
-    /// cycles cost for sending the `Response` back. If it is a `Response`,
+    /// If the message is a `Request`, reserves a slot in the corresponding output
+    /// queue for the eventual response; and guaranteed response memory for the
+    /// maximum `Response` size if it's guaranteed response. If it is a `Response`,
     /// the protocol should have already reserved a slot and memory for it.
     ///
     /// Updates `subnet_available_guaranteed_response_memory` to reflect any change
@@ -1026,6 +1026,41 @@ impl SystemState {
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
+        #[cfg(debug_assertions)]
+        let cycles_before = self.queues.attached_cycles() + self.cycles_balance + msg.cycles();
+
+        let res = self.push_input_impl(
+            msg,
+            subnet_available_guaranteed_response_memory,
+            own_subnet_type,
+            input_queue_type,
+        );
+
+        #[cfg(debug_assertions)]
+        {
+            let cycles_after = self.queues.attached_cycles()
+                + self.cycles_balance
+                + if let Err((_, msg)) = &res {
+                    msg.cycles()
+                } else {
+                    Cycles::zero()
+                };
+            debug_assert_eq!(
+                cycles_before, cycles_after,
+                "Cycles lost or duplicated: before = {cycles_before}, after = {cycles_after}",
+            );
+        }
+
+        res
+    }
+
+    fn push_input_impl(
+        &mut self,
+        msg: RequestOrResponse,
+        subnet_available_guaranteed_response_memory: &mut i64,
+        own_subnet_type: SubnetType,
+        input_queue_type: InputQueueType,
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         assert_eq!(
             msg.receiver(),
             self.canister_id,
@@ -1039,6 +1074,7 @@ impl SystemState {
             (RequestOrResponse::Response(response), CanisterStatus::Stopped)
                 if response.is_best_effort() =>
             {
+                self.credit_refund(response);
                 Ok(false)
             }
 
@@ -1067,7 +1103,7 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg
-                    && !should_enqueue_input(
+                    && !look_up_callback(
                         response,
                         call_context_manager,
                         self.aborted_or_paused_response(),
@@ -1075,6 +1111,7 @@ impl SystemState {
                     .map_err(|err| (err, msg.clone()))?
                 {
                     // Best effort response whose callback is gone. Silently drop it.
+                    self.credit_refund(response);
                     return Ok(false);
                 }
                 push_input(
@@ -1084,6 +1121,15 @@ impl SystemState {
                     own_subnet_type,
                     input_queue_type,
                 )
+                .map(|dropped| {
+                    if let Some(response) = dropped {
+                        // Duplicate best-effort response that was silently dropped.
+                        self.credit_refund(&response);
+                        false
+                    } else {
+                        true
+                    }
+                })
             }
         }
     }
@@ -1368,7 +1414,7 @@ impl SystemState {
 
             // Protect against enqueuing duplicate responses.
             if let RequestOrResponse::Response(response) = &msg {
-                match should_enqueue_input(
+                match look_up_callback(
                     response,
                     call_context_manager,
                     self.aborted_or_paused_response(),
@@ -1392,13 +1438,16 @@ impl SystemState {
                 }
             }
 
-            // Attempt inducting `msg`. May fail if the input queue is full.
-            if self
-                .queues
-                .induct_message_to_self(self.canister_id)
-                .is_err()
-            {
-                return;
+            match self.queues.induct_message_to_self(self.canister_id) {
+                // Message successfully inducted.
+                Ok(None) => {}
+                // Silently dropped duplicate best-effort response.
+                Ok(Some(response)) => {
+                    // Borrow checker doesn't allow calling `credit_refund()` here.
+                    self.cycles_balance += response.refund;
+                }
+                // Full input queue.
+                Err(_) => return,
             }
 
             // Adjust `subnet_available_guaranteed_response_memory` by `memory_usage_before
@@ -1545,6 +1594,19 @@ impl SystemState {
             .split_input_schedules(own_canister_id, local_canisters);
     }
 
+    /// Credits the canister with the refund in the inbound `Response`.
+    fn credit_refund(&mut self, response: &Response) {
+        debug_assert_eq!(
+            self.canister_id, response.originator,
+            "Can only credit refunds from `Responses` originating from self ({}), got {:?}",
+            self.canister_id, response
+        );
+        debug_assert!(response.is_best_effort());
+        if !response.refund.is_zero() {
+            self.add_cycles(response.refund, CyclesUseCase::NonConsumed);
+        }
+    }
+
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
     /// decrements the metric `consumed_cycles`.
     pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
@@ -1641,7 +1703,7 @@ impl SystemState {
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
         debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
 
-        if use_case == CyclesUseCase::NonConsumed || amount == Cycles::from(0u128) {
+        if use_case == CyclesUseCase::NonConsumed || amount.is_zero() {
             return;
         }
 
@@ -1836,7 +1898,7 @@ pub(crate) fn push_input(
     subnet_available_guaranteed_response_memory: &mut i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
-) -> Result<bool, (StateError, RequestOrResponse)> {
+) -> Result<Option<Arc<Response>>, (StateError, RequestOrResponse)> {
     // Do not enforce limits for local messages on system subnets.
     if (own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet)
         && let Err(required_memory) = can_push(&msg, *subnet_available_guaranteed_response_memory)
@@ -1861,21 +1923,21 @@ pub(crate) fn push_input(
     res
 }
 
-/// Tests whether the given response should be inducted or silently dropped.
-/// Verifies that the stored respondent and originator associated with the
-/// `callback_id`, as well as its deadline match those of the response.
+/// Looks up the `Callback` associated with the given response's `callback_id`.
+/// Verifies that the `Callback`'s respondent and originator, as well as its
+/// deadline match those of the response.
 ///
 /// Returns:
 ///
-///  * `Ok(true)` if the response can be safely inducted.
+///  * `Ok(true)` if a matching callback was found.
 ///  * `Ok(false)` (drop silently) when a matching `callback_id` was not found
 ///    for a best-effort response (because the callback might have expired and
 ///    been closed; or because the callback is executing -- aborted or paused).
 ///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
 ///    not found for a guaranteed response.
-///  * `Err(StateError::NonMatchingResponse)` if the response details do not
-///    match those of the callback.
-pub(crate) fn should_enqueue_input(
+///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
+///    found, but the response details do not match those of the callback.
+pub(crate) fn look_up_callback(
     response: &Response,
     call_context_manager: &CallContextManager,
     aborted_or_paused_response: Option<&Response>,
