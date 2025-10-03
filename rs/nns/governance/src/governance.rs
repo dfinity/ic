@@ -89,6 +89,9 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
+use ic_nervous_system_rate_limits::{
+    InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError,
+};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
@@ -128,6 +131,7 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    time::{Duration, SystemTime},
 };
 
 pub mod disburse_maturity;
@@ -263,6 +267,10 @@ const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..
 /// neuron takes ~120K instructions to draw/refund maturity, so the total is ~600M).
 pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
+/// A key for the neuron rate limiter, to make sure all add_neuron operations are limited
+/// in the same limit.
+const NEURON_RATE_LIMITER_KEY: &str = "ADD_NEURON";
+
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
         Self {
@@ -291,6 +299,28 @@ impl From<NervousSystemError> for GovernanceError {
             error_type: ErrorType::External as i32,
             error_message: nervous_system_error.error_message,
         }
+    }
+}
+
+impl From<RateLimiterError> for GovernanceError {
+    fn from(value: RateLimiterError) -> Self {
+        let message = match value {
+            RateLimiterError::NotEnoughCapacity => {
+                "Reached maximum number of neurons that can be created in this hour. \
+                    Please wait and try again later."
+                    .to_string()
+            }
+            RateLimiterError::InvalidArguments(e) => format!("Rate Limit Error: {e}"),
+            RateLimiterError::MaxReservationsReached => {
+                "Reached maximum number of neuron creation reservations.  This should not happen."
+                    .to_string()
+            }
+            RateLimiterError::ReservationNotFound => "Rate limit reservation could not be \
+                committed because rate limiter has no record of it."
+                .to_string(),
+        };
+
+        GovernanceError::new_with_message(ErrorType::Unavailable, message)
     }
 }
 
@@ -1309,6 +1339,10 @@ pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
 
+    fn now_system_time(&self) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(self.now())
+    }
+
     #[cfg(any(test, feature = "test"))]
     fn set_time_warp(&self, _new_time_warp: TimeWarp) {
         panic!("Not implemented.");
@@ -1348,23 +1382,6 @@ pub enum HeapGrowthPotential {
 
     /// The heap can still grow, but not by much.
     LimitedAvailability,
-}
-
-struct NeuronRateLimits {
-    /// The number of neurons that can be created.
-    available_allowances: u64,
-    /// The last time the number of neurons that can be created was increased.
-    last_allowance_increase: u64,
-}
-
-impl Default for NeuronRateLimits {
-    fn default() -> Self {
-        Self {
-            // Post-upgrade, we reset to max neurons per hour
-            available_allowances: MAX_NEURON_CREATION_SPIKE,
-            last_allowance_increase: 0,
-        }
-    }
 }
 
 /// The `Governance` canister implements the full public interface of the
@@ -1407,8 +1424,7 @@ pub struct Governance {
     /// Scope guard for minting node provider rewards.
     minting_node_provider_rewards: bool,
 
-    /// Current neurons available to create
-    neuron_rate_limits: NeuronRateLimits,
+    rate_limiter: InMemoryRateLimiter<String>,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1543,6 +1559,18 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     }
 }
 
+fn new_rate_limiter() -> InMemoryRateLimiter<String> {
+    RateLimiter::new_in_memory(RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE),
+        max_capacity: MAX_NEURON_CREATION_SPIKE,
+        // It should not be possible to have more than MAX_NEURON_CREATION_SPIKE_RESERVATIONS
+        // because there is only one reservation space being used.
+        // But we don't want to hit that error, so we add an extra one.
+        max_reservations: MAX_NEURON_CREATION_SPIKE + 1,
+    })
+}
+
 impl Governance {
     /// Creates a new Governance instance with uninitialized fields. The canister should only have
     /// such state before the state is recovered from the stable memory in post_upgrade or
@@ -1566,7 +1594,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            neuron_rate_limits: NeuronRateLimits::default(),
+            rate_limiter: new_rate_limiter(),
         }
     }
 
@@ -1593,7 +1621,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            neuron_rate_limits: NeuronRateLimits::default(),
+            rate_limiter: new_rate_limiter(),
         }
     }
 
@@ -1625,7 +1653,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            neuron_rate_limits: NeuronRateLimits::default(),
+            rate_limiter: new_rate_limiter(),
         }
     }
 
@@ -1780,7 +1808,6 @@ impl Governance {
         &mut self,
         neuron_id: u64,
         neuron: Neuron,
-        with_rate_limits: bool,
     ) -> Result<(), GovernanceError> {
         if neuron_id == 0 {
             return Err(GovernanceError::new_with_message(
@@ -1816,22 +1843,7 @@ impl Governance {
             ));
         }
 
-        if with_rate_limits && self.neuron_rate_limits.available_allowances < 1 {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "Reached maximum number of neurons that can be created in this hour. \
-                    Please wait and try again later.",
-            ));
-        }
-
         self.neuron_store.add_neuron(neuron)?;
-
-        if with_rate_limits {
-            self.neuron_rate_limits.available_allowances = self
-                .neuron_rate_limits
-                .available_allowances
-                .saturating_sub(1);
-        }
 
         Ok(())
     }
@@ -1849,7 +1861,6 @@ impl Governance {
             ));
         }
         self.neuron_store.remove_neuron(&neuron_id);
-        self.neuron_rate_limits.available_allowances += 1;
 
         Ok(())
     }
@@ -2359,6 +2370,12 @@ impl Governance {
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
+        let neuron_limit_reservation = self.rate_limiter.try_reserve(
+            self.env.now_system_time(),
+            NEURON_RATE_LIMITER_KEY.to_string(),
+            1,
+        )?;
+
         let &manage_neuron::Split {
             amount_e8s: split_amount_e8s,
             memo,
@@ -2479,7 +2496,7 @@ impl Governance {
         // acquiring the lock. Indeed, in case there is already a pending
         // command, we return without state rollback. If we had already created
         // the embryo, it would not be garbage collected.
-        self.add_neuron(child_nid.id, child_neuron.clone(), true)?;
+        self.add_neuron(child_nid.id, child_neuron.clone())?;
 
         // Do the transfer for the parent first, to avoid double spending.
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
@@ -2525,6 +2542,17 @@ impl Governance {
                 child_nid, error
             );
             return Err(error);
+        }
+
+        // Commit the usage from reservation now that we are not going to remove the neuron
+        if self
+            .rate_limiter
+            .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .is_err()
+        {
+            println!(
+                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
+            );
         }
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
@@ -2911,7 +2939,7 @@ impl Governance {
         .build();
 
         // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
-        self.add_neuron(child_nid.id, child_neuron, false)?;
+        self.add_neuron(child_nid.id, child_neuron)?;
 
         // Get the parent neuron again, but this time mutable references.
         self.with_neuron_mut(id, |parent_neuron| {
@@ -3057,6 +3085,12 @@ impl Governance {
         caller: &PrincipalId,
         disburse_to_neuron: &manage_neuron::DisburseToNeuron,
     ) -> Result<NeuronId, GovernanceError> {
+        let neuron_limit_reservation = self.rate_limiter.try_reserve(
+            self.env.now_system_time(),
+            NEURON_RATE_LIMITER_KEY.to_string(),
+            1,
+        )?;
+
         let economics = self
             .heap_data
             .economics
@@ -3206,7 +3240,7 @@ impl Governance {
         .with_kyc_verified(parent_neuron.kyc_verified)
         .build();
 
-        self.add_neuron(child_nid.id, child_neuron.clone(), true)?;
+        self.add_neuron(child_nid.id, child_neuron.clone())?;
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
         let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
@@ -3246,6 +3280,17 @@ impl Governance {
                 child_nid, error
             );
             return Err(error);
+        }
+
+        // Commit the reservation now that the neuron can no longer be deleted.
+        if self
+            .rate_limiter
+            .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .is_err()
+        {
+            println!(
+                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
+            );
         }
 
         // Get the neurons again, but this time mutable references.
@@ -3973,7 +4018,7 @@ impl Governance {
                 .with_kyc_verified(true)
                 .build();
 
-                self.add_neuron(nid.id, neuron, false)
+                self.add_neuron(nid.id, neuron)
             }
             Some(RewardMode::RewardToAccount(reward_to_account)) => {
                 // We are not creating a neuron, just transferring funds.
@@ -6107,6 +6152,12 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
+        let neuron_limit_reservation = self.rate_limiter.try_reserve(
+            self.env.now_system_time(),
+            NEURON_RATE_LIMITER_KEY.to_string(),
+            1,
+        )?;
+
         let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
         let now = self.env.now();
         let neuron = NeuronBuilder::new(
@@ -6124,7 +6175,7 @@ impl Governance {
         .build();
 
         // This also verifies that there are not too many neurons already.
-        self.add_neuron(nid.id, neuron.clone(), true)?;
+        self.add_neuron(nid.id, neuron.clone())?;
 
         let _neuron_lock = self.lock_neuron_for_command(
             nid.id,
@@ -6155,6 +6206,17 @@ impl Governance {
                     balance.get_e8s()
                 ),
             ));
+        }
+
+        // Commit the reservation now that the neuron can no longer be deleted.
+        if self
+            .rate_limiter
+            .commit(self.env.now_system_time(), neuron_limit_reservation)
+            .is_err()
+        {
+            println!(
+                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
+            );
         }
 
         let result = self.with_neuron_mut(&nid, |neuron| {
@@ -6330,30 +6392,6 @@ impl Governance {
         Ok(id)
     }
 
-    /// Increment neuron allowances if enough time has passed.
-    fn maybe_increase_neuron_allowances(&mut self) {
-        // We  increase the allowance over the maximum per hour to account
-        // for natural variations in rates, but not leaving too much spare capacity.
-        if self.neuron_rate_limits.available_allowances < MAX_NEURON_CREATION_SPIKE {
-            let time_elapsed_since_last_allowance_increase = self
-                .env
-                .now()
-                .saturating_sub(self.neuron_rate_limits.last_allowance_increase);
-
-            // Heartbeats should run frequently enough that the allowances increase fairly close
-            // to what's intended.  However, some variation is acceptable.
-            if time_elapsed_since_last_allowance_increase
-                >= MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE
-            {
-                self.neuron_rate_limits.available_allowances = self
-                    .neuron_rate_limits
-                    .available_allowances
-                    .saturating_add(1);
-                self.neuron_rate_limits.last_allowance_increase = self.env.now();
-            }
-        }
-    }
-
     pub fn get_ledger(&self) -> Arc<dyn IcpLedger + Send + Sync> {
         self.ledger.clone()
     }
@@ -6413,7 +6451,6 @@ impl Governance {
         }
 
         self.maybe_gc();
-        self.maybe_increase_neuron_allowances();
     }
 
     fn should_update_maturity_modulation(&self) -> bool {

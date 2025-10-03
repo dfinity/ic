@@ -715,12 +715,13 @@ fn hash_plan(
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 
-    let mut chunk_actions: Vec<ChunkAction> = Vec::new();
+    let mut chunk_actions: Vec<ChunkAction> =
+        Vec::with_capacity(chunks_total(files, max_chunk_size));
 
     for FileWithSize(relative_path, size_bytes) in files.iter() {
         let num_chunks = count_chunks(*size_bytes, max_chunk_size);
-        if let Some(base_index) = get_base_index(relative_path, base_manifest)
-            && files_with_same_inodes.contains(relative_path)
+        if files_with_same_inodes.contains(relative_path)
+            && let Some(base_index) = get_base_index(relative_path, base_manifest)
         {
             for i in 0..num_chunks {
                 let action = {
@@ -756,14 +757,18 @@ fn hash_plan(
     chunk_actions
 }
 
+/// Returns total amount of chunks necessary to hash given files.
+fn chunks_total(files: &[FileWithSize], max_chunk_size: u32) -> usize {
+    files
+        .iter()
+        .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
+        .sum()
+}
+
 /// Returns the trivial hash plan that instructs the caller to recompute hashes
 /// of all the chunks.
 fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAction> {
-    let chunks_total: usize = files
-        .iter()
-        .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
-        .sum();
-    vec![ChunkAction::Recompute; chunks_total]
+    vec![ChunkAction::Recompute; chunks_total(files, max_chunk_size)]
 }
 
 /// Returns relative paths of files with the same inodes in the `checkpoint` and `base_manifest_info`.

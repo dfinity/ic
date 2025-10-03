@@ -716,14 +716,15 @@ def inject_config_into_image(
 
     image_part = f"--image-path {img_path}"
     reward_part = f"--node-reward-type {node_reward_type}"
-    prefix_part = f"--ipv6-prefix {ipv6_prefix}"
+    prefix_part = f"--ipv6-prefix {ipv6_prefix} "
+    prefix_part += "--ipv6-prefix-length 64"
     gateway_part = f"--ipv6-gateway {ipv6_gateway}"
     ipv4_part = ""
     if ipv4_args:
         ipv4_part = f"--ipv4-address {ipv4_args.address} "
         ipv4_part += f"--ipv4-gateway {ipv4_args.gateway} "
         ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
-        ipv4_part += f"--domain {ipv4_args.domain} "
+        ipv4_part += f"--domain-name {ipv4_args.domain} "
 
     enable_trusted_execution_environment_part = ""
     if inject_enable_trusted_execution_environment is not None:
