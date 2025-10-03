@@ -553,7 +553,7 @@ impl GuestVmService {
             self.write_to_console_and_stdout("#################################################");
 
             let tail_output = Command::new("tail")
-                .args(["-n", "30", serial_log_path.to_str().unwrap()])
+                .args(["-n", "100", serial_log_path.to_str().unwrap()])
                 .output()
                 .await
                 .context("Failed to tail serial log")?;
