@@ -1257,7 +1257,7 @@ fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
     call_context_manager.with_call_context(CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
         Cycles::from(0u128),

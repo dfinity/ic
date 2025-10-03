@@ -333,7 +333,7 @@ fn call_context_roundtrip_encoding() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
     let minimal_call_context = CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
         Cycles::zero(),
@@ -341,7 +341,7 @@ fn call_context_roundtrip_encoding() {
         Default::default(),
     );
     let maximal_call_context = CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         true,
         false,
         Cycles::new(3),
@@ -590,7 +590,7 @@ fn call_context_stats() {
     //
     let ingress_id = new_call_context(
         &mut ccm,
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
     );
 
     // Not a canister update, no stats updated.
@@ -605,7 +605,12 @@ fn call_context_stats() {
     let be_deadline = CoarseTime::from_secs_since_unix_epoch(5);
     let best_effort_id = new_call_context(
         &mut ccm,
-        CallOrigin::CanisterUpdate(be_originator, CallbackId::from(4), be_deadline),
+        CallOrigin::CanisterUpdate(
+            be_originator,
+            CallbackId::from(4),
+            be_deadline,
+            String::from(""),
+        ),
     );
 
     // One unresponded call context, but not a guaranteed response one.

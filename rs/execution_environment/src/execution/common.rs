@@ -68,7 +68,7 @@ pub(crate) fn action_to_response(
     ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => action_to_ingress_response(
+        CallOrigin::Ingress(user_id, message_id, _method_name) => action_to_ingress_response(
             &canister.canister_id(),
             user_id,
             action,
@@ -77,10 +77,10 @@ pub(crate) fn action_to_response(
             log,
             ingress_with_cycles_error,
         ),
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             action_to_request_response(canister, action, caller_canister_id, callback_id, deadline)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
+        CallOrigin::CanisterQuery(_, _, _) | CallOrigin::Query(_, _) => fatal!(
             log,
             "The update path should not have created a callback with a query origin",
         ),
@@ -243,10 +243,10 @@ pub(crate) fn wasm_result_to_query_response(
     refund: Cycles,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => {
+        CallOrigin::Ingress(user_id, message_id, _method_name) => {
             wasm_result_to_ingress_response(result, canister, user_id, message_id, time)
         }
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             let response = Response {
                 originator: caller_canister_id,
                 respondent: canister.canister_id(),
@@ -257,7 +257,7 @@ pub(crate) fn wasm_result_to_query_response(
             };
             ExecutionResponse::Request(response)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+        CallOrigin::CanisterQuery(_, _, _) | CallOrigin::Query(_, _) => {
             fatal!(log, "The update path should not have a query origin",)
         }
         CallOrigin::SystemTask => {

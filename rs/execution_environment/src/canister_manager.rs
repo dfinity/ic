@@ -3058,7 +3058,7 @@ pub fn uninstall_canister(
         .delete_all_call_contexts(|call_context| {
             // Generate reject responses for ingress and canister messages.
             match call_context.call_origin() {
-                CallOrigin::Ingress(user_id, message_id) => {
+                CallOrigin::Ingress(user_id, message_id, _method_name) => {
                     Some(Response::Ingress(IngressResponse {
                         message_id: message_id.clone(),
                         status: IngressStatus::Known {
@@ -3072,20 +3072,23 @@ pub fn uninstall_canister(
                         },
                     }))
                 }
-                CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
-                    Some(Response::Canister(CanisterResponse {
-                        originator: *caller_canister_id,
-                        respondent: canister_id,
-                        originator_reply_callback: *callback_id,
-                        refund: call_context.available_cycles(),
-                        response_payload: Payload::Reject(RejectContext::new(
-                            RejectCode::CanisterReject,
-                            "Canister has been uninstalled.",
-                        )),
-                        deadline: *deadline,
-                    }))
-                }
-                CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
+                CallOrigin::CanisterUpdate(
+                    caller_canister_id,
+                    callback_id,
+                    deadline,
+                    _method_name,
+                ) => Some(Response::Canister(CanisterResponse {
+                    originator: *caller_canister_id,
+                    respondent: canister_id,
+                    originator_reply_callback: *callback_id,
+                    refund: call_context.available_cycles(),
+                    response_payload: Payload::Reject(RejectContext::new(
+                        RejectCode::CanisterReject,
+                        "Canister has been uninstalled.",
+                    )),
+                    deadline: *deadline,
+                })),
+                CallOrigin::CanisterQuery(_, _, _) | CallOrigin::Query(_, _) => fatal!(
                     log,
                     "No callbacks with a query origin should be found when uninstalling"
                 ),

@@ -44,19 +44,21 @@ impl TryFrom<pb::CallContext> for CallContext {
 impl From<&CallOrigin> for pb::call_context::CallOrigin {
     fn from(item: &CallOrigin) -> Self {
         match item {
-            CallOrigin::Ingress(user_id, message_id) => Self::Ingress(pb::call_context::Ingress {
-                user_id: Some(user_id_into_protobuf(*user_id)),
-                message_id: message_id.as_bytes().to_vec(),
-            }),
-            CallOrigin::CanisterUpdate(canister_id, callback_id, deadline) => {
+            CallOrigin::Ingress(user_id, message_id, method_name) => {
+                Self::Ingress(pb::call_context::Ingress {
+                    user_id: Some(user_id_into_protobuf(*user_id)),
+                    message_id: message_id.as_bytes().to_vec(),
+                })
+            }
+            CallOrigin::CanisterUpdate(canister_id, callback_id, deadline, method_name) => {
                 Self::CanisterUpdate(pb::call_context::CanisterUpdateOrQuery {
                     canister_id: Some(pb_types::CanisterId::from(*canister_id)),
                     callback_id: callback_id.get(),
                     deadline_seconds: deadline.as_secs_since_unix_epoch(),
                 })
             }
-            CallOrigin::Query(user_id) => Self::Query(user_id_into_protobuf(*user_id)),
-            CallOrigin::CanisterQuery(canister_id, callback_id) => {
+            CallOrigin::Query(user_id, method_name) => Self::Query(user_id_into_protobuf(*user_id)),
+            CallOrigin::CanisterQuery(canister_id, callback_id, method_name) => {
                 Self::CanisterQuery(pb::call_context::CanisterUpdateOrQuery {
                     canister_id: Some(pb_types::CanisterId::from(*canister_id)),
                     callback_id: callback_id.get(),

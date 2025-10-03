@@ -347,7 +347,7 @@ impl<'a> QueryContext<'a> {
                         | Some(CallOrigin::Ingress(..))
                         | Some(CallOrigin::SystemTask) => {}
 
-                        Some(CallOrigin::Query(_)) | Some(CallOrigin::CanisterQuery(_, _)) => {
+                        Some(CallOrigin::Query(..)) | Some(CallOrigin::CanisterQuery(..)) => {
                             // We never serialize messages of such types in the
                             // canister's state so these must have been produced
                             // by this module.
@@ -603,12 +603,10 @@ impl<'a> QueryContext<'a> {
             Payload::Reject(_) => callback.on_reject.clone(),
         };
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                FuncRef::QueryClosure(closure)
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
             }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => FuncRef::QueryClosure(closure),
         };
 
         let time = self.state.get_ref().time();
@@ -736,10 +734,10 @@ impl<'a> QueryContext<'a> {
         call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
+            }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
@@ -964,9 +962,7 @@ impl<'a> QueryContext<'a> {
             };
 
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::SystemTask => {
+            CallOrigin::CanisterUpdate(..) | CallOrigin::Ingress(..) | CallOrigin::SystemTask => {
                 error!(
                     self.log,
                     "[EXC-BUG] Canister {}: unexpected callback with an update origin. This is a bug @{}",
@@ -980,7 +976,7 @@ impl<'a> QueryContext<'a> {
                 ))
             }
 
-            CallOrigin::Query(_) => match self.action_to_result(canister.canister_id(), action) {
+            CallOrigin::Query(..) => match self.action_to_result(canister.canister_id(), action) {
                 Some(Ok(wasm_result)) => {
                     ExecutionResult::Response(QueryResponse::UserResponse(wasm_result))
                 }
@@ -990,7 +986,7 @@ impl<'a> QueryContext<'a> {
                     Err(err) => ExecutionResult::SystemError(err),
                 },
             },
-            CallOrigin::CanisterQuery(originator, callback_id) => {
+            CallOrigin::CanisterQuery(originator, callback_id, _method_name) => {
                 let canister_id = canister.canister_id();
                 let to_query_result = |payload| {
                     let response = Response {
@@ -1050,13 +1046,11 @@ impl<'a> QueryContext<'a> {
             format!("Canister {canister_id} did not produce a response"),
         );
         match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => {
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
                 unreachable!("Expected a query call context");
             }
-            CallOrigin::Query(_) => QueryResponse::UserError(error),
-            CallOrigin::CanisterQuery(originator, callback_id) => {
+            CallOrigin::Query(..) => QueryResponse::UserError(error),
+            CallOrigin::CanisterQuery(originator, callback_id, _method_name) => {
                 let response = Response {
                     originator,
                     respondent: canister_id,

@@ -17,12 +17,14 @@ message CallContext {
   message Ingress {
     types.v1.UserId user_id = 1;
     bytes message_id = 2;
+    string method_name = 3;
   }
   message CanisterUpdateOrQuery {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;
     // If non-zero, this originates from a best-effort canister update call.
     uint32 deadline_seconds = 3;
+    string method_name = 4;
   }
   // System task is either a Heartbeat or a GlobalTimer.
   message SystemTask {}

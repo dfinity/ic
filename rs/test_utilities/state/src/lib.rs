@@ -557,7 +557,7 @@ impl CallContextBuilder {
 impl Default for CallContextBuilder {
     fn default() -> Self {
         Self {
-            call_origin: CallOrigin::Ingress(user_test_id(0), message_test_id(0)),
+            call_origin: CallOrigin::Ingress(user_test_id(0), message_test_id(0), String::from("")),
             responded: false,
             time: Time::from_nanos_since_unix_epoch(0),
         }
