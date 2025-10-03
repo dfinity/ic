@@ -51,14 +51,40 @@ pub enum Network {
     Regtest,
 }
 
+impl From<ic_ckbtc_minter::Network> for Network {
+    fn from(network: ic_ckbtc_minter::Network) -> Self {
+        match network {
+            ic_ckbtc_minter::Network::Mainnet => Self::Mainnet,
+            ic_ckbtc_minter::Network::Testnet => Self::Testnet,
+            ic_ckbtc_minter::Network::Regtest => Self::Regtest,
+        }
+    }
+}
+
+impl From<Network> for ic_ckbtc_minter::Network {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => ic_ckbtc_minter::Network::Mainnet,
+            Network::Testnet => ic_ckbtc_minter::Network::Testnet,
+            Network::Regtest => ic_ckbtc_minter::Network::Regtest,
+        }
+    }
+}
+
+impl std::fmt::Display for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+            Self::Regtest => write!(f, "regtest"),
+        }
+    }
+}
+
 impl From<InitArgs> for CkbtcMinterInitArgs {
     fn from(args: InitArgs) -> Self {
         CkbtcMinterInitArgs {
-            btc_network: match args.doge_network {
-                Network::Mainnet => ic_ckbtc_minter::Network::Mainnet,
-                Network::Testnet => ic_ckbtc_minter::Network::Testnet,
-                Network::Regtest => ic_ckbtc_minter::Network::Regtest,
-            },
+            btc_network: ic_ckbtc_minter::Network::from(args.doge_network),
             ecdsa_key_name: args.ecdsa_key_name,
             retrieve_btc_min_amount: args.retrieve_doge_min_amount,
             ledger_id: args

@@ -26,10 +26,13 @@ fn should_parse_valid_addresses() {
 
             assert_eq!(parsed_address.as_bytes(), test_case.expected_bytes());
             assert_matches!(
-                (parsed_address, test_case.expect_address_type()),
+                (&parsed_address, test_case.expect_address_type()),
                 (DogecoinAddress::P2pkh(_), AddressType::Pubkey)
                     | (DogecoinAddress::P2sh(_), AddressType::Script)
             );
+
+            let rendered_parsed_address = parsed_address.display(&test_case.network());
+            assert_eq!(test_case.base58_address(), rendered_parsed_address);
         }
     }
 }

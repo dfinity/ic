@@ -2,9 +2,7 @@
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
 use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, tx};
 use candid::Principal;
-use ic_btc_checker::{
-    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
-};
+use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
 use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignCallError;
@@ -254,19 +252,6 @@ pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
 
     result
-}
-
-/// Check if the given Bitcoin address is blocked.
-pub async fn check_withdrawal_destination_address(
-    btc_checker_principal: Principal,
-    address: String,
-) -> Result<CheckAddressResponse, CallError> {
-    ic_cdk::call::Call::bounded_wait(btc_checker_principal, "check_address")
-        .with_arg(CheckAddressArgs { address })
-        .await
-        .map_err(|e| CallError::from_cdk_call_error("check_address", e))?
-        .candid()
-        .map_err(|e| CallError::from_cdk_call_error("check_address", e))
 }
 
 /// Check if the given UTXO passes Bitcoin check.

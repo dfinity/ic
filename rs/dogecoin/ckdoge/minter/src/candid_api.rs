@@ -1,8 +1,14 @@
 //! Candid types for the canister enpoints (arguments and return types)
 
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use icrc_ledger_types::icrc1::account::Subaccount;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct GetDogeAddressArgs {
+    pub owner: Option<Principal>,
+    pub subaccount: Option<Subaccount>,
+}
 
 /// The arguments of the [retrieve_btc_with_approval] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
