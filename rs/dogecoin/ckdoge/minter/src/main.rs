@@ -1,6 +1,8 @@
 use ic_cdk::{init, post_upgrade, update};
 use ic_ckbtc_minter::state::eventlog::EventType;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
+use ic_ckdoge_minter::address::derive_doge_address;
+use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME,
     candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
@@ -33,6 +35,11 @@ fn setup_tasks() {
 #[post_upgrade]
 fn post_upgrade() {
     todo!("XC-495")
+}
+
+#[update]
+async fn get_doge_address(args: GetDogeAddressArgs) -> String {
+    address::derive_doge_address(args).await.unwrap()
 }
 
 #[update]
