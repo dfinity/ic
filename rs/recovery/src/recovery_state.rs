@@ -187,6 +187,7 @@ mod tests {
                 readonly_pub_key: Some(String::from("Fake public key")),
                 readonly_key_file: Some(PathBuf::from(dir)),
                 download_method: None,
+                nb_checkpoints: None,
                 keep_downloaded_state: Some(false),
                 upload_method: None,
                 wait_for_cup_node: None,
