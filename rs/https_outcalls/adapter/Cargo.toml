@@ -27,10 +27,12 @@ parking_lot = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
+reqwest = { version = "0.12", features = ["tokio-rustls", "socks"] }
 serde_json = { workspace = true }
 slog = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-socks = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 

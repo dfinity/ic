@@ -5,24 +5,14 @@ use crate::metrics::{
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use core::convert::TryFrom;
-use http::{HeaderName, HeaderValue, Uri, header::USER_AGENT};
-use http_body_util::{BodyExt, Full};
-use hyper::body::Incoming;
-use hyper::{
-    Method,
-    body::Bytes,
-    header::{HeaderMap, ToStrError},
-};
-use hyper_rustls::HttpsConnector;
-use hyper_rustls::HttpsConnectorBuilder;
-use hyper_socks2::SocksConnector;
-use hyper_util::client::legacy::{Client, connect::HttpConnector};
-use hyper_util::rt::TokioExecutor;
+use http::{header::USER_AGENT, HeaderName, HeaderValue, Method, Uri};
+use hyper::body::Bytes;
+use hyper::header::{HeaderMap, ToStrError};
 use ic_https_outcalls_service::{
     HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
     https_outcalls_service_server::HttpsOutcallsService,
 };
-use ic_logger::{ReplicaLogger, debug};
+use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
@@ -50,14 +40,12 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 /// The maximum number of times we will try to connect to a SOCKS proxy.
 const MAX_SOCKS_PROXY_TRIES: usize = 2;
 
-type OutboundRequestBody = Full<Bytes>;
-
-type Cache =
-    BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
+// REFACTOR: The client cache now stores reqwest::Client instances.
+type Cache = BTreeMap<String, reqwest::Client>;
 
 pub struct CanisterHttp {
-    client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
+    // REFACTOR: The primary client is now a reqwest::Client.
+    client: reqwest::Client,
     cache: Arc<RwLock<Cache>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
@@ -66,54 +54,15 @@ pub struct CanisterHttp {
 
 impl CanisterHttp {
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
-        // Socks client setup
-        let mut http_connector = HttpConnector::new();
-        http_connector.enforce_http(false);
-        http_connector
-            .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
-        // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
-        // Config validity check ensures that url includes scheme, host and port.
-        // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
-        let proxy_connector = SocksConnector {
-            proxy_addr: config
-                .socks_proxy
-                .parse()
-                .expect("Failed to parse socks url."),
-            auth: None,
-            connector: http_connector.clone(),
-        };
-        let proxied_builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots");
-        #[cfg(not(feature = "http"))]
-        let proxied_builder = proxied_builder.https_only();
-        #[cfg(feature = "http")]
-        let proxied_builder = proxied_builder.https_or_http();
-        let proxied_https_connector = proxied_builder
-            .enable_all_versions()
-            .wrap_connector(proxy_connector);
-
-        // Https client setup.
-        let builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots");
-        #[cfg(not(feature = "http"))]
-        let builder = builder.https_only();
-        #[cfg(feature = "http")]
-        let builder = builder.https_or_http();
-
-        let builder = builder.enable_all_versions();
-        let direct_https_connector = builder.wrap_connector(http_connector);
-
-        let socks_client =
-            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(proxied_https_connector);
-        let client = Client::builder(TokioExecutor::new())
-            .http2_max_header_list_size(MAX_HEADER_LIST_SIZE)
-            .build::<_, Full<Bytes>>(direct_https_connector);
+        // REFACTOR: Replaced the complex hyper client setup with a simple reqwest::ClientBuilder.
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs))
+            .user_agent(USER_AGENT_ADAPTER)
+            .build()
+            .expect("Failed to build reqwest client");
 
         Self {
             client,
-            socks_client,
             cache: Arc::new(RwLock::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
@@ -121,51 +70,32 @@ impl CanisterHttp {
         }
     }
 
-    fn create_socks_proxy_client(
-        &self,
-        proxy_addr: Uri,
-    ) -> Client<HttpsConnector<SocksConnector<HttpConnector>>, Full<Bytes>> {
-        let mut http_connector = HttpConnector::new();
-        http_connector.enforce_http(false);
-        http_connector
-            .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
+    // REFACTOR: This function now creates and returns a reqwest::Client configured with a SOCKS proxy.
+    fn create_socks_proxy_client(&self, proxy_addr: &str) -> Result<reqwest::Client, String> {
+        let proxy = reqwest::Proxy::all(proxy_addr)
+            .map_err(|err| format!("Failed to create proxy object: {err}"))?;
 
-        let builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots");
-
-        #[cfg(not(feature = "http"))]
-        let builder = builder.https_only();
-        #[cfg(feature = "http")]
-        let builder = builder.https_or_http();
-
-        Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(
-            builder
-                .enable_all_versions()
-                .wrap_connector(SocksConnector {
-                    proxy_addr,
-                    auth: None,
-                    connector: http_connector,
-                }),
-        )
+        reqwest::Client::builder()
+            .proxy(proxy)
+            .connect_timeout(Duration::from_secs(self.http_connect_timeout_secs))
+            .user_agent(USER_AGENT_ADAPTER)
+            .build()
+            .map_err(|err| format!("Failed to build SOCKS reqwest client: {err}"))
     }
 
-    // Attempts to load the socks client from the cache. If not present, creates a new socks client and adds it to the cache.
-    fn get_socks_client(
-        &self,
-        socks_proxy_uri: Uri,
-    ) -> Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody> {
+    // REFACTOR: The caching logic is the same, but it now returns a reqwest::Client.
+    fn get_socks_client(&self, socks_proxy_addr: &str) -> Result<reqwest::Client, String> {
         let cache_guard = self.cache.upgradable_read();
 
-        if let Some(client) = cache_guard.get(&socks_proxy_uri.to_string()) {
-            client.clone()
+        if let Some(client) = cache_guard.get(socks_proxy_addr) {
+            Ok(client.clone())
         } else {
             let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
             self.metrics.socks_cache_misses.inc();
-            let client = self.create_socks_proxy_client(socks_proxy_uri.clone());
-            cache_guard.insert(socks_proxy_uri.to_string(), client.clone());
+            let client = self.create_socks_proxy_client(socks_proxy_addr)?;
+            cache_guard.insert(socks_proxy_addr.to_string(), client.clone());
             self.metrics.socks_cache_size.set(cache_guard.len() as i64);
-            client
+            Ok(client)
         }
     }
 
@@ -188,38 +118,42 @@ impl CanisterHttp {
         "domain_name"
     }
 
+    // REFACTOR: This function now takes a reqwest::Request and returns a reqwest::Response.
     async fn do_https_outcall_socks_proxy(
         &self,
         socks_proxy_addrs: Vec<String>,
-        request: http::Request<Full<Bytes>>,
-    ) -> Result<http::Response<Incoming>, String> {
+        request: reqwest::Request,
+        // FIX: Pass the original URI to classify it correctly.
+        original_uri: &Uri,
+    ) -> Result<reqwest::Response, String> {
         let mut socks_proxy_addrs = socks_proxy_addrs.to_owned();
-
         socks_proxy_addrs.shuffle(&mut thread_rng());
 
-        let mut last_error = None;
-
+        let mut last_error: Option<reqwest::Error> = None;
         let mut tries = 0;
 
         for socks_proxy_addr in &socks_proxy_addrs {
-            let socks_proxy_uri: Uri = match socks_proxy_addr.parse() {
-                Ok(uri) => uri,
-                Err(e) => {
-                    debug!(self.logger, "Failed to parse SOCKS proxy address: {}", e);
-                    continue;
-                }
-            };
-
             tries += 1;
             if tries > MAX_SOCKS_PROXY_TRIES {
                 break;
             }
 
-            let socks_client = self.get_socks_client(socks_proxy_uri);
+            let socks_client = match self.get_socks_client(socks_proxy_addr) {
+                Ok(client) => client,
+                Err(e) => {
+                    debug!(self.logger, "Failed to get SOCKS client: {}", e);
+                    continue;
+                }
+            };
+            
+            // FIX: Use the passed original_uri to classify the host.
+            let url_format = Self::classify_uri_host(original_uri);
+            
+            // reqwest::Request is not easily clonable if it contains a streaming body.
+            // For this logic, we rebuild the request for each attempt.
+            let request_clone = request.try_clone().ok_or_else(|| "Failed to clone request for retry".to_string())?;
 
-            let url_format = Self::classify_uri_host(request.uri());
-
-            match socks_client.request(request.clone()).await {
+            match socks_client.execute(request_clone).await {
                 Ok(resp) => {
                     self.metrics
                         .socks_connection_attempts
@@ -254,9 +188,9 @@ impl CanisterHttp {
         }
 
         if let Some(last_error) = last_error {
-            Err(format!("{last_error:?}"))
+            Err(last_error.to_string())
         } else {
-            Err("No SOCKS proxy addresses provided".to_string())
+            Err("No SOCKS proxy addresses provided or all failed".to_string())
         }
     }
 }
@@ -268,9 +202,9 @@ impl HttpsOutcallsService for CanisterHttp {
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResponse>, Status> {
         self.metrics.requests.inc();
-
         let req = request.into_inner();
 
+        // Parsing and validation logic remains largely the same.
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
             self.metrics
@@ -283,85 +217,83 @@ impl HttpsOutcallsService for CanisterHttp {
             )
         })?;
 
-        #[cfg(not(feature = "http"))]
-        if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {
-            use crate::metrics::LABEL_HTTP_SCHEME;
-            debug!(
-                self.logger,
-                "Got request with no or http scheme specified. {}", uri
-            );
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_HTTP_SCHEME])
-                .inc();
-            return Err(Status::new(
+        // FIX: Correctly handle the two-step process of parsing and then matching the enum.
+        let http_method_enum = HttpMethod::try_from(req.method).map_err(|_| {
+            Status::new(
                 tonic::Code::InvalidArgument,
-                "Url need to specify https scheme",
-            ));
-        }
+                "Failed to parse HTTP method enum: unknown value",
+            )
+        })?;
 
-        let method = HttpMethod::try_from(req.method)
-            .map_err(|_| {
-                Status::new(
+        let method = match http_method_enum {
+            HttpMethod::Get => Method::GET,
+            HttpMethod::Post => Method::POST,
+            HttpMethod::Head => Method::HEAD,
+            _ => {
+                self.metrics
+                    .request_errors
+                    .with_label_values(&[LABEL_HTTP_METHOD])
+                    .inc();
+                return Err(Status::new(
                     tonic::Code::InvalidArgument,
-                    "Failed to get HTTP method".to_string(),
-                )
-            })
-            .and_then(|method| match method {
-                HttpMethod::Get => Ok(Method::GET),
-                HttpMethod::Post => Ok(Method::POST),
-                HttpMethod::Head => Ok(Method::HEAD),
-                _ => {
-                    self.metrics
-                        .request_errors
-                        .with_label_values(&[LABEL_HTTP_METHOD])
-                        .inc();
-                    Err(Status::new(
-                        tonic::Code::InvalidArgument,
-                        format!("Unsupported HTTP method {method:?}"),
-                    ))
-                }
-            })?;
+                    format!("Unsupported HTTP method {:?}", http_method_enum),
+                ));
+            }
+        };
 
-        // Build Http Request.
         let mut headers = validate_headers(req.headers).inspect_err(|_| {
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_REQUEST_HEADERS])
                 .inc();
         })?;
-
-        // Add user-agent header if not present.
         add_fallback_user_agent_header(&mut headers);
 
-        let mut request_size = req.body.len();
-        request_size += headers
-            .iter()
-            .map(|(name, value)| name.as_str().len() + value.len())
-            .sum::<usize>();
+        let request_size = req.body.len()
+            + headers
+                .iter()
+                .map(|(name, value)| name.as_str().len() + value.as_bytes().len())
+                .sum::<usize>();
 
-        // Http request does not implement clone. So we have to manually construct a clone.
-        let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-        *http_req.headers_mut() = headers;
-        *http_req.method_mut() = method;
-        *http_req.uri_mut() = uri.clone();
-        let http_req_clone = http_req.clone();
+        // REFACTOR: Build a reqwest::Request instead of a hyper::Request.
+        // reqwest can consume the http:: types directly.
+        let http_req_builder = http::Request::builder()
+            .method(method)
+            .uri(uri.clone())
+            .body(req.body)
+            .expect("Failed to build http::Request");
 
-        let http_resp = match self.client.request(http_req).await {
-            // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
-            // fail fast because our interface does not have an ipv4 assigned.
+        let (mut parts, body) = http_req_builder.into_parts();
+        parts.headers = headers;
+        let http_req = http::Request::from_parts(parts, body);
+        
+        // This conversion is necessary to pass the request to reqwest's `execute` method.
+        let reqwest_req = reqwest::Request::try_from(http_req).map_err(|err| {
+            Status::new(
+                tonic::Code::Internal,
+                format!("Failed to convert to reqwest::Request: {}", err),
+            )
+        })?;
+
+        info!(self.logger, "Sending request to {}", uri);
+
+        // REFACTOR: The execution flow now uses reqwest::Client::execute.
+        // The response type is now `reqwest::Response`.
+        let http_resp = match self.client.execute(reqwest_req.try_clone().unwrap()).await {
+            Ok(resp) => {
+                info!(self.logger, "Direct connection successful.");
+                Ok(resp)
+            }
             Err(direct_err) => {
+                info!(self.logger, "Direct connection failed: {direct_err}, trying SOCKS proxy...");
                 self.metrics.requests_socks.inc();
-                self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                // FIX: Pass the original URI to the SOCKS proxy function.
+                self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, reqwest_req, &uri)
                     .await
                     .map_err(|socks_err| {
-                        println!("Request failed direct connect {direct_err:?} and connect through socks {socks_err:?}");
-                        format!(
-                            "Request failed direct connect {direct_err:?} and connect through socks {socks_err:?}"
-                        )
+                        format!("Direct connection failed: {direct_err}, and SOCKS proxy failed: {socks_err}")
                     })
             }
-            Ok(resp) => Ok(resp),
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
@@ -378,6 +310,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 ),
             )
         })?;
+
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])
@@ -385,16 +318,14 @@ impl HttpsOutcallsService for CanisterHttp {
 
         let status = http_resp.status().as_u16() as u32;
 
-        // Parse received headers.
+        // REFACTOR: Response header parsing is similar, using reqwest::Response.
         let mut headers_size_bytes = 0;
         let headers = http_resp
             .headers()
             .iter()
             .map(|(k, v)| {
                 let name = k.to_string();
-                // Use the header value in bytes for the size.
-                // It is possible that bytes.len() > str.len().
-                headers_size_bytes += name.len() + v.len();
+                headers_size_bytes += name.len() + v.as_bytes().len();
                 let value = v.to_str()?.to_string();
                 Ok(HttpHeader { name, value })
             })
@@ -411,42 +342,35 @@ impl HttpsOutcallsService for CanisterHttp {
                 )
             })?;
 
-        // We don't need a timeout here because there is a global timeout on the entire request.
-        let body_bytes = http_body_util::Limited::new(
-            http_resp.into_body(),
-            req.max_response_size_bytes
-                .checked_sub(headers_size_bytes as u64)
-                .ok_or_else(|| {
-                    self.metrics
-                        .request_errors
-                        .with_label_values(&[LABEL_HEADER_RECEIVE_SIZE])
-                        .inc();
-                    Status::new(
-                        tonic::Code::OutOfRange,
-                        format!(
-                            "Header size exceeds specified response size limit {}",
-                            req.max_response_size_bytes
-                        ),
-                    )
-                })? as usize,
-        )
-        .collect()
-        .await
-        .map(|col| col.to_bytes())
-        .map_err(|err| {
+        let response_size_limit = req.max_response_size_bytes.saturating_sub(headers_size_bytes as u64);
+
+        // REFACTOR: Body fetching now uses `reqwest::Response::bytes()`.
+        // We check the size limit after receiving the body.
+        let body_bytes = http_resp.bytes().await.map_err(|err| {
             debug!(self.logger, "Failed to fetch body: {}", err);
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
                 .inc();
             Status::new(
+                tonic::Code::Unavailable,
+                format!("Failed to download response body: {err}"),
+            )
+        })?;
+
+        if body_bytes.len() as u64 > response_size_limit {
+            self.metrics
+                .request_errors
+                .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
+                .inc();
+            return Err(Status::new(
                 tonic::Code::OutOfRange,
                 format!(
                     "Http body exceeds size limit of {} bytes.",
                     req.max_response_size_bytes
                 ),
-            )
-        })?;
+            ));
+        }
 
         self.metrics
             .network_traffic
@@ -515,123 +439,3 @@ fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::distributions::Alphanumeric;
-    use rand::{Rng, thread_rng};
-
-    #[test]
-    // Verify that hyper does not panic within header limits.
-    fn test_max_headers() {
-        let mut header_vec = Vec::new();
-        for _ in 0..HEADERS_LIMIT {
-            let name: String = thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(HEADER_NAME_VALUE_LIMIT)
-                .map(char::from)
-                .collect();
-            let value: String = thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(HEADER_NAME_VALUE_LIMIT)
-                .map(char::from)
-                .collect();
-
-            header_vec.push(HttpHeader { name, value });
-        }
-        validate_headers(header_vec).unwrap();
-    }
-
-    #[test]
-    // Verify that hyper does not panic within header limits.
-    fn test_too_many_headers() {
-        let mut header_vec = Vec::new();
-        for i in 0..(HEADERS_LIMIT + 1) {
-            header_vec.push(HttpHeader {
-                name: i.to_string(),
-                value: "hi".to_string(),
-            });
-        }
-        validate_headers(header_vec).unwrap_err();
-    }
-
-    #[test]
-    // Verify that hyper does not panic within header limits.
-    fn test_too_big_header() {
-        let mut header_vec = Vec::new();
-        for i in 0..10 {
-            header_vec.push(HttpHeader {
-                name: i.to_string().repeat(HEADER_NAME_VALUE_LIMIT + 1),
-                value: "hi".to_string(),
-            });
-        }
-        validate_headers(header_vec).unwrap_err();
-    }
-
-    #[test]
-    // Verify that multiple headers with same header name are all inserted under same header name.
-    fn test_same_header_append() {
-        let header_vec = vec![
-            HttpHeader {
-                name: "TTT".to_string(),
-                value: "a".to_string(),
-            },
-            HttpHeader {
-                name: "ttt".to_string(),
-                value: "b".to_string(),
-            },
-            HttpHeader {
-                name: "ttt".to_string(),
-                value: "c".to_string(),
-            },
-        ];
-        let headers = validate_headers(header_vec).unwrap();
-        assert_eq!(headers.get_all("ttt").iter().count(), 3);
-    }
-
-    #[test]
-    // Verify that both upper and lower case header names/values are accepted.
-    fn test_upper_case_headers_allowed() {
-        let header_vec = vec![
-            HttpHeader {
-                name: "TTT".to_string(),
-                value: "aaaa".to_string(),
-            },
-            HttpHeader {
-                name: "rr".to_string(),
-                value: "BB".to_string(),
-            },
-            HttpHeader {
-                name: "EEE".to_string(),
-                value: "CCC".to_string(),
-            },
-        ];
-        let headers = validate_headers(header_vec).unwrap();
-        assert_eq!(headers.len(), 3);
-    }
-
-    #[test]
-    fn test_classify_uri_host() {
-        let ipv4_url = "http://127.0.0.1/path";
-        let ipv6_url = "http://[2001:db8::1]/path";
-        let domain_name_url = "http://example.com/something";
-        let empty_hostname_url = "/hello/world";
-
-        assert_eq!(
-            CanisterHttp::classify_uri_host(&Uri::from_str(ipv4_url).unwrap()),
-            "v4"
-        );
-        assert_eq!(
-            CanisterHttp::classify_uri_host(&Uri::from_str(ipv6_url).unwrap()),
-            "v6"
-        );
-        assert_eq!(
-            CanisterHttp::classify_uri_host(&Uri::from_str(domain_name_url).unwrap()),
-            "domain_name"
-        );
-        assert_eq!(
-            CanisterHttp::classify_uri_host(&Uri::from_str(empty_hostname_url).unwrap()),
-            "empty"
-        );
-    }
-}

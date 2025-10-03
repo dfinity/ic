@@ -18,11 +18,13 @@ DEPENDENCIES = [
     "@crate_index//:parking_lot",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
+    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-socks",
     "@crate_index//:tonic",
     "@crate_index//:tower",
 ]

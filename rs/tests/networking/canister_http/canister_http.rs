@@ -98,17 +98,17 @@ pub fn setup(env: TestEnv) {
             });
         });
         // Set up Universal VM with HTTP Bin testing service
-        s.spawn(|| {
-            UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-                .with_config_img(get_dependency_path(
-                    "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-                ))
-                .enable_ipv4()
-                .start(&env)
-                .expect("failed to set up universal VM");
+        
+        UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+            .with_config_img(get_dependency_path(
+                "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+            ))
+            .enable_ipv4()
+            .start(&env)
+            .expect("failed to set up universal VM");
 
-            start_httpbin_on_uvm(&env);
-        });
+        start_httpbin_on_uvm(&env);
+        
     });
 }
 
@@ -183,6 +183,7 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
     let vm = deployed_universal_vm.get_vm().unwrap();
     let ipv6 = vm.ipv6.to_string();
     let ipv4 = vm.ipv4.map_or("".to_string(), |ipv4| ipv4.to_string());
+    let http_bin_port = 443;
     info!(
         &env.logger(),
         "Starting httpbin service on UVM '{UNIVERSAL_VM_NAME}' ..."
@@ -227,7 +228,7 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         sudo mv "$ipv6" ipv6
         sudo chmod -R 755 ipv6
 
-        echo "Setting up httpbin on port 443 ..."
+        echo "Setting up httpbin on port {http_bin_port} ..."
         docker load -i /config/httpbin.tar
         sudo docker run \
             --rm \
@@ -237,10 +238,48 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
             -v "$(pwd)/ipv6":/certs \
             --name httpbin \
             httpbin:image \
-            --cert-file /certs/cert.pem --key-file /certs/key.pem --port 443
+            --cert-file /certs/cert.pem --key-file /certs/key.pem --port {http_bin_port}
     "#
         ))
         .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
+
+    create_accept_fw_rules(env, ipv6, http_bin_port);
+}
+
+fn create_accept_fw_rules(env: &TestEnv, uvm_ipv6: String, uvm_port: u16) {
+    let all_nodes: Vec<IcNodeSnapshot> = env
+        .topology_snapshot()
+        .subnets()
+        .flat_map(|s| s.nodes())
+        .collect();
+
+    // Iterate over each node and apply the temporary firewall rule
+    for node in all_nodes {
+        let node_id = node.node_id;
+        let script = format!(
+            r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            echo "Inserting ACCEPT rule on node {node_id} for UVM destination {uvm_ipv6}..."
+            
+            # Insert a rule at the top of the OUTPUT chain to allow this specific connection
+            sudo nft "insert rule ip6 filter OUTPUT meta skuid $ADAPTER_UID ip6 daddr {uvm_ipv6} tcp dport {uvm_port} accept"
+            "#,
+        );
+
+        node.block_on_bash_script(&script)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to add firewall rule on node {}: {:?}",
+                    node_id, e
+                )
+            });
+    }
+
+    info!(
+        &env.logger(),
+        "Firewall rules successfully applied on all nodes."
+    );
 }
 
 pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {

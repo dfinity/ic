@@ -19,8 +19,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use anyhow::bail;
-use anyhow::anyhow;
 use canister_http::*;
+use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
@@ -28,9 +28,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::SshSession;
-use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
@@ -43,7 +41,6 @@ use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 use slog::Logger;
-use std::net::{IpAddr, ToSocketAddrs};
 
 // NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 fn main() -> Result<()> {
@@ -52,50 +49,6 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         .execute_from_args()?;
 
-    Ok(())
-}
-
-fn upgrade_fw(logger: &Logger, nodes: &[IcNodeSnapshot], target_hostname: &str) -> Result<()> {
-    let target_ipv6 = (target_hostname, 443) 
-        .to_socket_addrs()?
-        .filter_map(|addr| if addr.is_ipv6() { Some(addr.ip()) } else { None })
-        .next()
-        .ok_or_else(|| anyhow!("Could not resolve IPv6 for {}", target_hostname))?;
-    info!(logger, "Resolved '{}' to IPv6: {}", target_hostname, target_ipv6);
-
-    for node in nodes {
-        info!(logger, "--- Configuring Node {} for Fallback Test ---", node.node_id);
-
-        let read_script = r#"
-            echo "--- Current OUTPUT Chain Rules: ---"
-            sudo ip6tables -L OUTPUT -v -n --line-numbers
-            echo "-------------------------------------"
-        "#;
-        match node.block_on_bash_script(read_script) {
-            Ok(initial_rules) => info!(logger, "Initial firewall state for node {}:\n{}", node.node_id, initial_rules),
-            Err(e) => info!(logger, "Warning: Could not read initial firewall rules for node {}: {:?}", node.node_id, e),
-        }
-
-        // === Step 2: Add the new blocking rule ===
-        let add_rule_script = format!(
-            r#"
-            set -e
-            # Get the UID of the user running the adapter
-            ADAPTER_UID=$(id -u ic-http-adapter)
-            echo "Found UID for ic-http-adapter: $ADAPTER_UID"
-            
-            echo "Inserting DROP rule for destination {} at the top of the OUTPUT chain..."
-            # Insert a rule at the top of the OUTPUT chain to drop packets from our specific user
-            # to the target IP. Using -I ensures it's evaluated before existing rules.
-            sudo ip6tables -I OUTPUT 1 -m owner --uid-owner $ADAPTER_UID -p tcp -d "{}" -j DROP
-            echo "Rule added successfully."
-            "#,
-            target_ipv6, target_ipv6
-        );
-
-        node.block_on_bash_script(&add_rule_script)?;
-        info!(logger, "✅ Firewall rule ADDED to node {}", node.node_id);
-    }
     Ok(())
 }
 
@@ -178,32 +131,85 @@ pub fn setup_(env: TestEnv) {
 
 pub fn test(env: TestEnv) {
 
-    let apibn_ip = env.topology_snapshot().api_boundary_nodes().next().unwrap().get_ip_addr();
+    //TODO(urgent): name these variables better. 
+    let apibn_ip = env.topology_snapshot().api_boundary_nodes().next().unwrap().get_ip_addr().to_string();
     
     let logger = env.logger();
-    info!(logger, "API boundary node IP address: {}", apibn_ip.to_string());
-    let webserver_ipv6 = get_universal_vm_address(&env);
-    let webserver_url = format!("https://[{webserver_ipv6}]:20443");
-    //let webserver_url = "https://ifconfig.me/ip";
-
-    let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    // match universal_vm.activate_fw(&x.to_string()) {
-    //     Ok(v) => info!(logger, "Activated firewall rule on universal VM: {}", v),
-    //     Err(e) => info!(logger, "Failed to activate firewall rule on universal VM: {}", e),
-    // }
+    info!(logger, "API boundary node IP address: {}", apibn_ip);
+    let webserver_ipv6 = get_universal_vm_address(&env).to_string();
+    let webserver_url = format!("https://[{webserver_ipv6}]:443/ip");
 
     let mut system_nodes = get_system_subnet_node_snapshots(&env);
     let system_node = system_nodes.next().expect("there is no system subnet node");
-
-    //TODO(urgent): don't clone
-    match upgrade_fw(&logger, &[system_node.clone()], "ifconfig.me") {
-        Ok(_) => info!(logger, "Upgraded firewall rules on system node"),
-        Err(e) => info!(logger, "Failed to upgrade firewall rules on system node: {}", e),
-    }
+    let system_node_id = system_node.node_id;
 
     let runtime_system = get_runtime_from_node(&system_node);
     let proxy_canister_system = create_proxy_canister(&env, &runtime_system, &system_node);
 
+    //TODO(urgent): move this in the "ic.start" somwehere.
+    let api_bn_accept_script = format!(
+        r#"
+        set -e
+        ADAPTER_UID=$(id -u ic-http-adapter)
+        echo "Inserting ACCEPT rule on node {system_node_id} for UVM destination {apibn_ip}..."
+        
+        # Insert a rule at the top of the OUTPUT chain to allow this specific connection
+        sudo nft "insert rule ip6 filter OUTPUT meta skuid $ADAPTER_UID ip6 daddr {apibn_ip} tcp dport 1080 accept"
+        "#,
+    );
+
+    system_node.block_on_bash_script(&api_bn_accept_script)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to add accept firewall rule on node {}: {:?}",
+                system_node_id, e
+            )
+        });
+    
+    let uvm_reject_script = format!(
+        r#"
+        set -e
+        ADAPTER_UID=$(id -u ic-http-adapter)
+        echo "Inserting REJECT rule on node {system_node_id} for UVM destination {webserver_ipv6}..."
+        
+        # Insert a rule at the top of the OUTPUT chain to allow this specific connection
+        sudo nft "insert rule ip6 filter OUTPUT meta skuid $ADAPTER_UID ip6 daddr {webserver_ipv6} tcp dport 443 reject"
+        "#,
+    );
+
+    system_node.block_on_bash_script(&uvm_reject_script)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to add reject firewall rule on node {}: {:?}",
+                system_node_id, e
+            )
+        });
+
+    assert_outcall_result(&logger, &proxy_canister_system, &webserver_url, apibn_ip);
+
+    let uvm_accept_script = format!(
+        r#"
+        set -e
+        ADAPTER_UID=$(id -u ic-http-adapter)
+        echo "Inserting REJECT rule on node {system_node_id} for UVM destination {webserver_ipv6}..."
+        
+        # Insert a rule at the top of the OUTPUT chain to allow this specific connection
+        sudo nft "insert rule ip6 filter OUTPUT meta skuid $ADAPTER_UID ip6 daddr {webserver_ipv6} tcp dport 443 accept"
+        "#,
+    );
+
+    system_node.block_on_bash_script(&uvm_accept_script)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to add new accept firewall rule on node {}: {:?}",
+                system_node_id, e
+            )
+        });
+
+    assert_outcall_result(&logger, &proxy_canister_system, &webserver_url, system_node.get_ip_addr().to_string());
+}
+
+fn assert_outcall_result(logger: &Logger, proxy_canister_system: &Canister<'_>, webserver_url: &str, expected_body: String) {
     block_on(ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling send_request of proxy canister {} with URL {}",
@@ -238,14 +244,12 @@ pub fn test(env: TestEnv) {
                 .expect("Update call to proxy canister failed");
             if !matches!(res, Ok(ref x) if x.status == 200) {
                 //bail!("Http request failed response: {:?}", res);
-                info!(&logger, "Http request failed response: {:?}", res);
+                info!(logger, "Http request failed response: {:?}", res);
             }
             info!(&logger, "Update call succeeded! {:?}", res);
             match res {
                 Ok(response) => {
-                    info!(logger, "Response body: {}", response.body);
-                    info!(logger, "Expected API boundary node IP: {}", apibn_ip.to_string());
-                    //assert!(response.body == apibn_ip.to_string())
+                    assert_eq!(response.body, expected_body);
                 },
                 Err((code, message)) => info!(logger, "Error code: {:?}, message: {}", code, message),
             }
