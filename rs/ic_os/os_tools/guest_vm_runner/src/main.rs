@@ -149,7 +149,6 @@ impl VirtualMachine {
                 Err(e) if retries > 0 => {
                     println!("Domain creation failed, retrying: {}", e);
                     Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
-                    std::thread::sleep(Duration::from_secs(3)); // Wait to give libvirt a chance to clean up the domain.
                     retries -= 1;
                     continue;
                 }
