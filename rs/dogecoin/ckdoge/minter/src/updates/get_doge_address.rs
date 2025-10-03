@@ -19,10 +19,12 @@ pub async fn get_doge_address(
     ic_ckbtc_minter::updates::get_btc_address::init_ecdsa_public_key().await;
     let (ecdsa_key_name, network) =
         read_state(|s| (s.ecdsa_key_name.clone(), Network::from(s.btc_network)));
-    let public_key = derive_public_key(ecdsa_key_name, &account)
+    let public_key: [u8; 33] = derive_public_key(ecdsa_key_name, &account)
         .await?
-        .public_key;
-    Ok(derive_p2pkh_address(&public_key).display(&network))
+        .public_key
+        .try_into()
+        .expect("BUG: invalid ECDSA compressed public key");
+    Ok(DogecoinAddress::from_compressed_public_key(&public_key).display(&network))
 }
 
 /// Returns the derivation path that should be used to sign a message from a
@@ -54,10 +56,4 @@ pub async fn derive_public_key(
         ..Default::default()
     })
     .await
-}
-
-fn derive_p2pkh_address(public_key: &[u8]) -> DogecoinAddress {
-    assert_eq!(public_key.len(), 33);
-    assert!(public_key[0] == 0x02 || public_key[0] == 0x03);
-    DogecoinAddress::P2pkh(ic_ckbtc_minter::tx::hash160(public_key))
 }

@@ -140,6 +140,11 @@ impl DogecoinAddress {
             DogecoinAddress::P2sh(data) => data.as_slice(),
         }
     }
+
+    pub fn from_compressed_public_key(public_key: &[u8; 33]) -> Self {
+        assert!(public_key[0] == 0x02 || public_key[0] == 0x03);
+        DogecoinAddress::P2pkh(ic_ckbtc_minter::tx::hash160(public_key))
+    }
 }
 
 pub fn version_and_hash_to_address(version: u8, hash: &[u8; 20]) -> String {
