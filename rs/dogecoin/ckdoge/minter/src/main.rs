@@ -40,10 +40,13 @@ async fn retrieve_doge_with_approval(
     args: RetrieveDogeWithApprovalArgs,
 ) -> Result<RetrieveDogeOk, RetrieveDogeWithApprovalError> {
     check_anonymous_caller();
-    let result = ic_ckbtc_minter::updates::retrieve_btc::retrieve_btc_with_approval(args.into())
-        .await
-        .map(RetrieveDogeOk::from)
-        .map_err(RetrieveDogeWithApprovalError::from);
+    let result = ic_ckbtc_minter::updates::retrieve_btc::retrieve_btc_with_approval(
+        args.into(),
+        &DOGECOIN_CANISTER_RUNTIME,
+    )
+    .await
+    .map(RetrieveDogeOk::from)
+    .map_err(RetrieveDogeWithApprovalError::from);
     check_postcondition(result)
 }
 
