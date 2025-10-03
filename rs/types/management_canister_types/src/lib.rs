@@ -2473,7 +2473,7 @@ impl SetupInitialDKGResponse {
 
 /// Types of curves that can be used for ECDSA signing.
 /// ```text
-/// (variant { secp256k1; })
+/// variant { secp256k1; }
 /// ```
 #[derive(
     Copy,
@@ -2605,7 +2605,7 @@ impl FromStr for EcdsaKeyId {
 
 /// Types of algorithms that can be used for Schnorr signing.
 /// ```text
-/// (variant { bip340secp256k1; ed25519 })
+/// variant { bip340secp256k1; ed25519 }
 /// ```
 #[derive(
     Copy,
@@ -2743,7 +2743,7 @@ impl FromStr for SchnorrKeyId {
 
 /// Types of curves that can be used for threshold key derivation (vetKD).
 /// ```text
-/// (variant { bls12_381_g2; })
+/// variant { bls12_381_g2; }
 /// ```
 #[derive(
     Copy,
@@ -2878,7 +2878,7 @@ impl FromStr for VetKdKeyId {
 /// Unique identifier for a key that can be used for one of the signature schemes
 /// supported on the IC.
 /// ```text
-/// (variant { EcdsaKeyId; SchnorrKeyId })
+/// variant { EcdsaKeyId; SchnorrKeyId; VetKdKeyId }
 /// ```
 #[derive(
     Clone,
@@ -3166,11 +3166,11 @@ pub struct SignWithBip341Aux {
 
 /// Represents the aux argument of the sign_with_schnorr API.
 /// ```text
-/// (variant {
+/// variant {
 ///    bip341 : record {
 ///      merkle_root_hash : blob;
 ///   }
-/// })
+/// }
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum SignWithSchnorrAux {
