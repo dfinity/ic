@@ -7,6 +7,9 @@ use num_traits::ToPrimitive;
 /// ```text
 /// record {
 ///   amount : opt nat;
+///   settings : opt canister_settings;
+///   specified_id : opt principal;
+///   sender_canister_version : opt nat64;
 /// }
 /// ```
 #[derive(Debug, CandidType, Deserialize)]

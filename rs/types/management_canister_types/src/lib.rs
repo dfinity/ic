@@ -18,6 +18,7 @@ use ic_base_types::{
     SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
+use ic_protobuf::log::{self, log_entry};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -1217,12 +1218,12 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 /// ```text
 /// record {
 ///   controller : principal;
+///   controllers : vec principal;
 ///   compute_allocation : nat;
 ///   memory_allocation : nat;
 ///   freezing_threshold : nat;
 ///   reserved_cycles_limit : nat;
 ///   log_visibility : log_visibility;
-///   log_size : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
 ///   environment_variables : vec environment_variable;
@@ -1237,7 +1238,6 @@ pub struct DefiniteCanisterSettingsArgs {
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
     log_visibility: LogVisibilityV2,
-    log_size: candid::Nat,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
     environment_variables: Vec<EnvironmentVariable>,
@@ -1252,7 +1252,6 @@ impl DefiniteCanisterSettingsArgs {
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
         log_visibility: LogVisibilityV2,
-        log_size: u64,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
@@ -1275,7 +1274,6 @@ impl DefiniteCanisterSettingsArgs {
             freezing_threshold: candid::Nat::from(freezing_threshold),
             reserved_cycles_limit,
             log_visibility,
-            log_size,
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
             environment_variables,
@@ -1292,10 +1290,6 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
-    }
-
-    pub fn log_size(&self) -> candid::Nat {
-        self.log_size.clone()
     }
 
     pub fn wasm_memory_limit(&self) -> candid::Nat {
@@ -1354,6 +1348,7 @@ pub struct QueryStats {
 ///     snapshots_size : nat;
 ///   };
 ///   cycles : nat;
+///   balance : vec record { blob; nat };
 ///   freezing_threshold : nat;
 ///   idle_cycles_burned_per_day : nat;
 ///   reserved_cycles : nat;
@@ -2152,7 +2147,6 @@ pub struct EnvironmentVariable {
 ///   freezing_threshold : opt nat;
 ///   reserved_cycles_limit : opt nat;
 ///   log_visibility : opt log_visibility;
-///   log_size : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
 ///   environment_variables : opt vec environment_variable;
@@ -2166,7 +2160,6 @@ pub struct CanisterSettingsArgs {
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibilityV2>,
-    pub log_size: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
@@ -2185,7 +2178,6 @@ impl CanisterSettingsArgs {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
-            log_size: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
             environment_variables: None,
@@ -2201,7 +2193,6 @@ pub struct CanisterSettingsArgsBuilder {
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
     log_visibility: Option<LogVisibilityV2>,
-    log_size: Option<candid::Nat>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
     environment_variables: Option<Vec<EnvironmentVariable>>,
@@ -2221,7 +2212,6 @@ impl CanisterSettingsArgsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
-            log_size: self.log_size,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
             environment_variables: self.environment_variables,
@@ -2290,14 +2280,6 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
-            ..self
-        }
-    }
-
-    /// Sets the log size in bytes.
-    pub fn with_log_size(self, log_size: u64) -> Self {
-        Self {
-            log_size: Some(candid::Nat::from(log_size)),
             ..self
         }
     }
@@ -3072,12 +3054,14 @@ const MAX_ALLOWED_NODES_COUNT: usize = 100;
 pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
 
 /// Argument of the reshare_chain_key API.
-/// `(record {
+/// ```text
+/// (record {
 ///     key_id : master_public_key_id;
 ///     subnet_id : principal;
 ///     nodes : vec principal;
 ///     registry_version : nat64;
-/// })`
+/// })
+/// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct ReshareChainKeyArgs {
     pub key_id: MasterPublicKeyId,
@@ -3622,8 +3606,8 @@ pub type UploadChunkReply = ChunkHash;
 ///       skip_pre_upgrade : opt bool;
 ///     };
 ///   };
-///   target_canister_id : principal;
-///   store_canister_id : opt principal;
+///   target_canister : principal;
+///   store_canister : opt principal;
 ///   chunk_hashes_list : vec chunk_hash;
 ///   wasm_module_hash : blob;
 ///   arg : blob;
@@ -3704,7 +3688,8 @@ impl InstallChunkedCodeArgs {
 
 /// Struct used for encoding/decoding of legacy version of `InstallChunkedCodeArgs`,
 /// it is used to preserve backward compatibility.
-/// `(record {
+/// ```text
+/// (record {
 ///     mode : variant {
 ///         install;
 ///         reinstall;
@@ -3718,7 +3703,8 @@ impl InstallChunkedCodeArgs {
 ///     wasm_module_hash : blob;
 ///     arg : blob;
 ///     sender_canister_version : opt nat64;
-/// })`
+/// })
+/// ```
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InstallChunkedCodeArgsLegacy {
     pub mode: CanisterInstallModeV2,
@@ -3895,11 +3881,13 @@ impl LoadCanisterSnapshotArgs {
 impl Payload<'_> for LoadCanisterSnapshotArgs {}
 
 /// Struct to be returned when taking a canister snapshot.
-/// `(record {
+/// ```text
+/// (record {
 ///      id : blob;
 ///      taken_at_timestamp : nat64;
 ///      total_size : nat64;
-/// })`
+/// })
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSnapshotResponse {
     pub id: SnapshotId,
