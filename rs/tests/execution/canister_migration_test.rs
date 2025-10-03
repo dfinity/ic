@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -15,8 +15,8 @@ use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
 };
-use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
+use ic_system_test_driver::{retry_with_msg_async, systest};
 use ic_universal_canister::wasm;
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
@@ -26,8 +26,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
-        .with_timeout_per_test(Duration::from_secs(1200))
-        .with_overall_timeout(Duration::from_secs(1200))
+        .with_timeout_per_test(Duration::from_secs(800))
+        .with_overall_timeout(Duration::from_secs(800))
         .execute_from_args()?;
 
     Ok(())
@@ -209,21 +209,31 @@ async fn test_async(env: TestEnv) {
 
     // The migration canister has a step where it waits for 5 minutes, so we give it a minute more than that.
     println!("Wait over 5 minutes for processing.");
-    tokio::time::sleep(Duration::from_secs(360)).await;
 
-    let status = nns_agent
-        .update(&migration_canister_id, "migration_status")
-        .with_arg(args.clone())
-        .call_and_wait()
-        .await
-        .expect("Failed to call migration_status.");
-    let decoded_status = Decode!(&status, Vec<MigrationStatus>)
-        .expect("Failed to decode response from migration_status.");
+    retry_with_msg_async!(
+        "Wait 5m for migration canister to process",
+        &logger,
+        Duration::from_secs(360),
+        Duration::from_secs(10),
+        || async {
+            let status = nns_agent
+                .update(&migration_canister_id, "migration_status")
+                .with_arg(args.clone())
+                .call_and_wait()
+                .await
+                .expect("Failed to call migration_status.");
+            let decoded_status = Decode!(&status, Vec<MigrationStatus>)
+                .expect("Failed to decode response from migration_status.");
 
-    assert!(matches!(
-        decoded_status[0],
-        MigrationStatus::Succeeded { .. }
-    ));
+            if matches!(decoded_status[0], MigrationStatus::Succeeded { .. }) {
+                Ok(())
+            } else {
+                bail!("Not ready")
+            }
+        }
+    )
+    .await
+    .unwrap();
 
     // assert that the source canister is on the target subnet.
     #[derive(CandidType, Deserialize)]
@@ -252,20 +262,32 @@ async fn test_async(env: TestEnv) {
         subnet_id.unwrap(),
         app_subnet_2.subnet_id().unwrap().get().0
     );
-    // wait until delegation updates
-    tokio::time::sleep(Duration::from_secs(610)).await;
-    // assert that "source" canister responds
+
     let migrated_canister =
         UniversalCanister::from_canister_id(&app_subnet_2_agent, source_canister.canister_id());
     let mgr = ManagementCanister::create(&app_subnet_2_agent);
-    mgr.start_canister(&source_canister.canister_id())
-        .await
-        .unwrap();
+
+    // wait until delegation updates
+    retry_with_msg_async!(
+        "Wait 10m for delegation to change",
+        &logger,
+        Duration::from_secs(660),
+        Duration::from_secs(10),
+        || async {
+            // assert that "source" canister responds
+            match mgr.start_canister(&source_canister.canister_id()).await {
+                Ok(_) => Ok(()),
+                Err(_) => bail!("Not ready"),
+            }
+        }
+    )
+    .await
+    .unwrap();
+
     let data = [4, 2];
     let res = migrated_canister
         .update(wasm().reply_data(&data))
         .await
         .unwrap();
-    println!("res {:?}", res);
     assert_eq!(data, &res[0..2]);
 }
