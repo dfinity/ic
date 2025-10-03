@@ -8075,10 +8075,16 @@ fn test_proposal_gc() {
                             }))
                         } else {
                             Action::ExecuteNnsFunction(ExecuteNnsFunction {
+                                nns_function: NnsFunction::NnsCanisterInstall as i32,
                                 ..Default::default()
                             })
                         }),
                         ..Default::default()
+                    }),
+                    topic: Some(if id % 2 == 0 {
+                        Topic::NeuronManagement as i32
+                    } else {
+                        Topic::ProtocolCanisterManagement as i32
                     }),
                     ..Default::default()
                 },
@@ -8114,12 +8120,27 @@ fn test_proposal_gc() {
     assert!(gov.heap_data.proposals.len() <= 200);
     // Check that the proposals with high IDs have been kept and the
     // proposals with low IDs have been purged.
-    for i in 1..500 {
+    for i in 1..800 {
         assert!(!gov.heap_data.proposals.contains_key(&i));
     }
-    for i in 900..1000 {
+    for i in 800..1000 {
         assert!(gov.heap_data.proposals.contains_key(&i));
     }
+    // Check that garbage collected proposals are tracked with their topics
+    assert_eq!(
+        gov.heap_data.topic_of_garbage_collected_proposals,
+        (1..800)
+            .map(|i| {
+                let topic = if i % 2 == 0 {
+                    Topic::NeuronManagement
+                } else {
+                    Topic::ProtocolCanisterManagement
+                };
+                (i, topic)
+            })
+            .collect()
+    );
+
     // Running again, nothing should change...
     assert!(!gov.maybe_gc());
     // Reset all proposals.
