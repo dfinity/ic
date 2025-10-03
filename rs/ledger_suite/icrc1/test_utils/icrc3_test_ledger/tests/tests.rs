@@ -8,7 +8,7 @@ use ic_certification::{
 use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_icrc3_test_ledger::AddBlockResult;
+use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -19,8 +19,8 @@ use icrc_ledger_types::icrc3::blocks::{
 };
 use num_traits::cast::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::{collections::BTreeMap, time::Duration};
+use std::{path::PathBuf, u64};
 
 const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
 const TEST_USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
@@ -96,6 +96,25 @@ fn get_blocks(
         GetBlocksResponse
     )
     .expect("failed to decode icrc3_get_blocks response")
+}
+
+fn archive_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    archive_id: CanisterId,
+    num_blocks: u64,
+) -> u64 {
+    let archive_args = ArchiveBlocksArgs {
+        archive_id: archive_id.into(),
+        num_blocks,
+    };
+    Decode!(
+        &env.execute_ingress(ledger_id, "archive_blocks", Encode!(&archive_args).unwrap())
+            .expect("failed to archive blocks")
+            .bytes(),
+        u64
+    )
+    .expect("failed to decode add_block response")
 }
 
 fn check_legacy_get_blocks(
@@ -576,4 +595,74 @@ fn test_supported_standards() {
     assert_eq!(standards.len(), 2);
     assert_eq!(standards[0].name, "ICRC-3");
     assert_eq!(standards[1].name, "ICRC-10");
+}
+
+fn verify_blocks_in_ledger(env: &StateMachine, canister_id: CanisterId, start: u64, length: u64) {
+    let result = Decode!(
+        &env.query(
+            canister_id,
+            "icrc3_get_blocks",
+            Encode!(&vec![GetBlocksRequest {
+                start: Nat::from(0u64),
+                length: Nat::from(u64::MAX),
+            }])
+            .unwrap()
+        )
+        .expect("failed to get blocks")
+        .bytes(),
+        GetBlocksResult
+    )
+    .expect("failed to decode icrc3_get_blocks response");
+    if length == 0 {
+        assert!(result.blocks.is_empty());
+    } else {
+        assert_eq!(result.blocks.first().unwrap().id, start);
+        assert_eq!(result.blocks.last().unwrap().id, start + length - 1);
+    }
+}
+
+#[test]
+fn test_archiving() {
+    let (env, ledger_id) = setup_icrc3_test_ledger();
+
+    for block_id in 0..20 {
+        let block = BlockBuilder::new(block_id, block_id)
+            .mint(TEST_ACCOUNT_1, Tokens::from(1u64))
+            .build();
+        let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+        assert_eq!(result, Nat::from(block_id));
+    }
+
+    verify_blocks_in_ledger(&env, ledger_id, 0, 20);
+
+    let archive1 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive1, 2);
+    assert_eq!(archived_count, 2);
+
+    for _ in 0..10 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, ledger_id, 2, 18);
+
+    let archive2 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+
+    for _ in 0..10 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 2);
+    verify_blocks_in_ledger(&env, ledger_id, 4, 16);
 }

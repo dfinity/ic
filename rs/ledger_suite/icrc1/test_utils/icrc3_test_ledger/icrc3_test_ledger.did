@@ -130,9 +130,16 @@ type ArchiveBlocksArgs = record {
   num_blocks : nat64
 };
 
+type BlockWithId = record {
+  id : nat;
+  block : ICRC3Value
+};
+
 service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
+
+    add_block_with_index : (BlockWithId) -> (AddBlockResult);
 
     icrc1_supported_standards : () -> (vec StandardRecord) query;
 
