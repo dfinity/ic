@@ -35,12 +35,8 @@ if [ "$3" == "--generate-test-did" ]; then
 
     if ! patch "$DID_TEMP_FILE" -i "$PATCH_TEMP_FILE" -o "$TEST_DID_TEMP_PATH"; then
         echo "Error: Failed to patch $DID_TEMP_FILE with $PATCH_TEMP_FILE Consider use a different GIT_BASE."
-        rm $DID_TEMP_FILE
-        rm $PATCH_TEMP_FILE
         exit 1
     fi
-    rm $DID_TEMP_FILE
-    rm $PATCH_TEMP_FILE
     echo "Generated $TEST_DID_TEMP_PATH, please edit and run again with \`bazel run ${TARGET_BASE_NAME}_update_patch\`"
 elif [ "$3" == "--update-patch" ]; then
     if [ ! -f $DID_PATH ]; then

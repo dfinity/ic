@@ -31,7 +31,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
             else
                 PATCH_OPTS=""
             fi
-            if ! patch "$$PATCH_OPTS" {canister_did_path} -i {canister_test_did_patch_path} -o $@; then
+            if ! patch $$PATCH_OPTS {canister_did_path} -i {canister_test_did_patch_path} -o $@; then
                 echo "Error generating {canister_test_did}, please run the //{target_base_name}_generate_test_did to edit the generated file"
                 exit 1
             fi
