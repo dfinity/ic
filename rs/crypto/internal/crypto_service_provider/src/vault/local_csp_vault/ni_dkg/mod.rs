@@ -26,7 +26,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_node_key_validation::ValidDkgDealingEncryptionPublicKey;
-use ic_logger::debug;
+use ic_logger::{debug, info};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NumberOfNodes};
@@ -406,12 +406,20 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 let threshold_secret_key: Option<CspSecretKey> =
                     self.sks_read_lock().get(&threshold_key_id);
                 if let Some(secret_key) = threshold_secret_key {
-                    // this adds a sanity check to ensure the key is well formed:
-                    return specialise::groth20::threshold_secret_key(secret_key)
-                        .map(|_| ())
-                        .map_err(
-                            ni_dkg_errors::CspDkgLoadPrivateKeyError::MalformedSecretKeyError,
-                        );
+                    // DO NOT MERGE: uncomment me
+
+                    // // this adds a sanity check to ensure the key is well formed:
+                    // return specialise::groth20::threshold_secret_key(secret_key)
+                    //     .map(|_| ())
+                    //     .map_err(
+                    //         ni_dkg_errors::CspDkgLoadPrivateKeyError::MalformedSecretKeyError,
+                    //     );
+
+                    info!(
+                        self.logger,
+                        "PIERUGO | Found existing key {} in SKS. Would have skipped computation but still recomputing it now",
+                        threshold_key_id
+                    );
                 }
 
                 // Compute the key
