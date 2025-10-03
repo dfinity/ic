@@ -461,6 +461,15 @@ pub struct RenameToRecord {
 ///     controllers : opt vec principal;
 ///     environment_variables_hash : opt blob;
 ///   };
+///   rename_canister : record {
+///     canister_id : principal;
+///     total_num_changes : nat64;
+///     rename_to : record {
+///       canister_id : principal;
+///       version : nat64;
+///       total_num_changes : nat64;
+///     };
+///   };
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -2878,7 +2887,7 @@ impl FromStr for VetKdKeyId {
 /// Unique identifier for a key that can be used for one of the signature schemes
 /// supported on the IC.
 /// ```text
-/// variant { EcdsaKeyId; SchnorrKeyId; VetKdKeyId }
+/// variant { Ecdsa : ecdsa_key_id; Schnorr : schnorr_key_id; VetKd : vetkd_key_id }
 /// ```
 #[derive(
     Clone,
