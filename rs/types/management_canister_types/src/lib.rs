@@ -160,7 +160,12 @@ pub trait Payload<'a>: Sized + CandidType + Deserialize<'a> {
     }
 }
 
-/// Struct used for encoding/decoding `(record {canister_id})`.
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   canister_id : principal;
+/// }
+/// ```
 #[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct CanisterIdRecord {
     canister_id: PrincipalId,
@@ -324,7 +329,7 @@ impl CanisterControllersChangeRecord {
 ///    canister_version : nat64;
 ///    snapshot_id : blob;
 ///    taken_at_timestamp : nat64;
-///    source: variant {
+///    source : variant {
 ///         taken_from_canister : reserved;
 ///         metadata_upload : reserved;
 ///    };
@@ -443,7 +448,7 @@ pub struct RenameToRecord {
 ///     controllers : vec principal;
 ///   };
 ///   load_snapshot : record {
-///     canister_version: nat64;
+///     canister_version : nat64;
 ///     snapshot_id : blob;
 ///     taken_at_timestamp : nat64;
 ///     source : variant {
@@ -1122,7 +1127,7 @@ pub type BoundedAllowedViewers =
 /// variant {
 ///    controllers;
 ///    public;
-///    allowed_viewers: vec principal;
+///    allowed_viewers : vec principal;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter)]
@@ -1649,14 +1654,16 @@ impl WasmMemoryPersistence {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize, Serialize)]
-/// Struct used for encoding/decoding:
-/// `record {
-///    skip_pre_upgrade : opt bool;
-///    wasm_memory_persistence : opt variant {
-///      keep;
-///      replace;
-///    };
-/// }`
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   skip_pre_upgrade : opt bool;
+///   wasm_memory_persistence : opt variant {
+///     keep;
+///     replace;
+///   };
+/// }
+/// ```
 /// Extendibility for the future: Adding new optional fields ensures both backwards- and
 /// forwards-compatibility in Candid.
 pub struct CanisterUpgradeOptions {
@@ -2114,10 +2121,12 @@ impl DataSize for PrincipalId {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     name: text;
-///     value: text;
-/// })`
+/// ```text
+/// record {
+///   name : text;
+///   value : text;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct EnvironmentVariable {
     pub name: String,
@@ -2352,10 +2361,12 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     node_ids : vec principal;
-///     registry_version: nat64;
-/// })`
+/// ```text
+/// record {
+///   node_ids : vec principal;
+///   registry_version : nat64;
+/// }
+/// ```
 #[derive(Debug, CandidType, Deserialize)]
 pub struct SetupInitialDKGArgs {
     node_ids: Vec<PrincipalId>,
@@ -2524,7 +2535,7 @@ impl FromStr for EcdsaCurve {
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
 /// ```text
-/// (record { curve: ecdsa_curve; name: text})
+/// (record { curve : ecdsa_curve; name : text})
 /// ```
 #[derive(
     Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
@@ -2662,7 +2673,7 @@ impl FromStr for SchnorrAlgorithm {
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
 /// ```text
-/// (record { algorithm: schnorr_algorithm; name: text})
+/// (record { algorithm : schnorr_algorithm; name : text})
 /// ```
 #[derive(
     Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
@@ -2796,7 +2807,7 @@ impl FromStr for VetKdCurve {
 /// some information about the key (e.g. that the key is meant to be used for
 /// testing purposes).
 /// ```text
-/// (record { curve: vetkd_curve; name: text})
+/// (record { curve : vetkd_curve; name : text})
 /// ```
 #[derive(
     Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
@@ -3048,10 +3059,10 @@ pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED
 
 /// Argument of the reshare_chain_key API.
 /// `(record {
-///     key_id: master_public_key_id;
-///     subnet_id: principal;
-///     nodes: vec principal;
-///     registry_version: nat64;
+///     key_id : master_public_key_id;
+///     subnet_id : principal;
+///     nodes : vec principal;
+///     registry_version : nat64;
 /// })`
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct ReshareChainKeyArgs {
@@ -3128,7 +3139,7 @@ impl ReshareChainKeyResponse {
 /// Represents the BIP341 aux argument of the sign_with_schnorr API.
 /// ```text
 /// (record {
-///   merkle_root_hash: blob;
+///   merkle_root_hash : blob;
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -3139,8 +3150,8 @@ pub struct SignWithBip341Aux {
 /// Represents the aux argument of the sign_with_schnorr API.
 /// ```text
 /// (variant {
-///    bip341: record {
-///      merkle_root_hash: blob;
+///    bip341 : record {
+///      merkle_root_hash : blob;
 ///   }
 /// })
 /// ```
@@ -3216,9 +3227,9 @@ impl Payload<'_> for SchnorrPublicKeyResponse {}
 /// Represents the argument of the vetkd_derive_key API.
 /// ```text
 /// (record {
-///   input: blob;
+///   input : blob;
 ///   context : blob;
-///   transport_public_key: blob;
+///   transport_public_key : blob;
 ///   key_id : record { curve : vetkd_curve; name : text };
 /// })
 /// ```
@@ -3316,7 +3327,7 @@ pub enum QueryMethod {
 /// `CandidType` for `SubnetInfoArgs`
 /// ```text
 /// record {
-///     subnet_id: principal;
+///   subnet_id : principal;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
@@ -3329,8 +3340,8 @@ impl Payload<'_> for SubnetInfoArgs {}
 /// `CandidType` for `SubnetInfoResponse`
 /// ```text
 /// record {
-///     replica_version: text;
-///     registry_version: nat64;
+///     replica_version : text;
+///     registry_version : nat64;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
@@ -3344,8 +3355,8 @@ impl Payload<'_> for SubnetInfoResponse {}
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text
 /// record {
-///     subnet_id: principal;
-///     start_at_timestamp_nanos: nat64;
+///     subnet_id : principal;
+///     start_at_timestamp_nanos : nat64;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
@@ -3479,9 +3490,9 @@ impl FetchCanisterLogsRequest {
 /// `CandidType` for `CanisterLogRecord`
 /// ```text
 /// record {
-///     idx: nat64;
-///     timestamp_nanos: nat64;
-///     content: blob;
+///     idx : nat64;
+///     timestamp_nanos : nat64;
+///     content : blob;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
@@ -3533,7 +3544,7 @@ impl From<pb_canister_state_bits::CanisterLogRecord> for CanisterLogRecord {
 /// `CandidType` for `FetchCanisterLogsResponse`
 /// ```text
 /// record {
-///     canister_log_records: vec canister_log_record;
+///     canister_log_records : vec canister_log_record;
 /// }
 /// ```
 #[derive(Clone, PartialEq, Debug, Default, CandidType, Deserialize)]
@@ -3545,8 +3556,8 @@ impl Payload<'_> for FetchCanisterLogsResponse {}
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     canister_id: principal;
-///     chunk: blob;
+///     canister_id : principal;
+///     chunk : blob;
 /// })`
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct UploadChunkArgs {
@@ -3564,9 +3575,11 @@ impl UploadChunkArgs {
 }
 
 /// Candid type representing the hash of a wasm chunk.
-/// `(record {
-///      hash: blob;
-/// })`
+/// ```text
+/// record {
+///   hash : blob;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
 pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
@@ -3576,9 +3589,11 @@ pub struct ChunkHash {
 impl Payload<'_> for ChunkHash {}
 
 /// Struct to be returned when uploading a Wasm chunk.
-/// `(record {
-///      hash: blob;
-/// })`
+/// ```text
+/// record {
+///   hash : blob;
+/// }
+/// ```
 pub type UploadChunkReply = ChunkHash;
 
 /// Struct used for encoding/decoding
@@ -3676,7 +3691,7 @@ impl InstallChunkedCodeArgs {
 ///         install;
 ///         reinstall;
 ///         upgrade : opt record {
-///             skip_pre_upgrade: opt bool
+///             skip_pre_upgrade : opt bool
 ///         }
 ///     };
 ///     target_canister_id : principal;
@@ -3741,9 +3756,11 @@ impl InstallChunkedCodeArgsLegacy {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id: principal;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+/// }
+/// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct ClearChunkStoreArgs {
     pub canister_id: PrincipalId,
@@ -3758,9 +3775,11 @@ impl ClearChunkStoreArgs {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id: principal;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+/// }
+/// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct StoredChunksArgs {
     pub canister_id: PrincipalId,
@@ -3775,7 +3794,9 @@ impl StoredChunksArgs {
 }
 
 /// Struct to be returned when listing chunks in the Wasm store
-/// `(vec record { hash: blob })`
+/// ```text
+/// vec record { hash : blob }
+/// ```
 #[derive(PartialEq, Debug, CandidType, Deserialize)]
 pub struct StoredChunksReply(pub Vec<ChunkHash>);
 
@@ -3853,9 +3874,9 @@ impl Payload<'_> for LoadCanisterSnapshotArgs {}
 
 /// Struct to be returned when taking a canister snapshot.
 /// `(record {
-///      id: blob;
-///      taken_at_timestamp: nat64;
-///      total_size: nat64;
+///      id : blob;
+///      taken_at_timestamp : nat64;
+///      total_size : nat64;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSnapshotResponse {
@@ -3890,8 +3911,8 @@ impl CanisterSnapshotResponse {
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     canister_id: principal;
-///     snapshot_id: blob;
+///     canister_id : principal;
+///     snapshot_id : blob;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DeleteCanisterSnapshotArgs {
@@ -3919,9 +3940,11 @@ impl DeleteCanisterSnapshotArgs {
 impl Payload<'_> for DeleteCanisterSnapshotArgs {}
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id: principal;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct ListCanisterSnapshotArgs {
     canister_id: PrincipalId,
@@ -4344,7 +4367,9 @@ pub enum CanisterSnapshotDataKind {
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 
 /// Struct to encode/decode
-/// (record { chunk: blob }; )
+/// ```text
+/// record { chunk : blob }
+/// ```
 pub struct ReadCanisterSnapshotDataResponse {
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
@@ -4359,6 +4384,7 @@ impl ReadCanisterSnapshotDataResponse {
 }
 
 /// Struct to encode/decode
+/// ```text
 /// (record {
 ///     canister_id : principal;
 ///     replace_snapshot : opt blob;
@@ -4383,6 +4409,7 @@ impl ReadCanisterSnapshotDataResponse {
 ///         executed;
 ///     };
 /// };)
+/// ```
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotMetadataArgs {
@@ -4446,9 +4473,11 @@ impl UploadCanisterSnapshotMetadataArgs {
 }
 
 /// Struct to encode/decode
+/// ```text
 /// (record {
-///     snapshot_id: blob;
+///   snapshot_id : blob;
 /// };)
+/// ```
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotMetadataResponse {
     pub snapshot_id: SnapshotId,
