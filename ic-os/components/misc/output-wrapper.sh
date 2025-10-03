@@ -17,4 +17,8 @@ fi
 TEE_TARGET="$1"
 SCRIPT_ARGS=("${@:2}")
 
+# Run the script and capture its exit code separately from tee
 "${SCRIPT_ARGS[@]}" 2>&1 | tee "${TEE_TARGET}"
+SCRIPT_EXIT_CODE=${PIPESTATUS[0]}
+
+exit $SCRIPT_EXIT_CODE
