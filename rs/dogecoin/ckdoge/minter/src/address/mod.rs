@@ -79,19 +79,19 @@ impl DogecoinAddress {
             | (DOGE_REGTEST_P2SH_PREFIX, Network::Regtest) => Ok(Self::P2sh(data)),
             (DOGE_MAINNET_PREFIX, _) | (DOGE_MAINNET_P2SH_PREFIX, _) => {
                 Err(ParseAddressError::WrongNetwork {
-                    expected: Network::Mainnet,
-                    actual: *network,
+                    actual: Network::Mainnet,
+                    expected: *network,
                 })
             }
             (DOGE_TESTNET_PREFIX, _) | (DOGE_TESTNET_P2SH_PREFIX, _) => {
                 Err(ParseAddressError::WrongNetwork {
-                    expected: Network::Testnet,
-                    actual: *network,
+                    actual: Network::Testnet,
+                    expected: *network,
                 })
             }
             (DOGE_REGTEST_PREFIX, _) => Err(ParseAddressError::WrongNetwork {
-                expected: Network::Regtest,
-                actual: *network,
+                actual: Network::Regtest,
+                expected: *network,
             }),
             _ => Err(ParseAddressError::UnsupportedAddressType),
         }
