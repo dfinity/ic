@@ -2568,7 +2568,7 @@ mod tests {
                         .iter()
                         .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
                 );
-                assert!(accepted.len() >= 2 * f + 1);
+                assert!(accepted.len() > 2 * f);
                 assert_eq!(dropped.len(), 3 * f + 1 - accepted.len());
 
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
@@ -2641,6 +2641,18 @@ mod tests {
                         .get(&validated_id)
                         .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
                 );
+
+                // If the cache is reset, i.e. due to a replica restart,
+                // the duplicated share should still be invalidated
+                pre_signer
+                    .validated_dealing_supports
+                    .write()
+                    .unwrap()
+                    .clear();
+
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_handle_invalid(&change_set, &msg_id));
             })
         })
     }
