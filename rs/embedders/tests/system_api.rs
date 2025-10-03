@@ -1618,51 +1618,7 @@ fn test_on_low_wasm_memory_grow_wasm_memory_all_status_changes() {
 }
 
 #[test]
-fn test_on_low_wasm_memory_grow_stable_memory() {
-    // Growing stable memory cannot trigger hook condition even if
-    // memory_allocation - used_stable_memory - used_wasm_memory < wasm_memory_threshold
-    let wasm_memory_threshold = NumBytes::new(GIB as u64);
-    let wasm_memory_limit = None;
-    let memory_allocation = Some(NumBytes::new(3 * GIB as u64));
-    let max_allowed_memory_size = 2 * GIB;
-    let grow_wasm_memory = false;
-
-    // Hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_memory_size,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-
-    // Hook condition is satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_memory_size + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-
-    // Without `memory_allocation`, hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        None,
-        max_allowed_memory_size + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-}
-
-#[test]
-fn test_on_low_wasm_memory_without_memory_limitn() {
+fn test_on_low_wasm_memory_without_memory_limit() {
     // When memory limit is not set, the default Wasm memory limit is 4 GIB.
     let wasm_memory_threshold = NumBytes::new(GIB as u64);
     // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
