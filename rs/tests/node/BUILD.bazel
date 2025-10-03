@@ -1,5 +1,6 @@
 load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -102,10 +103,10 @@ system_test(
     ],
 )
 
-system_test(
-    name = "kill_start_test",
-    tags = ["long_test"],
-    uses_guestos_img = True,
+rust_binary(
+    name = "kill_start_test_bin",
+    testonly = True,
+    srcs = ["kill_start_test.rs"],
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -113,4 +114,23 @@ system_test(
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
+)
+
+system_test(
+    name = "kill_start_long_test",
+    env = {
+        "NUM_KILL_START_ITERATIONS": "5",
+    },
+    tags = ["long_test"],
+    test_driver_target = ":kill_start_test_bin",
+    uses_guestos_img = True,
+)
+
+system_test(
+    name = "kill_start_short_test",
+    env = {
+        "NUM_KILL_START_ITERATIONS": "1",
+    },
+    test_driver_target = ":kill_start_test_bin",
+    uses_guestos_img = True,
 )
