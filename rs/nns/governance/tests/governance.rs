@@ -96,7 +96,7 @@ use ic_nns_governance::{
 use ic_nns_governance::{governance::RandomnessGenerator, pb::v1::manage_neuron::Follow};
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-    ListNeuronsResponse, ManageNeuronResponse, NeuronState,
+    ListNeuronsResponse, ManageNeuronResponse, NeuronInfo, NeuronState,
     manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
     proposal::Action as ApiAction,
     proposal_validation::validate_proposal_title,
@@ -4404,20 +4404,8 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, api::
 
         // The neuron state should now be "Dissolved", meaning we can
         // now disburse the neuron.
-        let neuron = gov
-            .neuron_store
-            .with_neuron(&id, |neuron| neuron.clone())
-            .expect("Neuron not found");
-        assert_eq!(
-            neuron
-                .get_neuron_info(
-                    gov.voting_power_economics(),
-                    driver.now(),
-                    *RANDOM_PRINCIPAL_ID
-                )
-                .state,
-            NeuronState::Dissolved as i32
-        );
+        let neuron_info = gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID).unwrap();
+        assert_eq!(neuron_info.state, NeuronState::Dissolved as i32);
     } else {
         driver.advance_time_by(
             VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1,
@@ -5359,12 +5347,8 @@ fn test_neuron_split_fails() {
         .neuron_minimum_stake_e8s;
 
     assert_eq!(
-        neuron
-            .get_neuron_info(
-                gov.voting_power_economics(),
-                driver.now(),
-                *RANDOM_PRINCIPAL_ID
-            )
+        gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID)
+            .unwrap()
             .state,
         NeuronState::NotDissolving as i32
     );
@@ -5480,22 +5464,17 @@ fn test_neuron_split() {
     driver.advance_time_by(1234);
 
     let neuron_state = {
-        let neuron = governance
+        governance
             .neuron_store
             .with_neuron_mut(&id, |neuron| {
                 // Make sure the parent neuron also has maturity and staked maturity.
                 neuron.maturity_e8s_equivalent = maturity_e8s;
                 neuron.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s);
-
-                neuron.clone()
             })
             .expect("Neuron not found");
-        neuron
-            .get_neuron_info(
-                governance.voting_power_economics(),
-                driver.now(),
-                *RANDOM_PRINCIPAL_ID,
-            )
+        governance
+            .get_neuron_info(&id, *RANDOM_PRINCIPAL_ID)
+            .unwrap()
             .state
     };
 
@@ -5618,7 +5597,7 @@ fn test_seed_neuron_split() {
         VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
 
-    let (driver, mut gov, id, _) = governance_with_staked_neuron(
+    let (_driver, mut gov, id, _) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
@@ -5626,12 +5605,11 @@ fn test_seed_neuron_split() {
         nonce,
     );
 
-    let neuron = gov
-        .with_neuron_mut(&id, |neuron| {
-            neuron.neuron_type = Some(NeuronType::Seed as i32);
-            neuron.clone()
-        })
-        .expect("Neuron did not exist");
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.neuron_type = Some(NeuronType::Seed as i32);
+        neuron.clone()
+    })
+    .expect("Neuron did not exist");
 
     let transaction_fee = gov
         .heap_data
@@ -5641,12 +5619,8 @@ fn test_seed_neuron_split() {
         .transaction_fee_e8s;
 
     assert_eq!(
-        neuron
-            .get_neuron_info(
-                gov.voting_power_economics(),
-                driver.now(),
-                *RANDOM_PRINCIPAL_ID
-            )
+        gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID)
+            .unwrap()
             .state,
         NeuronState::NotDissolving as i32
     );
@@ -5721,13 +5695,10 @@ fn test_neuron_spawn() {
     );
     run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
-    let now = driver.now();
-    let voting_power_economics = gov.voting_power_economics();
     assert_eq!(
-        gov.with_neuron(&id, |neuron| neuron
-            .get_neuron_info(voting_power_economics, now, *RANDOM_PRINCIPAL_ID)
-            .state)
-            .unwrap(),
+        gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID)
+            .unwrap()
+            .state,
         NeuronState::NotDissolving as i32
     );
 
@@ -5912,12 +5883,10 @@ fn test_neuron_spawn_with_subaccount() {
     );
     run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
-    let now = driver.now();
     assert_eq!(
-        gov.with_neuron(&id, |neuron| neuron
-            .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
-            .state)
-            .unwrap(),
+        gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID)
+            .unwrap()
+            .state,
         NeuronState::NotDissolving as i32
     );
 
@@ -6070,12 +6039,10 @@ fn test_maturity_correctly_reset_if_spawn_fails() {
     );
     run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
-    let now = driver.now();
     assert_eq!(
-        gov.with_neuron(&id, |neuron| neuron
-            .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
-            .state)
-            .unwrap(),
+        gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID)
+            .unwrap()
+            .state,
         NeuronState::NotDissolving as i32
     );
 
@@ -6219,12 +6186,8 @@ fn assert_neuron_spawn_partial(
         .with_neuron(&id, |neuron| neuron.clone())
         .expect("Neuron did not exist");
     assert_eq!(
-        neuron
-            .get_neuron_info(
-                gov.voting_power_economics(),
-                driver.now(),
-                *RANDOM_PRINCIPAL_ID
-            )
+        gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID)
+            .unwrap()
             .state,
         NeuronState::NotDissolving as i32
     );
@@ -6604,19 +6567,10 @@ fn test_disburse_to_neuron() {
         VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1,
     );
 
-    let parent_neuron = gov.with_neuron(&id, |neuron| neuron.clone()).unwrap();
+    let parent_neuron_info = gov.get_neuron_info(&id, *RANDOM_PRINCIPAL_ID).unwrap();
     // The neuron state should now be "Dissolved", meaning we can
     // now disburse the neuron.
-    assert_eq!(
-        parent_neuron
-            .get_neuron_info(
-                gov.voting_power_economics(),
-                driver.now(),
-                *RANDOM_PRINCIPAL_ID
-            )
-            .state,
-        NeuronState::Dissolved as i32
-    );
+    assert_eq!(parent_neuron_info.state, NeuronState::Dissolved as i32);
 
     let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
 
@@ -9675,6 +9629,8 @@ fn test_include_public_neurons_in_full_neurons() {
     for neuron in &mut expected_full_neurons {
         if neuron.known_neuron_data.is_some() {
             neuron.visibility = Some(Visibility::Public as i32);
+            // Known neuron data does not appear in list_neurons response.
+            neuron.known_neuron_data = None;
         }
         let visibility = &mut neuron.visibility;
         if visibility.is_none() {
@@ -13705,11 +13661,15 @@ fn test_neuron_info_private_enforcement() {
                 assert_eq!(random_principal_get_result, controller_get_result)
             }
 
-            // Step 3.2: list_neurons results are supposed to be consistent with get_neuron_info.
+            // Step 3.2: list_neurons results are supposed to be consistent with get_neuron_info
+            // except for known neuron data as it's too much data to include in the list_neurons response.
             assert_eq!(
                 controller_list_result.neuron_infos,
                 hashmap! {
-                    neuron_id.id => controller_get_result,
+                    neuron_id.id => NeuronInfo {
+                        known_neuron_data: None,
+                        ..controller_get_result
+                    },
                 },
                 "{:#?}",
                 controller_list_result,
@@ -13717,7 +13677,10 @@ fn test_neuron_info_private_enforcement() {
             assert_eq!(
                 hot_key_list_result.neuron_infos,
                 hashmap! {
-                    neuron_id.id => hot_key_get_result,
+                    neuron_id.id => NeuronInfo {
+                        known_neuron_data: None,
+                        ..hot_key_get_result
+                    },
                 },
                 "{:#?}",
                 hot_key_list_result,
@@ -13725,7 +13688,10 @@ fn test_neuron_info_private_enforcement() {
             assert_eq!(
                 random_principal_list_result.neuron_infos,
                 hashmap! {
-                    neuron_id.id => random_principal_get_result,
+                    neuron_id.id => NeuronInfo {
+                        known_neuron_data: None,
+                        ..random_principal_get_result
+                    },
                 },
                 "{:#?}",
                 random_principal_list_result,
