@@ -6336,9 +6336,11 @@ impl Governance {
                 .await
                 .map(ManageNeuronResponse::disburse_to_neuron_response),
             Some(Command::Merge(s)) => self.merge_neurons(&id, caller, s).await,
-            Some(Command::Follow(f)) => self
-                .follow(&id, caller, f)
-                .map(|_| ManageNeuronResponse::follow_response()),
+            Some(Command::Follow(f)) => {
+                self.validate_followees(f.followees.as_ref())?;
+                self.follow(&id, caller, f)
+                    .map(|_| ManageNeuronResponse::follow_response())
+            }
             Some(Command::MakeProposal(p)) => {
                 self.make_proposal(&id, caller, p).await.map(|proposal_id| {
                     ManageNeuronResponse::make_proposal_response(
@@ -7996,6 +7998,18 @@ impl Governance {
 
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
+    }
+
+    fn validate_followees(&self, followees: &Vec<NeuronId>) -> Result<(), GovernanceError> {
+        for followee in followees {
+            if !self.neuron_store.contains(*followee) {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!("Followee neuron {followee:?} not found"),
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
