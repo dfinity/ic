@@ -1731,6 +1731,7 @@ impl PocketIcSubnets {
                         proposal_id: None,
                     }),
                     hash: sns_canister_wasm_hash.to_vec(),
+                    skip_update_latest_version: Some(false),
                 };
                 let res = self.execute_ingress_on(
                     nns_subnet.clone(),
