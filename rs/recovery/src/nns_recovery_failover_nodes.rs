@@ -276,6 +276,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         node_ip,
                         SshUser::Admin,
                         self.recovery.admin_key_file.clone(),
+                        /*nb_checkpoints=*/ None,
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/ vec![CUPS_DIR],
                     )))

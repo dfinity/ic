@@ -599,6 +599,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                         node_ip,
                         ssh_user,
                         key_file,
+                        /*nb_checkpoints=*/ None,
                         self.params.keep_downloaded_state == Some(true),
                         /*additional_excludes=*/
                         vec![

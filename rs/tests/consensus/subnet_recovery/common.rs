@@ -463,7 +463,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
-        keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
         upgrade_version: version_is_broken.then(|| working_version.clone()),
         upgrade_image_url: Some(get_guestos_update_img_url()),
@@ -474,6 +473,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         readonly_pub_key: (!cfg.corrupt_cup).then_some(readonly_pub_key),
         readonly_key_file: Some(ssh_priv_key_path),
         download_method: None, // We will set this after breaking/halting the subnet, see below
+        nb_checkpoints: Some(2),
+        keep_downloaded_state: Some(cfg.chain_key),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
