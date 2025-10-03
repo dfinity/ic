@@ -180,7 +180,7 @@ pub struct RateLimiterConfig {
     pub max_reservations: u64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RateLimiterError {
     NotEnoughCapacity,
     InvalidArguments(String),

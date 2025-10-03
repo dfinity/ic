@@ -1,12 +1,6 @@
 use std::fmt::Display;
 use std::time::SystemTime;
 
-use candid::CandidType;
-use ic_types::{NodeId, PrincipalId, SubnetId};
-use prost::Message;
-use serde::{Deserialize, Serialize};
-
-use crate::{flags::is_node_swapping_enabled, registry::Registry};
 use crate::{
     flags::{
         is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
@@ -15,7 +9,11 @@ use crate::{
     mutations::node_management::common::find_subnet_for_node,
     registry::Registry,
 };
+use candid::CandidType;
 use ic_nervous_system_time_helpers::now_system_time;
+use ic_types::{NodeId, PrincipalId, SubnetId};
+use prost::Message;
+use serde::{Deserialize, Serialize};
 
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
@@ -168,8 +166,8 @@ mod tests {
         },
         registry::Registry,
     };
-    use prost::Message;
     use ic_nervous_system_time_helpers::now_system_time;
+    use prost::Message;
 
     fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
     {
@@ -235,14 +233,14 @@ mod tests {
 
         let payload = valid_payload();
 
-        let result = registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1), now_system_time());
+        let result =
+            registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1), now_system_time());
 
         // First error that occurs after validation
         assert!(result.is_err_and(|err| err
             == SwapError::FeatureDisabledForCaller {
                 caller: PrincipalId::new_user_test_id(1)
             }));
-
     }
 
     #[test]

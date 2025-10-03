@@ -22,7 +22,8 @@ impl Registry {
     pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
         let caller_id = dfn_core::api::caller();
         println!("{LOG_PREFIX}do_remove_node_directly started: {payload:?} caller: {caller_id:?}");
-        self.do_remove_node(payload.clone(), caller_id, now_system_time());
+        self.do_remove_node(payload.clone(), caller_id, now_system_time())
+            .unwrap();
 
         println!("{LOG_PREFIX}do_remove_node_directly finished: {payload:?}");
     }
@@ -46,10 +47,12 @@ impl Registry {
         payload: RemoveNodeDirectlyPayload,
         caller_id: PrincipalId,
         _now: SystemTime,
-    ) {
+    ) -> Result<(), String> {
         let mutations = self.make_remove_or_replace_node_mutations(payload, caller_id, None);
         // Check invariants and apply mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        Ok(())
     }
 
     // Prepare mutations for removing or replacing a node in the registry.
@@ -710,9 +713,12 @@ mod tests {
                 .unwrap();
         commit_node_operator_reservation(now, reservation).unwrap();
 
-        // For now, the method doesn't implement rate limiting yet
-        // This test will be updated when rate limiting is implemented
-        registry.do_remove_node(payload, node_operator_id, now);
-        // The test should pass for now since rate limiting isn't implemented yet
+        let error = registry
+            .do_remove_node(payload, node_operator_id, now)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            "Rate Limit Capacity exceeded. Please wait and try again later."
+        );
     }
 }

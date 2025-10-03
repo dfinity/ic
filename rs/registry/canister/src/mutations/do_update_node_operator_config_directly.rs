@@ -126,7 +126,6 @@ mod tests {
     use crate::mutations::node_management::common::get_node_operator_record;
     use crate::rate_limits::get_available_node_operator_capacity;
     use maplit::btreemap;
-    use std::time::SystemTime;
 
     #[test]
     fn test_update_node_operator_config_directly_happy_path() {

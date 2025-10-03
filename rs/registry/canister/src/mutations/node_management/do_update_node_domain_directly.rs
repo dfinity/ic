@@ -27,7 +27,8 @@ impl Registry {
         println!(
             "{LOG_PREFIX}do_update_node_domain_directly started: {payload:?} caller: {caller_id:?}"
         );
-        self.do_update_node_domain(payload, caller_id, now_system_time());
+        self.do_update_node_domain(payload, caller_id, now_system_time())
+            .unwrap();
     }
 
     fn do_update_node_domain(
@@ -35,7 +36,7 @@ impl Registry {
         payload: UpdateNodeDomainDirectlyPayload,
         caller_id: PrincipalId,
         _now: SystemTime,
-    ) {
+    ) -> Result<(), String> {
         let UpdateNodeDomainDirectlyPayload { node_id, domain } = payload;
 
         // Get existing node record and apply the changes
@@ -68,6 +69,8 @@ impl Registry {
 
         // Check invariants before applying the mutation
         self.maybe_apply_mutation_internal(mutations);
+
+        Ok(())
     }
 }
 
@@ -335,9 +338,12 @@ mod tests {
                 .unwrap();
         commit_node_operator_reservation(now, reservation).unwrap();
 
-        // For now, the method doesn't implement rate limiting yet
-        // This test will be updated when rate limiting is implemented
-        registry.do_update_node_domain(payload, node_operator_id, now);
-        // The test should pass for now since rate limiting isn't implemented yet
+        let error = registry
+            .do_update_node_domain(payload, node_operator_id, now)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            "Rate Limit Capacity exceeded. Please wait and try again later."
+        );
     }
 }
