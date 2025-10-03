@@ -106,8 +106,8 @@ mod tests {
     use std::str::FromStr;
 
     use crate::rate_limits::{
-        commit_node_operator_reservation, get_available_node_operator_capacity,
-        try_reserve_node_operator_capacity,
+        commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
+        try_reserve_node_provider_op_capacity,
     };
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
@@ -494,11 +494,11 @@ mod tests {
         };
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_operator_capacity(format!("{node_operator_id}"), now);
+        let available = get_available_node_provider_op_capacity(format!("{node_operator_id}"), now);
         let reservation =
-            try_reserve_node_operator_capacity(now, format!("{node_operator_id}"), available)
+            try_reserve_node_provider_op_capacity(now, format!("{node_operator_id}"), available)
                 .unwrap();
-        commit_node_operator_reservation(now, reservation).unwrap();
+        commit_node_provider_op_reservation(now, reservation).unwrap();
 
         // This test should fail until rate limiting is implemented
         // The method should return a Result<(), String> to support rate limiting

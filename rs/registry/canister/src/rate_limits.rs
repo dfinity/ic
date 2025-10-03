@@ -33,36 +33,36 @@ thread_local! {
     ));
 }
 
-fn with_node_operator_rate_limiter<R>(
+fn with_node_provider_rate_limiter<R>(
     f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
 ) -> R {
     NODE_PROVIDER_RATE_LIMITER.with_borrow_mut(f)
 }
 
 /// Try to reserve capacity for an operation that is rate limited by Node Provider
-pub fn try_reserve_node_operator_capacity(
+pub fn try_reserve_node_provider_op_capacity(
     now: SystemTime,
     key: impl ToString,
     requested_capacity: u64,
 ) -> Result<Reservation<String>, RateLimiterError> {
-    with_node_operator_rate_limiter(|rate_limiter| {
+    with_node_provider_rate_limiter(|rate_limiter| {
         rate_limiter.try_reserve(now, key.to_string(), requested_capacity)
     })
 }
 
 /// Commit the reserved usage (i.e. commit the reserved usage)
-pub fn commit_node_operator_reservation(
+pub fn commit_node_provider_op_reservation(
     now: SystemTime,
     reservation: Reservation<String>,
 ) -> Result<(), RateLimiterError> {
-    with_node_operator_rate_limiter(|rate_limiter| rate_limiter.commit(now, reservation))
+    with_node_provider_rate_limiter(|rate_limiter| rate_limiter.commit(now, reservation))
 }
 
 // This function tells how much capacity is left, which is very useful for tests.  This could also
 // potentially be used in production code, but there's no use case yet.
 #[cfg(test)]
-pub fn get_available_node_operator_capacity(key: impl ToString, now: SystemTime) -> u64 {
-    with_node_operator_rate_limiter(|rate_limiter| {
+pub fn get_available_node_provider_op_capacity(key: impl ToString, now: SystemTime) -> u64 {
+    with_node_provider_rate_limiter(|rate_limiter| {
         rate_limiter.get_available_capacity(key.to_string(), now)
     })
 }
@@ -76,16 +76,16 @@ mod tests {
     fn test_drop_behavior_in_thread_local() {
         let now = SystemTime::now();
         let key = "Foo";
-        let first_available = get_available_node_operator_capacity(key, now);
+        let first_available = get_available_node_provider_op_capacity(key, now);
 
-        let reservation = try_reserve_node_operator_capacity(now, key, 5).unwrap();
+        let reservation = try_reserve_node_provider_op_capacity(now, key, 5).unwrap();
 
-        let second_available = get_available_node_operator_capacity(key, now);
+        let second_available = get_available_node_provider_op_capacity(key, now);
         assert_eq!(first_available - 5, second_available);
 
         drop(reservation);
 
-        let third_available = get_available_node_operator_capacity(key, now);
+        let third_available = get_available_node_provider_op_capacity(key, now);
 
         assert_eq!(first_available, third_available);
     }

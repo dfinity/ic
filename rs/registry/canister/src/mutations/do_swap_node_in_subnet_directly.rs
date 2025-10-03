@@ -14,6 +14,7 @@ use ic_nervous_system_time_helpers::now_system_time;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use crate::rate_limits::try_reserve_node_provider_op_capacity;
 
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
@@ -33,6 +34,8 @@ impl Registry {
         if !is_node_swapping_enabled() {
             return Err(SwapError::FeatureDisabled);
         }
+
+        try_reserve_node_provider_op_capacity(_now, )
 
         // Check if the payload is valid by itself.
         payload.validate()?;
@@ -161,8 +164,8 @@ mod tests {
         },
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         rate_limits::{
-            commit_node_operator_reservation, get_available_node_operator_capacity,
-            try_reserve_node_operator_capacity,
+            commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
+            try_reserve_node_provider_op_capacity,
         },
         registry::Registry,
     };
@@ -462,10 +465,10 @@ mod tests {
         let payload = valid_payload();
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_operator_capacity(format!("{caller}"), now);
+        let available = get_available_node_provider_op_capacity(format!("{caller}"), now);
         let reservation =
-            try_reserve_node_operator_capacity(now, format!("{caller}"), available).unwrap();
-        commit_node_operator_reservation(now, reservation).unwrap();
+            try_reserve_node_provider_op_capacity(now, format!("{caller}"), available).unwrap();
+        commit_node_provider_op_reservation(now, reservation).unwrap();
 
         // For now, the method doesn't implement rate limiting yet
         // This test will be updated when rate limiting is implemented

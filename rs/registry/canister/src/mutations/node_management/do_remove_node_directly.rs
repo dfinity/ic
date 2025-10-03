@@ -206,8 +206,8 @@ pub struct RemoveNodeDirectlyPayload {
 mod tests {
     use super::*;
     use crate::rate_limits::{
-        commit_node_operator_reservation, get_available_node_operator_capacity,
-        try_reserve_node_operator_capacity,
+        commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
+        try_reserve_node_provider_op_capacity,
     };
     use crate::{
         common::test_helpers::{
@@ -707,11 +707,11 @@ mod tests {
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_operator_capacity(format!("{node_operator_id}"), now);
+        let available = get_available_node_provider_op_capacity(format!("{node_operator_id}"), now);
         let reservation =
-            try_reserve_node_operator_capacity(now, format!("{node_operator_id}"), available)
+            try_reserve_node_provider_op_capacity(now, format!("{node_operator_id}"), available)
                 .unwrap();
-        commit_node_operator_reservation(now, reservation).unwrap();
+        commit_node_provider_op_reservation(now, reservation).unwrap();
 
         let error = registry
             .do_remove_node(payload, node_operator_id, now)
