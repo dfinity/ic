@@ -1,4 +1,5 @@
 use candid::{Decode, Encode, Principal};
+use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::candid_api::{
     RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
 };

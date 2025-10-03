@@ -29,7 +29,7 @@ pub async fn get_doge_address(
 
 /// Returns the derivation path that should be used to sign a message from a
 /// specified account.
-pub fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
+fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
     const SCHEMA_V1: u8 = 1;
     const PREFIX: [u8; 4] = [b'd', b'o', b'g', b'e'];
 
@@ -41,7 +41,7 @@ pub fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
     ]
 }
 
-pub async fn derive_public_key(
+async fn derive_public_key(
     ecdsa_key_name: String,
     account: &Account,
 ) -> Result<EcdsaPublicKeyResult, ic_cdk::call::Error> {

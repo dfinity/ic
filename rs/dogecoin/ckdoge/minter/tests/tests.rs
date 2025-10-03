@@ -1,12 +1,10 @@
-use assert_matches::assert_matches;
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::{
     GetDogeAddressArgs, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
 };
 use ic_ckdoge_minter_test_utils::{
-    DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+    DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
-use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 
 #[test]
 fn should_fail_withdrawal() {
@@ -18,15 +16,12 @@ fn should_fail_withdrawal() {
         from_subaccount: None,
     };
 
-    assert_matches!(
+    assert_trap(
         minter.update_call_retrieve_doge_with_approval(
             Principal::anonymous(),
-            &correct_withdrawal_args
+            &correct_withdrawal_args,
         ),
-        Err(RejectResponse {reject_code, reject_message, error_code, ..}) if
-            reject_code == RejectCode::CanisterError &&
-            reject_message.contains("anonymous caller not allowed") &&
-            error_code == ErrorCode::CanisterCalledTrap
+        "anonymous caller not allowed",
     );
 
     assert_eq!(
@@ -62,31 +57,25 @@ fn should_fail_to_get_doge_address() {
     let setup = Setup::default();
     let minter = setup.minter();
 
-    assert_matches!(
+    assert_trap(
         minter.update_call_get_doge_address(
             USER_PRINCIPAL,
             &GetDogeAddressArgs {
                 owner: Some(Principal::anonymous()),
-                subaccount: None
-            }
+                subaccount: None,
+            },
         ),
-        Err(RejectResponse {reject_code, reject_message, error_code, ..}) if
-            reject_code == RejectCode::CanisterError &&
-            reject_message.contains("owner must be non-anonymous") &&
-            error_code == ErrorCode::CanisterCalledTrap
+        "owner must be non-anonymous",
     );
 
-    assert_matches!(
+    assert_trap(
         minter.update_call_get_doge_address(
             Principal::anonymous(),
             &GetDogeAddressArgs {
                 owner: None,
-                subaccount: None
-            }
+                subaccount: None,
+            },
         ),
-        Err(RejectResponse {reject_code, reject_message, error_code, ..}) if
-            reject_code == RejectCode::CanisterError &&
-            reject_message.contains("owner must be non-anonymous") &&
-            error_code == ErrorCode::CanisterCalledTrap
+        "owner must be non-anonymous",
     );
 }
