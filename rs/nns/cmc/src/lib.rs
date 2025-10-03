@@ -13,9 +13,7 @@ use ic_management_canister_types_private::{
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_types::{
-    CanisterId, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, NumBytes, PrincipalId, SubnetId,
-};
+use ic_types::{CanisterId, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount, Tokens,

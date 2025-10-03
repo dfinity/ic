@@ -13,6 +13,7 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
+use ic_types::MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
