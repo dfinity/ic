@@ -1996,6 +1996,26 @@ impl InstallCodeArgs {
     }
 }
 
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   mode : variant {
+///     install;
+///     reinstall;
+///     upgrade : opt record {
+///       skip_pre_upgrade : opt bool;
+///       wasm_memory_persistence : opt variant {
+///         keep;
+///         replace;
+///       };
+///     };
+///   };
+///   canister_id : principal;
+///   wasm_module : blob;
+///   arg : blob;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InstallCodeArgsV2 {
     pub mode: CanisterInstallModeV2,
@@ -3451,7 +3471,7 @@ impl Payload<'_> for FetchCanisterLogsFilter {}
 /// ```text
 /// record {
 ///     canister_id : principal;
-///     filter : variant {
+///     filter : opt variant {
 ///       by_idx : record { start : nat64; end : nat64 };
 ///       by_timestamp_nanos : record { start : nat64; end : nat64 };
 ///     }
