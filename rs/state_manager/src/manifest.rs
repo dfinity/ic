@@ -212,13 +212,9 @@ pub struct DiffScript {
     pub(crate) zeros_chunks: u32,
 }
 
-/// ManifestDelta contains a manifest of an old state and indices of all the
-/// memory pages that changed (became "dirty") since that state.
-///
-/// This data allows us to speed up manifest computation: we can map dirty page
-/// indices back to chunks and avoid re-computing chunks that haven't changed
-/// since the previous manifest computation.
-pub struct ManifestDelta {
+/// BaseManifestInfo contains a manifest of an old state and auxilary data
+/// necessary for the incremental manifest computation.
+pub struct BaseManifestInfo {
     /// Manifest of the state at `base_height`.
     pub(crate) base_manifest: Manifest,
     /// Height of the base state.
@@ -775,23 +771,23 @@ fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAc
     vec![ChunkAction::Recompute; chunks_total(files, max_chunk_size)]
 }
 
-/// Returns relative paths of files with the same inodes in the `checkpoint` and `manifest_delta`.
+/// Returns relative paths of files with the same inodes in the `checkpoint` and `base_manifest_info`.
 fn files_with_same_inodes(
     log: &ReplicaLogger,
-    manifest_delta: &ManifestDelta,
+    base_manifest_info: &BaseManifestInfo,
     checkpoint: &CheckpointLayout<ReadOnly>,
     files: &[FileWithSize],
     max_chunk_size: u32,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> BTreeSet<PathBuf> {
     debug_assert!(uses_chunk_size(
-        &manifest_delta.base_manifest,
+        &base_manifest_info.base_manifest,
         max_chunk_size
     ));
 
     // The files with the same inode and device IDs are hardlinks, hence contain exactly the same
     // data.
-    if manifest_delta.base_height != manifest_delta.base_checkpoint.height() {
+    if base_manifest_info.base_height != base_manifest_info.base_checkpoint.height() {
         debug_assert!(false);
         return BTreeSet::new();
     }
@@ -801,7 +797,7 @@ fn files_with_same_inodes(
         |FileWithSize(relative_path, _size_bytes)| {
             use std::os::unix::fs::MetadataExt;
             let new_path = checkpoint.raw_path().join(relative_path);
-            let old_path = manifest_delta
+            let old_path = base_manifest_info
                 .base_checkpoint
                 .raw_path()
                 .join(relative_path);
@@ -850,7 +846,7 @@ pub fn compute_manifest(
     version: StateSyncVersion,
     checkpoint: &CheckpointLayout<ReadOnly>,
     max_chunk_size: u32,
-    opt_manifest_delta: Option<&ManifestDelta>,
+    opt_base_manifest_info: Option<&BaseManifestInfo>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
     let mut files = {
@@ -876,28 +872,28 @@ pub fn compute_manifest(
         );
     }
 
-    let chunk_actions = match opt_manifest_delta {
-        Some(manifest_delta) => {
+    let chunk_actions = match opt_base_manifest_info {
+        Some(base_manifest_info) => {
             // We have to check that the old manifest uses exactly the same chunk size.
             // Otherwise, if someone decides to change the chunk size in future,
             // all the tests are going to pass (because all of them will use the
             // new chunk size), but the manifest might be computed incorrectly
             // on the mainnet.
-            if uses_chunk_size(&manifest_delta.base_manifest, max_chunk_size) {
+            if uses_chunk_size(&base_manifest_info.base_manifest, max_chunk_size) {
                 let files_with_same_inodes = files_with_same_inodes(
                     log,
-                    manifest_delta,
+                    base_manifest_info,
                     checkpoint,
                     &files,
                     max_chunk_size,
                     thread_pool,
                 );
                 hash_plan(
-                    &manifest_delta.base_manifest,
+                    &base_manifest_info.base_manifest,
                     &files,
                     files_with_same_inodes,
                     max_chunk_size,
-                    manifest_delta.target_height.get(),
+                    base_manifest_info.target_height.get(),
                     if rehash == RehashManifest::Yes {
                         REHASH_EVERY_NTH_CHUNK
                     } else {

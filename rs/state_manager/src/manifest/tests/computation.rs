@@ -1,10 +1,10 @@
 use crate::manifest::{
-    ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript, FileWithSize,
-    MAX_FILE_SIZE_TO_GROUP, ManifestDelta, ManifestMetrics, ManifestValidationError,
-    RehashManifest, StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks,
-    build_meta_manifest, compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes,
-    files_with_sizes, filter_out_zero_chunks, hash::ManifestHash, hash_plan, manifest_hash,
-    manifest_hash_v1, manifest_hash_v2, meta_manifest_hash, validate_chunk, validate_manifest,
+    BaseManifestInfo, ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript,
+    FileWithSize, MAX_FILE_SIZE_TO_GROUP, ManifestMetrics, ManifestValidationError, RehashManifest,
+    StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest,
+    compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
+    filter_out_zero_chunks, hash::ManifestHash, hash_plan, manifest_hash, manifest_hash_v1,
+    manifest_hash_v2, meta_manifest_hash, validate_chunk, validate_manifest,
     validate_manifest_internal_consistency, validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
@@ -1124,7 +1124,7 @@ fn test_files_with_same_inodes() {
     .expect("failed to compute manifest");
     let files_with_same_inodes = files_with_same_inodes(
         &no_op_logger(),
-        &ManifestDelta {
+        &BaseManifestInfo {
             base_manifest,
             base_height: Height::new(0),
             target_height: Height::new(1),
@@ -1369,7 +1369,7 @@ fn all_same_inodes_are_detected() {
     create_different_file_in_base_and_target("d_changed");
     create_same_file_in_base_and_target("e_same");
 
-    let manifest_delta = ManifestDelta {
+    let base_manifest_info = BaseManifestInfo {
         base_manifest: Manifest::new(StateSyncVersion::V0, vec![], vec![]),
         base_height: Height::new(0),
         target_height: Height::new(1),
@@ -1386,7 +1386,7 @@ fn all_same_inodes_are_detected() {
 
     let result = files_with_same_inodes(
         &no_op_logger(),
-        &manifest_delta,
+        &base_manifest_info,
         &CheckpointLayout::new_untracked(target.path().to_path_buf(), Height::new(1)).unwrap(),
         &files,
         1024 * 1024,
