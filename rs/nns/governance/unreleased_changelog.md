@@ -13,6 +13,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Following a neuron N is allowed, if this neuron exists.
+
 ## Deprecated
 
 * The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
