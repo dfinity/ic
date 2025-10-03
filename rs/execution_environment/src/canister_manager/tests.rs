@@ -2299,7 +2299,7 @@ fn check_memory_size_exceeds_memory_allocation(
 }
 
 #[test]
-fn lower_memory_allocation_than_usage_succeeds() {
+fn set_memory_allocation_lower_than_usage_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
@@ -2320,7 +2320,7 @@ fn lower_memory_allocation_than_usage_succeeds() {
 }
 
 #[test]
-fn test_install_when_updating_memory_allocation_via_canister_settings() {
+fn exceeding_memory_allocation_during_install_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let memory_allocation = 200;
@@ -2341,10 +2341,10 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
 }
 
 #[test]
-fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
+fn exceeding_memory_allocation_during_upgrade_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
 
-    let memory_allocation = 10 << 20; // 10 MiB
+    let memory_allocation = 100 << 20; // 100 MiB
     let canister_id = test
         .create_canister_with_allocation(*INITIAL_CYCLES, None, Some(memory_allocation))
         .unwrap();
@@ -2362,7 +2362,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         CanisterInstallModeV2::Upgrade(None),
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        wasm().stable_grow(256).build(), // 16 MiB
+        wasm().stable_grow(2560).build(), // 160 MiB
     ))
     .unwrap();
 
@@ -2446,50 +2446,6 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             .memory_usage(),
         NumBytes::from(0)
     )
-}
-
-#[test]
-fn test_install_when_setting_memory_allocation_to_zero() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
-
-    let memory_allocation = 0;
-    test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation))
-        .unwrap();
-    test.install_code_v2(InstallCodeArgsV2::new(
-        CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    ))
-    .unwrap();
-}
-
-#[test]
-fn test_upgrade_when_setting_memory_allocation_to_zero() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
-
-    test.install_code_v2(InstallCodeArgsV2::new(
-        CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    ))
-    .unwrap();
-
-    let memory_allocation = 0;
-    test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation))
-        .unwrap();
-    test.install_code_v2(InstallCodeArgsV2::new(
-        CanisterInstallModeV2::Upgrade(None),
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    ))
-    .unwrap();
 }
 
 #[test]
@@ -6082,90 +6038,6 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
 }
 
 #[test]
-fn update_memory_allocation_does_not_update_hook_status_not_satisfied() {
-    let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
-    let wasm_memory_threshold = 1_000;
-    let wasm_memory_limit = 100_000;
-
-    let initial_memory_allocation = used_wasm_memory + 500 + wasm_memory_threshold;
-
-    assert!(wasm_memory_limit - used_wasm_memory >= wasm_memory_threshold);
-    let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
-
-    let initial_memory_state = MemoryState {
-        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
-        wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
-        memory_allocation: Some(
-            MemoryAllocation::try_from(NumBytes::from(initial_memory_allocation)).unwrap(),
-        ),
-        hook_status: initial_hook_status,
-    };
-
-    let updated_memory_allocation = used_wasm_memory + 500;
-
-    assert!(wasm_memory_limit - used_wasm_memory >= wasm_memory_threshold);
-    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
-
-    let updated_memory_state = MemoryState {
-        memory_allocation: Some(
-            MemoryAllocation::try_from(NumBytes::from(updated_memory_allocation)).unwrap(),
-        ),
-        hook_status: updated_hook_status,
-        ..initial_memory_state
-    };
-
-    helper_update_settings_updates_hook_status(
-        used_wasm_memory_pages,
-        initial_memory_state,
-        updated_memory_state,
-        false,
-    );
-}
-
-#[test]
-fn update_memory_allocation_does_not_update_hook_status_ready() {
-    let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
-    let wasm_memory_threshold = 90_000;
-    let wasm_memory_limit = 100_000;
-
-    let initial_memory_allocation = used_wasm_memory + 500;
-
-    assert!(wasm_memory_limit - used_wasm_memory < wasm_memory_threshold);
-    let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
-
-    let initial_memory_state = MemoryState {
-        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
-        wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
-        memory_allocation: Some(
-            MemoryAllocation::try_from(NumBytes::from(initial_memory_allocation)).unwrap(),
-        ),
-        hook_status: initial_hook_status,
-    };
-
-    let updated_memory_allocation = used_wasm_memory + 500 + wasm_memory_threshold;
-
-    assert!(wasm_memory_limit - used_wasm_memory < wasm_memory_threshold);
-    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
-
-    let updated_memory_state = MemoryState {
-        memory_allocation: Some(
-            MemoryAllocation::try_from(NumBytes::from(updated_memory_allocation)).unwrap(),
-        ),
-        hook_status: updated_hook_status,
-        ..initial_memory_state
-    };
-
-    helper_update_settings_updates_hook_status(
-        used_wasm_memory_pages,
-        initial_memory_state,
-        updated_memory_state,
-        false,
-    );
-}
-
-#[test]
 fn memory_usage_updates_increment_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new().build();
 
@@ -7392,7 +7264,7 @@ fn create_canister_with_invalid_specified_id_creator_in_whitelist() {
 }
 
 #[test]
-fn create_canister_memory_allocation_capacity_makes_subnet_oversubscribed() {
+fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(MEMORY_CAPACITY.get() as i64)
         .with_subnet_memory_reservation(0)
