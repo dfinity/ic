@@ -35,4 +35,20 @@ impl MinterCanister {
             .expect("BUG: failed to call retrieve_doge_with_approval");
         Decode!(&call_result, Result<RetrieveDogeOk, RetrieveDogeWithApprovalError>).unwrap()
     }
+
+    pub fn update_call_get_doge_address(
+        &self,
+        sender: Principal,
+        args: &GetDogeAddressArgs,
+    ) -> Result<std::vec::Vec<u8>, RejectResponse> {
+        self.env
+            .update_call(self.id, sender, "get_doge_address", Encode!(args).unwrap())
+    }
+
+    pub fn get_doge_address(&self, sender: Principal, args: &GetDogeAddressArgs) -> String {
+        let call_result = self
+            .update_call_get_doge_address(sender, args)
+            .expect("BUG: failed to call get_doge_address");
+        Decode!(&call_result, String).unwrap()
+    }
 }
