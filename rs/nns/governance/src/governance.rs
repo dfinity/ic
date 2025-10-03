@@ -3356,8 +3356,7 @@ impl Governance {
                 // If in the list of followees, there is any follow relationship
                 // the doesn't adhere to the aforementioned rules, return a GovernanceError.
                 let is_valid_followees = new_followees.followees.iter().all(|followee| {
-                    if let Ok(followee_neuron) =
-                        self.with_neuron(&followee, |neuron| neuron.clone())
+                    if let Ok(followee_neuron) = self.with_neuron(followee, |neuron| neuron.clone())
                     {
                         followee_neuron.visibility() == Visibility::Public
                             || followee_neuron.controller() == controller
