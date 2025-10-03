@@ -17,6 +17,7 @@ use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::num::TryFromIntError;
+use std::sync::Arc;
 
 pub mod conversions;
 pub mod proto_conversions;
@@ -721,7 +722,13 @@ pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
     pub registry_version: RegistryVersion,
-    pub verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    /// Serializing and deserializing the `Arc` around the `verified_dealings` is safe because it
+    /// is just an implementation detail we apply to benefit from cheap clones, so we only care
+    /// about serializing the inner data. In particular, we do not rely on multiple `Arc`s pointing
+    /// to the same allocation being shared again after deserialization.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub verified_dealings: Arc<BTreeMap<NodeIndex, BatchSignedIDkgDealing>>,
     pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -933,7 +940,7 @@ impl IDkgTranscript {
                 ));
             }
         }
-        for (dealer_index, signed_dealing) in &self.verified_dealings {
+        for (dealer_index, signed_dealing) in self.verified_dealings.as_ref() {
             let signers: BTreeSet<NodeId> = signed_dealing.signers();
             let ineligible_signers: BTreeSet<NodeId> = signers
                 .difference(params.receivers.get())
@@ -1295,7 +1302,7 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
         transcript_id: random_transcript_id(rng),
         receivers,
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
         internal_transcript_raw: vec![],

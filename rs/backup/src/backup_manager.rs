@@ -285,10 +285,10 @@ impl BackupManager {
             if versions_hot_str.is_empty() {
                 break DEFAULT_VERSIONS_HOT;
             }
-            if let Ok(versions_num) = versions_hot_str.parse::<usize>() {
-                if versions_num > 0 {
-                    break versions_num;
-                }
+            if let Ok(versions_num) = versions_hot_str.parse::<usize>()
+                && versions_num > 0
+            {
+                break versions_num;
             }
             println!("Error: invalid number was entered!")
         };
@@ -333,13 +333,10 @@ impl BackupManager {
                     let mut cmd = Command::new("rsync");
                     cmd.arg("-a").arg(old_state_dir).arg(data_dir);
                     info!(log, "Will execute: {:?}", cmd);
-                    match exec_cmd(&mut cmd) {
-                        Err(e) => {
-                            println!("Error: {e}");
-                        }
-                        _ => {
-                            break;
-                        }
+                    if let Err(e) = exec_cmd(&mut cmd) {
+                        println!("Error: {}", e);
+                    } else {
+                        break;
                     }
                 }
             }

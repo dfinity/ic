@@ -10,6 +10,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 #[test]
 fn should_create_quadruples_correctly() {
@@ -846,7 +847,7 @@ fn transcript<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
         internal_transcript_raw: vec![],
@@ -862,7 +863,7 @@ fn schnorr_transcript<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).expect("failed to create IDKG receivers"),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
         internal_transcript_raw: vec![1, 2, 3],

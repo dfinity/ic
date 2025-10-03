@@ -79,6 +79,7 @@ impl<'a> TestFixture<'a> {
             guest_vm_type: Default::default(),
             upgrade_config: Default::default(),
             trusted_execution_environment_config: None,
+            recovery_config: Default::default(),
         }
     }
 

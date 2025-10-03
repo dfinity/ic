@@ -64,6 +64,11 @@ pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
 pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
+pub const OVERLAY: &str = "overlay";
+pub const VMEMORY_0: &str = "vmemory_0";
+pub const STABLE_MEMORY: &str = "stable_memory";
+pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
+pub const BIN_FILE: &str = "bin";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -381,7 +386,10 @@ impl TipHandler {
     /// full state and is converted to a checkpoint.
     /// This directory is cleaned during restart of a node and reset to
     /// last full checkpoint.
-    pub fn tip(&mut self, height: Height) -> Result<CheckpointLayout<RwPolicy<Self>>, LayoutError> {
+    pub fn tip(
+        &mut self,
+        height: Height,
+    ) -> Result<CheckpointLayout<RwPolicy<'_, Self>>, LayoutError> {
         CheckpointLayout::new_untracked(self.tip_path(), height)
     }
 
@@ -706,10 +714,9 @@ impl StateLayout {
     }
 
     /// Returns scratchpad used during statesync
-    pub fn state_sync_scratchpad(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        Ok(self
-            .tmp()
-            .join(format!("state_sync_scratchpad_{:016x}", height.get())))
+    pub fn state_sync_scratchpad(&self, height: Height) -> PathBuf {
+        self.tmp()
+            .join(format!("state_sync_scratchpad_{:016x}", height.get()))
     }
 
     /// Returns the path to cache an unfinished statesync at `height`
@@ -738,7 +745,7 @@ impl StateLayout {
         &self,
         scratchpad_layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<'_, T>>, LayoutError> {
         scratchpad_layout.create_unverified_checkpoint_marker()?;
         self.scratchpad_to_checkpoint(scratchpad_layout, height)
     }
@@ -747,7 +754,7 @@ impl StateLayout {
         &self,
         layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<'_, T>>, LayoutError> {
         // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
         debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
@@ -1552,12 +1559,11 @@ fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
 pub fn canister_id_from_path(path: &Path) -> Option<CanisterId> {
     let mut path = path.iter();
     let top_level = path.next();
-    if top_level == Some(OsStr::new(CANISTER_STATES_DIR))
-        || top_level == Some(OsStr::new(SNAPSHOTS_DIR))
+    if (top_level == Some(OsStr::new(CANISTER_STATES_DIR))
+        || top_level == Some(OsStr::new(SNAPSHOTS_DIR)))
+        && let Some(hex) = path.next()
     {
-        if let Some(hex) = path.next() {
-            return parse_canister_id(hex.to_str()?).ok();
-        }
+        return parse_canister_id(hex.to_str()?).ok();
     }
     None
 }
@@ -2023,13 +2029,13 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
 impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     // The path to the base file.
     fn base(&self) -> PathBuf {
-        self.root.join(format!("{}.bin", self.name_stem))
+        self.root.join(format!("{}.{BIN_FILE}", self.name_stem))
     }
 
     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
         self.root.join(format!(
-            "{:016x}_{:04x}_{}.overlay",
+            "{:016x}_{:04x}_{}.{OVERLAY}",
             height.get(),
             shard.get(),
             self.name_stem,
@@ -2171,7 +2177,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "vmemory_0".into(),
+            name_stem: VMEMORY_0.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2180,7 +2186,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "stable_memory".into(),
+            name_stem: STABLE_MEMORY.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2189,7 +2195,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
+            name_stem: WASM_CHUNK_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2261,7 +2267,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "vmemory_0".into(),
+            name_stem: VMEMORY_0.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2270,7 +2276,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "stable_memory".into(),
+            name_stem: STABLE_MEMORY.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2279,7 +2285,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
+            name_stem: WASM_CHUNK_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }

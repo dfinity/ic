@@ -68,7 +68,7 @@ impl TryFrom<Nat> for U64 {
 }
 
 impl Storable for U64 {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.0.to_bytes()
     }
 

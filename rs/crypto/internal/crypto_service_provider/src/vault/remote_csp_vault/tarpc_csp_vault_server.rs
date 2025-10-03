@@ -98,9 +98,10 @@ where
             return;
         }
         let result = job();
-        let _ = tx.send(result); // Errors occur if the associated receiver
-        // handle was dropped and are considered
+
+        // Errors occur if the associated receiver handle was dropped and are considered
         // legitimate and are thus ignored.
+        let _ = tx.send(result);
     });
     rx.await.expect("the sender was dropped")
 }
@@ -382,7 +383,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,

@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
@@ -7,10 +6,9 @@ use crate::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReaso
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
-use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin;
+use ic_cdk::bitcoin_canister;
+use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -20,6 +18,10 @@ use serde_bytes::ByteBuf;
 use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
+
+use crate::state::CkBtcMinterState;
+pub use ic_btc_checker::CheckTransactionResponse;
+pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
 pub mod dashboard;
@@ -131,7 +133,7 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-pub type GetUtxosRequest = bitcoin::GetUtxosRequest;
+pub type GetUtxosRequest = bitcoin_canister::GetUtxosRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
@@ -140,8 +142,8 @@ pub struct GetUtxosResponse {
     pub next_page: Option<Page>,
 }
 
-impl From<bitcoin::GetUtxosResponse> for GetUtxosResponse {
-    fn from(response: bitcoin::GetUtxosResponse) -> Self {
+impl From<bitcoin_canister::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: bitcoin_canister::GetUtxosResponse) -> Self {
         Self {
             utxos: response
                 .utxos
@@ -174,12 +176,12 @@ pub enum Network {
     Regtest,
 }
 
-impl From<Network> for bitcoin::BitcoinNetwork {
+impl From<Network> for bitcoin_canister::Network {
     fn from(network: Network) -> Self {
         match network {
-            Network::Mainnet => bitcoin::BitcoinNetwork::Mainnet,
-            Network::Testnet => bitcoin::BitcoinNetwork::Testnet,
-            Network::Regtest => bitcoin::BitcoinNetwork::Regtest,
+            Network::Mainnet => bitcoin_canister::Network::Mainnet,
+            Network::Testnet => bitcoin_canister::Network::Testnet,
+            Network::Regtest => bitcoin_canister::Network::Regtest,
         }
     }
 }
@@ -367,7 +369,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     }
 
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
 
@@ -681,7 +683,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     }
 
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
 
@@ -1341,7 +1343,10 @@ pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
     use tasks::{pop_if_ready, run_task};
 
     if let Some(task) = pop_if_ready(&runtime) {
-        ic_cdk::spawn(run_task(task, runtime));
+        // Remark: spawn_017_compat is not needed since there is no code after `spawn` in the timer.
+        // See https://github.com/dfinity/cdk-rs/blob/0.18.3/ic-cdk/V18_GUIDE.md#futures-ordering-changes
+        #[allow(clippy::disallowed_methods)]
+        ic_cdk::futures::spawn(run_task(task, runtime));
     }
 }
 
@@ -1408,23 +1413,36 @@ pub fn estimate_retrieve_btc_fee(
 #[async_trait]
 pub trait CanisterRuntime {
     /// Returns the caller of the current call.
-    fn caller(&self) -> Principal;
+    fn caller(&self) -> Principal {
+        ic_cdk::api::msg_caller()
+    }
 
     /// Returns the canister id
-    fn id(&self) -> Principal;
+    fn id(&self) -> Principal {
+        ic_cdk::api::canister_self()
+    }
 
     /// Gets current timestamp, in nanoseconds since the epoch (1970-01-01)
-    fn time(&self) -> u64;
+    fn time(&self) -> u64 {
+        ic_cdk::api::time()
+    }
 
     /// Set a global timer to make the system schedule a call to the exported `canister_global_timer` Wasm method after the specified time.
     /// The time must be provided as nanoseconds since 1970-01-01.
     /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
-    fn global_timer_set(&self, timestamp: u64);
+    fn global_timer_set(&self, timestamp: u64) {
+        ic_cdk::api::global_timer_set(timestamp);
+    }
+
+    /// Validate the minter's state.
+    fn validate_config(&self, state: &CkBtcMinterState) {
+        state.validate_config()
+    }
 
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
-        request: GetUtxosRequest,
+        request: &GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
@@ -1444,7 +1462,7 @@ pub trait CanisterRuntime {
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
-        derivation_path: DerivationPath,
+        derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError>;
 
@@ -1460,25 +1478,9 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
-    fn caller(&self) -> Principal {
-        ic_cdk::caller()
-    }
-
-    fn id(&self) -> Principal {
-        ic_cdk::id()
-    }
-
-    fn time(&self) -> u64 {
-        ic_cdk::api::time()
-    }
-
-    fn global_timer_set(&self, timestamp: u64) {
-        ic_cdk::api::set_global_timer(timestamp);
-    }
-
     async fn bitcoin_get_utxos(
         &self,
-        request: GetUtxosRequest,
+        request: &GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }
@@ -1504,24 +1506,20 @@ impl CanisterRuntime for IcCanisterRuntime {
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
-        derivation_path: DerivationPath,
+        derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        use ic_cdk::api::management_canister::ecdsa::{
-            EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
-        };
-
-        ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
+        ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
             message_hash: message_hash.to_vec(),
-            derivation_path: derivation_path.into_inner(),
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
+            derivation_path,
+            key_id: ic_cdk::management_canister::EcdsaKeyId {
+                curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
                 name: key_name.clone(),
             },
         })
         .await
-        .map(|(result,)| result.signature)
-        .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
+        .map(|result| result.signature)
+        .map_err(CallError::from_sign_error)
     }
 
     async fn send_transaction(
@@ -1677,10 +1675,10 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
     pub fn get<T: Into<Timestamp>>(&self, key: &Key, now: T) -> Option<&Value> {
         let now = now.into();
         let timestamp = *self.keys.get(key)?;
-        if let Some(expire_cutoff) = now.checked_sub(self.expiration) {
-            if timestamp < expire_cutoff {
-                return None;
-            }
+        if let Some(expire_cutoff) = now.checked_sub(self.expiration)
+            && timestamp < expire_cutoff
+        {
+            return None;
         }
         self.values.get(&Timestamped {
             timestamp,
@@ -1689,4 +1687,4 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
     }
 }
 
-pub type GetUtxosCache = CacheWithExpiration<bitcoin::GetUtxosRequest, GetUtxosResponse>;
+pub type GetUtxosCache = CacheWithExpiration<bitcoin_canister::GetUtxosRequest, GetUtxosResponse>;

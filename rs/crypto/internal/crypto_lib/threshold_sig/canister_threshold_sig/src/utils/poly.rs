@@ -789,7 +789,9 @@ impl LagrangeCoefficients {
             numerator[i] = numerator[i].mul(&tmp)?;
         }
 
-        for (lagrange_i, x_i) in numerator.iter_mut().zip(&samples) {
+        let mut denominator = Vec::with_capacity(numerator.len());
+
+        for x_i in &samples {
             // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
             // other data points but `1` at `x_i`.
             let mut denom = EccScalar::one(curve_type);
@@ -798,12 +800,18 @@ impl LagrangeCoefficients {
                 denom = denom.mul(&diff)?;
             }
 
-            let inv = match denom.invert() {
-                Some(s) => s,
-                None => return Err(CanisterThresholdError::InterpolationError),
-            };
+            denominator.push(denom);
+        }
 
-            *lagrange_i = lagrange_i.mul(&inv)?;
+        let denominator_inv = match EccScalar::batch_invert_vartime(&denominator) {
+            Ok(i) => i,
+            // This case should never happen in practice due to how we created denominator
+            // in the loop above
+            Err(_) => return Err(CanisterThresholdError::InterpolationError),
+        };
+
+        for (n, d) in numerator.iter_mut().zip(denominator_inv) {
+            *n = n.mul(&d)?;
         }
         Self::new(numerator)
     }

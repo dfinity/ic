@@ -140,7 +140,9 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_instructions_left_error: IntCounter,
     // Instance stats
     accessed_pages: HistogramVec,
+    accessed_wasm_pages: HistogramVec,
     dirty_pages: HistogramVec,
+    dirty_wasm_pages: HistogramVec,
     read_before_write_count: HistogramVec,
     direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
@@ -323,15 +325,29 @@ impl SandboxedExecutionMetrics {
             // Instance stats
             accessed_pages: metrics_registry.histogram_vec(
                 "sandboxed_execution_accessed_pages",
-                "Number of pages accessed by type of memory (wasm, stable) \
+                "Number of OS pages accessed by type of memory (wasm, stable) \
                         and api type.",
                 // 1 page, 2 pages, …, 2^21 (8GiB worth of) pages
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
             ),
+            accessed_wasm_pages: metrics_registry.histogram_vec(
+                "sandboxed_execution_accessed_wasm_pages",
+                "Number of Wasm pages accessed by type of memory (wasm, stable) \
+                        and api type.",
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
             dirty_pages: metrics_registry.histogram_vec(
                 "sandboxed_execution_dirty_pages",
-                "Number of pages modified (dirtied) by type of memory (wasm, stable) \
+                "Number of OS pages modified (dirtied) by type of memory (wasm, stable) \
+                    and api type.",
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
+            dirty_wasm_pages: metrics_registry.histogram_vec(
+                "sandboxed_execution_dirty_wasm_pages",
+                "Number of Wasm pages modified (dirtied) by type of memory (wasm, stable) \
                     and api type.",
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
@@ -413,9 +429,15 @@ impl SandboxedExecutionMetrics {
         self.accessed_pages
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_accessed_os_pages_count as f64);
+        self.accessed_wasm_pages
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_accessed_wasm_pages_count as f64);
         self.dirty_pages
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_dirty_os_pages_count as f64);
+        self.dirty_wasm_pages
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_dirty_wasm_pages_count as f64);
         self.read_before_write_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_read_before_write_count as f64);
@@ -1810,23 +1832,23 @@ fn open_wasm(
     log: &ReplicaLogger,
 ) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
-    if let Some(cache) = embedder_cache.as_ref() {
-        if let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>() {
-            match opened_wasm {
-                Ok(opened_wasm) => match opened_wasm.sandbox_process.upgrade() {
-                    Some(cached_sandbox_process) => {
-                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
-                        assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
-                        return Ok((opened_wasm.wasm_id, None));
-                    }
-                    _ => {
-                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
-                    }
-                },
-                Err(err) => {
-                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
-                    return Err(err.clone());
+    if let Some(cache) = embedder_cache.as_ref()
+        && let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>()
+    {
+        match opened_wasm {
+            Ok(opened_wasm) => match opened_wasm.sandbox_process.upgrade() {
+                Some(cached_sandbox_process) => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
+                    assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
+                    return Ok((opened_wasm.wasm_id, None));
                 }
+                _ => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
+                }
+            },
+            Err(err) => {
+                metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
+                return Err(err.clone());
             }
         }
     }
@@ -1914,12 +1936,12 @@ fn open_remote_memory(
     memory: &Memory,
 ) -> SandboxMemoryHandle {
     let mut guard = memory.sandbox_memory.lock().unwrap();
-    if let SandboxMemory::Synced(id) = &*guard {
-        if let Some(pid) = id.get_sandbox_process_id() {
-            // There is a at most one sandbox process per canister at any time.
-            assert_eq!(pid, sandbox_process.pid as usize);
-            return id.clone();
-        }
+    if let SandboxMemory::Synced(id) = &*guard
+        && let Some(pid) = id.get_sandbox_process_id()
+    {
+        // There is a at most one sandbox process per canister at any time.
+        assert_eq!(pid, sandbox_process.pid as usize);
+        return id.clone();
     }
 
     // Here we have two cases:

@@ -6,7 +6,9 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
     key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspSigner;
-use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
+use ic_crypto_internal_csp::vault::api::{
+    CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, create_transcript as idkg_create_transcript,
@@ -90,7 +92,7 @@ pub fn create_transcript<C: CspSigner>(
         transcript_id: params.transcript_id(),
         receivers: params.receivers().clone(),
         registry_version: params.registry_version(),
-        verified_dealings: signed_dealings_by_index,
+        verified_dealings: Arc::new(signed_dealings_by_index),
         transcript_type,
         algorithm_id: params.algorithm_id(),
         internal_transcript_raw,
@@ -113,7 +115,7 @@ pub fn verify_transcript<C: CspSigner>(
             ))
         })?;
 
-    for (dealer_index, signed_dealing) in &transcript.verified_dealings {
+    for (dealer_index, signed_dealing) in transcript.verified_dealings.as_ref() {
         // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
         verify_signature_batch(
             csp_client,
@@ -137,8 +139,9 @@ pub fn verify_transcript<C: CspSigner>(
             "failed to deserialize internal transcript: {e:?}"
         ))
     })?;
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgVerifyTranscriptError::SerializationError(e.serde_error))?;
+    let internal_dealings =
+        internal_dealings_from_verified_dealings(transcript.verified_dealings.as_ref())
+            .map_err(|e| IDkgVerifyTranscriptError::SerializationError(e.serde_error))?;
 
     Ok(idkg_verify_transcript(
         &internal_transcript,
@@ -168,9 +171,13 @@ pub fn load_transcript(
         transcript.registry_version,
     )?;
 
+    let internal_dealings_bytes = cloned_internal_dealings_bytes_from_verified_dealings(
+        transcript.verified_dealings.as_ref(),
+    );
+
     let internal_complaints = vault.idkg_load_transcript(
         transcript.algorithm_id,
-        transcript.verified_dealings.clone(),
+        internal_dealings_bytes,
         transcript.context_data(),
         self_index,
         key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
@@ -235,7 +242,7 @@ pub fn load_transcript_with_openings(
 
     vault.idkg_load_transcript_with_openings(
         transcript.algorithm_id,
-        transcript.verified_dealings.clone(),
+        transcript.verified_dealings.as_ref().clone(),
         internal_openings,
         transcript.context_data(),
         self_index,
@@ -435,6 +442,20 @@ fn internal_dealings_from_verified_dealings(
                 }
             })?;
             Ok((*index, dealing))
+        })
+        .collect()
+}
+
+fn cloned_internal_dealings_bytes_from_verified_dealings(
+    verified_dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+) -> BTreeMap<NodeIndex, IDkgDealingInternalBytes> {
+    verified_dealings
+        .iter()
+        .map(|(index, signed_dealing)| {
+            let dealing = IDkgDealingInternalBytes::from(
+                signed_dealing.idkg_dealing().internal_dealing_raw.clone(),
+            );
+            (*index, dealing)
         })
         .collect()
 }

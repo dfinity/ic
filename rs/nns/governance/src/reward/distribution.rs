@@ -167,7 +167,8 @@ impl RewardsDistribution {
                             .saturating_add(reward_e8s),
                     );
                 } else {
-                    neuron.maturity_e8s_equivalent += reward_e8s;
+                    neuron.maturity_e8s_equivalent =
+                        neuron.maturity_e8s_equivalent.saturating_add(reward_e8s);
                 }
             }) {
                 Ok(_) => {}
@@ -188,7 +189,7 @@ impl RewardsDistribution {
 }
 
 impl Storable for RewardsDistributionInProgress {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
     }
 
@@ -405,13 +406,13 @@ mod test {
 
         for i in 1..=5 {
             governance
-                .add_neuron(i, make_neuron(i, 1000, 1000), false)
+                .add_neuron(i, make_neuron(i, 1000, 1000))
                 .unwrap();
         }
         for i in 6..=10 {
             let mut neuron = make_neuron(i, 1000, 1000);
             neuron.auto_stake_maturity = Some(true);
-            governance.add_neuron(i, neuron, false).unwrap();
+            governance.add_neuron(i, neuron).unwrap();
         }
 
         let mut distribution = RewardsDistribution::new();

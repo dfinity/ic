@@ -5,6 +5,8 @@ use paste::paste;
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
+
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
     G1Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
 }
@@ -43,6 +45,22 @@ fn random_scalar<R: Rng + CryptoRng>(rng: &mut R) -> Scalar {
 
 fn random_sparse_scalar<R: Rng + CryptoRng>(num_bits: u8, rng: &mut R) -> Scalar {
     Scalar::random_sparse(rng, num_bits)
+}
+
+fn random_nodes<R: Rng + CryptoRng>(count: usize, rng: &mut R) -> Vec<NodeIndex> {
+    let mut r = vec![];
+
+    let mut idx = 1;
+    while r.len() != count + 3 {
+        r.push(idx);
+        idx += 1;
+    }
+
+    while r.len() != count {
+        r.remove(rng.r#gen::<usize>() % r.len());
+    }
+
+    r
 }
 
 fn n_random_scalar<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Vec<Scalar> {
@@ -163,6 +181,7 @@ fn g2_multiexp_naive(points: &[G2Projective], scalars: &[Scalar]) -> G2Projectiv
 
 fn bls12_381_scalar_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_scalar");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -215,8 +234,24 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     });
 }
 
+fn bls12_381_interpolation_ops(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crypto_bls12_381_interpolation");
+    group.warm_up_time(WARMUP_TIME);
+
+    let rng = &mut reproducible_rng();
+
+    group.bench_function("Interpolation setup (n=32)", |b| {
+        b.iter_batched_ref(
+            || random_nodes(32, rng),
+            |nodes| LagrangeCoefficients::at_zero(&NodeIndices::from_slice(nodes).unwrap()),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
 fn bls12_381_g1_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_g1");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -384,6 +419,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
 fn bls12_381_g2_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_g2");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -560,6 +596,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
 fn pairing_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_gt");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -661,6 +698,7 @@ fn pairing_ops(c: &mut Criterion) {
 
 fn bls12_381_batch_sig_verification(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_batch_sig_verification");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -753,6 +791,7 @@ fn bls12_381_batch_sig_verification(c: &mut Criterion) {
 
 fn bls12_381_batch_sig_verification_multithreaded(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_batch_sig_verification_multithreaded");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -886,6 +925,7 @@ macro_rules! crypto_bls12_381_mul2_precomputation_init {
             fn [< mul2_precomputation_ $group >](c: &mut Criterion) {
                 let mut group =
                     c.benchmark_group(format!("crypto_bls12_381_mul2_precomputation_{}", stringify!($group)));
+                group.warm_up_time(WARMUP_TIME);
                 let random = [< random_ $group >];
 
                 let rng = &mut reproducible_rng();
@@ -951,6 +991,7 @@ criterion_group!(
     bls12_381_scalar_ops,
     bls12_381_g1_ops,
     bls12_381_g2_ops,
+    bls12_381_interpolation_ops,
     pairing_ops,
     bls12_381_batch_sig_verification,
     bls12_381_batch_sig_verification_multithreaded,

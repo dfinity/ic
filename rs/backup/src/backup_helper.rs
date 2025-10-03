@@ -305,10 +305,8 @@ impl BackupHelper {
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         debug!(self.log, "Will execute: {:?}", cmd);
 
-        match exec_cmd(&mut cmd) {
-            Err(e) => Err(format!("Error: {e}")),
-            _ => Ok(()),
-        }
+        exec_cmd(&mut cmd).map_err(|e| format!("Error: {}", e))?;
+        Ok(())
     }
 
     pub(crate) fn sync_files(&self, nodes: &[IpAddr]) {
@@ -544,12 +542,12 @@ impl BackupHelper {
         let prefix = "Please use the replay tool of version";
         let suffix = "to continue backup recovery from height";
         let min_version_len = 8;
-        if let Some(pos) = stdout.find(prefix) {
-            if pos + prefix.len() + min_version_len + suffix.len() < stdout.len() {
-                let pos2 = pos + prefix.len();
-                if let Some(pos3) = stdout[pos2..].find(suffix) {
-                    return Some(stdout[pos2..(pos2 + pos3)].trim().to_string());
-                }
+        if let Some(pos) = stdout.find(prefix)
+            && pos + prefix.len() + min_version_len + suffix.len() < stdout.len()
+        {
+            let pos2 = pos + prefix.len();
+            if let Some(pos3) = stdout[pos2..].find(suffix) {
+                return Some(stdout[pos2..(pos2 + pos3)].trim().to_string());
             }
         }
         None

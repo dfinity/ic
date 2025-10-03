@@ -3,11 +3,12 @@ use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockType;
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
+use ic_ledger_suite_in_memory_ledger::{
     AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
-use ic_ledger_suite_state_machine_tests::{TransactionGenerationParameters, generate_transactions};
+use ic_ledger_suite_state_machine_helpers::{
+    TransactionGenerationParameters, generate_transactions, parse_metric, retrieve_metrics,
+};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
@@ -287,7 +288,7 @@ impl Setup {
 
         let master_wasms = Wasms {
             ledger: Wasm::from_bytes(
-                std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+                std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap())
                     .expect("Could not read ledger wasm"),
             ),
             index: Wasm::from_bytes(
