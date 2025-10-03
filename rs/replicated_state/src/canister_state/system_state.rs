@@ -515,7 +515,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_size: NumBytes::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE),
+            log_size: NumBytes::new(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
