@@ -33,9 +33,10 @@ use ic_nns_test_utils::{
         nns_claim_or_refresh_neuron, nns_disburse_maturity, nns_disburse_neuron,
         nns_governance_get_full_neuron, nns_governance_get_neuron_info,
         nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
-        nns_leave_community_fund, nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron,
-        nns_set_auto_stake_maturity, nns_set_followees_for_neuron, nns_start_dissolving,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        nns_leave_community_fund, nns_make_neuron_public, nns_remove_hot_key,
+        nns_send_icp_to_claim_or_refresh_neuron, nns_set_auto_stake_maturity,
+        nns_set_followees_for_neuron, nns_start_dissolving, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -300,7 +301,10 @@ fn create_neuron_with_stake(
 ) -> NeuronIdProto {
     let nonce = 123_456;
     nns_send_icp_to_claim_or_refresh_neuron(state_machine, neuron_controller, stake, nonce);
-    nns_claim_or_refresh_neuron(state_machine, neuron_controller, nonce)
+    let neuron_id = nns_claim_or_refresh_neuron(state_machine, neuron_controller, nonce);
+    nns_make_neuron_public(state_machine, neuron_controller, neuron_id)
+        .expect("Failed to make neuron public");
+    neuron_id
 }
 
 /// Creates a neuron with some maturity, and returns the neuron id. This is done by (1) sending some

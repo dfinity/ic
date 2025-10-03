@@ -3,6 +3,7 @@ use crate::common::{
     build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm,
     build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm,
 };
+use crate::state_test_helpers::nns_governance_pb::Visibility;
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
 use cycles_minting_canister::{
@@ -89,7 +90,6 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
 use std::{convert::TryInto, time::Duration};
-
 /// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
 /// Canisters created in those tests without any `specified_id` are assigned to the default range
 /// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
@@ -1138,6 +1138,24 @@ pub fn nns_increase_dissolve_delay(
             additional_dissolve_delay_seconds,
         }
         .into_operation(),
+    )
+}
+
+pub fn nns_make_neuron_public(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) -> Result<
+    nns_governance_pb::manage_neuron_response::ConfigureResponse,
+    nns_governance_pb::GovernanceError,
+> {
+    nns_configure_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        Operation::SetVisibility(nns_governance_pb::manage_neuron::SetVisibility {
+            visibility: Some(Visibility::Public as i32),
+        }),
     )
 }
 
