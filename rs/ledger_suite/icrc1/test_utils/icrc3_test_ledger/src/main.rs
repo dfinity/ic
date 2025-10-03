@@ -10,6 +10,7 @@ use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_ledger_canister_core::range_utils;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::{ICRC3Value, Value};
+use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{
     BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
@@ -211,20 +212,49 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
     let next_id = next_block_id();
     BLOCKS.with(|blocks| {
         let blocks = blocks.borrow();
-        let total_blocks = next_id;
 
         let start = request.start.0.to_u64().unwrap_or(0);
+        let length = request.length.0.to_u64().unwrap_or(0);
+        let requested_range = start..start + length;
+
         let blocks_res = get_blocks_for_request(&blocks, request);
 
+        let local_blocks = blocks_res
+            .local_blocks
+            .iter()
+            .map(|b| Value::from(b.block.clone()))
+            .collect();
+
+        let first_non_archive = ARCHIVES.with(|archives| match archives.borrow().last() {
+            Some(archive) => archive.block_range.end,
+            None => 0u64,
+        });
+        let first_index = match blocks.first_key_value() {
+            Some((idx, _)) => {
+                let local_range = *idx..next_id;
+                match range_utils::intersect(&local_range, &requested_range) {
+                    Ok(intersection) => intersection.start,
+                    Err(_) => first_non_archive,
+                }
+            }
+            None => first_non_archive,
+        };
+
+        let archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>> = blocks_res
+            .archives
+            .into_iter()
+            .map(|(canister_id, slice)| ArchivedRange {
+                start: Nat::from(slice.start),
+                length: Nat::from(range_utils::range_len(&slice)),
+                callback: QueryBlockArchiveFn::new(canister_id, "get_blocks"),
+            })
+            .collect();
+
         GetBlocksResponse {
-            chain_length: total_blocks,
-            blocks: blocks_res
-                .local_blocks
-                .iter()
-                .map(|b| Value::from(b.block.clone()))
-                .collect(),
-            archived_blocks: vec![], // No archiving in this simple implementation
-            first_index: Nat::from(start),
+            chain_length: next_id,
+            blocks: local_blocks,
+            archived_blocks,
+            first_index: Nat::from(first_index),
             certificate: None,
         }
     })
