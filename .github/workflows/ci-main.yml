@@ -381,9 +381,10 @@ jobs:
             ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
 
       # Ensures that local development works on arm64-darwin.
-      - name: Build the entire codebase
+      - name: Build the entire codebase on darwin
         if: ${{ matrix.os == 'darwin' }}
         run: |
+          # We do not use `/...` here to exclude `//publish/...` which is not required for local development.
           bazel_build_targets=(
             //rs/...
             //packages/...
@@ -397,18 +398,13 @@ jobs:
 
       - name: Run tests tagged to run on all platforms
         run: |
-          bazel_test_targets=(
-            //rs/...
-            //packages/...
-          )
-
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
             --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
             --build_tests_only \
-            "${bazel_test_targets[@]}"
+            //...
 
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
