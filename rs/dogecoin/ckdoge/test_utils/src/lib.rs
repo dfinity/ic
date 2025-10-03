@@ -101,7 +101,7 @@ impl Setup {
                     cycles_for_archive_creation: Some(100_000_000_000_000),
                     max_transactions_per_response: None,
                 },
-                max_memo_length: None,
+                max_memo_length: Some(80),
                 feature_flags: None,
                 index_principal: None,
             };

@@ -48,11 +48,9 @@ fn should_fail_withdrawal() {
                 ..correct_withdrawal_args.clone()
             },
         ),
-        // TODO XC-495 Fix me!
-        // The error should be RetrieveDogeWithApprovalError::InsufficientAllowance, since the user
-        // did not allow the minter to burn.
-        Err(RetrieveDogeWithApprovalError::MalformedAddress(
-            "ckBTC supports only P2WPKH and P2PKH addresses".to_string()
-        ))
+        Err(RetrieveDogeWithApprovalError::InsufficientAllowance { allowance: 0 })
     )
+
+    // TODO XC-495: create sufficient allowance (which requires funds to pay for the ledger fee)
+    // and test failure when insufficient funds
 }
