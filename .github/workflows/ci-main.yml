@@ -332,22 +332,34 @@ jobs:
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
 
-  # Build & test the arm64-linux variant of pocket-ic-server and makes
-  # it available as a GHA artifact
-  # NOTE: uses 'namespace.so' runners
-  bazel-test-arm64-linux:
-    name: Bazel Test arm64-linux
-    runs-on: namespace-profile-arm64-linux # profile created in namespace console
+  # Build & test the arm64-{linux,darwin} variant of the PocketIC server
+  # and execution environment
+  # and make the PocketIC server available as a GHA artifact.
+  # NOTE: uses 'namespace.so' runners.
+  bazel-test-arm64:
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            profile: namespace-profile-arm64-linux # profile created in namespace console
+          - os: darwin
+            profile: namespace-profile-darwin # profile created in namespace console
+    name: Bazel Test arm64-${{ matrix.os }}
+    runs-on: ${{ matrix.profile }}
+    timeout-minutes: 120
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+
       - uses: actions/checkout@v4
+
       # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
       # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
       - name: Install lld
+        if: ${{ matrix.os }} == 'linux'
         run: |
           sudo apt install lld
 
@@ -356,7 +368,7 @@ jobs:
           # Setup zig-cache
           mkdir -p /tmp/zig-cache
 
-          bazel_targets=(
+          bazel_test_targets=(
             //rs/...
             //packages/pocket-ic/...
           )
@@ -364,73 +376,27 @@ jobs:
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
-            test \
-            --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
-            --build_tests_only \
-            "${bazel_targets[@]}"
-
-          bazel \
-            --noworkspace_rc \
-            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             build \
             //publish/binaries:pocket-ic.gz
 
-          mkdir -p build
-          cp \
-            ./bazel-bin/publish/binaries/pocket-ic.gz \
-            ./build/pocket-ic-server-arm64-linux.gz
-
-      - name: Upload pocket-ic-server
-        uses: actions/upload-artifact@v4
-        with:
-          name: pocket-ic-server-arm64-linux.gz
-          path: ./build/pocket-ic-server-arm64-linux.gz
-
-  bazel-test-arm64-darwin:
-    name: Bazel Test macOS Apple Silicon
-    timeout-minutes: 120
-    runs-on: namespace-profile-darwin # profile created in namespace console
-    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
-    steps:
-      - name: Set up Bazel cache
-        run: |
-          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
-          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
-      - uses: actions/checkout@v4
-
-      # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
-      - name: Test
-        run: |
-          # Setup zig-cache
-          mkdir -p /tmp/zig-cache
-
-          bazel_targets=(
-            # make sure codebase builds for local development
-            //rs/execution_environment/...
-            //rs/pocket_ic_server/...
-            //publish/binaries:pocket-ic.gz
-
-            # necessary artifacts & tests for pocket -ic
-            //packages/pocket-ic:all
-          )
-
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
             --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
-            "${bazel_targets[@]}"
+            --build_tests_only \
+            "${bazel_test_targets[@]}"
 
           mkdir -p build
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
-            ./build/pocket-ic-server-arm64-darwin.gz
+            ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
 
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
         with:
-          name: pocket-ic-server-arm64-darwin.gz
-          path: ./build/pocket-ic-server-arm64-darwin.gz
+          name: pocket-ic-server-arm64-${{ matrix.os }}.gz
+          path: ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
 
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
@@ -438,7 +404,7 @@ jobs:
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
-    needs: [bazel-test-arm64-linux, bazel-test-arm64-darwin, config]
+    needs: [bazel-test-arm64, config]
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     steps:
       - uses: actions/checkout@v4
