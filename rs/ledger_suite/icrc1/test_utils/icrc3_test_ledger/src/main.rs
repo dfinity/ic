@@ -193,7 +193,7 @@ pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
 
         // Process all requests
         for request in requests {
-            let mut blocks_res = get_blocks_for_request(&*blocks, request);
+            let mut blocks_res = get_blocks_for_request(&blocks, request);
             result_blocks.append(&mut blocks_res.local_blocks);
         }
 
@@ -214,7 +214,7 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
         let total_blocks = next_id;
 
         let start = request.start.0.to_u64().unwrap_or(0);
-        let blocks_res = get_blocks_for_request(&*blocks, request);
+        let blocks_res = get_blocks_for_request(&blocks, request);
 
         GetBlocksResponse {
             chain_length: total_blocks,
