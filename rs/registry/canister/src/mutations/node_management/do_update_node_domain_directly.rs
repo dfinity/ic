@@ -1,4 +1,9 @@
-use crate::mutations::node_management::common::get_node_operator_id_for_node;
+use crate::mutations::node_management::common::{
+    get_node_operator_id_for_node, get_node_operator_record,
+};
+use crate::rate_limits::{
+    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
+};
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -35,7 +40,7 @@ impl Registry {
         &mut self,
         payload: UpdateNodeDomainDirectlyPayload,
         caller_id: PrincipalId,
-        _now: SystemTime,
+        now: SystemTime,
     ) -> Result<(), String> {
         let UpdateNodeDomainDirectlyPayload { node_id, domain } = payload;
 
@@ -51,6 +56,14 @@ impl Registry {
             node_operator_id, caller_id,
             "The caller does not match this node's node operator id."
         );
+
+        // We know caller is node operator after last check.
+        let node_operator_record = get_node_operator_record(self, caller_id)?;
+
+        // Unwrap should be safe because node_provider_principal_id has to be valid bytes.
+        let node_provider_id =
+            PrincipalId::try_from(node_operator_record.node_provider_principal_id).unwrap();
+        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain
@@ -69,6 +82,10 @@ impl Registry {
 
         // Check invariants before applying the mutation
         self.maybe_apply_mutation_internal(mutations);
+
+        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+            std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
+        }
 
         Ok(())
     }
@@ -334,8 +351,7 @@ mod tests {
         // Exhaust the rate limit capacity
         let available = get_available_node_provider_op_capacity(node_operator_id, now);
         let reservation =
-            try_reserve_node_provider_op_capacity(now, node_operator_id, available)
-                .unwrap();
+            try_reserve_node_provider_op_capacity(now, node_operator_id, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
         let error = registry

@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, node_exists_with_ipv4,
+    get_node_operator_id_for_node, get_node_operator_record, node_exists_with_ipv4,
 };
 use crate::{common::LOG_PREFIX, mutations::common::node_exists_or_panic, registry::Registry};
 
@@ -13,6 +13,9 @@ use std::time::SystemTime;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+use crate::rate_limits::{
+    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
+};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nervous_system_time_helpers::now_system_time;
 
@@ -37,12 +40,20 @@ impl Registry {
         &mut self,
         payload: UpdateNodeIPv4ConfigDirectlyPayload,
         caller_id: PrincipalId,
-        _now: SystemTime,
+        now: SystemTime,
     ) -> Result<(), String> {
         let node_id = payload.node_id;
 
         // Ensure caller is actual node operator of the node in question
         self.check_caller_is_node_operator(caller_id, node_id);
+
+        // We know caller is node operator after last check.
+        let node_operator_record = get_node_operator_record(self, caller_id)?;
+
+        // Unwrap should be safe because node_provider_principal_id has to be valid bytes.
+        let node_provider_id =
+            PrincipalId::try_from(node_operator_record.node_provider_principal_id).unwrap();
+        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
 
         // Ensure payload is valid
         self.validate_update_node_ipv4_config_directly_payload(&payload);
@@ -66,6 +77,10 @@ impl Registry {
 
         // Check invariants before applying the mutation
         self.maybe_apply_mutation_internal(mutations);
+
+        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+            std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
+        }
 
         Ok(())
     }
@@ -496,8 +511,7 @@ mod tests {
         // Exhaust the rate limit capacity
         let available = get_available_node_provider_op_capacity(node_operator_id, now);
         let reservation =
-            try_reserve_node_provider_op_capacity(now, node_operator_id, available)
-                .unwrap();
+            try_reserve_node_provider_op_capacity(now, node_operator_id, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
         // This test should fail until rate limiting is implemented
