@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::state::CkBtcMinterState;
+use ic_ckbtc_minter::updates::retrieve_btc::BtcAddressCheckStatus;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse, Utxo,
     management::CallError, tx, updates::update_balance::UpdateBalanceError,
@@ -97,5 +98,14 @@ impl CanisterRuntime for DogeCanisterRuntime {
             DogecoinAddress::P2pkh(bytes) => BitcoinAddress::P2pkh(bytes),
             DogecoinAddress::P2sh(bytes) => BitcoinAddress::P2sh(bytes),
         })
+    }
+
+    async fn check_address(
+        &self,
+        _btc_checker_principal: Option<Principal>,
+        _address: String,
+    ) -> Result<BtcAddressCheckStatus, CallError> {
+        // No OFAC checklist for Dogecoin addresses
+        Ok(BtcAddressCheckStatus::Clean)
     }
 }

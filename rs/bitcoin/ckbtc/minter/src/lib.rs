@@ -20,7 +20,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use crate::state::CkBtcMinterState;
+use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
+use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
 pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
@@ -1473,6 +1475,13 @@ pub trait CanisterRuntime {
         transaction: &tx::SignedTransaction,
         network: Network,
     ) -> Result<(), CallError>;
+
+    /// Check if the given address is blocked.
+    async fn check_address(
+        &self,
+        btc_checker_principal: Option<Principal>,
+        address: String,
+    ) -> Result<BtcAddressCheckStatus, CallError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1538,6 +1547,31 @@ impl CanisterRuntime for IcCanisterRuntime {
         network: Network,
     ) -> Result<BitcoinAddress, std::string::String> {
         BitcoinAddress::parse(address, network).map_err(|e| e.to_string())
+    }
+
+    async fn check_address(
+        &self,
+        btc_checker_principal: Option<Principal>,
+        address: String,
+    ) -> Result<BtcAddressCheckStatus, CallError> {
+        let btc_checker_principal = btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set");
+
+        ic_cdk::call::Call::bounded_wait(btc_checker_principal, "check_address")
+            .with_arg(CheckAddressArgs {
+                address: address.clone(),
+            })
+            .await
+            .map_err(|e| CallError::from_cdk_call_error("check_address", e))?
+            .candid()
+            .map(|res: CheckAddressResponse| match res {
+                CheckAddressResponse::Failed => {
+                    log!(P0, "Discovered a tainted btc address {}", address);
+                    BtcAddressCheckStatus::Tainted
+                }
+                CheckAddressResponse::Passed => BtcAddressCheckStatus::Clean,
+            })
+            .map_err(|e| CallError::from_cdk_call_error("check_address", e))
     }
 }
 

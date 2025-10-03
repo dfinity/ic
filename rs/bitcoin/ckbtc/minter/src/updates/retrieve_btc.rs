@@ -1,7 +1,5 @@
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
-use crate::logs::P0;
 use crate::logs::P1;
-use crate::management::check_withdrawal_destination_address;
 use crate::memo::{BurnMemo, Status};
 use crate::tasks::{TaskType, schedule_now};
 use crate::{
@@ -12,7 +10,6 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_checker::CheckAddressResponse;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
@@ -146,7 +143,10 @@ impl From<ParseAddressError> for RetrieveBtcWithApprovalError {
     }
 }
 
-pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
+pub async fn retrieve_btc<R: CanisterRuntime>(
+    args: RetrieveBtcArgs,
+    runtime: &R,
+) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     let caller = ic_cdk::api::msg_caller();
 
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
@@ -189,13 +189,8 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::InsufficientFunds { balance });
     }
 
-    let btc_checker_principal = read_state(|s| {
-        s.btc_checker_principal
-            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
-            .get()
-            .into()
-    });
-    let status = check_address(btc_checker_principal, args.address.clone()).await?;
+    let btc_checker_principal = read_state(|s| s.btc_checker_principal).map(|id| id.get().into());
+    let status = check_address(btc_checker_principal, args.address.clone(), runtime).await?;
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
@@ -295,14 +290,15 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
         ));
     }
 
-    let btc_checker_principal = read_state(|s| {
-        s.btc_checker_principal
-            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
-            .get()
-            .into()
-    });
+    let btc_checker_principal = read_state(|s| s.btc_checker_principal).map(|id| id.get().into());
 
-    match check_address(btc_checker_principal, parsed_address.display(btc_network)).await {
+    match check_address(
+        btc_checker_principal,
+        parsed_address.display(btc_network),
+        runtime,
+    )
+    .await
+    {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
                 error_message: format!(
@@ -539,21 +535,18 @@ pub enum BtcAddressCheckStatus {
     /// The Bitcoin check found issues with the address in question.
     Tainted,
 }
-async fn check_address(
-    btc_checker_principal: Principal,
+
+async fn check_address<R: CanisterRuntime>(
+    btc_checker_principal: Option<Principal>,
     address: String,
+    runtime: &R,
 ) -> Result<BtcAddressCheckStatus, RetrieveBtcError> {
-    match check_withdrawal_destination_address(btc_checker_principal, address.clone())
+    runtime
+        .check_address(btc_checker_principal, address.clone())
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
                 "Failed to call Bitcoin checker canister: {call_err}"
             ))
-        })? {
-        CheckAddressResponse::Failed => {
-            log!(P0, "Discovered a tainted btc address {}", address);
-            Ok(BtcAddressCheckStatus::Tainted)
-        }
-        CheckAddressResponse::Passed => Ok(BtcAddressCheckStatus::Clean),
-    }
+        })
 }
