@@ -13,7 +13,9 @@ use ic_management_canister_types_private::{
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{
+    CanisterId, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, NumBytes, PrincipalId, SubnetId,
+};
 use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount, Tokens,
@@ -203,6 +205,7 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             freezing_threshold: settings.freezing_threshold,
             reserved_cycles_limit: settings.reserved_cycles_limit,
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
+            log_size: Some(candid::Nat::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE)),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
             environment_variables: None,
