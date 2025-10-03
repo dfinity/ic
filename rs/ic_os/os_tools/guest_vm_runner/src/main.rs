@@ -152,6 +152,7 @@ impl VirtualMachine {
                         && e.code() == ErrorNumber::OperationInvalid
                         && e.domain() == ErrorDomain::Domain =>
                 {
+                    eprintln!("Failed to create domain, will retry: {e}");
                     Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     retries -= 1;
                     continue;
