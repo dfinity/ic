@@ -54,8 +54,14 @@ impl Registry {
         let subnet_id = self.find_subnet_for_old_node(old_node_id)?;
         Self::swapping_allowed_on_subnet(subnet_id)?;
         // TODO - get rid of panics before feature enabled, and return nicer errors.
-        let node = self.get_node_or_panic(NodeId::from(payload.old_node_id.clone().unwrap()));
+        let node = self
+            .get_node(NodeId::from(payload.old_node_id.clone().unwrap()))
+            .ok_or(SwapError::NodeNotFound(
+                payload.old_node_id.clone().unwrap(),
+            ))?;
+        // Node should have valid bytes for node operator id
         let node_operator_id = PrincipalId::try_from(node.node_operator_id).unwrap();
+        // NodeOperatorRecord should have valid bytes for node provider.
         let node_provider_id =
             get_node_provider_id_for_operator_id(self, node_operator_id).unwrap();
 
@@ -124,6 +130,8 @@ pub enum SwapError {
     FeatureDisabledForCaller { caller: PrincipalId },
     FeatureDisabledOnSubnet { subnet_id: SubnetId },
     SubnetNotFoundForNode { old_node_id: PrincipalId },
+    RateLimiterError(RateLimiterError),
+    NodeNotFound(PrincipalId),
 }
 
 impl Display for SwapError {
@@ -143,6 +151,8 @@ impl Display for SwapError {
                     format!("Swapping is disabled on subnet `{subnet_id}`."),
                 SwapError::SubnetNotFoundForNode { old_node_id } =>
                     format!("Node {old_node_id} is not a member of any subnet."),
+                SwapError::RateLimiterError(e) => format!("{:?}", e),
+                SwapError::NodeNotFound(id) => format!("The node with id `{id}` was not found"),
             }
         )
     }
@@ -165,6 +175,8 @@ impl SwapNodeInSubnetDirectlyPayload {
 
 #[cfg(test)]
 mod tests {
+    use crate::common::test_helpers::invariant_compliant_registry;
+    use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::{
         common::test_helpers::get_invariant_compliant_subnet_record,
         flags::{
@@ -173,6 +185,10 @@ mod tests {
                 test_set_swapping_enabled_subnets, test_set_swapping_whitelisted_callers,
             },
         },
+    };
+    use crate::{
+        common::test_helpers::prepare_registry_with_nodes_and_node_operator_id,
+        flags::{temporarily_disable_node_swapping, temporarily_enable_node_swapping},
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         rate_limits::{
             commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
@@ -180,6 +196,7 @@ mod tests {
         },
         registry::Registry,
     };
+    use ic_base_types::NodeId;
     use ic_nervous_system_time_helpers::now_system_time;
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
@@ -188,11 +205,14 @@ mod tests {
         make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
     };
     use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+    use ic_types::PrincipalId;
     use ic_types::{NodeId, PrincipalId, SubnetId};
+    use maplit::btreemap;
     use std::collections::BTreeMap;
 
-    fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
-    {
+    fn invalid_payloads_with_expected_errors(
+        existing_node_id: NodeId,
+    ) -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)> {
         vec![
             (
                 SwapNodeInSubnetDirectlyPayload {
@@ -211,34 +231,61 @@ mod tests {
             (
                 SwapNodeInSubnetDirectlyPayload {
                     new_node_id: None,
-                    old_node_id: Some(PrincipalId::new_user_test_id(2)),
+                    old_node_id: Some(existing_node_id.get()),
                 },
                 SwapError::MissingInput,
             ),
             (
                 SwapNodeInSubnetDirectlyPayload {
-                    new_node_id: Some(PrincipalId::new_node_test_id(1)),
-                    old_node_id: Some(PrincipalId::new_node_test_id(1)),
+                    new_node_id: Some(existing_node_id.get()),
+                    old_node_id: Some(existing_node_id.get()),
                 },
                 SwapError::SamePrincipals,
             ),
         ]
     }
 
-    fn valid_payload() -> SwapNodeInSubnetDirectlyPayload {
+    fn valid_payload(existing_node_id: NodeId) -> SwapNodeInSubnetDirectlyPayload {
         SwapNodeInSubnetDirectlyPayload {
             new_node_id: Some(PrincipalId::new_node_test_id(1)),
-            old_node_id: Some(PrincipalId::new_node_test_id(2)),
+            old_node_id: Some(existing_node_id.get()),
         }
+    }
+
+    // Get the test data needed for most tests.
+    // Registry, node id that exists, and the node provider id
+    fn setup_test_data() -> (Registry, NodeId, PrincipalId) {
+        let node_operator_id = PrincipalId::new_user_test_id(10_001);
+        let node_provider_id = PrincipalId::new_user_test_id(20_002);
+
+        let mut registry = invariant_compliant_registry(0);
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes_and_node_operator_id(1, 2, node_operator_id);
+
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_id),
+            node_provider_principal_id: Some(node_provider_id),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+        };
+
+        registry.do_add_node_operator(payload);
+        let (node_id, _dkg_pks) = node_ids_and_dkg_pks.into_iter().next().unwrap();
+
+        (registry, node_id, node_provider_id)
     }
 
     #[test]
     fn feature_flag_check_works() {
-        let mut registry = Registry::new();
-
+        let (mut registry, node_id, _) = setup_test_data();
         let _temp = temporarily_disable_node_swapping();
 
-        let payload = valid_payload();
+        let payload = valid_payload(node_id);
 
         assert!(
             registry
@@ -249,11 +296,12 @@ mod tests {
 
     #[test]
     fn valid_payload_test() {
-        let mut registry = Registry::new();
+        let (mut registry, node_id, _) = setup_test_data();
 
         let _temp = temporarily_enable_node_swapping();
+        // Create a registry with nodes and node operators
 
-        let payload = valid_payload();
+        let payload = valid_payload(node_id);
 
         let result =
             registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1), now_system_time());
@@ -267,11 +315,11 @@ mod tests {
 
     #[test]
     fn invalid_payloads() {
-        let mut registry = Registry::new();
+        let (mut registry, node_id, _) = setup_test_data();
 
         let _temp = temporarily_enable_node_swapping();
 
-        for (payload, expected_err) in invalid_payloads_with_expected_errors() {
+        for (payload, expected_err) in invalid_payloads_with_expected_errors(node_id) {
             let output = registry.swap_nodes_inner(
                 payload,
                 PrincipalId::new_user_test_id(1),
@@ -475,13 +523,13 @@ mod tests {
 
     #[test]
     fn test_do_swap_node_in_subnet_directly_fails_when_rate_limits_exceeded() {
-        let mut registry = Registry::new();
+        let (mut registry, node_id, valid_np) = setup_test_data();
 
         let _temp = temporarily_enable_node_swapping();
 
+        let payload = valid_payload(node_id);
         let now = now_system_time();
-        let caller = PrincipalId::new_user_test_id(1);
-        let payload = valid_payload();
+        let caller = valid_np;
 
         // Exhaust the rate limit capacity
         let available = get_available_node_provider_op_capacity(caller, now);
