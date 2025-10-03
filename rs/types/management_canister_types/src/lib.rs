@@ -1087,10 +1087,12 @@ impl TryFrom<pb_canister_state_bits::CanisterChange> for CanisterChange {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     sender_canister_version : opt nat64;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct UninstallCodeArgs {
     canister_id: PrincipalId,
@@ -1212,18 +1214,20 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     controller : principal;
-///     compute_allocation : nat;
-///     memory_allocation : nat;
-///     freezing_threshold : nat;
-///     reserved_cycles_limit : nat;
-///     log_visibility : log_visibility;
-///     log_size : nat;
-///     wasm_memory_limit : nat;
-///     wasm_memory_threshold : nat;
-///     environment_variables : vec environment_variable;
-/// })`
+/// ```text
+/// record {
+///   controller : principal;
+///   compute_allocation : nat;
+///   memory_allocation : nat;
+///   freezing_threshold : nat;
+///   reserved_cycles_limit : nat;
+///   log_visibility : log_visibility;
+///   log_size : nat;
+///   wasm_memory_limit : nat;
+///   wasm_memory_threshold : nat;
+///   environment_variables : vec environment_variable;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
     controller: PrincipalId,
@@ -1330,35 +1334,37 @@ pub struct QueryStats {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     status : variant { running; stopping; stopped };
-///     ready_for_migration : bool,
-///     version : nat64,
-///     settings : definite_canister_settings;
-///     module_hash : opt blob;
-///     controller : principal;
-///     memory_size : nat;
-///     memory_metrics : record {
-///         wasm_memory_size : nat;
-///         stable_memory_size : nat;
-///         global_memory_size : nat;
-///         wasm_binary_size : nat;
-///         custom_sections_size : nat;
-///         canister_history_size : nat;
-///         wasm_chunk_store_size : nat;
-///         snapshots_size : nat;
-///     };
-///     cycles : nat;
-///     freezing_threshold : nat,
-///     idle_cycles_burned_per_day : nat;
-///     reserved_cycles : nat;
-///     query_stats : record {
-///         num_calls : nat;
-///         num_instructions : nat;
-///         ingress_payload_size : nat;
-///         egress_payload_size : nat;
-///     }
-/// })`
+/// ```text
+/// record {
+///   status : variant { running; stopping; stopped };
+///   ready_for_migration : bool;
+///   version : nat64;
+///   settings : definite_canister_settings;
+///   module_hash : opt blob;
+///   controller : principal;
+///   memory_size : nat;
+///   memory_metrics : record {
+///     wasm_memory_size : nat;
+///     stable_memory_size : nat;
+///     global_memory_size : nat;
+///     wasm_binary_size : nat;
+///     custom_sections_size : nat;
+///     canister_history_size : nat;
+///     wasm_chunk_store_size : nat;
+///     snapshots_size : nat;
+///   };
+///   cycles : nat;
+///   freezing_threshold : nat;
+///   idle_cycles_burned_per_day : nat;
+///   reserved_cycles : nat;
+///   query_stats : record {
+///     num_calls : nat;
+///     num_instructions : nat;
+///     ingress_payload_size : nat;
+///     egress_payload_size : nat;
+///   };
+/// }
+/// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
@@ -1937,13 +1943,15 @@ impl TryFrom<WasmMemoryPersistenceProto> for WasmMemoryPersistence {
 impl Payload<'_> for CanisterStatusResultV2 {}
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     mode : variant { install; reinstall; upgrade };
-///     canister_id : principal;
-///     wasm_module : blob;
-///     arg : blob;
-///     sender_canister_version : opt nat64;
-/// })`
+/// ```text
+/// record {
+///   mode : variant { install; reinstall; upgrade };
+///   canister_id : principal;
+///   wasm_module : blob;
+///   arg : blob;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InstallCodeArgs {
     pub mode: CanisterInstallMode,
@@ -2059,11 +2067,13 @@ impl<'a> Payload<'a> for EmptyBlob {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     settings : canister_settings;
-///     sender_canister_version : opt nat64;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   settings : canister_settings;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Debug, CandidType, Deserialize)]
 pub struct UpdateSettingsArgs {
     pub canister_id: PrincipalId,
@@ -2134,18 +2144,20 @@ pub struct EnvironmentVariable {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     controllers : opt vec principal;
-///     compute_allocation : opt nat;
-///     memory_allocation : opt nat;
-///     freezing_threshold : opt nat;
-///     reserved_cycles_limit : opt nat;
-///     log_visibility : opt log_visibility;
-///     log_size : opt nat;
-///     wasm_memory_limit : opt nat;
-///     wasm_memory_threshold : opt nat;
-///     environment_variables : opt vec environment_variable;
-/// })`
+/// ```text
+/// record {
+///   controllers : opt vec principal;
+///   compute_allocation : opt nat;
+///   memory_allocation : opt nat;
+///   freezing_threshold : opt nat;
+///   reserved_cycles_limit : opt nat;
+///   log_visibility : opt log_visibility;
+///   log_size : opt nat;
+///   wasm_memory_limit : opt nat;
+///   wasm_memory_threshold : opt nat;
+///   environment_variables : opt vec environment_variable;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettingsArgs {
     pub controllers: Option<BoundedControllers>,
@@ -2318,10 +2330,12 @@ impl CanisterSettingsArgsBuilder {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     settings : opt canister_settings;
-///     sender_canister_version : opt nat64;
-/// })`
+/// ```text
+/// record {
+///   settings : opt canister_settings;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Clone, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CreateCanisterArgs {
     pub settings: Option<CanisterSettingsArgs>,
@@ -3555,10 +3569,12 @@ pub struct FetchCanisterLogsResponse {
 impl Payload<'_> for FetchCanisterLogsResponse {}
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     chunk : blob;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   chunk : blob;
+/// }
+/// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct UploadChunkArgs {
     pub canister_id: PrincipalId,
@@ -3597,21 +3613,23 @@ impl Payload<'_> for ChunkHash {}
 pub type UploadChunkReply = ChunkHash;
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     mode : variant {
-///         install;
-///         reinstall;
-///         upgrade : opt record {
-///             skip_pre_upgrade : opt bool
-///         }
+/// ```text
+/// record {
+///   mode : variant {
+///     install;
+///     reinstall;
+///     upgrade : opt record {
+///       skip_pre_upgrade : opt bool;
 ///     };
-///     target_canister_id : principal;
-///     store_canister_id : opt principal;
-///     chunk_hashes_list : vec chunk_hash;
-///     wasm_module_hash : blob;
-///     arg : blob;
-///     sender_canister_version : opt nat64;
-/// })`
+///   };
+///   target_canister_id : principal;
+///   store_canister_id : opt principal;
+///   chunk_hashes_list : vec chunk_hash;
+///   wasm_module_hash : blob;
+///   arg : blob;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InstallChunkedCodeArgs {
     pub mode: CanisterInstallModeV2,
@@ -3803,10 +3821,12 @@ pub struct StoredChunksReply(pub Vec<ChunkHash>);
 impl Payload<'_> for StoredChunksReply {}
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     replace_snapshot : opt blob;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   replace_snapshot : opt blob;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
@@ -3832,11 +3852,13 @@ impl TakeCanisterSnapshotArgs {
 impl Payload<'_> for TakeCanisterSnapshotArgs {}
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     snapshot_id : blob;
-///     sender_canister_version : opt nat64;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   snapshot_id : blob;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct LoadCanisterSnapshotArgs {
     canister_id: PrincipalId,
@@ -3910,10 +3932,12 @@ impl CanisterSnapshotResponse {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     snapshot_id : blob;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   snapshot_id : blob;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DeleteCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
@@ -4059,10 +4083,12 @@ impl TryFrom<pb_canister_state_bits::Global> for Global {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     snapshot_id : blob;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   snapshot_id : blob;
+/// }
+/// ```
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct ReadCanisterSnapshotMetadataArgs {
