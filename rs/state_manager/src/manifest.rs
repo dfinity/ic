@@ -19,7 +19,6 @@ use crate::{
         encode_manifest,
     },
 };
-use bit_vec::BitVec;
 use hash::{ManifestHash, chunk_hasher, file_hasher, manifest_hasher};
 use ic_crypto_sha2::Sha256;
 use ic_logger::{ReplicaLogger, error, fatal, replica_logger::no_op_logger};
@@ -28,12 +27,12 @@ use ic_state_layout::{
     BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
     UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
 };
-use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
+use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
 use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -672,12 +671,34 @@ pub fn file_chunk_range(chunk_table: &[ChunkInfo], file_index: usize) -> Range<u
     start..end
 }
 
+/// Returns the index of the first chunk of the file in base_manifest (if any).
+fn get_base_index(relative_path: &Path, base_manifest: &Manifest) -> Option<usize> {
+    let base_file_index = base_manifest
+        .file_table
+        .binary_search_by_key(&relative_path, |file_info| &file_info.relative_path)
+        .ok()?;
+
+    // The chunk table contains chunks from all files and hence `base_index` is
+    // needed to know the absolute index. The chunk table is sorted by
+    // `file_index` and then `offset`. Therefore binary search can be used to find
+    // the first chunk index of a file.
+    base_manifest
+        .chunk_table
+        .binary_search_by(|chunk_info| {
+            chunk_info
+                .file_index
+                .cmp(&(base_file_index as u32))
+                .then_with(|| chunk_info.offset.cmp(&0u64))
+        })
+        .ok()
+}
+
 /// Makes a "hash plan": an instruction how to compute the hash of each chunk of
 /// the new manifest.
 fn hash_plan(
     base_manifest: &Manifest,
     files: &[FileWithSize],
-    dirty_file_chunks: BTreeMap<PathBuf, BitVec>,
+    files_with_same_inodes: BTreeSet<PathBuf>,
     max_chunk_size: u32,
     seed: u64,
     rehash_every_nth: u64,
@@ -698,42 +719,16 @@ fn hash_plan(
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 
-    let mut chunk_actions: Vec<ChunkAction> = Vec::new();
+    let mut chunk_actions: Vec<ChunkAction> =
+        Vec::with_capacity(chunks_total(files, max_chunk_size));
 
     for FileWithSize(relative_path, size_bytes) in files.iter() {
         let num_chunks = count_chunks(*size_bytes, max_chunk_size);
-
-        let compute_dirty_chunk_bitmap = || -> Option<(&BitVec, usize)> {
-            let dirty_chunk_bitmap = dirty_file_chunks.get(relative_path)?;
-
-            let base_file_index = base_manifest
-                .file_table
-                .binary_search_by_key(&relative_path, |file_info| &file_info.relative_path)
-                .ok()?;
-
-            // The chunk table contains chunks from all files and hence `base_index` is
-            // needed to know the absolute index. The chunk table is sorted by
-            // `file_index` and then `offset`. Therefore binary search can be used to find
-            // the first chunk index of a file.
-            let base_index = base_manifest
-                .chunk_table
-                .binary_search_by(|chunk_info| {
-                    chunk_info
-                        .file_index
-                        .cmp(&(base_file_index as u32))
-                        .then_with(|| chunk_info.offset.cmp(&0u64))
-                })
-                .ok()?;
-            Some((dirty_chunk_bitmap, base_index))
-        };
-
-        if let Some((dirty_chunk_bitmap, base_index)) = compute_dirty_chunk_bitmap() {
-            debug_assert_eq!(num_chunks, dirty_chunk_bitmap.len());
-
+        if files_with_same_inodes.contains(relative_path)
+            && let Some(base_index) = get_base_index(relative_path, base_manifest)
+        {
             for i in 0..num_chunks {
-                let action = if dirty_chunk_bitmap[i] {
-                    ChunkAction::Recompute
-                } else {
+                let action = {
                     let chunk = &base_manifest.chunk_table[base_index + i];
 
                     debug_assert_eq!(
@@ -766,56 +761,50 @@ fn hash_plan(
     chunk_actions
 }
 
+/// Returns total amount of chunks necessary to hash given files.
+fn chunks_total(files: &[FileWithSize], max_chunk_size: u32) -> usize {
+    files
+        .iter()
+        .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
+        .sum()
+}
+
 /// Returns the trivial hash plan that instructs the caller to recompute hashes
 /// of all the chunks.
 fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAction> {
-    let chunks_total: usize = files
-        .iter()
-        .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
-        .sum();
-    vec![ChunkAction::Recompute; chunks_total]
+    vec![ChunkAction::Recompute; chunks_total(files, max_chunk_size)]
 }
 
-/// Computes the bitmap of chunks modified since the base state.
-/// For the files with provided dirty pages, the pages not in the list are assumed unchanged.
-/// The files that are hardlinks of the same inode are not rehashed as they must contain the same
-/// data.
-fn dirty_pages_to_dirty_chunks(
+/// Returns relative paths of files with the same inodes in the `checkpoint` and `manifest_delta`.
+fn files_with_same_inodes(
     log: &ReplicaLogger,
     manifest_delta: &ManifestDelta,
     checkpoint: &CheckpointLayout<ReadOnly>,
     files: &[FileWithSize],
     max_chunk_size: u32,
     thread_pool: &mut scoped_threadpool::Pool,
-) -> Result<BTreeMap<PathBuf, BitVec>, CheckpointError> {
+) -> BTreeSet<PathBuf> {
     debug_assert!(uses_chunk_size(
         &manifest_delta.base_manifest,
         max_chunk_size
     ));
-    // The `max_chunk_size` is set to 1 MiB currently and the assertion below meets.
-    // Note that currently the code does not support changing `max_chunk_size`
-    // without adding explicit code for backward compatibility.
-    assert_eq!(
-        max_chunk_size as usize % PAGE_SIZE,
-        0,
-        "chunk size must be a multiple of page size for incremental computation to work correctly"
-    );
-
-    let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
 
     // The files with the same inode and device IDs are hardlinks, hence contain exactly the same
     // data.
     if manifest_delta.base_height != manifest_delta.base_checkpoint.height() {
         debug_assert!(false);
-        return Ok(dirty_chunks);
+        return BTreeSet::new();
     }
-    let path_to_num_chunks_for_same_files = parallel_map(
+    parallel_map(
         thread_pool,
         files.iter(),
-        |FileWithSize(path, size_bytes)| {
+        |FileWithSize(relative_path, _size_bytes)| {
             use std::os::unix::fs::MetadataExt;
-            let new_path = checkpoint.raw_path().join(path);
-            let old_path = manifest_delta.base_checkpoint.raw_path().join(path);
+            let new_path = checkpoint.raw_path().join(relative_path);
+            let old_path = manifest_delta
+                .base_checkpoint
+                .raw_path()
+                .join(relative_path);
             if !old_path.exists() {
                 return None;
             }
@@ -837,20 +826,14 @@ fn dirty_pages_to_dirty_chunks(
             let old_metadata = old_metadata.unwrap();
             if new_metadata.ino() == old_metadata.ino() && new_metadata.dev() == old_metadata.dev()
             {
-                return Some(FileWithSize(path.clone(), *size_bytes));
+                return Some(relative_path.clone());
             }
             None
         },
-    );
-    for FileWithSize(path, size_bytes) in path_to_num_chunks_for_same_files.into_iter().flatten() {
-        let num_chunks = count_chunks(size_bytes, max_chunk_size);
-        let chunks_bitmap = BitVec::from_elem(num_chunks, false);
-        let _prev_chunk = dirty_chunks.insert(path.clone(), chunks_bitmap);
-        // Check that for hardlinked files there are no dirty pages.
-        debug_assert!(_prev_chunk.is_none());
-    }
-
-    Ok(dirty_chunks)
+    )
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 #[derive(PartialEq, Eq)]
@@ -901,18 +884,18 @@ pub fn compute_manifest(
             // new chunk size), but the manifest might be computed incorrectly
             // on the mainnet.
             if uses_chunk_size(&manifest_delta.base_manifest, max_chunk_size) {
-                let dirty_file_chunks = dirty_pages_to_dirty_chunks(
+                let files_with_same_inodes = files_with_same_inodes(
                     log,
                     manifest_delta,
                     checkpoint,
                     &files,
                     max_chunk_size,
                     thread_pool,
-                )?;
+                );
                 hash_plan(
                     &manifest_delta.base_manifest,
                     &files,
-                    dirty_file_chunks,
+                    files_with_same_inodes,
                     max_chunk_size,
                     manifest_delta.target_height.get(),
                     if rehash == RehashManifest::Yes {
