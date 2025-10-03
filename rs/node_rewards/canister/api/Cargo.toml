@@ -14,5 +14,7 @@ candid = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 rewards-calculation = { path = "../../rewards_calculation" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-protobuf = { path = "../../../protobuf" }
 serde = { workspace = true }
 chrono = { workspace = true }
+rust_decimal = "1.37.1"

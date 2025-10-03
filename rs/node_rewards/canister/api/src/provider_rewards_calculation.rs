@@ -1,16 +1,15 @@
 pub use crate::DateUtc;
-use candid::{CandidType, Deserialize, Principal};
-use ic_base_types::PrincipalId;
+use candid::{CandidType, Deserialize};
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_proto::pb::v1::Decimal;
+use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProviderRewardsCalculationRequest {
-    pub from_day: DateUtc,
-    pub to_day: DateUtc,
-    pub provider_id: Principal,
+    pub day: DateUtc,
 }
 
-pub type GetNodeProviderRewardsCalculationResponse = Result<Vec<NodeProviderRewardsDaily>, String>;
+pub type GetNodeProviderRewardsCalculationResponse = Result<DailyResults, String>;
 
 // These are API-facing types with all fields wrapped in `Option`
 // to ensure forward compatibility. This way, new fields can be added
@@ -67,9 +66,8 @@ pub struct NodeProviderRewards {
     pub base_rewards_type3: Vec<BaseRewardsType3>,
     pub nodes_results: Vec<NodeResults>,
 }
-
-#[derive(CandidType, candid::Deserialize, Clone, Debug)]
-pub struct NodeProviderRewardsDaily {
-    pub day_utc: Option<DateUtc>,
-    pub node_provider_rewards: Option<NodeProviderRewards>,
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
+pub struct DailyResults {
+    pub subnets_fr: BTreeMap<SubnetId, Decimal>,
+    pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }

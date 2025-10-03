@@ -8,7 +8,6 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
-use maplit::btreemap;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal_macros::dec;
@@ -83,12 +82,6 @@ pub trait DataProvider {
         &self,
         date: &NaiveDate,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        date: &NaiveDate,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String>;
 }
 
 trait PerformanceBasedAlgorithm {
@@ -118,7 +111,6 @@ trait PerformanceBasedAlgorithm {
     fn calculate_rewards(
         from_date: &NaiveDate,
         to_date: &NaiveDate,
-        node_provider_filter: Option<PrincipalId>,
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         if from_date > to_date {
@@ -131,8 +123,7 @@ trait PerformanceBasedAlgorithm {
 
         // Process each day in the reward period
         for day in reward_period {
-            let result_for_day =
-                Self::calculate_daily_rewards(&data_provider, &day, &node_provider_filter)?;
+            let result_for_day = Self::calculate_daily_rewards(&data_provider, &day)?;
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
@@ -158,17 +149,10 @@ trait PerformanceBasedAlgorithm {
     fn calculate_daily_rewards(
         data_provider: &impl DataProvider,
         date: &NaiveDate,
-        node_provider_filter: &Option<PrincipalId>,
     ) -> Result<DailyResults, String> {
         let rewards_table = data_provider.get_rewards_table(date)?;
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(date)?;
-        let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
-            let rewardable_nodes =
-                data_provider.get_provider_rewardable_nodes(date, provider_id)?;
-            btreemap! { *provider_id => rewardable_nodes }
-        } else {
-            data_provider.get_rewardable_nodes(date)?
-        };
+        let providers_rewardable_nodes = data_provider.get_rewardable_nodes(date)?;
         let mut results_per_provider = BTreeMap::new();
 
         // Calculate failure rates for subnets and individual nodes
