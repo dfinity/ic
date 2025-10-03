@@ -18,7 +18,6 @@ use ic_base_types::{
     SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_protobuf::log::{self, log_entry};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
