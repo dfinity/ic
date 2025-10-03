@@ -29,42 +29,33 @@ struct ArchiveInfo {
 
 thread_local! {
     static BLOCKS: RefCell<BlockStorage> = const { RefCell::new(BTreeMap::new()) };
-    static NEXT_BLOCK_ID: RefCell<u64> = const { RefCell::new(0) };
     static ICRC3_ENABLED: RefCell<bool> = const { RefCell::new(true) };
     static ARCHIVES: RefCell<Vec<ArchiveInfo>> = const { RefCell::new(vec![]) };
+}
+
+fn next_block_id() -> u64 {
+    BLOCKS.with(|blocks| match blocks.borrow().last_key_value() {
+        Some((k, _)) => *k + 1,
+        None => 0u64,
+    })
 }
 
 /// Add a block to the ledger storage
 #[candid_method(update)]
 #[update]
 pub fn add_block(block: ICRC3Value) -> AddBlockResult {
+    let mut next_id = next_block_id();
     let result = BLOCKS.with(|blocks| {
-        NEXT_BLOCK_ID.with(|next_id| {
-            let mut blocks = blocks.borrow_mut();
-            let mut next_id = next_id.borrow_mut();
+        let mut blocks = blocks.borrow_mut();
 
-            let block_id = *next_id;
-            blocks.insert(block_id, block);
-            *next_id += 1;
+        let block_id = next_id;
+        blocks.insert(block_id, block);
+        next_id += 1;
 
-            Ok(Nat::from(block_id))
-        })
+        Ok(Nat::from(block_id))
     });
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
     result
-}
-
-/// Add a block to the ledger storage
-#[candid_method(update)]
-#[update]
-pub fn set_next_block_id(block_id: u64) {
-    NEXT_BLOCK_ID.with(|next_id| {
-        let mut next_id = next_id.borrow_mut();
-        if block_id != *next_id {
-            assert_eq!(*next_id, 0);
-            *next_id = block_id;
-        }
-    });
 }
 
 /// Archive the oldest `num_blocks` to the archive at given `archive_id`.
@@ -112,13 +103,6 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
             }),
         };
     });
-
-    Call::unbounded_wait(args.archive_id, "set_next_block_id")
-        .with_arg(&first_block_index)
-        .await
-        .expect("failed to set the initial block id")
-        .candid::<()>()
-        .expect("Failed decoding empty result");
 
     for block in &blocks_to_archive {
         let result = Call::unbounded_wait(args.archive_id, "add_block")
@@ -200,51 +184,49 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 #[candid_method(query)]
 #[query]
 pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    let next_id = next_block_id();
     BLOCKS.with(|blocks| {
-        NEXT_BLOCK_ID.with(|next_id| {
-            let blocks = blocks.borrow();
-            let total_blocks = *next_id.borrow();
+        let blocks = blocks.borrow();
+        let total_blocks = next_id;
 
-            let mut result_blocks = Vec::new();
+        let mut result_blocks = Vec::new();
 
-            // Process all requests
-            for request in requests {
-                let mut blocks_res = get_blocks_for_request(&*blocks, request);
-                result_blocks.append(&mut blocks_res.local_blocks);
-            }
+        // Process all requests
+        for request in requests {
+            let mut blocks_res = get_blocks_for_request(&*blocks, request);
+            result_blocks.append(&mut blocks_res.local_blocks);
+        }
 
-            GetBlocksResult {
-                log_length: Nat::from(total_blocks),
-                blocks: result_blocks,
-                archived_blocks: vec![], // No archiving in this simple implementation
-            }
-        })
+        GetBlocksResult {
+            log_length: Nat::from(total_blocks),
+            blocks: result_blocks,
+            archived_blocks: vec![], // No archiving in this simple implementation
+        }
     })
 }
 
 #[candid_method(query)]
 #[query]
 pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
+    let next_id = next_block_id();
     BLOCKS.with(|blocks| {
-        NEXT_BLOCK_ID.with(|next_id| {
-            let blocks = blocks.borrow();
-            let total_blocks = *next_id.borrow();
+        let blocks = blocks.borrow();
+        let total_blocks = next_id;
 
-            let start = request.start.0.to_u64().unwrap_or(0);
-            let blocks_res = get_blocks_for_request(&*blocks, request);
+        let start = request.start.0.to_u64().unwrap_or(0);
+        let blocks_res = get_blocks_for_request(&*blocks, request);
 
-            GetBlocksResponse {
-                chain_length: total_blocks,
-                blocks: blocks_res
-                    .local_blocks
-                    .iter()
-                    .map(|b| Value::from(b.block.clone()))
-                    .collect(),
-                archived_blocks: vec![], // No archiving in this simple implementation
-                first_index: Nat::from(start),
-                certificate: None,
-            }
-        })
+        GetBlocksResponse {
+            chain_length: total_blocks,
+            blocks: blocks_res
+                .local_blocks
+                .iter()
+                .map(|b| Value::from(b.block.clone()))
+                .collect(),
+            archived_blocks: vec![], // No archiving in this simple implementation
+            first_index: Nat::from(start),
+            certificate: None,
+        }
     })
 }
 
@@ -302,10 +284,6 @@ pub fn set_icrc3_enabled(enabled: bool) {
 #[init]
 fn init() {
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
-}
-
-pub fn get_block_count() -> u64 {
-    NEXT_BLOCK_ID.with(|next_id| *next_id.borrow())
 }
 
 fn main() {}

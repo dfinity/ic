@@ -150,6 +150,4 @@ service : () -> {
     set_icrc3_enabled : (bool) -> ();
 
     archive_blocks : (ArchiveBlocksArgs) -> (nat64);
-
-    set_next_block_id : (nat64) -> ();
 }
