@@ -2670,8 +2670,6 @@ mod test {
                 result: Some(add_wasm_response::Result::Hash(valid_hash.to_vec()))
             }
         );
-
-        panic!("Canister state: {:#?}", canister.upgrade_path);
     }
 
     #[test]
@@ -3353,14 +3351,6 @@ mod test {
         let archive_1_hash = add_wasm_and_return_hash(SnsCanisterType::Archive, 1, false);
         let index_1_hash = add_wasm_and_return_hash(SnsCanisterType::Index, 1, false);
         let governance_2_hash = add_wasm_and_return_hash(SnsCanisterType::Governance, 2, false);
-
-        println!("governance_1_hash: {:?}", governance_1_hash);
-        println!("root_1_hash: {:?}", root_1_hash);
-        println!("ledger_1_hash: {:?}", ledger_1_hash);
-        println!("swap_1_hash: {:?}", swap_1_hash);
-        println!("archive_1_hash: {:?}", archive_1_hash);
-        println!("index_1_hash: {:?}", index_1_hash);
-        println!("governance_2_hash: {:?}", governance_2_hash);
 
         let basic_version = SnsVersion {
             governance_wasm_hash: governance_1_hash,
