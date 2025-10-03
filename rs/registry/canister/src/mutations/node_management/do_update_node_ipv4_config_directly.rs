@@ -494,9 +494,9 @@ mod tests {
         };
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(format!("{node_operator_id}"), now);
+        let available = get_available_node_provider_op_capacity(node_operator_id, now);
         let reservation =
-            try_reserve_node_provider_op_capacity(now, format!("{node_operator_id}"), available)
+            try_reserve_node_provider_op_capacity(now, node_operator_id, available)
                 .unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 

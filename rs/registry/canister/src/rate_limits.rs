@@ -1,4 +1,5 @@
 use crate::storage::get_rate_limiter_memory;
+use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_rate_limits::{
     RateLimiter, RateLimiterConfig, RateLimiterError, Reservation, StableMemoryCapacityStorage,
@@ -33,6 +34,10 @@ thread_local! {
     ));
 }
 
+fn node_provider_key(node_provider: PrincipalId) -> String {
+    format!("node_provider_{node_provider}")
+}
+
 fn with_node_provider_rate_limiter<R>(
     f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
 ) -> R {
@@ -42,11 +47,11 @@ fn with_node_provider_rate_limiter<R>(
 /// Try to reserve capacity for an operation that is rate limited by Node Provider
 pub fn try_reserve_node_provider_op_capacity(
     now: SystemTime,
-    key: impl ToString,
+    node_provider: PrincipalId,
     requested_capacity: u64,
 ) -> Result<Reservation<String>, RateLimiterError> {
     with_node_provider_rate_limiter(|rate_limiter| {
-        rate_limiter.try_reserve(now, key.to_string(), requested_capacity)
+        rate_limiter.try_reserve(now, node_provider_key(node_provider), requested_capacity)
     })
 }
 
@@ -61,9 +66,9 @@ pub fn commit_node_provider_op_reservation(
 // This function tells how much capacity is left, which is very useful for tests.  This could also
 // potentially be used in production code, but there's no use case yet.
 #[cfg(test)]
-pub fn get_available_node_provider_op_capacity(key: impl ToString, now: SystemTime) -> u64 {
+pub fn get_available_node_provider_op_capacity(node_provider: PrincipalId, now: SystemTime) -> u64 {
     with_node_provider_rate_limiter(|rate_limiter| {
-        rate_limiter.get_available_capacity(key.to_string(), now)
+        rate_limiter.get_available_capacity(node_provider_key(node_provider), now)
     })
 }
 
@@ -75,7 +80,7 @@ mod tests {
     #[test]
     fn test_drop_behavior_in_thread_local() {
         let now = SystemTime::now();
-        let key = "Foo";
+        let key = PrincipalId::new_user_test_id(1);
         let first_available = get_available_node_provider_op_capacity(key, now);
 
         let reservation = try_reserve_node_provider_op_capacity(now, key, 5).unwrap();

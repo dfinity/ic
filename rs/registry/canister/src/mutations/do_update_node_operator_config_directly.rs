@@ -68,7 +68,7 @@ impl Registry {
         }
 
         // 3. Check Rate Limits
-        let reservation = try_reserve_node_provider_op_capacity(now, format!("{caller}"), 1)?;
+        let reservation = try_reserve_node_provider_op_capacity(now, caller, 1)?;
 
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
@@ -205,13 +205,13 @@ mod tests {
         // Original should be able to change this.
         let caller = node_provider_id;
 
-        let available = get_available_node_provider_op_capacity(format!("{caller}"), now);
+        let available = get_available_node_provider_op_capacity(caller, now);
 
         registry
             .do_update_node_operator_config_directly_(request, caller, now)
             .unwrap();
 
-        let next_available = get_available_node_provider_op_capacity(format!("{caller}"), now);
+        let next_available = get_available_node_provider_op_capacity(caller, now);
         assert_eq!(available - 1, next_available);
     }
 
@@ -245,9 +245,8 @@ mod tests {
         // Original should be able to change this.
         let caller = node_provider_id;
 
-        let available = get_available_node_provider_op_capacity(format!("{caller}"), now);
-        let reservation =
-            try_reserve_node_provider_op_capacity(now, format!("{caller}"), available).unwrap();
+        let available = get_available_node_provider_op_capacity(caller, now);
+        let reservation = try_reserve_node_provider_op_capacity(now, caller, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
         let error = registry

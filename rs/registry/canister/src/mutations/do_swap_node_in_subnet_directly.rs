@@ -1,6 +1,9 @@
-use std::fmt::Display;
-use std::time::SystemTime;
-
+use crate::common::LOG_PREFIX;
+use crate::mutations::node_management::common::get_node_provider_id_for_operator_id;
+use crate::rate_limits::{
+    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
+};
+use crate::{flags::is_node_swapping_enabled, registry::Registry};
 use crate::{
     flags::{
         is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
@@ -10,11 +13,17 @@ use crate::{
     registry::Registry,
 };
 use candid::CandidType;
+use candid::CandidType;
+use ic_base_types::NodeId;
+use ic_nervous_system_rate_limits::RateLimiterError;
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use crate::rate_limits::try_reserve_node_provider_op_capacity;
+use std::fmt::Display;
+use std::fmt::Display;
+use std::time::SystemTime;
+use std::time::SystemTime;
 
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
@@ -28,14 +37,12 @@ impl Registry {
         &mut self,
         payload: SwapNodeInSubnetDirectlyPayload,
         caller: PrincipalId,
-        _now: SystemTime,
+        now: SystemTime,
     ) -> Result<(), SwapError> {
         // Check if the feature is enabled on the network.
         if !is_node_swapping_enabled() {
             return Err(SwapError::FeatureDisabled);
         }
-
-        try_reserve_node_provider_op_capacity(_now, )
 
         // Check if the payload is valid by itself.
         payload.validate()?;
@@ -46,10 +53,24 @@ impl Registry {
         Self::swapping_enabled_for_caller(caller)?;
         let subnet_id = self.find_subnet_for_old_node(old_node_id)?;
         Self::swapping_allowed_on_subnet(subnet_id)?;
+        // TODO - get rid of panics before feature enabled, and return nicer errors.
+        let node = self.get_node_or_panic(NodeId::from(payload.old_node_id.clone().unwrap()));
+        let node_operator_id = PrincipalId::try_from(node.node_operator_id).unwrap();
+        let node_provider_id =
+            get_node_provider_id_for_operator_id(self, node_operator_id).unwrap();
+
+        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)
+            .map_err(|e| SwapError::RateLimiterError(e))?;
+
+        //TODO(DRE-547): Check if the feature is allowed on the target subnet and for the caller
 
         //TODO(DRE-553): Rate-limiting mechanism
 
         //TODO(DRE-548): Implement the swapping functionality
+
+        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+            println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
+        }
         Ok(())
     }
 
@@ -144,16 +165,6 @@ impl SwapNodeInSubnetDirectlyPayload {
 
 #[cfg(test)]
 mod tests {
-
-    use std::collections::BTreeMap;
-
-    use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
-    use ic_registry_keys::{
-        make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    };
-    use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
-    use ic_types::{NodeId, PrincipalId, SubnetId};
-
     use crate::{
         common::test_helpers::get_invariant_compliant_subnet_record,
         flags::{
@@ -170,7 +181,15 @@ mod tests {
         registry::Registry,
     };
     use ic_nervous_system_time_helpers::now_system_time;
-    use prost::Message;
+    use ic_protobuf::registry::node::v1::NodeRecord;
+    use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
+    use ic_registry_keys::make_node_record_key;
+    use ic_registry_keys::{
+        make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    };
+    use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+    use ic_types::{NodeId, PrincipalId, SubnetId};
+    use std::collections::BTreeMap;
 
     fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
     {
@@ -465,9 +484,8 @@ mod tests {
         let payload = valid_payload();
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(format!("{caller}"), now);
-        let reservation =
-            try_reserve_node_provider_op_capacity(now, format!("{caller}"), available).unwrap();
+        let available = get_available_node_provider_op_capacity(caller, now);
+        let reservation = try_reserve_node_provider_op_capacity(now, caller, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
         // For now, the method doesn't implement rate limiting yet
