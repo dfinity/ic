@@ -2,7 +2,7 @@ use crate::provider_rewards_calculation::{
     BaseRewards, BaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
     NodeResults, NodeStatus,
 };
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, SubnetId};
 use ic_nervous_system_proto::pb::v1::Decimal as DecimalProto;
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use rewards_calculation::performance_based_algorithm::results as native_types;
@@ -17,11 +17,11 @@ impl From<native_types::NodeMetricsDaily> for NodeMetricsDaily {
     fn from(metrics: native_types::NodeMetricsDaily) -> Self {
         Self {
             subnet_assigned: Some(metrics.subnet_assigned.get()),
-            subnet_assigned_fr_percent: Some(metrics.subnet_assigned_fr.into()),
+            subnet_assigned_fr_percent: Some(DecimalProto::from(metrics.subnet_assigned_fr)),
             num_blocks_proposed: Some(metrics.num_blocks_proposed),
             num_blocks_failed: Some(metrics.num_blocks_failed),
-            original_fr_percent: Some(metrics.original_fr.into()),
-            relative_fr_percent: Some(metrics.relative_fr.into()),
+            original_fr_percent: Some(DecimalProto::from(metrics.original_fr)),
+            relative_fr_percent: Some(DecimalProto::from(metrics.relative_fr)),
         }
     }
 }
@@ -31,7 +31,7 @@ impl TryFrom<NodeMetricsDaily> for native_types::NodeMetricsDaily {
 
     fn try_from(value: NodeMetricsDaily) -> Result<Self, Self::Error> {
         Ok(Self {
-            subnet_assigned: value.subnet_assigned.unwrap().into(),
+            subnet_assigned: SubnetId::from(value.subnet_assigned.unwrap()),
             subnet_assigned_fr: Decimal::try_from(value.subnet_assigned_fr_percent.unwrap())?,
             num_blocks_proposed: value.num_blocks_proposed.unwrap(),
             num_blocks_failed: value.num_blocks_failed.unwrap(),
@@ -46,10 +46,10 @@ impl From<native_types::NodeStatus> for NodeStatus {
     fn from(status: native_types::NodeStatus) -> Self {
         match status {
             native_types::NodeStatus::Assigned { node_metrics } => Self::Assigned {
-                node_metrics: Some(node_metrics.into()),
+                node_metrics: Some(NodeMetricsDaily::from(node_metrics)),
             },
             native_types::NodeStatus::Unassigned { extrapolated_fr } => Self::Unassigned {
-                extrapolated_fr_percent: Some(extrapolated_fr.into()),
+                extrapolated_fr_percent: Some(DecimalProto::from(extrapolated_fr)),
             },
         }
     }
@@ -77,7 +77,7 @@ impl From<native_types::NodeResults> for NodeResults {
     fn from(results: native_types::NodeResults) -> Self {
         Self {
             node_id: Some(results.node_id.get()),
-            node_reward_type: Some(results.node_reward_type.into()),
+            node_reward_type: Some(results.node_reward_type.to_string()),
             region: Some(results.region),
             dc_id: Some(results.dc_id),
             node_status: Some(NodeStatus::from(results.node_status)),
@@ -166,21 +166,21 @@ impl TryFrom<BaseRewardsType3> for native_types::BaseRewardsType3 {
 impl From<native_types::NodeProviderRewards> for NodeProviderRewards {
     fn from(rewards: native_types::NodeProviderRewards) -> Self {
         Self {
-            rewards_total_xdr_permyriad: Some(rewards.rewards_total.into()),
+            rewards_total_xdr_permyriad: Some(DecimalProto::from(rewards.rewards_total)),
             base_rewards: rewards
                 .base_rewards
                 .into_iter()
-                .map(|r| BaseRewards::from(r))
+                .map(BaseRewards::from)
                 .collect(),
             base_rewards_type3: rewards
                 .base_rewards_type3
                 .into_iter()
-                .map(|r| BaseRewardsType3::from(r))
+                .map(BaseRewardsType3::from)
                 .collect(),
             nodes_results: rewards
                 .nodes_results
                 .into_iter()
-                .map(|r| NodeResults::from(r))
+                .map(NodeResults::from)
                 .collect(),
         }
     }
@@ -195,17 +195,17 @@ impl TryFrom<NodeProviderRewards> for native_types::NodeProviderRewards {
             base_rewards: value
                 .base_rewards
                 .into_iter()
-                .map(|r| native_types::BaseRewards::try_from(r))
+                .map(native_types::BaseRewards::try_from)
                 .collect::<Result<_, _>>()?,
             base_rewards_type3: value
                 .base_rewards_type3
                 .into_iter()
-                .map(|r| native_types::BaseRewardsType3::try_from(r))
+                .map(native_types::BaseRewardsType3::try_from)
                 .collect::<Result<_, _>>()?,
             nodes_results: value
                 .nodes_results
                 .into_iter()
-                .map(|r| native_types::NodeResults::try_from(r))
+                .map(native_types::NodeResults::try_from)
                 .collect::<Result<_, _>>()?,
         })
     }
