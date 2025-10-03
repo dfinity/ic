@@ -560,7 +560,7 @@ impl GuestVmService {
 
             let logs = String::from_utf8_lossy(&tail_output.stdout);
             for line in logs.lines() {
-                self.write_to_console_and_stdout(line);
+                self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
             }
         } else {
             self.write_to_console_and_stdout("No console log file found.");
