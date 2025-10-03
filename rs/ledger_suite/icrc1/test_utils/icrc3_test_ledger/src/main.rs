@@ -10,8 +10,8 @@ use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_ledger_canister_core::range_utils;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::{ICRC3Value, Value};
-use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
-use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryArchiveFn, QueryBlockArchiveFn};
+use icrc_ledger_types::icrc3::blocks::{ArchivedBlocks, ICRC3DataCertificate};
 use icrc_ledger_types::icrc3::blocks::{
     BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
 };
@@ -190,18 +190,50 @@ pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
         let blocks = blocks.borrow();
         let total_blocks = next_id;
 
-        let mut result_blocks = Vec::new();
+        let mut result_blocks = vec![];
+        let mut archived_blocks = vec![];
 
         // Process all requests
         for request in requests {
             let mut blocks_res = get_blocks_for_request(&blocks, request);
             result_blocks.append(&mut blocks_res.local_blocks);
+
+            let archived_ranges: Vec<
+                ArchivedRange<QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>>,
+            > = blocks_res
+                .archives
+                .into_iter()
+                .map(|(canister_id, slice)| ArchivedRange {
+                    start: Nat::from(slice.start),
+                    length: Nat::from(range_utils::range_len(&slice)),
+                    callback: QueryArchiveFn::<Vec<GetBlocksRequest>, GetBlocksResult>::new(
+                        canister_id,
+                        "icrc3_get_blocks",
+                    ),
+                })
+                .collect();
+            let mut archived_blocks_by_callback = BTreeMap::new();
+            for ArchivedRange {
+                start,
+                length,
+                callback,
+            } in archived_ranges
+            {
+                let request = GetBlocksRequest { start, length };
+                archived_blocks_by_callback
+                    .entry(callback)
+                    .or_insert(vec![])
+                    .push(request);
+            }
+            for (callback, args) in archived_blocks_by_callback {
+                archived_blocks.push(ArchivedBlocks { args, callback });
+            }
         }
 
         GetBlocksResult {
             log_length: Nat::from(total_blocks),
             blocks: result_blocks,
-            archived_blocks: vec![], // No archiving in this simple implementation
+            archived_blocks,
         }
     })
 }
