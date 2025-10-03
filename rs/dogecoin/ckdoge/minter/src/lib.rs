@@ -1,6 +1,7 @@
 pub mod address;
 pub mod candid_api;
 pub mod lifecycle;
+pub mod updates;
 
 use crate::address::DogecoinAddress;
 use crate::lifecycle::init::Network;

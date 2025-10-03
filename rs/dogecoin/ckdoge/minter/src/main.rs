@@ -6,6 +6,7 @@ use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME,
     candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
     lifecycle::init::MinterArg,
+    updates,
 };
 
 #[init]
@@ -38,9 +39,7 @@ fn post_upgrade() {
 
 #[update]
 async fn get_doge_address(args: GetDogeAddressArgs) -> String {
-    ic_ckdoge_minter::address::derive_doge_address(args)
-        .await
-        .unwrap()
+    updates::get_doge_address(args).await.unwrap()
 }
 
 #[update]
