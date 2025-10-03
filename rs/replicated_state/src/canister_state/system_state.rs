@@ -2094,7 +2094,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_size: NumBytes::from(MAX_CANISTER_LOG_SIZE_BYTES as u64),
+            log_size: NumBytes::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64),
             canister_log: Default::default(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

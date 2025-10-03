@@ -471,6 +471,7 @@ impl CanisterManager {
             settings.reserved_cycles_limit(),
             reservation_cycles,
             settings.log_visibility().cloned(),
+            settings.log_size(),
             settings.wasm_memory_limit(),
             settings.environment_variables().cloned(),
         ))
