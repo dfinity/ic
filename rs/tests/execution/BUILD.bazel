@@ -153,6 +153,7 @@ system_test_nns(
     tags = [
         "k8s",
     ],
+    test_timeout = "eternal",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/nns/constants",

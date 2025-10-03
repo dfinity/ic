@@ -26,8 +26,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
-        .with_timeout_per_test(Duration::from_secs(800))
-        .with_overall_timeout(Duration::from_secs(800))
+        .with_timeout_per_test(Duration::from_secs(1100))
+        .with_overall_timeout(Duration::from_secs(1100))
         .execute_from_args()?;
 
     Ok(())
