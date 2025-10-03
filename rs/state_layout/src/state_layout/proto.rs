@@ -59,6 +59,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            log_size: item.log_size.get(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -193,6 +194,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
+            log_size: NumBytes::from(value.log_size),
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value

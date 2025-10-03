@@ -392,6 +392,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
+// Next ID: 57
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -464,6 +465,8 @@ message CanisterStateBits {
   reserved "log_visibility";
   // Log visibility for the canister.
   LogVisibilityV2 log_visibility_v2 = 51;
+  // The size of the canister log in bytes.
+  uint64 log_size = 56;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.
