@@ -51,6 +51,16 @@ pub enum Network {
     Regtest,
 }
 
+impl std::fmt::Display for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+            Self::Regtest => write!(f, "regtest"),
+        }
+    }
+}
+
 impl From<InitArgs> for CkbtcMinterInitArgs {
     fn from(args: InitArgs) -> Self {
         CkbtcMinterInitArgs {

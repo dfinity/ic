@@ -2,6 +2,7 @@
 mod tests;
 
 use crate::lifecycle::init::Network;
+use std::fmt;
 
 // See https://github.com/dogecoin/dogecoin/blob/7237da74b8c356568644cbe4fba19d994704355b/src/chainparams.cpp#L167
 const DOGE_MAINNET_PREFIX: u8 = 30;
@@ -26,8 +27,25 @@ pub enum ParseAddressError {
     UnsupportedAddressType,
     WrongNetwork { expected: Network, actual: Network },
     MalformedAddress(String),
-    UnexpectedHumanReadablePart { expected: String, actual: String },
     NoData,
+}
+
+impl fmt::Display for ParseAddressError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedAddressType => {
+                write!(fmt, "ckDOGE supports only P2PKH and P2SH addresses")
+            }
+            Self::WrongNetwork { expected, actual } => {
+                write!(
+                    fmt,
+                    "expected an address from network {expected}, got an address from network {actual}"
+                )
+            }
+            Self::MalformedAddress(msg) => write!(fmt, "{msg}"),
+            Self::NoData => write!(fmt, "the address contains no data"),
+        }
+    }
 }
 
 impl DogecoinAddress {

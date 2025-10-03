@@ -285,7 +285,9 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
             min_retrieve_amount,
         ));
     }
-    let parsed_address = BitcoinAddress::parse(&args.address, btc_network)?;
+    let parsed_address = runtime
+        .parse_address(&args.address, btc_network)
+        .map_err(RetrieveBtcWithApprovalError::MalformedAddress)?;
     if read_state(|s| s.count_incomplete_retrieve_btc_requests() >= MAX_CONCURRENT_PENDING_REQUESTS)
     {
         return Err(RetrieveBtcWithApprovalError::TemporarilyUnavailable(

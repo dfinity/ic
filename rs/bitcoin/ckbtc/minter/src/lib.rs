@@ -1439,6 +1439,8 @@ pub trait CanisterRuntime {
         state.validate_config()
     }
 
+    fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
+
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
@@ -1528,6 +1530,14 @@ impl CanisterRuntime for IcCanisterRuntime {
         network: Network,
     ) -> Result<(), CallError> {
         management::send_transaction(transaction, network).await
+    }
+
+    fn parse_address(
+        &self,
+        address: &str,
+        network: Network,
+    ) -> Result<BitcoinAddress, std::string::String> {
+        BitcoinAddress::parse(address, network).map_err(|e| e.to_string())
     }
 }
 
