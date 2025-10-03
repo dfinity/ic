@@ -1,22 +1,22 @@
-use candid::Reserved;
+use candid::{Decode, Reserved};
 use canister_test::WasmResult;
 use ic_base_types::SnapshotId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, Global,
-    GlobalTimer, LoadCanisterSnapshotArgs, OnLowWasmMemoryHookStatus,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs,
+    CanisterChangeDetails, CanisterIdRecord, CanisterSettingsArgsBuilder,
+    CanisterSnapshotDataOffset, Global, GlobalTimer, LoadCanisterSnapshotArgs,
+    OnLowWasmMemoryHookStatus, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
-use ic_types::CanisterId;
+use ic_types::{CanisterId, Cycles};
 
 // Asserts that two snapshots are equal modulo their source, timestamp, and canister version (transient values).
 fn assert_snapshot_eq(
@@ -999,4 +999,64 @@ fn load_canister_snapshot_works_on_another_canister() {
             Some(canister_id_1),
         ),
     );
+}
+
+#[test]
+fn canister_snapshots_and_memory_allocation() {
+    let env = StateMachine::new();
+
+    // We first fill the subnet with canisters having 100 GiB of memory allocation each.
+    let mut canisters = vec![];
+    loop {
+        let settings = CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(100 << 30)
+            .build();
+        match env.create_canister_with_cycles_impl(None, Cycles::zero(), Some(settings)) {
+            Ok(WasmResult::Reply(bytes)) => {
+                let canister_id = Decode!(&bytes, CanisterIdRecord).unwrap().get_canister_id();
+                canisters.push(canister_id);
+            }
+            Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
+            Err(err) => {
+                assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+                break;
+            }
+        }
+    }
+
+    // Now we unset the memory allocation of the last canister, i.e.,
+    // make its memory allocation best-effort.
+    // Since this canister is the only canister with best-effort memory allocation
+    // and the other canisters do not exceed their memory allocation of 100 GiB,
+    // it is effectively still guaranteed that this last canister can grow
+    // its memory usage up to 100 GiB.
+    let best_effort_canister_id = canisters.last().unwrap();
+    env.update_settings(
+        best_effort_canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(0)
+            .build(),
+    )
+    .unwrap();
+
+    // For each canister (including the last best-effort canister),
+    // we deploy the universal canister WASM,
+    // grow stable memory to 40 GiB, and take a canister snapshot.
+    // This should succeed because the overall memory usage is ~80 GiB
+    // which is well within the memory allocation of 100 GiB.
+    for canister_id in canisters {
+        env.install_existing_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
+            .unwrap();
+        env.execute_ingress(
+            canister_id,
+            "update",
+            wasm().stable64_grow(655360).reply().build(),
+        )
+        .unwrap(); // 40 GiB
+        let args = TakeCanisterSnapshotArgs {
+            canister_id: canister_id.get(),
+            replace_snapshot: None,
+        };
+        env.take_canister_snapshot(args).unwrap();
+    }
 }

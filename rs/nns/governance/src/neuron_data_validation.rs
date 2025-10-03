@@ -272,7 +272,6 @@ impl Issues {
                 .issue_groups_map
                 .entry(discriminant(&issue))
                 .or_default();
-            // @todo if we should log it?
             issue_group.issues_count = issue_group.issues_count.saturating_add(1);
             if issue_group.example_issues.len() < MAX_EXAMPLE_ISSUES_COUNT {
                 issue_group.example_issues.push(issue);

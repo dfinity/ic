@@ -140,6 +140,7 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
+    "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
@@ -266,6 +267,7 @@ members = [
     "rs/nervous_system/proto",
     "rs/nervous_system/proto/protobuf_generator",
     "rs/nervous_system/proxied_canister_calls_tracker",
+    "rs/nervous_system/rate_limits",
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
@@ -812,6 +814,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
