@@ -26,6 +26,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        .with_timeout_per_test(Duration::from_secs(1200))
+        .with_overall_timeout(Duration::from_secs(1200))
         .execute_from_args()?;
 
     Ok(())
@@ -250,14 +252,17 @@ async fn test_async(env: TestEnv) {
         subnet_id.unwrap(),
         app_subnet_2.subnet_id().unwrap().get().0
     );
-
+    // wait until delegation updates
+    tokio::time::sleep(Duration::from_secs(610)).await;
     // assert that "source" canister responds
+    let migrated_canister =
+        UniversalCanister::from_canister_id(&app_subnet_2_agent, source_canister.canister_id());
     let mgr = ManagementCanister::create(&app_subnet_2_agent);
     mgr.start_canister(&source_canister.canister_id())
         .await
         .unwrap();
     let data = [4, 2];
-    let res = source_canister
+    let res = migrated_canister
         .update(wasm().reply_data(&data))
         .await
         .unwrap();
