@@ -124,3 +124,34 @@ mod get_doge_address {
         );
     }
 }
+
+mod deposit {
+    use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
+    use ic_ckdoge_minter::{OutPoint, Utxo};
+    use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, txid};
+
+    #[test]
+    fn should_mint_ckdoge() {
+        let setup = Setup::default();
+        let minter = setup.minter();
+        let dogecoin = setup.dogecoin();
+
+        let deposit_address = minter.get_doge_address(
+            USER_PRINCIPAL,
+            &GetDogeAddressArgs {
+                owner: None,
+                subaccount: Some([42_u8; 32]),
+            },
+        );
+
+        let utxo = Utxo {
+            height: 0,
+            outpoint: OutPoint {
+                txid: txid(),
+                vout: 1,
+            },
+            value: 1_000_000_000,
+        };
+        dogecoin.simulate_transaction(utxo, deposit_address);
+    }
+}

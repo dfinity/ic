@@ -7,14 +7,14 @@ use crate::address::DogecoinAddress;
 use crate::lifecycle::init::Network;
 use async_trait::async_trait;
 use candid::Principal;
-use ic_ckbtc_minter::address::BitcoinAddress;
-use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::updates::retrieve_btc::BtcAddressCheckStatus;
 use ic_ckbtc_minter::{
-    CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse, Utxo,
-    management::CallError, tx, updates::update_balance::UpdateBalanceError,
+    CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse,
+    address::BitcoinAddress, management::CallError, state::CkBtcMinterState, tx,
+    updates::retrieve_btc::BtcAddressCheckStatus, updates::update_balance::UpdateBalanceError,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
+
+pub use ic_ckbtc_minter::{OutPoint, Page, Txid, Utxo};
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 

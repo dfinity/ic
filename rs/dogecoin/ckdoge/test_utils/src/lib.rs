@@ -4,8 +4,10 @@ mod minter;
 use crate::dogecoin::DogecoinCanister;
 pub use crate::minter::MinterCanister;
 use candid::{Encode, Principal};
-use ic_ckdoge_minter::lifecycle::init::Mode;
-use ic_ckdoge_minter::lifecycle::init::{InitArgs, MinterArg, Network};
+use ic_ckdoge_minter::{
+    Txid,
+    lifecycle::init::{InitArgs, MinterArg, Mode, Network},
+};
 use ic_icrc1_ledger::ArchiveOptions;
 use ic_management_canister_types::{CanisterId, CanisterSettings};
 use icrc_ledger_types::icrc1::account::Account;
@@ -52,7 +54,7 @@ impl Setup {
         env.install_canister(
             dogecoin,
             bitcoin_canister_mock_wasm(),
-            Encode!(&Network::Mainnet).unwrap(),
+            Encode!(&ic_bitcoin_canister_mock::Network::Mainnet).unwrap(),
             Some(NNS_ROOT_PRINCIPAL),
         );
 
@@ -188,6 +190,10 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
             reject_message.contains(message) &&
             error_code == ErrorCode::CanisterCalledTrap
     );
+}
+
+pub fn txid() -> Txid {
+    Txid::from([42u8; 32])
 }
 
 #[cfg(test)]
