@@ -1232,6 +1232,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///   freezing_threshold : nat;
 ///   reserved_cycles_limit : nat;
 ///   log_visibility : log_visibility;
+///   log_size : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
 ///   environment_variables : vec environment_variable;
@@ -2184,6 +2185,7 @@ pub struct EnvironmentVariable {
 ///   freezing_threshold : opt nat;
 ///   reserved_cycles_limit : opt nat;
 ///   log_visibility : opt log_visibility;
+///   log_size : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
 ///   environment_variables : opt vec environment_variable;
