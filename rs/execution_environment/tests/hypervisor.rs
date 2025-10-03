@@ -9691,7 +9691,7 @@ fn canister_balance_is_roughly(
     );
 }
 
-#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[rstest]
 #[case::query_does_not_trap("query", "", ErrorCode::CanisterDidNotReply)]
 #[case::update_does_not_trap("update", "", ErrorCode::CanisterDidNotReply)]
