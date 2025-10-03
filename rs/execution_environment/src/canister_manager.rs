@@ -559,6 +559,9 @@ impl CanisterManager {
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility.clone();
         }
+        if let Some(log_size) = settings.log_size() {
+            canister.system_state.log_size = log_size.clone();
+        }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
@@ -1069,6 +1072,7 @@ impl CanisterManager {
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
+        let log_size = canister.system_state.log_size;
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
@@ -1097,7 +1101,7 @@ impl CanisterManager {
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
-            log_size,
+            log_size.get(),
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,

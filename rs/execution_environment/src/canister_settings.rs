@@ -133,6 +133,14 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let log_size = match input.log_size {
+            Some(ls) => Some(NumBytes::new(
+                ls.0.to_u64()
+                    .ok_or(UpdateSettingsError::LogSizeOutOfRange { provided: ls })?,
+            )),
+            None => None,
+        };
+
         let wasm_memory_limit = match input.wasm_memory_limit {
             Some(limit) => {
                 let limit = limit
@@ -185,7 +193,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
-            input.log_size,
+            log_size,
             wasm_memory_limit,
             environment_variables,
         ))
@@ -327,6 +335,7 @@ pub enum UpdateSettingsError {
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
+    LogSizeOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -375,6 +384,10 @@ impl From<UpdateSettingsError> for UserError {
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(
                 ErrorCode::InvalidManagementPayload,
                 "Duplicate environment variables are not allowed".to_string(),
+            ),
+            UpdateSettingsError::LogSizeOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!("Log size expected to be in the range of [0..2^64-1], got {provided}"),
             ),
         }
     }
