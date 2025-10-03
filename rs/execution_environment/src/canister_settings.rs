@@ -133,12 +133,13 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
-        let log_size = input.log_size.map(|x| {
-            NumBytes::new(
-                x.0.to_u64()
-                    .ok_or(UpdateSettingsError::LogSizeOutOfRange { provided: x })?,
-            )
-        });
+        let log_size = match input.log_size {
+            Some(ls) => Some(NumBytes::from(
+                ls.0.to_u64()
+                    .ok_or(UpdateSettingsError::LogSizeOutOfRange { provided: ls })?,
+            )),
+            None => None,
+        };
 
         let wasm_memory_limit = match input.wasm_memory_limit {
             Some(limit) => {
