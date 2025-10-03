@@ -206,6 +206,7 @@ mod tests {
                 domain: None,
             },
             node_operator_id,
+            now_system_time(),
         );
         let node_record = registry.get_node_or_panic(node_id);
         assert_eq!(node_record.domain, None);

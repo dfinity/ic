@@ -20,6 +20,7 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
+use crate::rate_limits::{commit_node_operator_reservation, try_reserve_node_operator_capacity};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
@@ -41,10 +42,17 @@ impl Registry {
         &mut self,
         payload: AddNodePayload,
         caller_id: PrincipalId,
-        _now: SystemTime,
+        now: SystemTime,
     ) -> Result<NodeId, String> {
         let mut node_operator_record = get_node_operator_record(self, caller_id)
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
+
+        let node_provider_principal =
+            PrincipalId::try_from(node_operator_record.node_provider_principal_id.clone())
+                .expect("Could not convert node_provider_principal_id bytes into PrincipalId");
+
+        let reservation =
+            try_reserve_node_operator_capacity(now, format!("{node_provider_principal}"), 20)?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
@@ -183,6 +191,10 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{LOG_PREFIX}do_add_node finished: {payload:?}");
+
+        if let Err(e) = commit_node_operator_reservation(now, reservation) {
+            println!("{LOG_PREFIX}do_add_node did not use reservation capacity: {e}");
+        }
 
         Ok(node_id)
     }
