@@ -387,143 +387,152 @@ impl IDkgPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
-        let mut valid_dealing_supports = self.validated_dealing_supports.write().unwrap();
-        let mut ret = Vec::new();
-        for (id, support) in idkg_pool.unvalidated().dealing_support() {
-            // Dedup dealing support by checking whether a previous (transcript_id, dealer_id,
-            // dealing_hash) was already signed by the signer
-            let key = IDkgValidatedDealingSupportIdentifier::from(&support);
-            let maybe_signers = valid_dealing_supports.get_mut(&key);
-            if maybe_signers
-                .as_ref()
-                .is_some_and(|signers| signers.contains(&support.sig_share.signer))
-            {
-                ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Duplicate dealing support in unvalidated batch: {support}"),
-                ));
-                continue;
-            };
-            // Drop shares for xnet reshare transcripts
-            if source_subnet_xnet_transcripts.contains(&support.transcript_id) {
-                self.metrics.pre_sign_errors_inc("xnet_reshare_support");
-                ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Support for xnet reshare transcript: {support}"),
-                ));
-                continue;
-            }
+        let unvalidated_supports: Vec<_> = idkg_pool.unvalidated().dealing_support().collect();
+        self.thread_pool.install(|| {
+            unvalidated_supports.into_par_iter().filter_map(|(id, support)| {
+                // Drop shares for xnet reshare transcripts
+                if source_subnet_xnet_transcripts.contains(&support.transcript_id) {
+                    self.metrics.pre_sign_errors_inc("xnet_reshare_support");
+                    return Some(IDkgChangeAction::HandleInvalid(
+                        id,
+                        format!("Support for xnet reshare transcript: {support}"),
+                    ));
+                }
 
-            // Disable the height check on target subnet side for the initial transcripts.
-            // Since the transcript_id.source_height is from the source subnet, the height
-            // cannot be relied upon. This also lets us process the shares for the initial
-            // bootstrap with higher urgency, without deferring it.
-            let msg_height = if target_subnet_xnet_transcripts.contains(&support.transcript_id) {
-                None
-            } else {
-                Some(support.transcript_id.source_height())
-            };
+                // Disable the height check on target subnet side for the initial transcripts.
+                // Since the transcript_id.source_height is from the source subnet, the height
+                // cannot be relied upon. This also lets us process the shares for the initial
+                // bootstrap with higher urgency, without deferring it.
+                let msg_height = if target_subnet_xnet_transcripts.contains(&support.transcript_id) {
+                    None
+                } else {
+                    Some(support.transcript_id.source_height())
+                };
 
-            match Action::action(
-                block_reader,
-                &transcript_param_map,
-                msg_height,
-                &support.transcript_id,
-            ) {
-                Action::Process(transcript_params_ref) => {
-                    let transcript_params = match self.resolve_ref(
-                        transcript_params_ref,
-                        block_reader,
-                        "validate_dealing_support",
-                    ) {
-                        Some(transcript_params) => transcript_params,
-                        None => {
-                            ret.push(IDkgChangeAction::HandleInvalid(
-                                id,
-                                format!("Failed to translate transcript_params_ref: {support}"),
-                            ));
-                            continue;
-                        }
-                    };
-
-                    if maybe_signers.as_ref().map_or(0, |signers| signers.len())
-                        >= transcript_params.verification_threshold().get() as usize
-                    {
-                        // Already have enough valid supports for this dealing
-                        ret.push(IDkgChangeAction::RemoveUnvalidated(id));
-                    } else if !transcript_params
-                        .receivers()
-                        .contains(support.sig_share.signer)
-                    {
-                        // The node is not in the receiver list for this transcript,
-                        // support share is not expected from it
-                        self.metrics.pre_sign_errors_inc("unexpected_support");
-                        ret.push(IDkgChangeAction::HandleInvalid(
-                            id,
-                            format!("Support from unexpected node: {support}"),
-                        ))
-                    } else if let Some(signed_dealing) = valid_dealings.get(&support.dealing_hash) {
-                        let dealing = signed_dealing.idkg_dealing();
-                        if self.has_node_issued_dealing_support(
-                            idkg_pool,
-                            &signed_dealing.idkg_dealing().transcript_id,
-                            &signed_dealing.dealer_id(),
-                            &support.sig_share.signer,
-                            &support.dealing_hash,
-                        ) {
-                            // The node already sent a valid support for this dealing
-                            self.metrics.pre_sign_errors_inc("duplicate_support");
-                            ret.push(IDkgChangeAction::HandleInvalid(
-                                id,
-                                format!("Duplicate support: {support}"),
-                            ))
-                        } else if support.transcript_id != dealing.transcript_id
-                            || support.dealer_id != signed_dealing.dealer_id()
+                match Action::action(
+                    block_reader,
+                    &transcript_param_map,
+                    msg_height,
+                    &support.transcript_id,
+                ) {
+                    Action::Process(transcript_params_ref) => {
+                        // Dedup dealing support by checking whether a previous (transcript_id, dealer_id,
+                        // dealing_hash) was already signed by the signer
+                        let key = IDkgValidatedDealingSupportIdentifier::from(&support);
                         {
-                            // Meta data mismatch
-                            self.metrics
-                                .pre_sign_errors_inc("support_meta_data_mismatch");
-                            ret.push(IDkgChangeAction::HandleInvalid(
+                            let valid_dealing_supports = self.validated_dealing_supports.read().unwrap();
+                            let maybe_signers = valid_dealing_supports.get(&key);
+                            if maybe_signers
+                                .is_some_and(|signers| signers.contains(&support.sig_share.signer))
+                            {
+                                return Some(IDkgChangeAction::HandleInvalid(
+                                    id,
+                                    format!("Duplicate dealing support found in cache: {support}"),
+                                ));
+                            }
+
+                            if maybe_signers.as_ref().map_or(0, |signers| signers.len())
+                                >= transcript_params_ref.verification_threshold()
+                            {
+                                // We already have enough valid supports for this dealing
+                                return Some(IDkgChangeAction::RemoveUnvalidated(id));
+                            }
+                        }
+
+                        if !transcript_params_ref
+                            .receivers
+                            .contains(&support.sig_share.signer)
+                        {
+                            // The node is not in the receiver list for this transcript,
+                            // a support share is not expected from it
+                            self.metrics.pre_sign_errors_inc("unexpected_support");
+                            return Some(IDkgChangeAction::HandleInvalid(
                                 id,
-                                format!(
-                                    "Support meta data mismatch: expected = {:?}/{:?}, \
-                                         received = {:?}/{:?}",
-                                    support.transcript_id,
-                                    support.dealer_id,
-                                    dealing.transcript_id,
-                                    signed_dealing.dealer_id()
-                                ),
-                            ))
-                        } else {
+                                format!("Support from unexpected node: {support}"),
+                            ));
+                        }
+
+                        // Look up the dealing being supported
+                        if let Some(signed_dealing) = valid_dealings.get(&support.dealing_hash) {
+                            let dealing = signed_dealing.idkg_dealing();
+                            if self.has_node_issued_dealing_support(
+                                idkg_pool,
+                                &signed_dealing.idkg_dealing().transcript_id,
+                                &signed_dealing.dealer_id(),
+                                &support.sig_share.signer,
+                                &support.dealing_hash,
+                            ) {
+                                // The node already sent a valid support for this dealing
+                                self.metrics.pre_sign_errors_inc("duplicate_support");
+                                return Some(IDkgChangeAction::HandleInvalid(
+                                    id,
+                                    format!("Duplicate support: {support}"),
+                                ))
+                            }
+
+                            if support.transcript_id != dealing.transcript_id
+                                || support.dealer_id != signed_dealing.dealer_id()
+                            {
+                                // Meta data mismatch
+                                self.metrics
+                                    .pre_sign_errors_inc("support_meta_data_mismatch");
+                                return Some(IDkgChangeAction::HandleInvalid(
+                                    id,
+                                    format!(
+                                        "Support meta data mismatch: expected = {:?}/{:?}, \
+                                            received = {:?}/{:?}",
+                                        support.transcript_id,
+                                        support.dealer_id,
+                                        dealing.transcript_id,
+                                        signed_dealing.dealer_id()
+                                    ),
+                                ))
+                            }
+
+                            let Some(transcript_params) = self.resolve_ref(
+                                transcript_params_ref,
+                                block_reader,
+                                "validate_dealing_support",
+                            ) else {
+                                return Some(IDkgChangeAction::HandleInvalid(
+                                    id.clone(),
+                                    format!("Failed to translate transcript_params_ref: {}", support),
+                                ));
+                            };
+
                             let signer = support.sig_share.signer;
                             let action = self.crypto_verify_dealing_support(
-                                id,
+                                &id,
                                 &transcript_params,
                                 signed_dealing,
                                 support,
                                 idkg_pool.stats(),
                             );
-                            if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
-                                if let Some(signers) = maybe_signers {
-                                    signers.insert(signer);
-                                } else {
-                                    valid_dealing_supports.insert(key, BTreeSet::from([signer]));
+                            if let Some(IDkgChangeAction::MoveToValidated(msg)) = &action {
+                                let mut valid_dealing_supports = self.validated_dealing_supports.write().unwrap();
+                                let signers = valid_dealing_supports.entry(key).or_default();
+                                if !signers.insert(signer) {
+                                    return Some(IDkgChangeAction::HandleInvalid(
+                                        id,
+                                        format!("Duplicate dealing support in unvalidated batch: {:?}", msg),
+                                    ));
                                 }
                             }
-                            ret.append(&mut action.into_iter().collect());
-                        }
-                    } else {
-                        // If the dealer_id in the share is invalid, drop it.
-                        if !transcript_params.dealers().contains(support.dealer_id) {
-                            self.metrics
-                                .pre_sign_errors_inc("missing_hash_invalid_dealer");
-                            ret.push(IDkgChangeAction::RemoveUnvalidated(id));
-                            warn!(
-                                self.log,
-                                "validate_dealing_support(): Missing hash, invalid dealer: {:?}",
-                                support
-                            );
+                            action
+
                         } else {
+                            // If the dealer_id in the share is invalid, drop it.
+                            if !transcript_params_ref.dealers.contains(&support.dealer_id) {
+                                self.metrics
+                                    .pre_sign_errors_inc("missing_hash_invalid_dealer");
+                                warn!(
+                                    self.log,
+                                    "validate_dealing_support(): Missing hash, invalid dealer: {:?}",
+                                    support
+                                );
+                                return Some(IDkgChangeAction::RemoveUnvalidated(id));
+                            }
+
                             // If the share points to a different dealing hash than what we
                             // have for the same <transcript Id, dealer Id>, drop it. This is
                             // different from the case where we don't have the dealing yet
@@ -540,23 +549,23 @@ impl IDkgPreSignerImpl {
                             if dealing_hash_mismatch {
                                 self.metrics
                                     .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
-                                ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                                 warn!(
                                     self.log,
                                     "validate_dealing_support(): Missing hash, meta data mismatch: {:?}",
                                     support
                                 );
+                                return Some(IDkgChangeAction::RemoveUnvalidated(id));
                             }
+
                             // Else: Support for a dealing we don't have yet, defer it
+                            None
                         }
                     }
+                    Action::Drop => Some(IDkgChangeAction::RemoveUnvalidated(id)),
+                    Action::Defer => None,
                 }
-                Action::Drop => ret.push(IDkgChangeAction::RemoveUnvalidated(id)),
-                Action::Defer => {}
-            }
-        }
-
-        ret
+            }).collect()
+        })
     }
 
     /// Purges the entries no longer needed from the artifact pool
@@ -803,7 +812,7 @@ impl IDkgPreSignerImpl {
     /// Helper to verify a support share for a dealing
     fn crypto_verify_dealing_support(
         &self,
-        id: IDkgMessageId,
+        id: &IDkgMessageId,
         transcript_params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
         support: IDkgDealingSupport,
@@ -822,7 +831,7 @@ impl IDkgPreSignerImpl {
             Err(error) => {
                 self.metrics.pre_sign_errors_inc("verify_dealing_support");
                 Some(IDkgChangeAction::HandleInvalid(
-                    id,
+                    id.clone(),
                     format!("Support validation failed: {support}, error = {error:?}"),
                 ))
             }
@@ -2288,7 +2297,7 @@ mod tests {
                 let (dealing, support) = create_support(id, NODE_2, NODE_3);
                 let changeset: Vec<_> = pre_signer
                     .crypto_verify_dealing_support(
-                        support.message_id(),
+                        &support.message_id(),
                         &params,
                         &dealing,
                         support.clone(),
@@ -2352,7 +2361,6 @@ mod tests {
         // A dealing for a transcript that is requested by finalized block,
         // but we don't have the dealing yet(share deferred)
         let (_, support) = create_support(id_3, NODE_2, NODE_3);
-        let msg_id_3 = support.message_id();
         artifacts.push(UnvalidatedArtifact {
             message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
@@ -2429,10 +2437,9 @@ mod tests {
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 4);
+                assert_eq!(change_set.len(), 3);
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
                 assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
-                assert!(is_handle_invalid(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
                 assert!(pre_signer.validated_dealing_supports().is_empty());
@@ -2500,7 +2507,45 @@ mod tests {
             });
         }
 
-        // Using CryptoReturningOK only 2f + 1 shares should be accepted, the rest dropped
+        // In the single threaded case only 2f + 1 shares should be accepted, the rest dropped
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, pre_signer) =
+                    create_pre_signer_dependencies_with_threads(pool_config, logger, 1);
+
+                // Set up the IDKG pool
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing.clone(),
+                ))];
+                idkg_pool.apply(change_set);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 3 * f + 1);
+                let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
+                    .clone()
+                    .into_iter()
+                    .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
+                assert!(
+                    dropped
+                        .iter()
+                        .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
+                );
+                assert_eq!(accepted.len(), 2 * f + 1);
+                assert_eq!(dropped.len(), f);
+
+                assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
+                assert!(
+                    pre_signer
+                        .validated_dealing_supports()
+                        .get(&validated_id)
+                        .is_some_and(|signers| signers.len() == 2 * f + 1
+                            && signers.is_subset(&node_ids.iter().cloned().collect()))
+                );
+            })
+        });
+
+        // In the multi threaded case at least 2f + 1 shares should be accepted, the rest dropped
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -2523,15 +2568,15 @@ mod tests {
                         .iter()
                         .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
                 );
-                assert_eq!(accepted.len(), 2 * f + 1);
-                assert_eq!(dropped.len(), f);
+                assert!(accepted.len() >= 2 * f + 1);
+                assert_eq!(dropped.len(), 3 * f + 1 - accepted.len());
 
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
                 assert!(
                     pre_signer
                         .validated_dealing_supports()
                         .get(&validated_id)
-                        .is_some_and(|signers| signers.len() == 2 * f + 1
+                        .is_some_and(|signers| signers.len() == accepted.len()
                             && signers.is_subset(&node_ids.into_iter().collect()))
                 );
             })

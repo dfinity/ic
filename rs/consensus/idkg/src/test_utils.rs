@@ -405,6 +405,21 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
+    create_pre_signer_dependencies_with_crypto_and_threads(
+        pool_config,
+        logger,
+        consensus_crypto,
+        MAX_IDKG_THREADS,
+    )
+}
+
+// Sets up the dependencies and creates the pre signer
+pub(crate) fn create_pre_signer_dependencies_with_crypto_and_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+    threads: usize,
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
@@ -413,7 +428,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
-        build_thread_pool(MAX_IDKG_THREADS),
+        build_thread_pool(threads),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -449,6 +464,15 @@ pub(crate) fn create_pre_signer_dependencies(
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     create_pre_signer_dependencies_with_crypto(pool_config, logger, None)
+}
+
+// Sets up the dependencies and creates the pre signer
+pub(crate) fn create_pre_signer_dependencies_with_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    threads: usize,
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
+    create_pre_signer_dependencies_with_crypto_and_threads(pool_config, logger, None, threads)
 }
 
 // Sets up the dependencies and creates the signer
