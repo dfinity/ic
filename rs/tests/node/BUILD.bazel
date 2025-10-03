@@ -1,6 +1,6 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
