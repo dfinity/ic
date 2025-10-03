@@ -308,6 +308,8 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             commit
         );
 
+        let _switcher = CommitSwitcher::switch(commit.clone());
+
         // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
         for canister in &nns_canisters {
             println!("Creating proposal text for NNS canister: {canister}");
