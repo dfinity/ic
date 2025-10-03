@@ -116,6 +116,8 @@ rust_binary(
     ],
 )
 
+# Tests if killing and starting a node does not corrupt its filesystem.
+# Doesn't run on PRs by default since we do multiple kill-start iterations which takes around 7 minutes.
 system_test(
     name = "kill_start_long_test",
     env = {
@@ -126,6 +128,7 @@ system_test(
     uses_guestos_img = True,
 )
 
+# Tests if killing and starting a node still allows the node to boot normally.
 system_test(
     name = "kill_start_short_test",
     env = {
