@@ -121,6 +121,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: true,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(ic_nns_governance_api::Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -148,6 +149,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(ic_nns_governance_api::Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -167,6 +169,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(ic_nns_governance_api::Visibility::Public as i32),
                 ..Default::default()
             }
         };
