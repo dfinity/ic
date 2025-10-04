@@ -19,8 +19,8 @@ use icrc_ledger_types::icrc3::blocks::{
 };
 use num_traits::cast::ToPrimitive;
 use serde_bytes::ByteBuf;
+use std::path::PathBuf;
 use std::{collections::BTreeMap, time::Duration};
-use std::{path::PathBuf, u64};
 
 const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
 const TEST_USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
@@ -641,11 +641,8 @@ fn test_archiving() {
 
     let archived_count = archive_blocks(&env, ledger_id, archive1, 2);
     assert_eq!(archived_count, 2);
-
-    for _ in 0..10 {
-        env.advance_time(Duration::from_secs(60));
-        env.tick();
-    }
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
 
     verify_blocks_in_ledger(&env, archive1, 0, 2);
     verify_blocks_in_ledger(&env, ledger_id, 2, 18);
@@ -656,13 +653,33 @@ fn test_archiving() {
 
     let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
     assert_eq!(archived_count, 2);
-
-    for _ in 0..10 {
-        env.advance_time(Duration::from_secs(60));
-        env.tick();
-    }
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
 
     verify_blocks_in_ledger(&env, archive1, 0, 2);
     verify_blocks_in_ledger(&env, archive2, 2, 2);
     verify_blocks_in_ledger(&env, ledger_id, 4, 16);
+
+    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 4);
+    verify_blocks_in_ledger(&env, ledger_id, 6, 14);
+
+    let archive3 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive3, 10);
+    assert_eq!(archived_count, 10);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 4);
+    verify_blocks_in_ledger(&env, archive3, 6, 10);
+    verify_blocks_in_ledger(&env, ledger_id, 16, 4);
 }
