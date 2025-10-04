@@ -108,8 +108,7 @@ fn best_effort_response_to(canister_id: CanisterId) -> Response {
 fn time_out_messages(state: &mut ReplicatedState) -> usize {
     let metrics = FakeDropMessageMetrics::default();
     state.time_out_messages(&metrics);
-    let timed_out_messages = metrics.timed_out_messages.borrow().values().sum();
-    timed_out_messages
+    metrics.timed_out_messages.borrow().values().sum()
 }
 
 /// Fixture using `SUBNET_ID` as its own subnet ID and `CANISTER_ID` as the ID
