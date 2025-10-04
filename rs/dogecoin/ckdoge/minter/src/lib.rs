@@ -1,3 +1,4 @@
+pub mod address;
 pub mod candid_api;
 pub mod lifecycle;
 
