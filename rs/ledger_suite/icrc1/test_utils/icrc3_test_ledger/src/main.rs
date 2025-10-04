@@ -1,48 +1,138 @@
-use candid::{Nat, candid_method};
+use candid::{Nat, Principal, candid_method};
+use ic_cdk::call::Call;
 use ic_cdk::{init, query, update};
 use ic_certification::{
     HashTree,
     hash_tree::{Label, empty, fork, label, leaf},
 };
 use ic_icrc1::endpoints::StandardRecord;
-use ic_icrc3_test_ledger::AddBlockResult;
+use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
+use ic_ledger_canister_core::range_utils;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
-use icrc_ledger_types::icrc::generic_value::ICRC3Value;
-use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+use icrc_ledger_types::icrc::generic_value::{ICRC3Value, Value};
+use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryArchiveFn, QueryBlockArchiveFn};
+use icrc_ledger_types::icrc3::blocks::{ArchivedBlocks, ICRC3DataCertificate};
 use icrc_ledger_types::icrc3::blocks::{
-    BlockWithId, GenericBlock, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+    BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
 };
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::{cell::RefCell, ops::Range};
 
 type BlockStorage = BTreeMap<u64, ICRC3Value>;
 
+#[derive(Clone)]
+struct ArchiveInfo {
+    pub archive_id: Principal,
+    pub block_range: Range<u64>,
+}
+
 thread_local! {
     static BLOCKS: RefCell<BlockStorage> = const { RefCell::new(BTreeMap::new()) };
-    static NEXT_BLOCK_ID: RefCell<u64> = const { RefCell::new(0) };
     static ICRC3_ENABLED: RefCell<bool> = const { RefCell::new(true) };
+    static ARCHIVES: RefCell<Vec<ArchiveInfo>> = const { RefCell::new(vec![]) };
+}
+
+fn next_block_id() -> u64 {
+    BLOCKS.with(|blocks| match blocks.borrow().last_key_value() {
+        Some((k, _)) => *k + 1,
+        None => 0u64,
+    })
 }
 
 /// Add a block to the ledger storage
 #[candid_method(update)]
 #[update]
 pub fn add_block(block: ICRC3Value) -> AddBlockResult {
+    let next_id = next_block_id();
     let result = BLOCKS.with(|blocks| {
-        NEXT_BLOCK_ID.with(|next_id| {
-            let mut blocks = blocks.borrow_mut();
-            let mut next_id = next_id.borrow_mut();
-
-            let block_id = *next_id;
-            blocks.insert(block_id, block);
-            *next_id += 1;
-
-            Ok(Nat::from(block_id))
-        })
+        let mut blocks = blocks.borrow_mut();
+        blocks.insert(next_id, block);
+        Ok(Nat::from(next_id))
     });
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
     result
+}
+
+/// Add a block to the ledger storage
+#[candid_method(update)]
+#[update]
+pub fn add_block_with_index(block_with_id: BlockWithId) -> AddBlockResult {
+    let next_id = next_block_id();
+    if next_id > 0 {
+        assert_eq!(block_with_id.id, next_id);
+    }
+    let result = BLOCKS.with(|blocks| {
+        let mut blocks = blocks.borrow_mut();
+        blocks.insert(block_with_id.id.0.to_u64().unwrap(), block_with_id.block);
+        Ok(Nat::from(block_with_id.id))
+    });
+    ic_cdk::api::certified_data_set(construct_hash_tree().digest());
+    result
+}
+
+/// Archive the oldest `num_blocks` to the archive at given `archive_id`.
+#[candid_method(update)]
+#[update]
+pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
+    let mut blocks_to_archive = vec![];
+
+    BLOCKS.with(|blocks| {
+        let mut blocks = blocks.borrow_mut();
+        while !blocks.is_empty() && (blocks_to_archive.len() as u64) < args.num_blocks {
+            blocks_to_archive.push(blocks.pop_first().unwrap());
+        }
+    });
+
+    if blocks_to_archive.is_empty() {
+        return 0;
+    }
+
+    let first_block_index = blocks_to_archive.first().unwrap().0;
+    let last_block_index = blocks_to_archive.last().unwrap().0;
+
+    ARCHIVES.with(|archives| {
+        let mut archives = archives.borrow_mut();
+        let last_archive = archives.last().cloned();
+        match last_archive {
+            Some(archive) => {
+                if archive.archive_id == args.archive_id {
+                    let updated_archive = ArchiveInfo {
+                        block_range: archive.block_range.start..last_block_index + 1,
+                        ..archive
+                    };
+                    let last_idx = archives.len() - 1;
+                    archives[last_idx] = updated_archive;
+                } else {
+                    archives.push(ArchiveInfo {
+                        archive_id: args.archive_id,
+                        block_range: first_block_index..last_block_index + 1,
+                    });
+                }
+            }
+            None => archives.push(ArchiveInfo {
+                archive_id: args.archive_id,
+                block_range: first_block_index..last_block_index + 1,
+            }),
+        };
+    });
+
+    for block in &blocks_to_archive {
+        let result = Call::unbounded_wait(args.archive_id, "add_block_with_index")
+            .with_arg(&BlockWithId {
+                id: Nat::from(block.0),
+                block: block.1.clone(),
+            })
+            .await
+            .expect("failed to add block to archive")
+            .candid::<AddBlockResult>()
+            .expect("Could not decode AddBlockResult")
+            .expect("adding block failed");
+        assert_eq!(result, Nat::from(block.0));
+    }
+
+    blocks_to_archive.len() as u64
 }
 
 #[query]
@@ -111,67 +201,146 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 #[candid_method(query)]
 #[query]
 pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    let next_id = next_block_id();
     BLOCKS.with(|blocks| {
-        NEXT_BLOCK_ID.with(|next_id| {
-            let blocks = blocks.borrow();
-            let total_blocks = *next_id.borrow();
+        let blocks = blocks.borrow();
+        let total_blocks = next_id;
 
-            let mut result_blocks = Vec::new();
+        let mut result_blocks = vec![];
+        let mut archived_blocks = vec![];
 
-            // Process all requests
-            for request in requests {
-                let start = request.start.0.to_u64().unwrap_or(0);
-                let length = request.length.0.to_u64().unwrap_or(0) as usize;
+        // Process all requests
+        for request in requests {
+            let mut blocks_res = get_blocks_for_request(&blocks, request);
+            result_blocks.append(&mut blocks_res.local_blocks);
 
-                // Get blocks in the requested range
-                for block_id in start..std::cmp::min(start + length as u64, total_blocks) {
-                    if let Some(block) = blocks.get(&block_id) {
-                        result_blocks.push(BlockWithId {
-                            id: Nat::from(block_id),
-                            block: block.clone(),
-                        });
-                    }
-                }
+            let archived_ranges: Vec<
+                ArchivedRange<QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>>,
+            > = blocks_res
+                .archives
+                .into_iter()
+                .map(|(canister_id, slice)| ArchivedRange {
+                    start: Nat::from(slice.start),
+                    length: Nat::from(range_utils::range_len(&slice)),
+                    callback: QueryArchiveFn::<Vec<GetBlocksRequest>, GetBlocksResult>::new(
+                        canister_id,
+                        "icrc3_get_blocks",
+                    ),
+                })
+                .collect();
+            let mut archived_blocks_by_callback = BTreeMap::new();
+            for ArchivedRange {
+                start,
+                length,
+                callback,
+            } in archived_ranges
+            {
+                let request = GetBlocksRequest { start, length };
+                archived_blocks_by_callback
+                    .entry(callback)
+                    .or_insert(vec![])
+                    .push(request);
             }
-
-            GetBlocksResult {
-                log_length: Nat::from(total_blocks),
-                blocks: result_blocks,
-                archived_blocks: vec![], // No archiving in this simple implementation
+            for (callback, args) in archived_blocks_by_callback {
+                archived_blocks.push(ArchivedBlocks { args, callback });
             }
-        })
+        }
+
+        GetBlocksResult {
+            log_length: Nat::from(total_blocks),
+            blocks: result_blocks,
+            archived_blocks,
+        }
     })
 }
 
 #[candid_method(query)]
 #[query]
 pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
+    let next_id = next_block_id();
     BLOCKS.with(|blocks| {
-        NEXT_BLOCK_ID.with(|next_id| {
-            let blocks = blocks.borrow();
-            let total_blocks = *next_id.borrow();
+        let blocks = blocks.borrow();
 
-            let mut result_blocks = Vec::new();
+        let start = request.start.0.to_u64().unwrap_or(0);
+        let length = request.length.0.to_u64().unwrap_or(0);
+        let requested_range = start..start + length;
 
-            let start = request.start.0.to_u64().unwrap_or(0);
-            let length = request.length.0.to_u64().unwrap_or(0) as usize;
+        let blocks_res = get_blocks_for_request(&blocks, request);
 
-            // Get blocks in the requested range
-            for block_id in start..std::cmp::min(start + length as u64, total_blocks) {
-                if let Some(block) = blocks.get(&block_id) {
-                    result_blocks.push(GenericBlock::from(block.clone()));
+        let local_blocks = blocks_res
+            .local_blocks
+            .iter()
+            .map(|b| Value::from(b.block.clone()))
+            .collect();
+
+        let first_non_archive = ARCHIVES.with(|archives| match archives.borrow().last() {
+            Some(archive) => archive.block_range.end,
+            None => 0u64,
+        });
+        let first_index = match blocks.first_key_value() {
+            Some((idx, _)) => {
+                let local_range = *idx..next_id;
+                match range_utils::intersect(&local_range, &requested_range) {
+                    Ok(intersection) => intersection.start,
+                    Err(_) => first_non_archive,
                 }
             }
+            None => first_non_archive,
+        };
 
-            GetBlocksResponse {
-                chain_length: total_blocks,
-                blocks: result_blocks,
-                archived_blocks: vec![], // No archiving in this simple implementation
-                first_index: Nat::from(start),
-                certificate: None,
-            }
-        })
+        let archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>> = blocks_res
+            .archives
+            .into_iter()
+            .map(|(canister_id, slice)| ArchivedRange {
+                start: Nat::from(slice.start),
+                length: Nat::from(range_utils::range_len(&slice)),
+                callback: QueryBlockArchiveFn::new(canister_id, "get_blocks"),
+            })
+            .collect();
+
+        GetBlocksResponse {
+            chain_length: next_id,
+            blocks: local_blocks,
+            archived_blocks,
+            first_index: Nat::from(first_index),
+            certificate: None,
+        }
     })
+}
+
+struct BlocksResponse {
+    pub local_blocks: Vec<BlockWithId>,
+    pub archives: Vec<(Principal, Range<u64>)>,
+}
+
+fn get_blocks_for_request(blocks: &BlockStorage, request: GetBlocksRequest) -> BlocksResponse {
+    let mut result = BlocksResponse {
+        local_blocks: vec![],
+        archives: vec![],
+    };
+
+    let start = request.start.0.to_u64().unwrap_or(0);
+    let length = request.length.0.to_u64().unwrap_or(0);
+
+    // Get blocks in the requested range
+    for block in blocks.range(start..start + length) {
+        result.local_blocks.push(BlockWithId {
+            id: Nat::from(*block.0),
+            block: block.1.clone(),
+        });
+    }
+
+    ARCHIVES.with(|archives| {
+        let request_range = start..start + length;
+        for archive in &*archives.borrow() {
+            let arch_range = range_utils::intersect(&archive.block_range, &request_range);
+            if let Ok(arch_range) = arch_range {
+                result.archives.push((archive.archive_id, arch_range));
+            }
+        }
+    });
+
+    result
 }
 
 #[query]
@@ -193,10 +362,6 @@ pub fn set_icrc3_enabled(enabled: bool) {
 #[init]
 fn init() {
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
-}
-
-pub fn get_block_count() -> u64 {
-    NEXT_BLOCK_ID.with(|next_id| *next_id.borrow())
 }
 
 fn main() {}

@@ -14,6 +14,7 @@ rust_library(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
     ],
 )
 
@@ -28,6 +29,7 @@ rust_canister(
         # Keep sorted.
         ":icrc3_test_ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1",
         "@crate_index//:candid",
         "@crate_index//:ciborium",

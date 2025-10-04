@@ -20,9 +20,11 @@ ciborium = { workspace = true }
 ic-cdk = { workspace = true }
 ic-certification = { workspace = true }
 ic-icrc1 = { path = "../.." }
+ic-ledger-canister-core = { path = "../../../common/ledger_canister_core" }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 leb128 = { workspace = true }
 num-traits = { workspace = true }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
