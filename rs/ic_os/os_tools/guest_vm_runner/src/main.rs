@@ -152,6 +152,7 @@ impl VirtualMachine {
                         && e.code() == ErrorNumber::OperationInvalid
                         && e.domain() == ErrorDomain::Domain =>
                 {
+                    eprintln!("Failed to create domain, will retry: {e}");
                     Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     retries -= 1;
                     continue;
@@ -552,14 +553,14 @@ impl GuestVmService {
             self.write_to_console_and_stdout("#################################################");
 
             let tail_output = Command::new("tail")
-                .args(["-n", "30", serial_log_path.to_str().unwrap()])
+                .args(["-n", "100", serial_log_path.to_str().unwrap()])
                 .output()
                 .await
                 .context("Failed to tail serial log")?;
 
             let logs = String::from_utf8_lossy(&tail_output.stdout);
             for line in logs.lines() {
-                self.write_to_console_and_stdout(line);
+                self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
             }
         } else {
             self.write_to_console_and_stdout("No console log file found.");

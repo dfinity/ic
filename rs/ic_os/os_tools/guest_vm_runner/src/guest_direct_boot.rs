@@ -6,6 +6,7 @@ use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider};
 use std::fs::File;
+use std::process::Command;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
@@ -82,8 +83,19 @@ pub async fn prepare_direct_boot(
         .context("Could not mount grub partition")?;
 
     let grubenv_path = grub_partition.mount_point().join("grubenv");
-    let mut grubenv =
-        GrubEnv::read_from(File::open(&grubenv_path).context("Could not open grubenv")?)?;
+    let grubenv_res = File::open(&grubenv_path).context("Could not open grubenv");
+    let Ok(grubenv_file) = grubenv_res else {
+        let ls_output = Command::new("ls")
+            .arg("-lah")
+            .arg(grubenv_path)
+            .output()
+            .context("Failed to list grubenv_path")?;
+        println!("{}", String::from_utf8_lossy(&ls_output.stdout));
+
+        return Err(grubenv_res.unwrap_err());
+    };
+
+    let mut grubenv = GrubEnv::read_from(grubenv_file)?;
 
     let grubenv_is_changing = should_refresh_grubenv
         && refresh_grubenv(&mut grubenv).context("Failed to refresh grubenv")?;
