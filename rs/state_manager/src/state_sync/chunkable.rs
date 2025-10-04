@@ -27,9 +27,18 @@ use std::{
 
 pub mod cache;
 
-// If set to true, we validate chunks even in situations where it might not be
-// necessary.
-const ALWAYS_VALIDATE: bool = false;
+// Controls whether to validate chunks even when validation might not be necessary.
+// Normally, validation is only enabled when the base checkpoint height is less than or
+// equal to the state manager's started_height (typically after a restart).
+// This can be overridden for testing by setting IC_STATE_SYNC_ALWAYS_VALIDATE=true.
+fn always_validate() -> bool {
+    static ALWAYS_VALIDATE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ALWAYS_VALIDATE.get_or_init(|| {
+        std::env::var("IC_STATE_SYNC_ALWAYS_VALIDATE")
+            .map(|v| v.to_lowercase() == "true")
+            .unwrap_or(false)
+    })
+}
 
 type SubManifest = Vec<u8>;
 /// The state of the communication with up-to-date nodes.
@@ -87,6 +96,7 @@ pub(crate) struct IncompleteState {
     root_hash: CryptoHashOfState,
     state: DownloadState,
     manifest_with_checkpoint_layout: Option<(Manifest, CheckpointLayout<ReadOnly>)>,
+    state_manager_started_height: Height,
     metrics: StateManagerMetrics,
     started_at: Instant,
     fetch_started_at: Option<Instant>,
@@ -233,6 +243,7 @@ impl IncompleteState {
             root_hash,
             state: DownloadState::Blank,
             manifest_with_checkpoint_layout: state_sync.state_manager.latest_manifest(),
+            state_manager_started_height: state_sync.state_manager.started_height(),
             metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
             fetch_started_at: None,
@@ -367,7 +378,7 @@ impl IncompleteState {
             log,
             "state sync: hardlink_files for {} files {} validation",
             diff_script.copy_files.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if validate_data || always_validate() {
                 "with"
             } else {
                 "without"
@@ -388,7 +399,7 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    if validate_data || ALWAYS_VALIDATE {
+                    if validate_data || always_validate() {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
                             fatal!(
@@ -449,7 +460,7 @@ impl IncompleteState {
                                 );
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && always_validate() {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -481,7 +492,7 @@ impl IncompleteState {
 
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && always_validate() {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -629,7 +640,7 @@ impl IncompleteState {
             log,
             "state sync: copy_chunks for {} chunks {} validation",
             diff_script.copy_chunks.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if validate_data || always_validate() {
                 "with"
             } else {
                 "without"
@@ -720,7 +731,7 @@ impl IncompleteState {
                         }
                         #[cfg(not(target_os = "linux"))]
                         let src_data = &src_map.as_slice()[byte_range];
-                        if validate_data || ALWAYS_VALIDATE {
+                        if validate_data || always_validate() {
                             #[cfg(target_os = "linux")]
                             let src_data = &src_map.as_slice()[byte_range];
 
@@ -743,7 +754,7 @@ impl IncompleteState {
                                 );
 
                                 corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && always_validate() {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}.",
@@ -1005,7 +1016,7 @@ impl IncompleteState {
                         missing_chunks: Default::default(),
                         root_old: checkpoint_layout.raw_path().to_path_buf(),
                         height_old: checkpoint_height,
-                        validate_data: true,
+                        validate_data: checkpoint_height <= self.state_manager_started_height,
                     })
                 }
             }
@@ -1023,11 +1034,7 @@ impl IncompleteState {
                     missing_chunks: Default::default(),
                     root_old: checkpoint_old.raw_path().to_path_buf(),
                     height_old: checkpoint_height,
-                    validate_data: !self
-                        .state_sync_refs
-                        .cache
-                        .read()
-                        .state_is_fetched(checkpoint_height),
+                    validate_data: checkpoint_height <= self.state_manager_started_height,
                 })
             }
             (None, None) => None,
@@ -1421,10 +1428,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             Arc::new(meta_manifest.clone()),
                         );
                         self.state = DownloadState::Complete;
-                        self.state_sync_refs
-                            .cache
-                            .write()
-                            .register_successful_sync(self.height);
                         Ok(())
                     } else {
                         let state_sync_file_group = build_file_group_chunks(&manifest);
@@ -1618,11 +1621,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         Arc::new(meta_manifest.clone()),
                     );
                     self.state = DownloadState::Complete;
-
-                    self.state_sync_refs
-                        .cache
-                        .write()
-                        .register_successful_sync(self.height);
 
                     // Delay delivery of artifact
                     #[cfg(feature = "malicious_code")]
