@@ -3,9 +3,10 @@ use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
 use gpt::GptDisk;
 use std::fs::File;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
-use sys_mount::{FilesystemType, Mount, MountFlags, UnmountDrop, UnmountFlags};
+use sys_mount::{FilesystemType, Mount, MountFlags, Unmount, UnmountFlags};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -160,8 +161,27 @@ impl PartitionProvider for GptPartitionProvider {
 struct LoopDeviceMount {
     // Field order matters: mount must be dropped before tempdir
     // According to the Rust spec, fields are dropped in the order of declaration.
-    mount: UnmountDrop<Mount>,
+    mount: MyUnmountDrop<Mount>,
     _tempdir: TempDir,
+}
+
+struct MyUnmountDrop<T: Unmount> {
+    mount: T,
+}
+
+impl<T: Unmount> Deref for MyUnmountDrop<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.mount
+    }
+}
+
+impl<T: Unmount> Drop for MyUnmountDrop<T> {
+    fn drop(&mut self) {
+        let res = self.mount.unmount(UnmountFlags::empty());
+        println!("{res:?}");
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -195,7 +215,8 @@ impl Mounter for LoopDeviceMounter {
                         .loopback_offset(offset_bytes)
                         .flags(MountFlags::empty())
                         .explicit_loopback()
-                        .mount_autodrop(&device, mount_point, UnmountFlags::empty())
+                        .mount(&device, mount_point)
+                        .map(|mount| MyUnmountDrop { mount })
                 })
                 .context("Failed to create mount")?,
                 _tempdir: tempdir,
