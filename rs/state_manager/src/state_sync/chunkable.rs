@@ -27,9 +27,18 @@ use std::{
 
 pub mod cache;
 
-// If set to true, we validate chunks even in situations where it might not be
-// necessary.
-const ALWAYS_VALIDATE: bool = false;
+// Controls whether to validate chunks even when validation might not be necessary.
+// Normally, validation is only enabled when the base checkpoint height is less than or
+// equal to the state manager's started_height (typically after a restart).
+// This can be overridden for testing by setting IC_STATE_SYNC_ALWAYS_VALIDATE=true.
+fn always_validate() -> bool {
+    static ALWAYS_VALIDATE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ALWAYS_VALIDATE.get_or_init(|| {
+        std::env::var("IC_STATE_SYNC_ALWAYS_VALIDATE")
+            .map(|v| v.to_lowercase() == "true")
+            .unwrap_or(false)
+    })
+}
 
 type SubManifest = Vec<u8>;
 /// The state of the communication with up-to-date nodes.
@@ -369,7 +378,7 @@ impl IncompleteState {
             log,
             "state sync: hardlink_files for {} files {} validation",
             diff_script.copy_files.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if validate_data || always_validate() {
                 "with"
             } else {
                 "without"
@@ -390,7 +399,7 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    if validate_data || ALWAYS_VALIDATE {
+                    if validate_data || always_validate() {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
                             fatal!(
@@ -451,7 +460,7 @@ impl IncompleteState {
                                 );
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && always_validate() {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -483,7 +492,7 @@ impl IncompleteState {
 
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && always_validate() {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -631,7 +640,7 @@ impl IncompleteState {
             log,
             "state sync: copy_chunks for {} chunks {} validation",
             diff_script.copy_chunks.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if validate_data || always_validate() {
                 "with"
             } else {
                 "without"
@@ -722,7 +731,7 @@ impl IncompleteState {
                         }
                         #[cfg(not(target_os = "linux"))]
                         let src_data = &src_map.as_slice()[byte_range];
-                        if validate_data || ALWAYS_VALIDATE {
+                        if validate_data || always_validate() {
                             #[cfg(target_os = "linux")]
                             let src_data = &src_map.as_slice()[byte_range];
 
@@ -745,7 +754,7 @@ impl IncompleteState {
                                 );
 
                                 corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && always_validate() {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}.",
