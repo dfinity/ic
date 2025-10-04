@@ -130,7 +130,7 @@ impl SystemStateFixture {
         &mut self,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
+    ) -> Result<Option<Arc<Response>>, (StateError, RequestOrResponse)> {
         self.system_state
             .queues_mut()
             .push_input(msg, input_queue_type)
@@ -198,10 +198,9 @@ fn correct_charging_target_canister_for_a_response() {
     let initial_cycles_balance = fixture.system_state.balance();
 
     // Enqueue the request.
-    assert!(
-        fixture
-            .push_input(default_input_request(), InputQueueType::RemoteSubnet)
-            .unwrap()
+    assert_eq!(
+        Ok(None),
+        fixture.push_input(default_input_request(), InputQueueType::RemoteSubnet)
     );
     // Pop the Request, as if processing it.
     fixture.pop_input();
@@ -319,13 +318,12 @@ fn induct_messages_to_self_memory_limit_test_impl(
     );
 
     // Make a slot reservation for `response``.
-    assert!(
-        fixture
-            .push_input(
-                RequestOrResponse::Request(request0),
-                InputQueueType::RemoteSubnet,
-            )
-            .unwrap()
+    assert_eq!(
+        Ok(None),
+        fixture.push_input(
+            RequestOrResponse::Request(request0),
+            InputQueueType::RemoteSubnet,
+        )
     );
     fixture.pop_input().unwrap();
 
@@ -378,13 +376,12 @@ fn induct_messages_to_self_full_queue() {
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
         let (request, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
         requests.push(request.clone());
-        assert!(
-            fixture
-                .push_input(
-                    RequestOrResponse::Request(request),
-                    InputQueueType::LocalSubnet,
-                )
-                .unwrap()
+        assert_eq!(
+            Ok(None),
+            fixture.push_input(
+                RequestOrResponse::Request(request),
+                InputQueueType::LocalSubnet,
+            )
         );
     }
 
@@ -509,13 +506,12 @@ fn time_out_callbacks() {
     let c4 = simulate_outbound_call(&mut fixture, d2).originator_reply_callback;
 
     // Simulate a paused execution for `rep1`.
-    assert!(
-        fixture
-            .push_input(
-                RequestOrResponse::Response(rep1),
-                InputQueueType::RemoteSubnet,
-            )
-            .unwrap()
+    assert_eq!(
+        Ok(None),
+        fixture.push_input(
+            RequestOrResponse::Response(rep1),
+            InputQueueType::RemoteSubnet,
+        )
     );
     let response1 = fixture.pop_input().unwrap();
     fixture
@@ -527,13 +523,12 @@ fn time_out_callbacks() {
         });
 
     // And enqueue `rep2`.
-    assert!(
-        fixture
-            .push_input(
-                RequestOrResponse::Response(rep2.clone()),
-                InputQueueType::RemoteSubnet,
-            )
-            .unwrap()
+    assert_eq!(
+        Ok(None),
+        fixture.push_input(
+            RequestOrResponse::Response(rep2.clone()),
+            InputQueueType::RemoteSubnet,
+        )
     );
 
     // Time out callbacks with deadlines before `d2` (only applicable to `c3` now).

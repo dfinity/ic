@@ -1077,6 +1077,10 @@ fn serialize_protos_to_checkpoint_readwrite(
         .subnet_queues()
         .serialize((state.subnet_queues()).into())?;
 
+    checkpoint_readwrite
+        .refunds()
+        .serialize((state.refunds()).into())?;
+
     checkpoint_readwrite.stats().serialize(Stats {
         query_stats: state.query_stats().as_query_stats(),
     })?;

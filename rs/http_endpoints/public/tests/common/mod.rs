@@ -40,7 +40,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata,
+    CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
     canister_snapshots::CanisterSnapshots,
 };
 use ic_test_utilities::crypto::{CryptoReturningOk, temp_crypto_component_with_fake_registry};
@@ -205,6 +205,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
+            RefundPool::default(),
             RawQueryStats::default(),
             CanisterSnapshots::default(),
         )),
