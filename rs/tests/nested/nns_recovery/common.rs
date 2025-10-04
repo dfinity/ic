@@ -258,6 +258,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 node.get_ip_addr()
             )
         });
+
+        std::thread::sleep(Duration::from_secs(30));
     }
 
     info!(logger, "Ensure a healthy node still works in read mode");
