@@ -46,7 +46,6 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
-use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     ops::RangeInclusive,
@@ -260,7 +259,7 @@ impl CanisterStateBuilder {
     }
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
-        self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self.memory_allocation = MemoryAllocation::from(num_bytes.into());
         self
     }
 
@@ -456,8 +455,7 @@ impl SystemStateBuilder {
     }
 
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
-        self.system_state.memory_allocation =
-            MemoryAllocation::try_from(memory_allocation).unwrap();
+        self.system_state.memory_allocation = MemoryAllocation::from(memory_allocation);
         self
     }
 
