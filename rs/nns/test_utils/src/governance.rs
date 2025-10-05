@@ -570,3 +570,33 @@ pub async fn invalid_bitcoin_set_config_by_proposal(
     )
     .await
 }
+
+pub async fn pause_migrations(governance: &Canister<'_>) {
+    let proposal: Vec<u8> = Vec::new();
+
+    submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::PauseMigrations,
+        proposal,
+        "Pause Migrations".to_string(),
+        "".to_string(),
+    )
+    .await;
+}
+
+pub async fn unpause_migrations(governance: &Canister<'_>) {
+    let proposal: Vec<u8> = Vec::new();
+
+    submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::UnpauseMigrations,
+        proposal,
+        "Unpause Migrations".to_string(),
+        "".to_string(),
+    )
+    .await;
+}

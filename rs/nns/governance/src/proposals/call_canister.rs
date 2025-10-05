@@ -10,4 +10,4 @@ pub trait CallCanister {
     fn payload(&self) -> Result<Vec<u8>, GovernanceError>;
 }
 
-// TODO: impl CallCanister for ExecuteNnsFunciton
+// TODO: impl CallCanister for ExecuteNnsFunction

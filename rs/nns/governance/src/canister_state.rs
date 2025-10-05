@@ -401,7 +401,9 @@ fn get_effective_payload(
         | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
         | NnsFunction::DeployGuestosToAllUnassignedNodes
         | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
-        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Ok(payload),
+        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
+        | NnsFunction::PauseMigrations
+        | NnsFunction::UnpauseMigrations => Ok(payload),
     }
 }
 

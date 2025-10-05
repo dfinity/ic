@@ -486,6 +486,12 @@ enum NnsFunction {
   // The proposal requests a subnet rental.
   NNS_FUNCTION_SUBNET_RENTAL_REQUEST = 52;
 
+  // Instruct the migration canister to not accept any more migration requests.
+  NNS_FUNCTION_PAUSE_MIGRATIONS = 53;
+
+  // Instruct the migration canister to accept migration requests again.
+  NNS_FUNCTION_UNPAUSE_MIGRATIONS = 54;
+
   // STOP! Adding to NnsFunction is NOT the standard way to add new proposal
   // types. Instead, add to the Proposal.action oneof DIRECTLY. The problem with
   // NnsFunction is that it leads to proposals with opaque blobs (specifically,

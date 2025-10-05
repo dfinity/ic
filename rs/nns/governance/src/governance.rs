@@ -95,8 +95,8 @@ use ic_nervous_system_rate_limits::{
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
@@ -592,6 +592,8 @@ impl NnsFunction {
             NnsFunction::SubnetRentalRequest => {
                 (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
             }
+            NnsFunction::PauseMigrations => (MIGRATION_CANISTER_ID, "disable_api"),
+            NnsFunction::UnpauseMigrations => (MIGRATION_CANISTER_ID, "enable_api"),
             NnsFunction::BlessReplicaVersion
             | NnsFunction::RetireReplicaVersion
             | NnsFunction::UpdateElectedHostosVersions
@@ -684,6 +686,9 @@ impl NnsFunction {
             | NnsFunction::BitcoinSetConfig => Topic::ProtocolCanisterManagement,
             NnsFunction::AddSnsWasm | NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 Topic::ServiceNervousSystemManagement
+            }
+            NnsFunction::PauseMigrations | NnsFunction::UnpauseMigrations => {
+                Topic::ProtocolCanisterManagement
             }
         };
         Ok(topic)
