@@ -132,7 +132,7 @@ fn ic0_stable_grow_works() {
 }
 
 #[test]
-fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
+fn ic0_stable_grow_succeeds_when_exceeding_memory_allocation() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
@@ -141,8 +141,8 @@ fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
 
             (func (export "canister_update test")
                 ;; Grow the memory by 1000 pages and verify that the return value
-                ;; is -1 because the grow should fail.
-                (if (i32.ne (call $stable_grow (i32.const 1000)) (i32.const -1))
+                ;; is 0 because the grow should succeed.
+                (if (i32.ne (call $stable_grow (i32.const 1000)) (i32.const 0))
                     (then (unreachable))
                 )
             )
@@ -7639,7 +7639,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
     let memory_allocation = 655360000 + empty_memory_usage.get();
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         freezing_threshold,
-        ic_types::MemoryAllocation::Reserved(NumBytes::new(memory_allocation)),
+        ic_types::MemoryAllocation::try_from(NumBytes::new(memory_allocation)).unwrap(),
         NumBytes::new(0),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
@@ -7685,7 +7685,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
     let memory_usage = 655_360_000 + 1_000_000;
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         freezing_threshold,
-        ic_types::MemoryAllocation::BestEffort,
+        ic_types::MemoryAllocation::default(),
         NumBytes::new(memory_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),

@@ -469,7 +469,7 @@ mod tests {
                         NumInstructions::new(12),
                     ),
                     wasm_memory_limit: Some(NumBytes::new(123)),
-                    memory_allocation: MemoryAllocation::Reserved(NumBytes::new(123)),
+                    memory_allocation: MemoryAllocation::default(),
                     canister_guaranteed_callback_quota: 123,
                     compute_allocation: ComputeAllocation::zero(),
                     subnet_type: SubnetType::Application,
