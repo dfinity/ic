@@ -10911,8 +10911,14 @@ async fn test_known_neurons() {
     // Test that we have them all
     assert_eq!(expected_known_neuron_name_set, known_neuron_name_set);
     // Test that they're in the index
-    assert!(gov.neuron_store.contains_known_neuron_name("One"));
-    assert!(gov.neuron_store.contains_known_neuron_name("Zwei"));
+    assert_eq!(
+        gov.neuron_store.known_neuron_id_by_name("One"),
+        Some(NeuronId { id: 1 })
+    );
+    assert_eq!(
+        gov.neuron_store.known_neuron_id_by_name("Zwei"),
+        Some(NeuronId { id: 2 })
+    );
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
