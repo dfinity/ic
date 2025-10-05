@@ -42,7 +42,7 @@ use slog::info;
 use std::time::Duration;
 
 const INITIAL_NODES: usize = 1;
-const TOTAL_NODES: usize = 13;
+const TOTAL_NODES: usize = 4;
 
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(150); // artificial added latency

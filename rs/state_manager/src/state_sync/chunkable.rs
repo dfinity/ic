@@ -1,8 +1,8 @@
 use crate::{
-    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_FETCH,
-    LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
-    StateSyncMetrics, StateSyncRefs,
+    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, IncompleteStateReader, LABEL_COPY_CHUNKS,
+    LABEL_FETCH, LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK,
+    LABEL_FETCH_STATE_CHUNK, LABEL_HARDLINK_FILES, LABEL_PREALLOCATE,
+    LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
     state_sync::StateSync,
     state_sync::types::{
@@ -839,7 +839,7 @@ impl IncompleteState {
         metrics.remaining.sub(1);
     }
 
-    // Return wether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
+    // Return whether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
     #[must_use]
     fn make_checkpoint(
         log: &ReplicaLogger,
@@ -1216,13 +1216,21 @@ fn maliciously_alter_chunk_data(
 impl Chunkable<StateSyncMessage> for IncompleteState {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         match self.state {
-            DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
+            DownloadState::Blank => {
+                info!(self.log, "STATE_SYNC: Serving meta manifest");
+                Box::new(std::iter::once(META_MANIFEST_CHUNK))
+            }
             DownloadState::Prep {
                 meta_manifest: _,
                 manifest_in_construction: _,
                 ref manifest_chunks,
             } => {
                 let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
+                info!(
+                    self.log,
+                    "STATE_SYNC: Serving {} meta manifest chunks",
+                    ids.len()
+                );
                 Box::new(ids.into_iter())
             }
             DownloadState::Loading {
@@ -1236,6 +1244,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     .iter()
                     .map(|id| ChunkId::new(*id as u32))
                     .collect();
+                info!(self.log, "STATE_SYNC: Serving {} state chunks", ids.len());
                 Box::new(ids.into_iter())
             }
             DownloadState::Complete => Box::new(std::iter::empty()),
@@ -1463,12 +1472,24 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                         let num_fetch_chunks = fetch_chunks.len();
                         self.state = DownloadState::Loading {
-                            meta_manifest,
-                            manifest,
-                            state_sync_file_group,
+                            meta_manifest: meta_manifest.clone(),
+                            manifest: manifest.clone(),
+                            state_sync_file_group: state_sync_file_group.clone(),
                             fetch_chunks,
                             copied_chunks_from_file_group,
                         };
+                        self.state_sync_refs
+                            .incomplete_state_readers
+                            .write()
+                            .insert(
+                                self.height,
+                                IncompleteStateReader::empty(
+                                    self.root_hash.clone(),
+                                    meta_manifest,
+                                    manifest,
+                                    state_sync_file_group,
+                                ),
+                            );
                         self.fetch_started_at = Some(Instant::now());
                         info!(
                             self.log,
@@ -1576,6 +1597,13 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 }
 
                 fetch_chunks.remove(&(ix as usize));
+                self.state_sync_refs
+                    .incomplete_state_readers
+                    .write()
+                    .get_mut(&self.height)
+                    .unwrap()
+                    .chunks
+                    .insert(chunk_id);
 
                 if fetch_chunks.is_empty() {
                     debug!(
@@ -1633,6 +1661,15 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                 Ok(())
             }
+        }
+    }
+
+    fn is_base_layer(&self) -> bool {
+        match self.state {
+            DownloadState::Blank => false,
+            DownloadState::Prep { .. } => false,
+            DownloadState::Loading { .. } => true,
+            DownloadState::Complete => true,
         }
     }
 }
