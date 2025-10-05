@@ -27,6 +27,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:proptest",
+        "@crate_index//:rstest",
         "@crate_index//:tempfile",
     ],
 )
