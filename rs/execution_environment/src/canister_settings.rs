@@ -26,6 +26,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
+    pub(crate) log_size: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
@@ -39,6 +40,7 @@ impl CanisterSettings {
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
+        log_size: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
     ) -> Self {
@@ -50,6 +52,7 @@ impl CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            log_size,
             wasm_memory_limit,
             environment_variables,
         }
@@ -81,6 +84,10 @@ impl CanisterSettings {
 
     pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
+    }
+
+    pub fn log_size(&self) -> Option<NumBytes> {
+        self.log_size
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
@@ -123,6 +130,14 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             Some(limit) => Some(Cycles::from(limit.0.to_u128().ok_or(
                 UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided: limit },
             )?)),
+            None => None,
+        };
+
+        let log_size = match input.log_size {
+            Some(ls) => Some(NumBytes::from(
+                ls.0.to_u64()
+                    .ok_or(UpdateSettingsError::LogSizeOutOfRange { provided: ls })?,
+            )),
             None => None,
         };
 
@@ -178,6 +193,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
+            log_size,
             wasm_memory_limit,
             environment_variables,
         ))
@@ -203,6 +219,7 @@ pub(crate) struct CanisterSettingsBuilder {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
+    log_size: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
 }
@@ -218,6 +235,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
+            log_size: None,
             wasm_memory_limit: None,
             environment_variables: None,
         }
@@ -232,6 +250,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
+            log_size: self.log_size,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
         }
@@ -286,6 +305,13 @@ impl CanisterSettingsBuilder {
         }
     }
 
+    pub fn with_log_size(self, log_size: NumBytes) -> Self {
+        Self {
+            log_size: Some(log_size),
+            ..self
+        }
+    }
+
     pub fn with_wasm_memory_limit(self, wasm_memory_limit: NumBytes) -> Self {
         Self {
             wasm_memory_limit: Some(wasm_memory_limit),
@@ -309,6 +335,7 @@ pub enum UpdateSettingsError {
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
+    LogSizeOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -358,6 +385,10 @@ impl From<UpdateSettingsError> for UserError {
                 ErrorCode::InvalidManagementPayload,
                 "Duplicate environment variables are not allowed".to_string(),
             ),
+            UpdateSettingsError::LogSizeOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!("Log size expected to be in the range of [0..2^64-1], got {provided}"),
+            ),
         }
     }
 }
@@ -383,6 +414,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
+    log_size: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
 }
@@ -397,6 +429,7 @@ impl ValidatedCanisterSettings {
         reserved_cycles_limit: Option<Cycles>,
         reservation_cycles: Cycles,
         log_visibility: Option<LogVisibilityV2>,
+        log_size: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
     ) -> Self {
@@ -409,6 +442,7 @@ impl ValidatedCanisterSettings {
             reserved_cycles_limit,
             reservation_cycles,
             log_visibility,
+            log_size,
             wasm_memory_limit,
             environment_variables,
         }
@@ -444,6 +478,10 @@ impl ValidatedCanisterSettings {
 
     pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
+    }
+
+    pub fn log_size(&self) -> Option<NumBytes> {
+        self.log_size
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
