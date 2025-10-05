@@ -47,7 +47,7 @@ const CONTENT_TYPE_CBOR: &str = "application/cbor";
 // In order to properly test the time outs we set much lower values for them when we are
 // in the test mode.
 #[cfg(not(test))]
-const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(10 * 60);
+const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5 * 60);
 #[cfg(test)]
 const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
