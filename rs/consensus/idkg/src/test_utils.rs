@@ -467,6 +467,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     let signer = ThresholdSignerImpl::new(
         NODE_1,
         consensus_crypto.unwrap_or(crypto),
+        build_thread_pool(MAX_IDKG_THREADS),
         state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
@@ -498,6 +499,7 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
     let signer = ThresholdSignerImpl::new(
         NODE_1,
         crypto,
+        build_thread_pool(MAX_IDKG_THREADS),
         state_manager.clone(),
         metrics_registry.clone(),
         logger.clone(),
