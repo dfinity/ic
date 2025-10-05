@@ -1,7 +1,7 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    index_ng_wasm, install_index_ng, install_ledger, ledger_get_all_blocks, ledger_wasm,
-    wait_until_sync_is_completed,
+    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
+    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
@@ -9,14 +9,18 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
-    InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
+    InitArg as IndexInitArg, ListSubaccountsArgs, SyncStatus, TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+use ic_icrc1_ledger::{
+    ChangeFeeCollector, LedgerArgument, Tokens, UpgradeArgs as LedgerUpgradeArgs,
+};
 use ic_icrc1_test_utils::{
-    ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
+    ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
+    valid_transactions_strategy,
 };
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -80,6 +84,14 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .0
         .to_u64()
         .expect("Balance must be a u64!")
+}
+
+fn sync_status(env: &StateMachine, canister_id: CanisterId) -> SyncStatus {
+    let res = env
+        .execute_ingress(canister_id, "sync_status", Encode!(&()).unwrap())
+        .expect("Failed to query sync_status")
+        .bytes();
+    Decode!(&res, SyncStatus).expect("Failed to decode sync_status response")
 }
 
 fn index_get_blocks(
@@ -220,6 +232,22 @@ fn transfer(
         memo: None,
     };
     icrc1_transfer(env, ledger_id, owner.into(), req)
+}
+
+fn add_block(env: &StateMachine, ledger_id: CanisterId, block: &ICRC3Value) -> BlockIndex {
+    let req = Encode!(block).expect("Failed to encode block");
+    let res = env
+        .execute_ingress_as(
+            ic_base_types::PrincipalId(Principal::anonymous()),
+            ledger_id,
+            "add_block",
+            req,
+        )
+        .unwrap_or_else(|e| panic!("Failed to add block. arg:{:?} error:{}", block, e))
+        .bytes();
+    Decode!(&res, Result<Nat, String>)
+        .expect("Failed to decode Result<Nat, String>")
+        .unwrap_or_else(|e| panic!("Failed to add block. arg:{:?} error:{}", block, e))
 }
 
 fn icrc2_approve(
@@ -451,6 +479,82 @@ fn test_ledger_growing() {
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
         icrc1_balance_of(env, index_id, account(1, 0))
+    );
+}
+
+#[test]
+fn test_unknown_block() {
+    // check that the index canister can incrementally get the blocks from the ledger.
+
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    // Test initial mint block.
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+
+    // Test first transfer block.
+
+    const TA1: Account = Account {
+        owner: PrincipalId::new_user_test_id(44).0,
+        subaccount: None,
+    };
+
+    const TA2: Account = Account {
+        owner: PrincipalId::new_user_test_id(66).0,
+        subaccount: None,
+    };
+
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(TA1, Tokens::from(1_000u64))
+        .build();
+    let block1 = BlockBuilder::new(1, 2000)
+        .with_parent_hash(block0.clone().hash().to_vec())
+        .transfer(TA1, TA2, Tokens::from(50u64))
+        .build();
+    let mut block1_map = match block1 {
+        ICRC3Value::Map(btree_map) => btree_map,
+        _ => panic!("block should be a map"),
+    };
+    block1_map.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+    let block1 = ICRC3Value::Map(block1_map);
+    let block2 = BlockBuilder::new(2, 3000)
+        .with_parent_hash(block1.clone().hash().to_vec())
+        .mint(TA1, Tokens::from(1_000u64))
+        .build();
+
+    add_block(env, ledger_id, &block0);
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+
+    let status = sync_status(env, index_id);
+    assert!(status.sync_active);
+    assert!(status.sync_error.is_none());
+
+    assert_eq!(icrc1_balance_of(env, index_id, TA1), 1_000u64);
+    assert_eq!(icrc1_balance_of(env, index_id, TA2), 0u64);
+
+    add_block(env, ledger_id, &block1);
+    add_block(env, ledger_id, &block2);
+
+    for _i in 0..3 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
+    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
+    let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
+    assert_eq!(ledger_blocks.chain_length, index_blocks.chain_length + 2);
+
+    assert_eq!(icrc1_balance_of(env, index_id, TA1), 1_000u64);
+    assert_eq!(icrc1_balance_of(env, index_id, TA2), 0u64);
+
+    let status = sync_status(env, index_id);
+    assert!(!status.sync_active);
+    assert_eq!(
+        status.sync_error,
+        Some("Unknown block at index 1.".to_string())
     );
 }
 
