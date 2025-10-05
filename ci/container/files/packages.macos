@@ -1,0 +1,78 @@
+# Essentials
+curl
+build-essential
+git
+git-lfs
+gnupg
+node-json5
+uuid-dev
+zsh
+fish
+clang
+iproute2
+shellcheck
+xxd
+vim
+
+# Bitcoin core (for bitcoin adapter integration test)
+libtool
+libevent-dev
+libboost-dev
+
+# GitHub CI
+sudo
+gosu
+jq
+rclone
+time
+qemu-system-x86
+
+# Test
+rsync
+lcov
+
+# RUST
+gcc
+lld
+pkg-config
+libssl-dev
+libunwind-dev
+libusb-1.0-0-dev
+libsqlite3-dev
+zlib1g-dev
+libclang-18-dev
+protobuf-compiler
+llvm
+liblmdb-dev
+liblzma-dev
+
+# Haskell
+libtinfo-dev
+libffi-dev
+libgmp-dev
+
+# IC-OS
+fdisk
+cryptsetup-bin
+dosfstools
+fakeroot
+faketime
+grub-efi-arm64-bin
+iasl # to build OVMF
+iputils-ping
+ # Linked in by IC-OS binaries for managing encrypted disks.
+libcryptsetup-dev
+ # Linked in by IC-OS binaries for creating mapped devices.
+libdevmapper-dev
+libselinux-dev
+libsystemd-dev
+ # Linked in by IC-OS binaries for managing virtual machines programmatically.
+libvirt-dev
+lsb-release
+lvm2
+mtools
+nasm # to build OVMF
+python-is-python3
+python3
+python3-pip
+zstd
