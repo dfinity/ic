@@ -243,42 +243,17 @@ impl OngoingStateSync {
         cancellation: CancellationToken,
         tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
     ) {
-        let available_download_capacity = self
-            .allowed_downloads
-            .saturating_sub(self.downloading_chunks.len());
-
         if self.peer_state.is_empty() {
             return;
         }
 
-        let mut small_rng = SmallRng::from_entropy();
-        let max_active_downloads = self
-            .peer_state
-            .values()
-            .map(|peer| peer.active_downloads())
-            .max()
-            .expect("Peers not empty");
-        let mut peers = Vec::with_capacity(self.peer_state.len());
-        let mut weights = Vec::with_capacity(self.peer_state.len());
-        for (peer_id, peer) in &self.peer_state {
-            peers.push(*peer_id);
-            // Add one such that all peers can get selected.
-            weights.push(max_active_downloads - peer.active_downloads() + 1);
-        }
-        info!(
-            self.log,
-            "STATE_SYNC: Spawning chunks to download from {} out of {} peers",
-            peers.len(),
-            self.peer_state.len(),
-        );
-
-        let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
-        for _ in 0..available_download_capacity {
+        loop {
             match self.chunks_to_download.next_chunk_to_download() {
-                Some(chunk) if !self.downloading_chunks.contains(&chunk) => {
-                    // Select random peer weighted proportional to active downloads.
-                    // Peers with less active downloads are more likely to be selected.
-                    let peer_id = *peers.get(dist.sample(&mut small_rng)).expect("Is present");
+                Some(chunk) => {
+                    let Some(peer_id) = self.choose_peer_for_chunk(chunk) else {
+                        self.chunks_to_download.download_failed(chunk);
+                        break;
+                    };
 
                     info!(
                         self.log,
@@ -303,10 +278,9 @@ impl OngoingStateSync {
                         &self.rt,
                     );
                 }
-                Some(_) => {}
                 None => {
                     if self.chunks_to_download.num_entries() != 0 {
-                        return;
+                        break;
                     }
 
                     // If we store chunks in self.chunks_to_download we will eventually initiate and
@@ -337,6 +311,11 @@ impl OngoingStateSync {
 
                     self.metrics.chunks_to_download_calls_total.inc();
                     self.metrics.chunks_to_download_total.inc_by(added as u64);
+
+                    if added == 0 {
+                        info!(self.log, "STATE_SYNC: Failed to retreive new chunks");
+                        break;
+                    }
                 }
             }
         }

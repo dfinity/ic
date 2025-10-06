@@ -151,7 +151,7 @@ impl PeerState {
     }
 
     pub(crate) fn deregister_download(&mut self) {
-        let _ = self.num_downloads.saturating_sub(1);
+        self.num_downloads = self.num_downloads.saturating_sub(1);
     }
 
     pub(crate) fn active_downloads(&self) -> usize {
