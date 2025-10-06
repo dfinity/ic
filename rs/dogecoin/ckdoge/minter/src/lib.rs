@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 pub mod address;
 pub mod candid_api;
 pub mod lifecycle;
@@ -28,9 +31,12 @@ pub struct DogeCanisterRuntime {}
 impl CanisterRuntime for DogeCanisterRuntime {
     async fn bitcoin_get_utxos(
         &self,
-        _request: &GetUtxosRequest,
+        request: &GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError> {
-        todo!()
+        dogecoin_canister::dogecoin_get_utxos(request)
+            .await
+            .map(GetUtxosResponse::from)
+            .map_err(|err| CallError::from_cdk_call_error("dogecoin_get_utxos", err))
     }
 
     async fn check_transaction(
@@ -111,5 +117,36 @@ impl CanisterRuntime for DogeCanisterRuntime {
     ) -> Result<BtcAddressCheckStatus, CallError> {
         // No OFAC checklist for Dogecoin addresses
         Ok(BtcAddressCheckStatus::Clean)
+    }
+}
+
+/// Similar to ic_cdk::bitcoin_canister but for Dogecoin
+mod dogecoin_canister {
+    use candid::Principal;
+    use ic_cdk::bitcoin_canister::{GetUtxosRequest, GetUtxosResponse};
+    use ic_cdk::call::{Call, CallResult};
+
+    pub async fn dogecoin_get_utxos(arg: &GetUtxosRequest) -> CallResult<GetUtxosResponse> {
+        let canister_id = get_dogecoin_canister_id(&arg.network);
+        // same cycles cost as for the Bitcoin canister
+        let cycles = ic_cdk::bitcoin_canister::cost_get_utxos(arg);
+        Ok(Call::bounded_wait(canister_id, "dogecoin_get_utxos")
+            .with_arg(arg)
+            .with_cycles(cycles)
+            .await?
+            .candid()?)
+    }
+
+    /// Gets the canister ID of the Bitcoin canister for the specified network.
+    pub fn get_dogecoin_canister_id(network: &ic_cdk::bitcoin_canister::Network) -> Principal {
+        const MAINNET_ID: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]); // "gordg-fyaaa-aaaan-aaadq-cai"
+        const TESTNET_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 1, 160, 0, 8, 1, 1]); // "hd7hi-kqaaa-aaaan-aaaea-cai"
+        const REGTEST_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 1, 160, 0, 8, 1, 1]); // "hd7hi-kqaaa-aaaan-aaaea-cai"
+
+        match network {
+            ic_cdk::bitcoin_canister::Network::Mainnet => MAINNET_ID,
+            ic_cdk::bitcoin_canister::Network::Testnet => TESTNET_ID,
+            ic_cdk::bitcoin_canister::Network::Regtest => REGTEST_ID,
+        }
     }
 }
