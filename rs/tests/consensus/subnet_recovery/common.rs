@@ -456,13 +456,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         use_local_binaries: cfg.local_recovery,
     };
 
-    let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
-
-    let upload_node = match unassigned_nodes.next() {
-        Some(node) => node,
-        _ => app_nodes.next().unwrap(),
-    };
-
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
 
     let unassigned_nodes_ids = env
@@ -490,8 +483,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
         readonly_key_file: Some(ssh_readonly_priv_key_path),
         download_method: None, // We will set this after breaking/halting the subnet, see below
-        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
-        wait_for_cup_node: Some(upload_node.get_ip_addr()),
+        upload_method: None,   // We will set this after breaking/halting the subnet, see below
+        wait_for_cup_node: None, // We will set this after breaking/halting the subnet, see below
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
         next_step: None,
         skip: None,
@@ -512,7 +505,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     );
     if cfg.upgrade {
         break_subnet(
-            app_nodes,
+            &mut app_nodes,
             cfg.subnet_size,
             subnet_recovery.get_recovery_api(),
             &logger,
@@ -528,6 +521,22 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
     let download_node = select_download_node(&app_subnet, &logger);
+    let upload_node = if cfg.local_recovery {
+        // In local recoveries, we download and upload from/to the same node
+        download_node.0.clone()
+    } else {
+        env.topology_snapshot()
+            .unassigned_nodes()
+            .next()
+            .or_else(|| app_nodes.next())
+            .unwrap()
+    };
+
+    subnet_recovery.params.download_method =
+        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
+    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
+    subnet_recovery.params.upload_method = Some(DataLocation::Remote(upload_node.get_ip_addr()));
+    subnet_recovery.params.wait_for_cup_node = Some(upload_node.get_ip_addr());
 
     if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
@@ -535,22 +544,27 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
     }
 
-    subnet_recovery.params.download_method =
-        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
-    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
-
-    // Mirror production setup by removing admin SSH access from all nodes except the upload and
-    // download nodes (local recovery needs admin access also to the download node).
+    // Mirror production setup by removing admin SSH access from all nodes except the ones we need
+    // for recovery.
+    let admin_nodes = if subnet_recovery.params.readonly_pub_key.is_some() {
+        // If we can deploy read-only access, we only need admin access on the upload node to upload
+        // the state
+        vec![&upload_node]
+    } else {
+        // In cases where we cannot deploy read-only access, we download the state & pool using
+        // admin access instead of read-only, so we need admin access on the download node as well
+        vec![&download_node.0, &upload_node]
+    };
     info!(
         logger,
-        "Remove admin SSH access from all nodes except the upload and download nodes"
+        "Admin nodes: {:?}. Removing admin SSH access from all other nodes",
+        admin_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>()
     );
-    let nodes_except_upload_download_nodes = app_subnet
-        .nodes()
-        .filter(|n| n.node_id != upload_node.node_id && n.node_id != download_node.0.node_id)
-        .collect::<Vec<_>>();
     let mut admin_ssh_sessions = HashMap::new();
-    for node in nodes_except_upload_download_nodes {
+    for node in app_subnet
+        .nodes()
+        .filter(|n| !admin_nodes.iter().any(|an| an.node_id == n.node_id))
+    {
         info!(
             logger,
             "Removing admin SSH access from node {} ({:?})",
@@ -562,33 +576,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
         admin_ssh_sessions.insert(node.node_id, session);
     }
-    // Scenarios where we still need admin access to the download node are:
-    //  - Local recovery
-    //  - Cases where we cannot deploy read-only access, and we need to fall back to admin access
-    // We always need admin access to the upload node, so let us also check that it is not the same
-    // node as the download node.
-    if !cfg.local_recovery
-        && subnet_recovery.params.readonly_pub_key.is_some()
-        && download_node.0.node_id != upload_node.node_id
-    {
-        info!(
-            logger,
-            "Additionally removing admin SSH access from the download node {} ({:?})",
-            download_node.0.node_id,
-            download_node.0.get_ip_addr()
-        );
-        let session =
-            disable_ssh_access_to_node(&download_node.0, SSH_USERNAME, &admin_auth).unwrap();
-        admin_ssh_sessions.insert(download_node.0.node_id, session);
-    } else {
-        // Ensure we can still SSH into the nodes where admin access wasn't removed
-        wait_until_authentication_is_granted(
-            &download_node.0.get_ip_addr(),
-            SSH_USERNAME,
-            &admin_auth,
-        );
+    // Ensure we can still SSH into admin nodes
+    for node in admin_nodes {
+        wait_until_authentication_is_granted(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
     }
-    wait_until_authentication_is_granted(&upload_node.get_ip_addr(), SSH_USERNAME, &admin_auth);
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
@@ -738,7 +729,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
 fn break_subnet(
-    subnet: Box<dyn Iterator<Item = IcNodeSnapshot>>,
+    subnet: &mut dyn Iterator<Item = IcNodeSnapshot>,
     subnet_size: usize,
     recovery: &Recovery,
     logger: &Logger,
