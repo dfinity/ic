@@ -7,7 +7,7 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob, IC_00,
-    InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
+    InstallCodeArgs, LogVisibilityV2, Method, Payload, UpdateSettingsArgs,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
@@ -722,8 +722,8 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
-                Default::default(),
-                4_096_u64,  // Default log size 4 KiB.
+                LogVisibilityV2::default(),
+                4_096_u64,           // Default log size 4 KiB.
                 0u128,
                 0u128,
                 0u128,
@@ -791,8 +791,8 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
-                    Default::default(),
-                    4_096_u64,  // Default log size 4 KiB.
+                    LogVisibilityV2::default(),
+                    4_096_u64,           // Default log size 4 KiB.
                     0u128,
                     0u128,
                     0u128,
