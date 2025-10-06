@@ -136,7 +136,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         let log_capacity = match input.log_capacity {
             Some(ls) => Some(NumBytes::from(
                 ls.0.to_u64()
-                    .ok_or(UpdateSettingsError::LogSizeOutOfRange { provided: ls })?,
+                    .ok_or(UpdateSettingsError::LogCapacityOutOfRange { provided: ls })?,
             )),
             None => None,
         };
@@ -335,7 +335,7 @@ pub enum UpdateSettingsError {
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
-    LogSizeOutOfRange { provided: candid::Nat },
+    LogCapacityOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -385,9 +385,9 @@ impl From<UpdateSettingsError> for UserError {
                 ErrorCode::InvalidManagementPayload,
                 "Duplicate environment variables are not allowed".to_string(),
             ),
-            UpdateSettingsError::LogSizeOutOfRange { provided } => UserError::new(
+            UpdateSettingsError::LogCapacityOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!("Log size expected to be in the range of [0..2^64-1], got {provided}"),
+                format!("Log capacity expected to be in the range of [0..2^64-1], got {provided}"),
             ),
         }
     }
