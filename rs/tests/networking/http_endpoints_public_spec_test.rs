@@ -444,18 +444,19 @@ async fn deploy_wasm_to_fresh_canister(
 }
 
 fn method_name_edge_cases(env: TestEnv) {
-    let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
-    // We use application subnet in this test since its ingress message size limits
-    // are much lower than the maximum allowed size of HTTP requests.
+    // We use an application subnet in this test
+    // since its update call size limits are lower
+    // and thus we can easily test the case of
+    // an update call already failing with HTTP status code 429
+    // and a query call still returning a reject.
     let (_primary, _sys_uc, app_uc) = get_canister_ids(&snapshot);
     let subnet_replica_url = get_app_subnet_replica_url(&snapshot);
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
         for url in [subnet_replica_url, api_bn_url] {
-            info!(logger, "url: {}", url);
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
@@ -491,6 +492,7 @@ fn method_name_edge_cases(env: TestEnv) {
                 // not exported by the canister.
                 // To this end, we use a trivial WASM exporting no method.
                 let trivial_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+                // We deploy a fresh canister to prevent test flakiness due to query caching.
                 let canister_id =
                     deploy_wasm_to_fresh_canister(&agent, app_uc.into(), trivial_wasm.as_slice())
                         .await;
@@ -508,7 +510,6 @@ fn method_name_edge_cases(env: TestEnv) {
                     .unwrap_err();
                 assert!(matches!(err, AgentError::UncertifiedReject { .. }));
 
-                info!(logger, "method name size: 1MiB");
                 let too_long_method_name = 'x'.to_string().repeat(1 << 20);
                 let err = agent
                     .update(&canister_id, &too_long_method_name)
@@ -523,25 +524,41 @@ fn method_name_edge_cases(env: TestEnv) {
                     .unwrap_err();
                 assert!(matches!(err, AgentError::UncertifiedReject { .. }));
 
-                info!(logger, "method name size: 3MiB");
                 let too_long_method_name = 'x'.to_string().repeat(3 << 20);
                 let err = agent
                     .update(&canister_id, &too_long_method_name)
                     .call_and_wait()
                     .await
                     .unwrap_err();
-                match err {
-                    AgentError::HttpError(payload) => {
-                        assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
-                    }
-                    _ => panic!("Unexpected error: {:?}", err),
+                let payload_too_large = |err: AgentError| {
+                    match err {
+                        AgentError::HttpError(payload) => {
+                            assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
+                        }
+                        _ => panic!("Unexpected error: {:?}", err),
+                    };
                 };
+                payload_too_large(err);
                 let err = agent
                     .query(&canister_id, &too_long_method_name)
                     .call()
                     .await
                     .unwrap_err();
                 assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+
+                let too_long_method_name = 'x'.to_string().repeat(5 << 20);
+                let err = agent
+                    .update(&canister_id, &too_long_method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                payload_too_large(err);
+                let err = agent
+                    .query(&canister_id, &too_long_method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                payload_too_large(err);
             }
         }
     });
