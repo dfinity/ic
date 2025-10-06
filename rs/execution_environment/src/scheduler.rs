@@ -1543,7 +1543,7 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_balance = Cycles::zero();
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
-                let mut total_canister_memory_usage = NumBytes::new(0);
+                let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics
@@ -1570,15 +1570,13 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
-                    // TODO(EXC-1722): remove after migrating to v2.
-                    self.metrics
-                        .canister_log_memory_usage
-                        .observe(canister.system_state.canister_log.used_space() as f64);
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
-                    total_canister_memory_usage += canister.memory_usage();
+                    total_canister_memory_allocated_bytes += canister
+                        .memory_allocation()
+                        .allocated_bytes(canister.memory_usage());
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
 
@@ -1612,20 +1610,20 @@ impl Scheduler for SchedulerImpl {
                 // }
 
                 // Check replicated state invariants still hold after the round execution.
-                // We allow `total_canister_memory_usage` to exceed the subnet memory capacity
+                // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
                 // by `total_canister_history_memory_usage` because the canister history
                 // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-                if total_canister_memory_usage
+                if total_canister_memory_allocated_bytes
                     > self.exec_env.subnet_memory_capacity() + total_canister_history_memory_usage
                 {
                     self.metrics.subnet_memory_usage_invariant.inc();
                     warn!(
                         round_log,
-                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Total canister memory allocated bytes {} exceeded subnet memory capacity {}",
                         SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
                         current_round,
                         state.time(),
-                        total_canister_memory_usage,
+                        total_canister_memory_allocated_bytes,
                         self.exec_env.subnet_memory_capacity()
                     );
                 }
