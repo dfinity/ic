@@ -3,7 +3,7 @@ use crate::{
     PageMapType, SharedState, StateManagerMetrics,
     checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest,
-    manifest::{ManifestDelta, RehashManifest},
+    manifest::{BaseManifestInfo, RehashManifest},
     release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -126,7 +126,7 @@ pub(crate) enum TipRequest {
     /// State: latest_checkpoint_state.has_manifest = true
     ComputeManifest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
-        manifest_delta: Option<crate::manifest::ManifestDelta>,
+        base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
         states: Arc<parking_lot::RwLock<SharedState>>,
         persist_metadata_guard: Arc<Mutex<()>>,
     },
@@ -400,18 +400,18 @@ pub(crate) fn spawn_tip_thread(
 
                         TipRequest::ComputeManifest {
                             checkpoint_layout,
-                            manifest_delta,
+                            base_manifest_info,
                             states,
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest_total");
-                            if let Some(manifest_delta) = &manifest_delta {
+                            if let Some(base_manifest_info) = &base_manifest_info {
                                 info!(
                                     log,
                                     "Computing manifest for checkpoint @{} incrementally \
                                         from checkpoint @{}",
                                     checkpoint_layout.height(),
-                                    manifest_delta.base_height
+                                    base_manifest_info.base_height
                                 );
                             } else {
                                 info!(
@@ -428,7 +428,7 @@ pub(crate) fn spawn_tip_thread(
                                 &states,
                                 &state_layout,
                                 &checkpoint_layout,
-                                manifest_delta,
+                                base_manifest_info,
                                 &persist_metadata_guard,
                                 &malicious_flags,
                                 &mut rehash_divergence,
@@ -1379,15 +1379,15 @@ fn handle_compute_manifest_request(
     states: &parking_lot::RwLock<SharedState>,
     state_layout: &StateLayout,
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    manifest_delta: Option<crate::manifest::ManifestDelta>,
+    base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
     persist_metadata_guard: &Arc<Mutex<()>>,
     #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     rehash_divergence: &mut bool,
 ) {
-    let manifest_delta = if *rehash_divergence {
+    let base_manifest_info = if *rehash_divergence {
         None
     } else {
-        manifest_delta
+        base_manifest_info
     };
     let system_metadata = checkpoint_layout
         .system_metadata()
@@ -1425,7 +1425,7 @@ fn handle_compute_manifest_request(
     }
 
     let start = Instant::now();
-    let manifest_is_incremental = manifest_delta.is_some();
+    let manifest_is_incremental = base_manifest_info.is_some();
     let manifest = crate::manifest::compute_manifest(
         thread_pool,
         &metrics.manifest_metrics,
@@ -1433,7 +1433,7 @@ fn handle_compute_manifest_request(
         state_sync_version,
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-        manifest_delta,
+        base_manifest_info.as_ref(),
         RehashManifest::No,
     )
     .unwrap_or_else(|err| {
@@ -1480,8 +1480,6 @@ fn handle_compute_manifest_request(
         checkpoint_layout.height(),
     );
 
-    let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
-
     let bundled_manifest = compute_bundled_manifest(manifest.clone());
 
     #[cfg(feature = "malicious_code")]
@@ -1496,27 +1494,6 @@ fn handle_compute_manifest_request(
         bundled_manifest.root_hash,
         checkpoint_layout.height()
     );
-
-    metrics
-        .manifest_metrics
-        .file_group_chunks
-        .set(num_file_group_chunks as i64);
-
-    let file_group_chunk_id_range_length =
-        (MANIFEST_CHUNK_ID_OFFSET - FILE_GROUP_CHUNK_ID_OFFSET) as usize;
-    if num_file_group_chunks > file_group_chunk_id_range_length / 2 {
-        error!(
-            log,
-            "{}: The number of file group chunks is greater than half of the available ID space in state sync. Number of file group chunks: {}, file group chunk ID range length: {}",
-            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-            num_file_group_chunks,
-            file_group_chunk_id_range_length,
-        );
-        metrics
-            .manifest_metrics
-            .chunk_id_usage_nearing_limits_critical
-            .inc();
-    }
 
     let num_sub_manifest_chunks = bundled_manifest.meta_manifest.sub_manifest_hashes.len();
     metrics
@@ -1547,12 +1524,56 @@ fn handle_compute_manifest_request(
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
 
+    let timer = request_timer(metrics, "observe_build_file_group_chunks");
+    let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
+    metrics
+        .manifest_metrics
+        .file_group_chunks
+        .set(num_file_group_chunks as i64);
+
+    let file_group_chunk_id_range_length =
+        (MANIFEST_CHUNK_ID_OFFSET - FILE_GROUP_CHUNK_ID_OFFSET) as usize;
+    if num_file_group_chunks > file_group_chunk_id_range_length / 2 {
+        error!(
+            log,
+            "{}: The number of file group chunks is greater than half of the available ID space in state sync. Number of file group chunks: {}, file group chunk ID range length: {}",
+            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+            num_file_group_chunks,
+            file_group_chunk_id_range_length,
+        );
+        metrics
+            .manifest_metrics
+            .chunk_id_usage_nearing_limits_critical
+            .inc();
+    }
+    drop(timer);
+
+    let timer = request_timer(metrics, "observe_duplicated_chunks");
+    crate::manifest::observe_duplicated_chunks(&manifest, &metrics.manifest_metrics);
+    drop(timer);
+
+    let timer = request_timer(metrics, "observe_file_sizes");
+    if let Some(base_manifest_info) = &base_manifest_info {
+        crate::manifest::observe_file_sizes(
+            &manifest,
+            &base_manifest_info.base_manifest,
+            &metrics.manifest_metrics,
+        );
+    }
+    drop(timer);
+
     if !manifest_is_incremental {
         *rehash_divergence = false;
         return;
     }
     let _timer = request_timer(metrics, "compute_manifest_rehash");
     let start = Instant::now();
+    let rehash_manifest_info = BaseManifestInfo {
+        base_manifest: manifest.clone(),
+        base_checkpoint: checkpoint_layout.clone(),
+        base_height: checkpoint_layout.height(),
+        target_height: checkpoint_layout.height(),
+    };
     let rehashed_manifest = crate::manifest::compute_manifest(
         thread_pool,
         &metrics.manifest_metrics,
@@ -1560,12 +1581,7 @@ fn handle_compute_manifest_request(
         state_sync_version,
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-        Some(ManifestDelta {
-            base_manifest: manifest.clone(),
-            base_checkpoint: checkpoint_layout.clone(),
-            base_height: checkpoint_layout.height(),
-            target_height: checkpoint_layout.height(),
-        }),
+        Some(&rehash_manifest_info),
         RehashManifest::Yes,
     )
     .unwrap_or_else(|err| {

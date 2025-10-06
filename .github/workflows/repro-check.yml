@@ -51,5 +51,5 @@ jobs:
           # Hermetic python interpreter requires a non-root user to be built.
           sudo -u ubuntu bash -c '
             curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/scripts/repro-check |
-            python3 - -c ${{ inputs.github_sha }} --setupos --guestos --hostos
+            python3 - -c ${{ inputs.github_sha }}
           '

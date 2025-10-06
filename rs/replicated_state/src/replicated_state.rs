@@ -26,7 +26,7 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
@@ -832,22 +832,19 @@ impl ReplicatedState {
             mut best_effort_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
-            wasm_chunk_store_memory_usage,
         ) = self
             .canisters_iter()
             .map(|canister| {
                 (
-                    match canister.memory_allocation() {
-                        MemoryAllocation::Reserved(bytes) => bytes,
-                        MemoryAllocation::BestEffort => canister.execution_memory_usage(),
-                    },
+                    canister
+                        .memory_allocation()
+                        .allocated_bytes(canister.memory_usage()),
                     canister
                         .system_state
                         .guaranteed_response_message_memory_usage(),
                     canister.system_state.best_effort_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
-                    canister.wasm_chunk_store_memory_usage(),
                 )
             })
             .reduce(|accum, val| {
@@ -857,7 +854,6 @@ impl ReplicatedState {
                     accum.2 + val.2,
                     accum.3 + val.3,
                     accum.4 + val.4,
-                    accum.5 + val.5,
                 )
             })
             .unwrap_or_default();
@@ -867,13 +863,8 @@ impl ReplicatedState {
         best_effort_message_memory_taken +=
             (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
 
-        let canister_snapshots_memory_taken = self.canister_snapshots.memory_taken();
-
         MemoryTaken {
-            execution: raw_memory_taken
-                + canister_history_memory_taken
-                + wasm_chunk_store_memory_usage
-                + canister_snapshots_memory_taken,
+            execution: raw_memory_taken,
             guaranteed_response_messages: guaranteed_response_message_memory_taken,
             best_effort_messages: best_effort_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
