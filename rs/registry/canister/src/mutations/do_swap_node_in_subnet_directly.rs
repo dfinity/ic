@@ -249,7 +249,7 @@ mod tests {
 
     // Get the test data needed for most tests.
     // Registry, node id that exists, and the node provider id
-    fn setup_test_data() -> (Registry, NodeId, PrincipalId) {
+    fn setup_registry_for_test() -> (Registry, NodeId, PrincipalId) {
         let node_operator_id = PrincipalId::new_user_test_id(10_001);
         let node_provider_id = PrincipalId::new_user_test_id(20_002);
 
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn feature_flag_check_works() {
-        let (mut registry, node_id, _) = setup_test_data();
+        let (mut registry, node_id, _) = setup_registry_for_test();
         let _temp = temporarily_disable_node_swapping();
 
         let payload = valid_payload(node_id);
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn valid_payload_test() {
-        let (mut registry, node_id, _) = setup_test_data();
+        let (mut registry, node_id, _) = setup_registry_for_test();
 
         let _temp = temporarily_enable_node_swapping();
         // Create a registry with nodes and node operators
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn invalid_payloads() {
-        let (mut registry, node_id, _) = setup_test_data();
+        let (mut registry, node_id, _) = setup_registry_for_test();
 
         let _temp = temporarily_enable_node_swapping();
 
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn test_do_swap_node_in_subnet_directly_fails_when_rate_limits_exceeded() {
-        let (mut registry, node_id, valid_np) = setup_test_data();
+        let (mut registry, node_id, valid_np) = setup_registry_for_test();
 
         let _temp = temporarily_enable_node_swapping();
 

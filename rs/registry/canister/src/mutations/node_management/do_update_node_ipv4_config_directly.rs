@@ -143,7 +143,7 @@ mod tests {
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
-            1, // node count
+            2, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -375,19 +375,24 @@ mod tests {
             ipv4_config: Some(ipv4_config.clone()),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        registry
+            .do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time())
+            .expect("failed to do update node ipv4 config");
 
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id: node_id_2,
             ipv4_config: Some(ipv4_config),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        registry
+            .do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time())
+            .expect("failed to do update node ipv4 config");
     }
 
     #[test]
     fn test_do_update_node_ipv4_config_directly_fails_when_rate_limits_exceeded() {
-        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
+        let (mut registry, node_ids, node_operator_id, node_provider_id) =
+            setup_registry_for_test();
 
         let node_id = node_ids[0];
         let ipv4_config = init_ipv4_config();
@@ -399,9 +404,9 @@ mod tests {
         let now = now_system_time();
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(node_operator_id, now);
+        let available = get_available_node_provider_op_capacity(node_provider_id, now);
         let reservation =
-            try_reserve_node_provider_op_capacity(now, node_operator_id, available).unwrap();
+            try_reserve_node_provider_op_capacity(now, node_provider_id, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
         let error = registry
