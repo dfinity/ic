@@ -214,7 +214,7 @@ fn cmd_get_recovery_cup(
     player: &crate::player::Player,
     cmd: &crate::cmd::GetRecoveryCupCmd,
 ) -> Result<(), String> {
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
+    use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
     use ic_types::{consensus::HasHeight, crypto::threshold_sig::ni_dkg::NiDkgTag};
 
     let context_time = ic_types::time::current_time();
