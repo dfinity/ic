@@ -4,15 +4,15 @@ mod tests;
 use crate::lifecycle::init::Network;
 
 // See https://github.com/dogecoin/dogecoin/blob/7237da74b8c356568644cbe4fba19d994704355b/src/chainparams.cpp#L167
-const DOGE_MAINNET_PREFIX: u8 = 30;
+const DOGE_MAINNET_P2PKH_PREFIX: u8 = 30;
 const DOGE_MAINNET_P2SH_PREFIX: u8 = 22;
 
 // See https://github.com/dogecoin/dogecoin/blob/7237da74b8c356568644cbe4fba19d994704355b/src/chainparams.cpp#L327
-const DOGE_TESTNET_PREFIX: u8 = 113;
+const DOGE_TESTNET_P2PKH_PREFIX: u8 = 113;
 const DOGE_TESTNET_P2SH_PREFIX: u8 = 196;
 
 // See https://github.com/dogecoin/dogecoin/blob/7237da74b8c356568644cbe4fba19d994704355b/src/chainparams.cpp#L472
-const DOGE_REGTEST_PREFIX: u8 = 111;
+const DOGE_REGTEST_P2PKH_PREFIX: u8 = 111;
 const DOGE_REGTEST_P2SH_PREFIX: u8 = 196;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -71,25 +71,25 @@ impl DogecoinAddress {
         data.copy_from_slice(&bytes[1..21]);
 
         match (bytes[0], network) {
-            (DOGE_MAINNET_PREFIX, Network::Mainnet)
-            | (DOGE_TESTNET_PREFIX, Network::Testnet)
-            | (DOGE_REGTEST_PREFIX, Network::Regtest) => Ok(Self::P2pkh(data)),
+            (DOGE_MAINNET_P2PKH_PREFIX, Network::Mainnet)
+            | (DOGE_TESTNET_P2PKH_PREFIX, Network::Testnet)
+            | (DOGE_REGTEST_P2PKH_PREFIX, Network::Regtest) => Ok(Self::P2pkh(data)),
             (DOGE_MAINNET_P2SH_PREFIX, Network::Mainnet)
             | (DOGE_TESTNET_P2SH_PREFIX, Network::Testnet)
             | (DOGE_REGTEST_P2SH_PREFIX, Network::Regtest) => Ok(Self::P2sh(data)),
-            (DOGE_MAINNET_PREFIX, _) | (DOGE_MAINNET_P2SH_PREFIX, _) => {
+            (DOGE_MAINNET_P2PKH_PREFIX, _) | (DOGE_MAINNET_P2SH_PREFIX, _) => {
                 Err(ParseAddressError::WrongNetwork {
                     actual: Network::Mainnet,
                     expected: *network,
                 })
             }
-            (DOGE_TESTNET_PREFIX, _) | (DOGE_TESTNET_P2SH_PREFIX, _) => {
+            (DOGE_TESTNET_P2PKH_PREFIX, _) | (DOGE_TESTNET_P2SH_PREFIX, _) => {
                 Err(ParseAddressError::WrongNetwork {
                     actual: Network::Testnet,
                     expected: *network,
                 })
             }
-            (DOGE_REGTEST_PREFIX, _) => Err(ParseAddressError::WrongNetwork {
+            (DOGE_REGTEST_P2PKH_PREFIX, _) => Err(ParseAddressError::WrongNetwork {
                 actual: Network::Regtest,
                 expected: *network,
             }),
