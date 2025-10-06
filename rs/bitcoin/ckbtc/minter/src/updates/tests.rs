@@ -40,6 +40,7 @@ mod update_balance {
         mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
         let test_utxo = utxo();
         let amount = test_utxo.value - read_state(|s| s.check_fee);
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![test_utxo.clone()]);
         // The expectation below also ensures check_transaction is called exactly 3 times
         expect_check_transaction_returning_responses(
@@ -92,6 +93,7 @@ mod update_balance {
         mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
         expect_check_transaction_returning(
             &mut runtime,
@@ -144,6 +146,7 @@ mod update_balance {
         mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
         expect_check_transaction_returning(
             &mut runtime,
@@ -215,6 +218,7 @@ mod update_balance {
         let minted_amount = quarantined_utxo.value - check_fee;
         let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
         expect_check_transaction_returning(
             &mut runtime,
@@ -280,6 +284,7 @@ mod update_balance {
         let minted_amount = utxo.value - check_fee;
         let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(
             &mut runtime,
             account,
@@ -344,6 +349,7 @@ mod update_balance {
             };
             let mut runtime = MockCanisterRuntime::new();
             mock_schedule_now_process_logic(&mut runtime);
+            mock_derive_user_address(&mut runtime, account);
             mock_get_utxos_for_account(&mut runtime, account, account_utxos);
             mock_time(
                 &mut runtime,
@@ -741,6 +747,7 @@ mod update_balance {
             owner: Some(account.owner),
             subaccount: account.subaccount,
         };
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
@@ -897,6 +904,13 @@ mod update_balance {
             time_counter += 1;
             result.as_nanos_since_unix_epoch()
         });
+    }
+
+    fn mock_derive_user_address(runtime: &mut MockCanisterRuntime, account: Account) {
+        runtime
+            .expect_derive_user_address()
+            .withf(move |_state, account_| account_ == &account)
+            .return_const("bc1p3jcdy9fn2g68jzafdlayrkvsltq8ttm7y2vkhxpxhxr9yw3jukks03ufup");
     }
 
     fn mock_get_utxos_for_account(
