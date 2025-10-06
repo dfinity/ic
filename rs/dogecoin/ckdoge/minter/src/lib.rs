@@ -53,11 +53,11 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     async fn mint_ckbtc(
         &self,
-        _amount: u64,
-        _to: Account,
-        _memo: Memo,
+        amount: u64,
+        to: Account,
+        memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
-        todo!()
+        ic_ckbtc_minter::updates::update_balance::mint(amount, to, memo).await
     }
 
     async fn sign_with_ecdsa(

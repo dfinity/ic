@@ -357,7 +357,7 @@ async fn check_utxo<R: CanisterRuntime>(
 }
 
 /// Mint an amount of ckBTC to an Account.
-pub(crate) async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError> {
+pub async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError> {
     debug_assert!(memo.0.len() <= crate::CKBTC_LEDGER_MEMO_SIZE as usize);
     let client = ICRC1Client {
         runtime: CdkRuntime,
