@@ -482,7 +482,6 @@ impl CanisterHttpPoolManagerImpl {
                     ))
                 } else {
                     // Update the set of existing signed requests.
-                    //TODO(gossip): fully replicated shares should not have a response.
                     existing_signed_requests.insert(key_from_share(share));
                     self.metrics.shares_validated.inc();
                     Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))

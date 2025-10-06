@@ -830,7 +830,9 @@ fn divergence_error_message() {
 
 #[test]
 fn non_replicated_request_response_coming_in_gossip_payload_created() {
-    //TODO(urgent): say what this test does
+    // This test ensures that when a non-replicated request is delegated to
+    // a different node than the block maker, and the response is gossiped
+    // back to the block maker, the payload builder correctly includes the response.
 
     test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
         // In the test setup, the block maker is node 0. We'll make node 1 delegated.
@@ -872,10 +874,9 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
         let (response, metadata) = test_response_and_metadata(callback_id.get());
         let share = metadata_to_share(node_id_to_u64(delegated_node_id), &metadata);
 
-        // Add the artifact to the pool. 
+        // Add the artifact to the pool.
         {
             let mut pool_access = canister_http_pool.write().unwrap();
-            add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
             add_received_artifacts_to_pool(
                 pool_access.deref_mut(),
                 vec![CanisterHttpResponseArtifact {
@@ -912,7 +913,7 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
             "Expected exactly one response in the payload"
         );
 
-        // The response must contain EXACTLY ONE signature, proving the "extra" share was ignored.
+        // The response must contain one seignature.
         let proof = &parsed_payload.responses[0].proof;
         assert_eq!(
             proof.signature.signatures_map.len(),
@@ -1589,10 +1590,10 @@ pub(crate) fn add_received_artifacts_to_pool(
             peer_id: node_test_id(0),
             timestamp: UNIX_EPOCH,
         });
-        //TODO(urgent): figure out why commenting this out still passes the test. 
-        // pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
-        //     artifact.share,
-        // )]);
+
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
+            artifact.share,
+        )]);
     }
 }
 
