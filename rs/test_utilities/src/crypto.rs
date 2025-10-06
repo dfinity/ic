@@ -5,10 +5,10 @@ use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
-    IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
-    LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
+    DummySizedVaultResponse, IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult,
+    IDkgProtocol, KeyManager, LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier,
+    ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
@@ -564,4 +564,10 @@ impl VetKdProtocol for CryptoReturningOk {
 
 pub fn mock_random_number_generator() -> Box<dyn RngCore> {
     Box::new(StdRng::from_seed([0u8; 32]))
+}
+
+impl DummySizedVaultResponse for CryptoReturningOk {
+    fn dummy_vault_response(&self, _input: Vec<u8>, _response_size_bytes: usize) -> Vec<u8> {
+        vec![]
+    }
 }
