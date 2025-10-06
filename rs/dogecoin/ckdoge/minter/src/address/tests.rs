@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::io::BufReader;
 use std::path::PathBuf;
 
-//https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_valid.json
+// Content copied from https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_valid.json
 const VALID_BASE58_KEYS: &str = "base58_keys_valid.json";
-// https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_invalid.json
+// Content copied from https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_invalid.json
 const INVALID_BASE58_KEYS: &str = "base58_keys_invalid.json";
 
 #[test]
