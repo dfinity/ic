@@ -13,6 +13,8 @@ on the process that this file is part of, see
 * Allow updating known neuron through RegisterKnownNeuron without having to change its name.
 * Added `committed_topics` to the `KnownNeuronData` that can be submitted as part of the
   `RegisterKnownNeuron` proposal.
+* Add an API to list neuron votes given a specific neuron id. In the short term it only works for
+  known neurons as only known neuron votes are recorded.
 
 ## Changed
 

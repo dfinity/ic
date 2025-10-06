@@ -5,17 +5,18 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
-    DeregisterKnownNeuron, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse,
+    DeregisterKnownNeuron, GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse,
     MakeProposalRequest, Motion, ProposalActionRequest, TopicToFollow, Vote,
-    manage_neuron_response::Command,
+    governance_error::ErrorType, manage_neuron_response::Command,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
         list_known_neurons, nns_claim_or_refresh_neuron, nns_deregister_known_neuron,
         nns_governance_get_neuron_info, nns_governance_make_proposal, nns_increase_dissolve_delay,
-        nns_list_neuron_votes, nns_register_known_neuron, nns_send_icp_to_claim_or_refresh_neuron,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        nns_list_neuron_votes, nns_list_neuron_votes_or_panic, nns_register_known_neuron,
+        nns_send_icp_to_claim_or_refresh_neuron, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -348,7 +349,7 @@ fn test_known_neurons_voting_history() {
 
     // Step 6: Verify the votes of neuron 1 (including abstentions).
     assert_eq!(
-        nns_list_neuron_votes(&state_machine, neuron_id_1),
+        nns_list_neuron_votes_or_panic(&state_machine, neuron_id_1),
         vec![
             (proposal_id_not_voted_by_neuron_1, Vote::Unspecified),
             (proposal_id_voted_by_neuron_1, Vote::Yes),
@@ -357,5 +358,11 @@ fn test_known_neurons_voting_history() {
     );
 
     // Step 7: Verify that there are no votes for neuron 2 as it's not a known neuron.
-    assert_eq!(nns_list_neuron_votes(&state_machine, neuron_id_2), vec![]);
+    assert_eq!(
+        nns_list_neuron_votes(&state_machine, neuron_id_2),
+        Err(GovernanceError {
+            error_type: ErrorType::PreconditionFailed as i32,
+            error_message: "Neuron is not a known neuron".to_string(),
+        })
+    );
 }

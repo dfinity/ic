@@ -2044,7 +2044,7 @@ impl Governance {
     pub fn list_neuron_votes(
         &self,
         request: ListNeuronVotesRequest,
-    ) -> Result<NeuronVotes, api::GovernanceError> {
+    ) -> Result<NeuronVotes, GovernanceError> {
         let ListNeuronVotesRequest {
             neuron_id,
             before_proposal,
@@ -2054,6 +2054,15 @@ impl Governance {
             ErrorType::PreconditionFailed,
             "Neuron ID is required",
         ))?;
+        // For now, we only support listing votes for known neurons. In the future when we record
+        // votes for all neurons, we can enhance this to check the caller if the neuron is not a
+        // known neuron.
+        if !self.neuron_store.is_known_neuron(neuron_id) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Neuron is not a known neuron",
+            ));
+        }
 
         let votes = with_voting_history_store(|voting_history| {
             voting_history.list_neuron_votes(neuron_id, before_proposal, limit)

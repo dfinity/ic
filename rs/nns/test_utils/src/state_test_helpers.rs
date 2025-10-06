@@ -2306,7 +2306,7 @@ pub fn nns_register_known_neuron(
         ic_nns_governance_api::manage_neuron_response::Command::MakeProposal(response) => {
             let proposal_id = response.proposal_id.unwrap();
             nns_wait_for_proposal_execution(state_machine, proposal_id.id);
-            return proposal_id;
+            proposal_id
         }
         other => panic!("Expected MakeProposal response but got: {other:?}"),
     }
@@ -2348,7 +2348,7 @@ pub fn nns_deregister_known_neuron(
 pub fn nns_list_neuron_votes(
     state_machine: &StateMachine,
     neuron_id: NeuronId,
-) -> Vec<(ProposalId, Vote)> {
+) -> ListNeuronVotesResponse {
     let request = ListNeuronVotesRequest {
         neuron_id: Some(neuron_id),
         before_proposal: None,
@@ -2361,9 +2361,14 @@ pub fn nns_list_neuron_votes(
         Encode!(&request).unwrap(),
     )
     .expect("Error calling list_neuron_votes");
-    let response = Decode!(&response, ListNeuronVotesResponse)
-        .expect("Error decoding ListNeuronVotesResponse");
-    response
+    Decode!(&response, ListNeuronVotesResponse).expect("Error decoding ListNeuronVotesResponse")
+}
+
+pub fn nns_list_neuron_votes_or_panic(
+    state_machine: &StateMachine,
+    neuron_id: NeuronId,
+) -> Vec<(ProposalId, Vote)> {
+    nns_list_neuron_votes(state_machine, neuron_id)
         .unwrap()
         .votes
         .unwrap()

@@ -560,7 +560,11 @@ fn get_restore_aging_summary() -> RestoreAgingSummary {
 
 #[query]
 fn list_neuron_votes(request: ListNeuronVotesRequest) -> ListNeuronVotesResponse {
-    with_governance(|governance| governance.list_neuron_votes(request))
+    with_governance(|governance| {
+        governance
+            .list_neuron_votes(request)
+            .map_err(GovernanceError::from)
+    })
 }
 
 #[query(
