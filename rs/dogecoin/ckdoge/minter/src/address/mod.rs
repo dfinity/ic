@@ -32,11 +32,11 @@ pub enum ParseAddressError {
 
 impl DogecoinAddress {
     pub fn parse(address: &str, network: &Network) -> Result<Self, ParseAddressError> {
-        if address.len() > 125 {
-            // 1 byte requires at most 5 base-58 characters
-            // Decoded address must be 25 bytes.
+        // Same limit as
+        // https://github.com/dfinity/rust-dogecoin/blob/b24563ead9c61522e05b144d527c4b114befc301/bitcoin/src/dogecoin/address/mod.rs#L534
+        if address.len() > 50 {
             return Err(ParseAddressError::MalformedAddress(format!(
-                "Expected an address with at most 125 base-58 characters, got {}",
+                "Expected an address with at most 50 base-58 characters, got {}",
                 address.len()
             )));
         }
