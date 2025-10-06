@@ -17,6 +17,7 @@ use ic_ckbtc_minter::{
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 
+use ic_ckbtc_minter::state::UtxoCheckStatus;
 pub use ic_ckbtc_minter::{
     OutPoint, Page, Txid, Utxo,
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
@@ -121,6 +122,16 @@ impl CanisterRuntime for DogeCanisterRuntime {
     ) -> Result<BtcAddressCheckStatus, CallError> {
         // No OFAC checklist for Dogecoin addresses
         Ok(BtcAddressCheckStatus::Clean)
+    }
+
+    async fn check_utxo(
+        &self,
+        _btc_checker_principal: Option<Principal>,
+        _utxo: &Utxo,
+        _args: &UpdateBalanceArgs,
+    ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
+        // No OFAC checklist for Dogecoin addresses
+        Ok(UtxoCheckStatus::Clean)
     }
 }
 

@@ -57,6 +57,13 @@ impl Setup {
             Encode!(&ic_bitcoin_canister_mock::Network::Mainnet).unwrap(),
             Some(NNS_ROOT_PRINCIPAL),
         );
+        env.update_call(
+            dogecoin,
+            NNS_ROOT_PRINCIPAL,
+            "set_tip_height",
+            Encode!(&101_u32).unwrap(),
+        )
+        .unwrap();
 
         let fiduciary_subnet = env.topology().get_fiduciary().unwrap();
 
