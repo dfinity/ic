@@ -3614,12 +3614,7 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
         .unwrap();
     test.install_canister(canister_id, binary).unwrap();
     let initial_memory_used = test.state().memory_taken().execution();
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
-    assert_eq!(
-        initial_memory_used.get(),
-        memory_allocation.get() + canister_history_memory as u64
-    );
+    assert_eq!(initial_memory_used.get(), memory_allocation.get(),);
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);

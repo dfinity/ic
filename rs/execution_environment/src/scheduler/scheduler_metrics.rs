@@ -31,7 +31,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
-    pub(super) canister_log_memory_usage: Histogram, // TODO(EXC-1722): remove after migrating to v2.
     pub(super) canister_log_memory_usage_v2: Histogram,
     pub(super) canister_log_memory_usage_v3: Histogram,
     pub(super) canister_log_delta_memory_usage: Histogram,
@@ -162,12 +161,6 @@ impl SchedulerMetrics {
             canister_binary_size: memory_histogram(
                 "canister_binary_size_bytes",
                 "Canisters Wasm binary size distribution in bytes.",
-                metrics_registry,
-            ),
-            // TODO(EXC-1722): remove after migrating to v2.
-            canister_log_memory_usage: memory_histogram(
-                "canister_log_memory_usage_bytes",
-                "Canisters log memory usage distribution in bytes.",
                 metrics_registry,
             ),
             canister_log_memory_usage_v2: metrics_registry.histogram(

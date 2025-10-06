@@ -7451,6 +7451,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ckdoge-minter"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "async-trait",
+ "candid",
+ "candid_parser",
+ "ic-cdk",
+ "ic-ckbtc-minter",
+ "ic-ckdoge-minter-test-utils",
+ "icrc-ledger-types",
+ "pocket-ic",
+ "serde",
+]
+
+[[package]]
+name = "ic-ckdoge-minter-test-utils"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-ckdoge-minter",
+ "ic-icrc1-ledger",
+ "ic-management-canister-types",
+ "icrc-ledger-types",
+ "pocket-ic",
+]
+
+[[package]]
 name = "ic-cketh-minter"
 version = "0.9.0"
 dependencies = [
@@ -17994,7 +18022,6 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
- "consensus-upgrade-system-tests",
  "ic-agent",
  "ic-base-types",
  "ic-nns-constants",
