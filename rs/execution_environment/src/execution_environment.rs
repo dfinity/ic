@@ -3,7 +3,7 @@ use crate::{
     canister_manager::{
         CanisterManager,
         types::{
-            CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
+            CanisterManagerError, DtsInstallCodeResult, InstallCodeContext,
             PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
         },
     },
@@ -65,7 +65,6 @@ use ic_replicated_state::{
         SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
         SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
-    page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::{
     CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
@@ -328,7 +327,7 @@ enum StopCanisterReply {
 pub struct ExecutionEnvironment {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
-    canister_manager: CanisterManager,
+    canister_manager: Arc<CanisterManager>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     metrics: ExecutionEnvironmentMetrics,
     call_tree_metrics: CallTreeMetricsImpl,
@@ -371,57 +370,22 @@ impl ExecutionEnvironment {
     pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
+        canister_manager: Arc<CanisterManager>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        compute_capacity: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         scheduler_cores: usize,
-        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        heap_delta_rate_limit: NumBytes,
-        upload_wasm_chunk_instructions: NumInstructions,
-        canister_snapshot_baseline_instructions: NumInstructions,
-        canister_snapshot_data_baseline_instructions: NumInstructions,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
             config.canister_sandboxing_flag == FlagStatus::Enabled,
             "Deterministic time slicing works only with canister sandboxing."
         );
-        let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
-            config.subnet_memory_capacity,
-            config.default_provisional_cycles_balance,
-            config.default_freeze_threshold,
-            own_subnet_id,
-            own_subnet_type,
-            config.max_controllers,
-            compute_capacity,
-            config.rate_limiting_of_instructions,
-            config.allocatable_compute_capacity_in_percent,
-            config.rate_limiting_of_heap_delta,
-            heap_delta_rate_limit,
-            upload_wasm_chunk_instructions,
-            config.embedders_config.wasm_max_size,
-            canister_snapshot_baseline_instructions,
-            canister_snapshot_data_baseline_instructions,
-            config.default_wasm_memory_limit,
-            config.max_number_of_snapshots_per_canister,
-            config.max_environment_variables,
-            config.max_environment_variable_name_length,
-            config.max_environment_variable_value_length,
-        );
+
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
-        let canister_manager = CanisterManager::new(
-            Arc::clone(&hypervisor),
-            log.clone(),
-            canister_manager_config,
-            Arc::clone(&cycles_account_manager),
-            Arc::clone(&ingress_history_writer),
-            fd_factory,
-            config.environment_variables,
-        );
         // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
         // 0.1 ms between deallocations, to spread out the load on the memory allocator
         // (the 0.1 ms was determined by running a benchmark with thousands of messages
