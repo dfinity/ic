@@ -26,11 +26,14 @@ use ic_types::{
 };
 use std::{
     cell::RefCell,
+    cmp::max,
     collections::{BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+const MINIMUM_ALLOWED_RESPONSE_BYTES: u64 = 1024; // 1KB
 
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
@@ -425,10 +428,15 @@ impl CanisterHttpPoolManagerImpl {
 
                             //TODO: we should also check the response size when validating the payload.
 
+                            // An honest replica enforces that response.content.count_bytes() does not exceed max_response_bytes
+                            // when the content is `Success`. However it doesn't enroce anything in the case of `Failure`.
+                            // As we still want to set a limit for failure, we enforce 1KB, which si reasonable for 
+                            // an error message.
+
                             let response_size = response.content.count_bytes() as u64;
 
                             let max_response_size = match context.max_response_bytes {
-                                Some(response_size) => response_size.get(),
+                                Some(response_size) => max(MINIMUM_ALLOWED_RESPONSE_BYTES, response_size.get()),
                                 None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
                             };
 
@@ -595,6 +603,7 @@ pub mod test {
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_consensus_utils::crypto::SignVerify;
+    use ic_error_types::RejectCode;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
@@ -1265,7 +1274,7 @@ pub mod test {
                     .return_const(Err(TryReceiveError::Empty));
 
                 let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
-                let max_response_bytes = NumBytes::from(100);
+                let max_response_bytes = NumBytes::from(2000);
 
                 // 1. Set up a state context with a specific max_response_bytes limit.
                 let request_context = CanisterHttpRequestContext {
@@ -1413,6 +1422,130 @@ pub mod test {
 
                     assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
                 }
+            })
+        });
+    }
+
+    #[test]
+    fn test_reject_message_is_valid_when_context_limit_is_too_low() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                use ic_types::canister_http::CanisterHttpReject;
+
+                const MINIMUM_ALLOWED_RESPONSE_BYTES: u64 = 1024;
+                // This value is intentionally lower than the reject message size.
+                const LOW_MAX_RESPONSE_BYTES: u64 = 10;
+
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+
+                // 1. Set up a state context with a very low max_response_bytes limit.
+                let request_context = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: Some(NumBytes::from(LOW_MAX_RESPONSE_BYTES)),
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request_context,
+                        )]))),
+                    ));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager.clone(),
+                    Arc::new(Mutex::new(Box::new(shim_mock))),
+                    crypto.clone(),
+                    pool.get_cache(),
+                    replica_config.clone(),
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // 2. Create a reject message that is larger than the low limit, but smaller
+                //    than the minimum floor.
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                let reject_message =
+                    "This error message is definitely longer than 10 bytes.".to_string();
+                assert!(reject_message.len() as u64 > LOW_MAX_RESPONSE_BYTES);
+                assert!(reject_message.len() as u64 <= MINIMUM_ALLOWED_RESPONSE_BYTES);
+
+                let reject_content = CanisterHttpReject {
+                    reject_code: RejectCode::SysFatal,
+                    message: reject_message,
+                };
+
+                let response = CanisterHttpResponse {
+                    id: CallbackId::from(0),
+                    content: CanisterHttpResponseContent::Reject(reject_content),
+                    ..empty_canister_http_response(0)
+                };
+
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    replica_version: ReplicaVersion::default(),
+                };
+
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    signature: crypto
+                        .sign(
+                            &response_metadata,
+                            delegated_node_id,
+                            RegistryVersion::from(1),
+                        )
+                        .unwrap(),
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: Some(response),
+                    },
+                    peer_id: delegated_node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                // 3. Call validate_shares and assert that the share is considered VALID.
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                // The share should be moved to validated because the effective limit is
+                // max(1024, 10) = 1024, and the message is smaller than that.
+                assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
             })
         });
     }
