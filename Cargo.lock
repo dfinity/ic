@@ -10817,13 +10817,13 @@ dependencies = [
  "ic-utils-thread",
  "lazy_static",
  "maplit",
+ "messaging-test",
  "mockall",
  "pretty_assertions",
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "random-traffic-test",
  "serde",
  "slog",
  "test-strategy 0.3.1",
@@ -17489,6 +17489,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "messaging-test"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-error-types 0.2.0",
+ "ic-types",
+ "proptest",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20296,22 +20312,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "random-traffic-test"
-version = "0.9.0"
-dependencies = [
- "candid",
- "futures",
- "ic-base-types",
- "ic-cdk",
- "ic-error-types 0.2.0",
- "ic-types",
- "proptest",
- "rand 0.8.5",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]

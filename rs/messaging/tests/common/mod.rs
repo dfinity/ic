@@ -1,3 +1,107 @@
+use canister_test::Project;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_state_machine_tests::{StateMachine, SubmitIngressError, UserError};
+use ic_types::{
+    ingress::{IngressState, IngressStatus, WasmResult},
+    messages::MessageId,
+};
+use messaging_test::{Call, Message, Reply, Response, decode_reply, encode_message};
+use std::sync::Arc;
+
+pub enum PulseStatus {
+    // The pulse has been submitted; the outcome is not known yet.
+    Submitted(CanisterId, Message, MessageId),
+    // The pulse has been processed successfully.
+    Completed(CanisterId, Message, Reply),
+    // The pulse was rejected by the destination canister.
+    Rejected(CanisterId, Message, String),
+    // The pulse triggered an error during execution, i.e. the destination canister trapped.
+    Failed(CanisterId, Message, UserError),
+}
+
+impl PulseStatus {
+    fn update(self, env: &StateMachine) -> Self {
+        if let Self::Submitted(receiver, msg, msg_id) = self {
+            match env.ingress_status(&msg_id) {
+                // The pulse has been processed successfully.
+                IngressStatus::Known {
+                    state: IngressState::Completed(WasmResult::Reply(blob)),
+                    ..
+                } => Self::Completed(receiver, msg, decode_reply(blob)),
+                // The pulse was rejected by the `receiver`.
+                IngressStatus::Known {
+                    state: IngressState::Completed(WasmResult::Reject(reject_msg)),
+                    ..
+                } => Self::Rejected(receiver, msg, reject_msg),
+                // The pulse triggered an error during execution.
+                IngressStatus::Known {
+                    state: IngressState::Failed(user_error),
+                    ..
+                } => Self::Failed(receiver, msg, user_error),
+                // There is no update for the pulse yet.
+                _ => Self::Submitted(receiver, msg, msg_id),
+            }
+        } else {
+            self
+        }
+    }
+}
+
+struct TestSubnet {
+    env: Arc<StateMachine>,
+    pulses: Vec<PulseStatus>,
+}
+
+impl TestSubnet {
+    /// Executes a round on this state machine and advances time by one second.
+    pub fn execute_round(&self) {
+        self.env.execute_round();
+        self.env.advance_time(std::time::Duration::from_secs(1));
+    }
+
+    /// Attempts to submit a new pulse; executes a round on the state machine if successful.
+    pub fn pulse(
+        &mut self,
+        receiver: CanisterId,
+        msg: Message,
+    ) -> Result<(), (Message, SubmitIngressError)> {
+        // Try signing up a new pulse.
+        let pulse = match self.env.submit_ingress_as(
+            PrincipalId::new_anonymous(),
+            receiver,
+            "pulse",
+            messaging_test::encode_message(&msg, 0),
+        ) {
+            Ok(msg_id) => PulseStatus::Submitted(receiver, msg, msg_id),
+            Err(err) => {
+                return Err((msg, err));
+            }
+        };
+        self.pulses.push(pulse);
+
+        // Make progress on the subnet and return.
+        self.execute_round();
+        Ok(())
+    }
+
+    /// Iterates through all the pulses and attempts to update their status.
+    pub fn update_results(&mut self) {
+        let pulses = std::mem::take(&mut self.pulses)
+            .into_iter()
+            .map(|status| status.update(&self.env))
+            .collect::<Vec<_>>();
+        self.pulses = pulses;
+    }
+
+    /// Returns the number of pulses whose outcome is not known yet.
+    pub fn awaiting_pulses_count(&self) -> u64 {
+        self.pulses
+            .iter()
+            .map(|status| matches!(status, PulseStatus::Submitted(..)) as u64)
+            .sum()
+    }
+}
+
 /*
 use candid::{Decode, Encode};
 use canister_test::Project;
