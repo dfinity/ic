@@ -994,12 +994,10 @@ pub fn execute_response(
     };
 
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(..)
-        | CallOrigin::CanisterUpdate(..)
-        | CallOrigin::SystemTask => FuncRef::UpdateClosure(closure),
-        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
-            FuncRef::QueryClosure(closure)
+        CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+            FuncRef::UpdateClosure(closure)
         }
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => FuncRef::QueryClosure(closure),
     };
 
     let api_type = match &response.response_payload {
@@ -1085,9 +1083,9 @@ fn execute_response_cleanup(
         .instruction_limits
         .update(instructions_left);
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(..)
-        | CallOrigin::CanisterUpdate(..)
-        | CallOrigin::SystemTask => FuncRef::UpdateClosure(cleanup_closure),
+        CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+            FuncRef::UpdateClosure(cleanup_closure)
+        }
         CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
             FuncRef::QueryClosure(cleanup_closure)
         }
