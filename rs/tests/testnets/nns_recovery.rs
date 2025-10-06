@@ -195,7 +195,7 @@ fn log_instructions(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_timeout_per_test(Duration::from_secs(60 * 60))
+        .with_timeout_per_test(Duration::from_secs(90 * 60))
         .with_setup(setup)
         .add_test(systest!(log_instructions))
         .execute_from_args()?;
