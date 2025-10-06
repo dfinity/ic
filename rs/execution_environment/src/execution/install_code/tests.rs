@@ -334,13 +334,13 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     // only a few canisters.
     let available_wasm_custom_sections_memory = 1024; // 1 KiB
 
-    // This value might need adjustment if something changes in the canister's
-    // wasm that gets installed in the test.
     let canister_history_memory_for_creation =
         size_of::<CanisterChange>() + size_of::<PrincipalId>();
     let canister_history_memory_for_install = size_of::<CanisterChange>();
     let canister_history_memory_per_canister =
         canister_history_memory_for_creation + canister_history_memory_for_install;
+    // This value might need adjustment if something changes in the canister's
+    // wasm that gets installed in the test.
     let total_memory_taken_per_canister_in_bytes =
         364441 + canister_history_memory_per_canister as i64;
 
