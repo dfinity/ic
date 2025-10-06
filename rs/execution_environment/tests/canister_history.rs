@@ -12,6 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
 use ic_types::{CanisterId, Cycles, ingress::WasmResult};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
@@ -1646,4 +1647,98 @@ fn canister_history_memory_usage_ignored_in_invariant_checks() {
         err.description()
             .contains("Canister cannot grow its memory usage.")
     );
+}
+
+#[test]
+fn subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+    test.set_user_id(user_test_id(0));
+
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let mut current_subnet_available_memory = test.subnet_available_memory();
+
+    let canister_id = test.create_canister_with_default_cycles();
+
+    let mut check_subnet_available_memory = |test: &ExecutionTest, memory_usage_grow: bool| {
+        assert_eq!(
+            test.subnet_available_memory().get_execution_memory()
+                + test.canister_state(canister_id).memory_usage().get() as i64,
+            initial_subnet_available_memory.get_execution_memory()
+        );
+        if memory_usage_grow {
+            assert!(
+                test.subnet_available_memory().get_execution_memory()
+                    < current_subnet_available_memory.get_execution_memory()
+            );
+        } else {
+            assert!(
+                test.subnet_available_memory().get_execution_memory()
+                    > current_subnet_available_memory.get_execution_memory()
+            );
+        }
+        current_subnet_available_memory = test.subnet_available_memory();
+    };
+
+    check_subnet_available_memory(&test, true);
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    check_subnet_available_memory(&test, true);
+
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let res = test.subnet_message(
+        Method::TakeCanisterSnapshot,
+        take_canister_snapshot_args.encode(),
+    );
+    let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+        .unwrap()
+        .id;
+
+    check_subnet_available_memory(&test, true);
+
+    let grow_payload = wasm().stable_grow(100).build();
+    test.upgrade_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), grow_payload)
+        .unwrap();
+
+    check_subnet_available_memory(&test, true);
+
+    let grow_payload = wasm().stable_grow(300).build();
+    test.reinstall_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), grow_payload)
+        .unwrap();
+
+    check_subnet_available_memory(&test, true);
+
+    /* Subnet available memory is not updated after uninstalling code.
+    test.uninstall_code(canister_id).unwrap();
+
+    check_subnet_available_memory(&test);
+    */
+
+    let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    test.subnet_message(
+        Method::LoadCanisterSnapshot,
+        load_canister_snapshot_args.encode(),
+    )
+    .unwrap();
+
+    check_subnet_available_memory(&test, false);
+
+    for _ in 0..MAX_CANISTER_HISTORY_CHANGES {
+        let controllers = (0..10).map(|i| user_test_id(i).get()).collect();
+        test.canister_update_controller(canister_id, controllers)
+            .unwrap();
+    }
+
+    check_subnet_available_memory(&test, true);
+
+    test.canister_update_controller(canister_id, vec![test.user_id().get()])
+        .unwrap();
+
+    check_subnet_available_memory(&test, false);
+
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    check_subnet_available_memory(&test, false);
 }
