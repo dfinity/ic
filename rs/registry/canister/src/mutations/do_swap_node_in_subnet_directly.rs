@@ -5,7 +5,6 @@ use crate::mutations::node_management::common::{
 use crate::rate_limits::{
     commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
 };
-use crate::{flags::is_node_swapping_enabled, registry::Registry};
 use crate::{
     flags::{
         is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
@@ -15,16 +14,12 @@ use crate::{
     registry::Registry,
 };
 use candid::CandidType;
-use candid::CandidType;
-use ic_base_types::NodeId;
 use ic_nervous_system_rate_limits::RateLimiterError;
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::fmt::Display;
-use std::time::SystemTime;
 use std::time::SystemTime;
 
 impl Registry {
