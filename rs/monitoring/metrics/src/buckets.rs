@@ -2,27 +2,24 @@
 
 use std::cmp::Ordering;
 
-/// Create buckets using divisors of 10 multiplied by powers of 10, e.g.,
-/// ```text
-/// […, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, …]
-/// ```
-///
-/// The buckets go from `10^min_power` to `5 × 10^max_power`, inclusively.
-/// The total number of buckets is `3 * (max_power - min_power + 1)`.
+/// Create log-scale buckets on a decimal 1–2–5 grid: `{1, 2, 5} × 10^n`.
+/// Range — from `10^min_power` up to `5×10^max_power` (inclusive).
+/// Count — `3 * (max_power - min_power + 1)`.
+/// Returns a strictly increasing `Vec<f64>`.
 ///
 /// # Examples
-///
 /// ```
 /// use ic_metrics::buckets::decimal_buckets;
 ///
-/// assert_eq!(vec![0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0], decimal_buckets(-1, 1));
-/// assert_eq!(vec![1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0], decimal_buckets(0, 2));
+/// assert_eq!(
+///     vec![0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0],
+///     decimal_buckets(-1, 1)
+/// );
 /// assert_eq!(3 * 21, decimal_buckets(-10, 10).len());
 /// ```
 ///
 /// # Panics
-///
-/// * Panics if min_power > max_power.
+/// Panics if `min_power > max_power`.
 pub fn decimal_buckets(min_power: i32, max_power: i32) -> Vec<f64> {
     assert!(
         min_power <= max_power,
@@ -37,25 +34,23 @@ pub fn decimal_buckets(min_power: i32, max_power: i32) -> Vec<f64> {
     buckets
 }
 
-/// Create decimal buckets with `0` as the first bucket
+/// Same as [`decimal_buckets`], but with an initial `0` bucket.
+/// Count — `3 * (max_power - min_power + 1) + 1`.
 pub fn decimal_buckets_with_zero(min_power: i32, max_power: i32) -> Vec<f64> {
     let mut buckets = decimal_buckets(min_power, max_power);
     buckets.insert(0, 0_f64);
     buckets
 }
 
-/// Create buckets as exact powers of two, e.g.,
-/// ```text
-/// …, 0.5, 1, 2, 4, 8, …
-/// ```
-///
-/// Range is defined by exponents: from `2^min_power` to `2^max_power` (inclusive).
-/// The output is strictly increasing. Count = `max_power - min_power + 1`.
-///
-/// Suitable for binary/IEC units (KiB/MiB/GiB) and log-scale histograms.
+/// Create log-scale buckets as exact powers of two: `2^n`.
+/// Range — from `2^min_power` to `2^max_power` (inclusive).
+/// Count — `max_power - min_power + 1`.
+/// Returns a strictly increasing `Vec<f64>`. Suitable for IEC units (KiB/MiB/GiB).
 ///
 /// # Examples
 /// ```
+/// use ic_metrics::buckets::binary_buckets;
+///
 /// assert_eq!(vec![0.5, 1.0, 2.0, 4.0], binary_buckets(-1, 2));
 /// assert_eq!(vec![1.0, 2.0, 4.0, 8.0], binary_buckets(0, 3));
 /// assert_eq!(21, binary_buckets(-10, 10).len());
@@ -77,20 +72,11 @@ pub fn binary_buckets(min_power: i32, max_power: i32) -> Vec<f64> {
     buckets
 }
 
-/// Same as `binary_buckets`, but with an initial `0` bucket.
-/// Useful for histograms that expect an explicit zero bound.
+/// Same as [`binary_buckets`], but with an initial `0` bucket.
+/// Count — `max_power - min_power + 2`.
 pub fn binary_buckets_with_zero(min_power: i32, max_power: i32) -> Vec<f64> {
-    assert!(
-        min_power <= max_power,
-        "min_power must be <= max_power, given {min_power} and {max_power}"
-    );
-
-    let len = (max_power - min_power + 1) as usize;
-    let mut buckets = Vec::with_capacity(len + 1);
-    buckets.push(0.0);
-    for n in min_power..=max_power {
-        buckets.push(2_f64.powi(n));
-    }
+    let mut buckets = binary_buckets(min_power, max_power);
+    buckets.insert(0, 0_f64);
     buckets
 }
 
