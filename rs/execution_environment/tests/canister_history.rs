@@ -1671,13 +1671,13 @@ fn subnet_available_memory() {
 
     let canister_id = test.create_canister_with_default_cycles();
 
-    let mut check_subnet_available_memory = |test: &ExecutionTest, memory_usage_grow: bool| {
+    let mut check_subnet_available_memory = |test: &ExecutionTest, memory_usage_increase: bool| {
         assert_eq!(
             test.subnet_available_memory().get_execution_memory()
                 + test.canister_state(canister_id).memory_usage().get() as i64,
             initial_subnet_available_memory.get_execution_memory()
         );
-        if memory_usage_grow {
+        if memory_usage_increase {
             assert!(
                 test.subnet_available_memory().get_execution_memory()
                     < current_subnet_available_memory.get_execution_memory()
@@ -1691,15 +1691,15 @@ fn subnet_available_memory() {
         current_subnet_available_memory = test.subnet_available_memory();
     };
 
-    // memory usage grows after canister creation
+    // memory usage increases after canister creation
     check_subnet_available_memory(&test, true);
 
-    // memory usage grows after installing the universal canister WASM
+    // memory usage increases after installing the universal canister WASM
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     check_subnet_available_memory(&test, true);
 
-    // memory usage grows after taking a snapshot
+    // memory usage increases after taking a snapshot
     let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
@@ -1710,7 +1710,7 @@ fn subnet_available_memory() {
         .id;
     check_subnet_available_memory(&test, true);
 
-    // memory usage grows after upgrading and growing stable memory in post-upgrade
+    // memory usage increases after upgrading and growing stable memory in post-upgrade
     let grow_payload = wasm().stable_grow(100).build();
     test.upgrade_canister_with_args(
         canister_id,
