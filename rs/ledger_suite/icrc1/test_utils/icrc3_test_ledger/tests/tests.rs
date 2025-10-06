@@ -131,7 +131,7 @@ fn archive_blocks(
             .bytes(),
         u64
     )
-    .expect("failed to decode add_block response")
+    .expect("failed to decode archive_blocks response")
 }
 
 fn check_legacy_get_blocks(

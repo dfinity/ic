@@ -61,7 +61,7 @@ pub fn add_block(block: ICRC3Value) -> AddBlockResult {
     result
 }
 
-/// Add a block to the ledger storage
+/// Add a block to the ledger storage with the given id.
 #[candid_method(update)]
 #[update]
 pub fn add_block_with_id(block_with_id: BlockWithId) -> AddBlockResult {
@@ -78,7 +78,7 @@ pub fn add_block_with_id(block_with_id: BlockWithId) -> AddBlockResult {
     result
 }
 
-/// Archive the oldest `num_blocks` to the archive at given `archive_id`.
+/// Archive the oldest `args.num_blocks` to the archive at given `args.archive_id`.
 #[candid_method(update)]
 #[update]
 pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
