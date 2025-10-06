@@ -937,6 +937,7 @@ impl SchedulerImpl {
                     all_rejects.push(uninstall_canister(
                         &self.log,
                         canister,
+                        None,
                         state_time,
                         AddCanisterChangeToHistory::No,
                         Arc::clone(&self.fd_factory),

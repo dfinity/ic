@@ -951,8 +951,9 @@ impl CanisterManager {
         let rejects = uninstall_canister(
             &self.log,
             canister,
+            Some(round_limits),
             time,
-            AddCanisterChangeToHistory::Yes(origin, round_limits),
+            AddCanisterChangeToHistory::Yes(origin),
             Arc::clone(&self.fd_factory),
         );
         crate::util::process_responses(
@@ -3035,10 +3036,13 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
 pub fn uninstall_canister(
     log: &ReplicaLogger,
     canister: &mut CanisterState,
+    mut round_limits: Option<&mut RoundLimits>,
     time: Time,
     add_canister_change: AddCanisterChangeToHistory,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Vec<Response> {
+    let old_allocated_bytes = canister.memory_allocated_bytes();
+
     // Drop the canister's execution state.
     canister.execution_state = None;
 
@@ -3055,16 +3059,31 @@ pub fn uninstall_canister(
     canister.system_state.global_timer = CanisterTimer::Inactive;
     // Increment canister version.
     canister.system_state.canister_version += 1;
+
+    let new_allocated_bytes = canister.memory_allocated_bytes();
+    debug_assert!(new_allocated_bytes <= old_allocated_bytes);
+
+    if let Some(round_limits) = round_limits.as_deref_mut() {
+        let deallocated_bytes = old_allocated_bytes.saturating_sub(&new_allocated_bytes);
+        round_limits.subnet_available_memory.increment(
+            deallocated_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
+    }
+
     match add_canister_change {
-        AddCanisterChangeToHistory::Yes(origin, round_limits) => {
+        AddCanisterChangeToHistory::Yes(origin) => {
             let available_execution_memory_change = canister.add_canister_change(
                 time,
                 origin,
                 CanisterChangeDetails::CanisterCodeUninstall,
             );
-            round_limits
-                .subnet_available_memory
-                .update_execution_memory_unchecked(available_execution_memory_change);
+            if let Some(round_limits) = round_limits {
+                round_limits
+                    .subnet_available_memory
+                    .update_execution_memory_unchecked(available_execution_memory_change);
+            }
         }
         AddCanisterChangeToHistory::No => {}
     };

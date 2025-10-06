@@ -508,7 +508,7 @@ impl CanisterState {
 
     /// Returns the actual number of allocated bytes for the canister:
     /// the maximum of its memory allocation and memory usage.
-    fn memory_allocated_bytes(&self) -> NumBytes {
+    pub fn memory_allocated_bytes(&self) -> NumBytes {
         self.memory_allocation()
             .allocated_bytes(self.memory_usage())
     }
