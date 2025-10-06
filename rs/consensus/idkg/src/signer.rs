@@ -175,8 +175,8 @@ impl ThresholdSignerImpl {
                 .get_state()
                 .signature_request_contexts()
                 .into_par_iter()
-                .flat_map(|(id, context)| {
-                    build_signature_inputs(*id, context).map_err(|err| {
+                .filter_map(|(id, context)| {
+                    build_signature_inputs(*id, context).inspect_err(|err| {
                         if err.is_fatal() {
                             warn!(every_n_seconds => 15, self.log,
                                 "send_signature_shares(): failed to build signature inputs: {:?}",
@@ -185,6 +185,7 @@ impl ThresholdSignerImpl {
                             self.metrics.sign_errors_inc("signature_inputs_malformed");
                         }
                     })
+                    .ok()
                 })
                 .filter(|(request_id, inputs)| {
                     !self.signer_has_issued_share(
