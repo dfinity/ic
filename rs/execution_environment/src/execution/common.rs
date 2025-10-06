@@ -651,6 +651,7 @@ mod test {
                 CanisterId::from(123u64),
                 CallbackId::new(2),
                 NO_DEADLINE,
+                String::from(""),
             ),
             &log,
             Cycles::from(1000u128),

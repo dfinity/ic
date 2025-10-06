@@ -103,7 +103,12 @@ impl CanisterStateFixture {
             .canister_state
             .system_state
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
+                CallOrigin::CanisterUpdate(
+                    CANISTER_ID,
+                    CallbackId::from(1),
+                    NO_DEADLINE,
+                    String::from(""),
+                ),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
