@@ -5,8 +5,9 @@ use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
 use std::collections::VecDeque;
 
+// TODO(EXC-2118): replace with default canister log capacity.
 /// The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024; // TODO(EXC-2118): replace with default canister log capacity.
+pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
 fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
     let max_content_size =
