@@ -202,18 +202,17 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 #[candid_method(query)]
 #[query]
 pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
-    let next_id = next_block_id();
+    let total_blocks = next_block_id();
     BLOCKS.with(|blocks| {
         let blocks = blocks.borrow();
-        let total_blocks = next_id;
 
-        let mut result_blocks = vec![];
+        let mut local_blocks = vec![];
         let mut archived_blocks = vec![];
 
         // Process all requests
         for request in requests {
             let mut blocks_res = get_blocks_for_request(&blocks, request);
-            result_blocks.append(&mut blocks_res.local_blocks);
+            local_blocks.append(&mut blocks_res.local_blocks);
 
             let archived_ranges: Vec<
                 ArchivedRange<QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>>,
@@ -249,7 +248,7 @@ pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
 
         GetBlocksResult {
             log_length: Nat::from(total_blocks),
-            blocks: result_blocks,
+            blocks: local_blocks,
             archived_blocks,
         }
     })
@@ -258,7 +257,7 @@ pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
 #[candid_method(query)]
 #[query]
 pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
-    let next_id = next_block_id();
+    let chain_length = next_block_id();
     BLOCKS.with(|blocks| {
         let blocks = blocks.borrow();
 
@@ -276,7 +275,7 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
 
         let first_index = match blocks.first_key_value() {
             Some((idx, _)) => {
-                let local_range = *idx..next_id;
+                let local_range = *idx..chain_length;
                 match range_utils::intersect(&local_range, &requested_range) {
                     Ok(intersection) => intersection.start,
                     Err(_) => first_non_archive_index(),
@@ -296,7 +295,7 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
             .collect();
 
         GetBlocksResponse {
-            chain_length: next_id,
+            chain_length,
             blocks: local_blocks,
             archived_blocks,
             first_index: Nat::from(first_index),
