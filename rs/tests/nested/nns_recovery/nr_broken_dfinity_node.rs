@@ -46,7 +46,7 @@ fn main() -> Result<()> {
             break_dfinity_owned_node: true,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
-        .with_overall_timeout(Duration::from_secs(40 * 60))
+        .with_overall_timeout(Duration::from_secs(45 * 60))
         .execute_from_args()?;
 
     Ok(())

@@ -33,13 +33,14 @@ fn delay_until_next_run(
     latest_reward_day_after_genesis: u64,
 ) -> Duration {
     let latest_distribution_nominal_end_timestamp_seconds = latest_reward_day_after_genesis
-        * REWARD_DISTRIBUTION_PERIOD_SECONDS
-        + genesis_timestamp_seconds;
+        .saturating_mul(REWARD_DISTRIBUTION_PERIOD_SECONDS)
+        .saturating_add(genesis_timestamp_seconds);
 
     // We add 1 to the end of the period to make sure we always run after the period is over, to
     // avoid missing any proposals that would be ready to settle right on the edge of the period.
-    let next =
-        latest_distribution_nominal_end_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1;
+    let next = latest_distribution_nominal_end_timestamp_seconds
+        .saturating_add(REWARD_DISTRIBUTION_PERIOD_SECONDS)
+        .saturating_add(1);
 
     // We want the difference between next and now.  If it's in the past, we want to run
     // immediately

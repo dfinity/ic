@@ -2,7 +2,7 @@
 use aide::{
     axum::{
         ApiRouter, IntoApiResponse,
-        routing::{get, post},
+        routing::{delete, get, post},
     },
     openapi::{Info, OpenApi},
 };
@@ -28,7 +28,7 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
-use pocket_ic_server::state_api::routes::handler_read_graph;
+use pocket_ic_server::state_api::routes::{handler_prune_graph, handler_read_graph};
 use pocket_ic_server::state_api::{
     routes::{AppState, RouterExt, http_gateway_routes, instances_routes, status},
     state::{ApiState, PocketIcApiStateBuilder},
@@ -231,7 +231,13 @@ async fn start(runtime: Arc<Runtime>) {
         .directory_route("/verify_signature", post(verify_signature))
         //
         // Read state: Poll a result based on a received Started{} reply.
-        .directory_route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
+        .route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
+        //
+        // Prune state: Prune a result after successful polling based on a received Started{} reply.
+        .route(
+            "/prune_graph/{state_label}/{op_id}",
+            delete(handler_prune_graph),
+        )
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())

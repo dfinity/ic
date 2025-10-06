@@ -3,6 +3,7 @@ use crate::{
     pb::v1::{ProposalData, Topic},
 };
 use ic_cdk::println;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};
@@ -23,8 +24,11 @@ impl Governance {
         // Run GC if either (a) more than 24 hours has passed since it
         // was run last, or (b) more than 100 proposals have been
         // added since it was run last.
-        if !(now_seconds > self.latest_gc_timestamp_seconds + 60 * 60 * 24
-            || self.heap_data.proposals.len() > self.latest_gc_num_proposals + 100)
+        if !(now_seconds
+            > self
+                .latest_gc_timestamp_seconds
+                .saturating_add(ONE_DAY_SECONDS)
+            || self.heap_data.proposals.len() > self.latest_gc_num_proposals.saturating_add(100))
         {
             // Condition to run was not met. Return false.
             return false;
@@ -63,12 +67,17 @@ impl Governance {
                 props.len()
             );
             if props.len() > max_proposals {
-                for prop_id in props.iter().take(props.len() - max_proposals) {
+                // As the above condition holds, we are guaranteed that
+                // `props.len() - max_proposals` does not underflow.
+                for prop_id in props.iter().take(props.len().saturating_sub(max_proposals)) {
                     // Check that this proposal can be purged.
                     if let Some(prop) = self.heap_data.proposals.get(prop_id)
                         && prop.can_be_purged(now_seconds, voting_period_seconds)
                     {
                         self.heap_data.proposals.remove(prop_id);
+                        self.heap_data
+                            .topic_of_garbage_collected_proposals
+                            .insert(*prop_id, topic);
                     }
                 }
             }

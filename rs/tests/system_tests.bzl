@@ -103,7 +103,6 @@ def _run_system_test(ctx):
     )
 
     env = dict(ctx.attr.env.items())
-    env_deps = ctx.attr.env_deps
 
     # Expand Make variables in env vars, with runtime_deps as targets
     for key, value in env.items():
@@ -126,7 +125,6 @@ def _run_system_test(ctx):
     env |= {
         "RUN_SCRIPT_ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in icos_images.items()]),
     }
-    env_deps = dict(env_deps, **icos_images)
 
     env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
 
@@ -151,7 +149,7 @@ def _run_system_test(ctx):
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
-    for e, t in env_deps.items():
+    for e, t in icos_images.items():
         runtime_deps.append(t.files)
         env[e] = t.files.to_list()[0].short_path
 
@@ -188,7 +186,6 @@ run_system_test = rule(
         "_k8sconfig": attr.label(allow_single_file = True, default = None),
         "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
         "runtime_deps": attr.label_list(allow_files = True),
-        "env_deps": attr.string_keyed_label_dict(allow_files = True),
         "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
         "info_file_vars": attr.string_list_dict(doc = "Specifies variables to be pulled from info_file. Expects a map of varname to [infovar_name, optional_suffix]."),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
@@ -349,7 +346,7 @@ def system_test(
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_LATEST["version"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_latest_guest_img" if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash"] if not uses_dev_mainnet else MAINNET_LATEST["dev_hash"]
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash" if not uses_dev_mainnet else "dev_hash"]
 
         # TODO(NODE-1723): Currently dev measurements are not published. Use them once they are.
         _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guest_img//:launch_measurements"  # if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev//:launch_measurements"
@@ -358,7 +355,7 @@ def system_test(
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS["version"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_nns_guest_img" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_NNS["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS["hash"] if not uses_dev_mainnet else MAINNET_NNS["dev_hash"]
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS["hash" if not uses_dev_mainnet else "dev_hash"]
 
         # TODO(NODE-1723): Currently dev measurements are not published. Use them once they are.
         _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_guest_img//:launch_measurements"  # if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev//:launch_measurements"
@@ -367,7 +364,7 @@ def system_test(
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APP["version"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_app_guest_img" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_APP["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP["hash"] if not uses_dev_mainnet else MAINNET_APP["dev_hash"]
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP["hash" if not uses_dev_mainnet else "dev_hash"]
 
         # TODO(NODE-1723): Currently dev measurements are not published. Use them once they are.
         _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_guest_img//:launch_measurements"  # if not uses_dev_mainnet else "@mainnet_app_guest_img_dev//:launch_measurements"
@@ -396,7 +393,7 @@ def system_test(
     if uses_guestos_mainnet_latest_update:
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST["version"]
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash"] if not uses_dev_mainnet else MAINNET_LATEST["dev_hash"]
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash" if not uses_dev_mainnet else "dev_hash"]
 
         # TODO(NODE-1723): Currently dev measurements are not published. Use them once they are.
         _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guest_img//:launch_measurements"  #  if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev//:launch_measurements"
@@ -404,7 +401,7 @@ def system_test(
     if uses_guestos_mainnet_nns_update:
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS["version"]
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_NNS["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS["hash"] if not uses_dev_mainnet else MAINNET_NNS["dev_hash"]
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS["hash" if not uses_dev_mainnet else "dev_hash"]
 
         # TODO(NODE-1723): Currently dev measurements are not published. Use them once they are.
         _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_guest_img//:launch_measurements"  # if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev//:launch_measurements"
@@ -412,7 +409,7 @@ def system_test(
     if uses_guestos_mainnet_app_update:
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_APP["version"]
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_APP["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_APP["hash"] if not uses_dev_mainnet else MAINNET_APP["dev_hash"]
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_APP["hash" if not uses_dev_mainnet else "dev_hash"]
 
         # TODO(NODE-1723): Currently dev measurements are not published. Use them once they are.
         _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_guest_img//:launch_measurements"  # if not uses_dev_mainnet else "@mainnet_app_guest_img_dev//:launch_measurements"
@@ -446,7 +443,7 @@ def system_test(
     if uses_hostos_mainnet_latest_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS["version"]
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True)
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS["hash"] if not uses_dev_mainnet else MAINNET_LATEST_HOSTOS["dev_hash"]
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS["hash" if not uses_dev_mainnet else "dev_hash"]
 
     deps = list(runtime_deps)
     if logs:
@@ -459,11 +456,19 @@ def system_test(
 
         deps = deps + UNIVERSAL_VM_RUNTIME_DEPS
 
+    # Expand _env_deps
+    env |= {
+        name: "$(rootpath {})".format(dep)
+        for name, dep in _env_deps.items()
+    }
+    for dep in _env_deps.values():
+        if dep not in deps:
+            deps.append(dep)
+
     run_system_test(
         name = test_name,
         src = test_driver_target,
         runtime_deps = deps,
-        env_deps = _env_deps,
         env = env,
         icos_images = icos_images,
         info_file_vars = info_file_vars,
@@ -503,7 +508,6 @@ def system_test(
             "//rs/tests:colocate_uvm_config_image",
             test_driver_target,
         ],
-        env_deps = _env_deps,
         env_inherit = env_inherit,
         env = env,
         icos_images = icos_images,

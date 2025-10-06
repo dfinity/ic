@@ -1,0 +1,107 @@
+type MinterArg = variant {
+    Init : InitArgs;
+};
+
+// The initialization parameters of the minter canister.
+type InitArgs = record {
+    // The minter will interact with this Dogecoin network.
+    doge_network : Network;
+
+    // The principal of the ledger that handles ckDOGE transfers.
+    // The default account of the ckDOGE minter must be configured as
+    // the minting account of the ledger.
+    ledger_id : principal;
+
+    // The name of the ECDSA key to use.
+    // E.g., "dfx_test_key" on the local replica.
+    ecdsa_key_name : text;
+
+    // The minimal amount of ckDOGE that can be converted to DOGE.
+    retrieve_doge_min_amount : nat64;
+
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    max_time_in_queue_nanos : nat64;
+
+    /// The minimum number of confirmations required for the minter to
+    /// accept a Dogecoin transaction.
+    min_confirmations : opt nat32;
+
+    /// The minter's operation mode.
+    mode : Mode;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
+};
+
+type Network = variant {
+    // The public Dogecoin mainnet.
+    Mainnet;
+    // The public Dogecoin testnet.
+    Testnet;
+    // A local Dogecoin regtest installation.
+    Regtest;
+};
+
+type Mode = variant {
+    // The minter does not allow any state modifications.
+    ReadOnly;
+    // Only specified principals can modify minter's state.
+    RestrictedTo : vec principal;
+    // Only specified principals can convert DOGE to ckDOGE.
+    DepositsRestrictedTo : vec principal;
+    // Anyone can interact with the minter.
+    GeneralAvailability;
+};
+
+type RetrieveDogeWithApprovalArgs = record {
+    // The address to which the ckDOGE minter should deposit DOGE.
+    address : text;
+    // The amount of ckDOGE in koinu (smallest denomination of DOGE) that the client wants to withdraw.
+    amount : nat64;
+    // The subaccount to burn ckDOGE from.
+    from_subaccount : opt blob;
+};
+
+type RetrieveDogeOk = record {
+    // Returns the burn transaction index corresponding to the withdrawal.
+    // You can use this index to query the withdrawal status.
+    block_index : nat64
+};
+
+type RetrieveDogeWithApprovalError = variant {
+    // The minter failed to parse the destination address.
+    MalformedAddress : text;
+    // The minter is already processing another retrieval request for the same
+    // principal.
+    AlreadyProcessing;
+    // The withdrawal amount is too low.
+    // The payload contains the minimal withdrawal amount.
+    AmountTooLow : nat64;
+    // The ckDOGE balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat64 };
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat64 };
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
+};
+
+service : (minter_arg : MinterArg) -> {
+    // Submits a request to convert ckDOGE to DOGE.
+    //
+    // # Note
+    //
+    // The DOGE retrieval process is slow.  Instead of
+    // synchronously waiting for a DOGE transaction to settle, this
+    // method returns a request ([block_index]) that the caller can use
+    // to query the request status.
+    //
+    // # Preconditions
+    //
+    // * The caller allowed the minter's principal to spend its funds
+    //   using [icrc2_approve] on the ckDOGE ledger.
+    retrieve_doge_with_approval : (RetrieveDogeWithApprovalArgs) -> (variant { Ok : RetrieveDogeOk; Err : RetrieveDogeWithApprovalError });
+}

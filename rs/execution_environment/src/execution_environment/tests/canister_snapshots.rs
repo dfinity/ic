@@ -1428,7 +1428,7 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
 }
 
 #[test]
-fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
+fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating_snapshot() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
@@ -1441,9 +1441,6 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
     let canister_id_1 = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
-    let canister_id_2 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
 
     // Take a snapshot.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
@@ -1453,23 +1450,39 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
     let snapshot_id = response.snapshot_id();
     assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
 
-    let initial_canister_state = test.state().canister_state(&canister_id_2).unwrap().clone();
+    // Change the user id to a different one, so the second canister has a different controller.
+    test.set_user_id(user_test_id(42));
 
-    // Loading a canister snapshot fails because snapshot does not belong to `canister_id_2`.
+    // Create another canister.
+    let canister_id_2 = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Ensure the two canisters have different controllers.
+    assert_ne!(
+        test.canister_state(canister_id_1).system_state.controllers,
+        test.canister_state(canister_id_2).system_state.controllers
+    );
+
+    let initial_canister_state = test.canister_state(canister_id_2).clone();
+
+    // Loading a snapshot belonging to `canister_id_1` into `canister_id_2` fails because
+    // the controller of `canister_id_2` does not control `canister_id_1`.
     let args: LoadCanisterSnapshotArgs =
         LoadCanisterSnapshotArgs::new(canister_id_2, snapshot_id, None);
     let error = test
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
-    let message =
-        format!("The snapshot {snapshot_id} does not belong to canister {canister_id_2}",)
-            .to_string();
+    let message = format!(
+        "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}",
+        snapshot_id, canister_id_2, test.user_id().get()
+    )
+    .to_string();
     assert!(error.description().contains(&message));
-    assert!(test.state().canister_state(&canister_id_2).is_some());
     assert_eq!(
         initial_canister_state,
-        test.state().canister_state(&canister_id_2).unwrap().clone()
+        test.canister_state(canister_id_2).clone()
     );
 }
 
@@ -1661,6 +1674,7 @@ fn load_canister_snapshot_succeeds() {
             snapshot_id,
             snapshot_taken_at_timestamp,
             SnapshotSource::TakenFromCanister(Reserved),
+            None,
         )
     );
     let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
@@ -3071,7 +3085,7 @@ const COUNTER_CANISTER_WAT: &str = r#"
     )
     (call $msg_reply)
   )
-  
+
   (func $write
     (i32.const 1)
     (call $stable_grow)

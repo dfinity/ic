@@ -18,7 +18,6 @@ use ic_consensus_utils::{
     pool_reader::PoolReader,
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
@@ -290,12 +289,6 @@ impl Player {
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfig::new(subnet_type);
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            subnet_type,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
         let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);
 
@@ -316,9 +309,8 @@ impl Player {
             &metrics_registry,
             subnet_id,
             subnet_type,
-            subnet_config.scheduler_config,
             cfg.hypervisor.clone(),
-            Arc::clone(&cycles_account_manager),
+            subnet_config,
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
             completed_execution_messages_tx,
@@ -330,7 +322,7 @@ impl Player {
             execution_service.ingress_history_writer.clone(),
             execution_service.scheduler,
             cfg.hypervisor.clone(),
-            cycles_account_manager,
+            Arc::clone(&execution_service.cycles_account_manager),
             subnet_id,
             &metrics_registry,
             log.clone(),

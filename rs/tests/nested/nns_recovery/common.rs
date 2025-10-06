@@ -296,7 +296,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
         replica_version: Some(ic_version),
-        key_file: Some(ssh_priv_key_path.clone()),
+        admin_key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -311,8 +311,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
-        download_state_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
-        upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        keep_downloaded_state: Some(false),
         wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_priv_key_path),
         output_dir: Some(output_dir.clone()),
@@ -541,7 +541,7 @@ fn local_recovery(
     let node_ip = node.get_ip_addr();
 
     let maybe_admin_key_file =
-        if let Some(admin_key_file) = &subnet_recovery_tool.recovery_args.key_file {
+        if let Some(admin_key_file) = &subnet_recovery_tool.recovery_args.admin_key_file {
             info!(
                 logger,
                 "Copying the admin key file to node {node_id} with IP {node_ip} ..."
@@ -554,7 +554,7 @@ fn local_recovery(
                 0o400,
             );
 
-            format!("--key-file {ADMIN_KEY_FILE_REMOTE_PATH} ")
+            format!("--admin-key-file {ADMIN_KEY_FILE_REMOTE_PATH} ")
         } else {
             String::default()
         };
@@ -605,6 +605,11 @@ fn local_recovery(
         .download_pool_node
         .map(|n| format!("--download-pool-node {n} "))
         .unwrap_or_default();
+    let maybe_keep_downloaded_state = subnet_recovery_tool
+        .params
+        .keep_downloaded_state
+        .map(|b| format!("--keep-downloaded-state {b} "))
+        .unwrap_or_default();
     let maybe_skips = subnet_recovery_tool
         .params
         .skip
@@ -621,7 +626,7 @@ fn local_recovery(
         r#"/opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         {maybe_admin_key_file}\
-        --test --skip-prompts --use-local-binaries \
+        --test --skip-prompts \
         nns-recovery-same-nodes \
         --subnet-id {subnet_id} \
         {maybe_upgrade_version}\
@@ -629,8 +634,8 @@ fn local_recovery(
         {maybe_upgrade_image_url}\
         {maybe_upgrade_image_hash}\
         {maybe_download_pool_node}\
-        --download-state-method local \
-        --upload-method local \
+        --admin-access-location local \
+        {maybe_keep_downloaded_state}\
         --wait-for-cup-node {node_ip} \
         {maybe_backup_key_file}\
         --output-dir {OUTPUT_DIR_REMOTE_PATH} \

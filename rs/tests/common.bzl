@@ -19,8 +19,8 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "tip-of-branch": "//rs/nns/governance:governance-canister-test",
         "mainnet": "@mainnet_nns_governance_canister//file",
     },
-    "ledger-canister_notify-method": {
-        "tip-of-branch": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "ledger-canister": {
+        "tip-of-branch": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "mainnet": "@mainnet_icp_ledger_canister//file",
     },
     "root-canister": {

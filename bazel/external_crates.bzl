@@ -1202,6 +1202,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "ring",
                     "std",
                     "brotli",
+                    "tls12",
                 ],
             ),
             "rustls-pemfile": crate.spec(

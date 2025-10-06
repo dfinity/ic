@@ -1,0 +1,36 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "CARGO_MANIFEST_DIR": "rs/ic_os/remote_attestation/shared",
+        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
+    },
+    data = [
+        "proto/remote_attestation.proto",
+        "//rs/ic_os/attestation:proto/attestation.proto",
+        "@com_google_protobuf//:protoc",
+        "@rules_rust//rust/toolchain:current_rustfmt_files",
+    ],
+    deps = [
+        "@crate_index//:prost-build",
+        "@crate_index//:tonic-build",
+    ],
+)
+
+rust_library(
+    name = "shared",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "remote_attestation_shared",
+    deps = [
+        ":build_script",
+        "//rs/ic_os/attestation",
+        "@crate_index//:prost",
+        "@crate_index//:tonic",
+    ],
+)

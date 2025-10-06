@@ -226,9 +226,7 @@ impl IncompleteState {
         // Create the `IncompleteState` object while holding the write lock on the active state sync reference.
         Some(Self {
             log,
-            root: state_layout
-                .state_sync_scratchpad(height)
-                .expect("failed to create directory for state sync scratchpad"),
+            root: state_layout.state_sync_scratchpad(height),
             state_sync: state_sync.clone(),
             state_layout,
             height,
@@ -247,7 +245,17 @@ impl IncompleteState {
     /// Creates all the files listed in the manifest and resizes them to their
     /// expected sizes.  This way we won't have to worry about creating parent
     /// directories when we receive chunks.
-    pub(crate) fn preallocate_layout(log: &ReplicaLogger, root: &Path, manifest: &Manifest) {
+    pub(crate) fn preallocate_layout(
+        log: &ReplicaLogger,
+        root: &Path,
+        manifest: &Manifest,
+        metrics: &StateSyncMetrics,
+    ) {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE])
+            .start_timer();
+
         for file_info in manifest.file_table.iter() {
             let path = root.join(&file_info.relative_path);
 
@@ -918,7 +926,12 @@ impl IncompleteState {
     /// that we have locally.
     /// Returns a set of chunks that still need to be fetched
     fn initialize_state_on_disk(&self, manifest_new: &Manifest) -> HashSet<usize> {
-        Self::preallocate_layout(&self.log, &self.root, manifest_new);
+        Self::preallocate_layout(
+            &self.log,
+            &self.root,
+            manifest_new,
+            &self.metrics.state_sync_metrics,
+        );
 
         let state_sync_size_fetch = self
             .metrics
