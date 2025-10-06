@@ -41,6 +41,7 @@ fn default_input_request() -> RequestOrResponse {
     RequestBuilder::default()
         .sender(OTHER_CANISTER_ID)
         .receiver(CANISTER_ID)
+        .payment(Cycles::new(2))
         .build()
         .into()
 }
@@ -49,6 +50,7 @@ fn default_output_response() -> Arc<Response> {
     ResponseBuilder::default()
         .respondent(CANISTER_ID)
         .originator(OTHER_CANISTER_ID)
+        .refund(Cycles::new(1))
         .build()
         .into()
 }
@@ -57,6 +59,7 @@ fn default_request_to_self() -> Arc<Request> {
     RequestBuilder::default()
         .sender(CANISTER_ID)
         .receiver(CANISTER_ID)
+        .payment(Cycles::new(3))
         .build()
         .into()
 }
@@ -114,6 +117,7 @@ impl SystemStateFixture {
             .receiver(callee)
             .sender_reply_callback(callback)
             .deadline(deadline)
+            .payment(Cycles::new(10))
             .build()
             .into();
         let response = ResponseBuilder::default()
@@ -121,6 +125,7 @@ impl SystemStateFixture {
             .originator(CANISTER_ID)
             .originator_reply_callback(callback)
             .deadline(deadline)
+            .refund(Cycles::new(5))
             .build()
             .into();
         (request, response)
@@ -397,6 +402,50 @@ fn induct_messages_to_self_full_queue() {
         0,
         fixture.system_state.queues().output_queues_message_count()
     );
+}
+
+/// Induct a best-effort response to self for a callback that already has a
+/// response enqueued. The response should be silently dropped.
+#[test]
+fn induct_messages_to_self_duplicate_best_effort_response() {
+    let mut fixture = SystemStateFixture::running();
+
+    let (request, response) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
+    let callback = response.originator_reply_callback;
+
+    // Enqueue the outgoing request.
+    fixture.push_output_request(request.clone()).unwrap();
+
+    // Induct it into the input queue.
+    fixture.induct_messages_to_self();
+
+    // Pop and start executing it (pretend it's waiting multiple rounds for
+    // downstream calls).
+    assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
+
+    // Expire the callback.
+    fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX));
+
+    // A few rounds later, have the running call context produce a response.
+    fixture.push_output_response(response);
+
+    // Try inducting the response and check that it was consumed.
+    fixture.induct_messages_to_self();
+    assert!(!fixture.system_state.queues().has_output());
+
+    // Pop the timeout reject response and execute it (consuming the callback).
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(resp)) if resp.response_payload == Payload::Reject(RejectContext::new(RejectCode::SysUnknown, "Call deadline has expired.")));
+    assert_matches!(
+        fixture.system_state.unregister_callback(callback),
+        Ok(Some(_))
+    );
+
+    // There should now be zero messages and reserved slots in the canister queues.
+    let queues = fixture.system_state.queues();
+    assert!(!queues.has_input());
+    assert!(!queues.has_output());
+    assert_eq!(0, queues.input_queues_reserved_slots());
+    assert_eq!(0, queues.output_queues_reserved_slots());
 }
 
 /// Induct a best-effort response to self for a callback that has already been

@@ -1027,7 +1027,7 @@ impl SystemState {
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         #[cfg(debug_assertions)]
-        let cycles_before = self.queues.attached_cycles() + self.cycles_balance + msg.cycles();
+        let balance_before = self.balance_with_messages(None, Some(msg.cycles()));
 
         let res = self.push_input_impl(
             msg,
@@ -1037,23 +1037,17 @@ impl SystemState {
         );
 
         #[cfg(debug_assertions)]
-        {
-            let cycles_after = self.queues.attached_cycles()
-                + self.cycles_balance
-                + if let Err((_, msg)) = &res {
-                    msg.cycles()
-                } else {
-                    Cycles::zero()
-                };
-            debug_assert_eq!(
-                cycles_before, cycles_after,
-                "Cycles lost or duplicated: before = {cycles_before}, after = {cycles_after}",
-            );
-        }
+        self.assert_balance_with_messages(
+            balance_before,
+            None,
+            res.as_ref().err().map(|(_, msg)| msg.cycles()),
+        );
 
         res
     }
 
+    /// Implementation of `push_input`. Separated, to make it easier to write debug
+    /// assertions.
     fn push_input_impl(
         &mut self,
         msg: RequestOrResponse,
@@ -1393,6 +1387,25 @@ impl SystemState {
         subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
     ) {
+        #[cfg(debug_assertions)]
+        let balance_before = self.balance_with_messages(None, None);
+
+        self.induct_messages_to_self_impl(
+            subnet_available_guaranteed_response_memory,
+            own_subnet_type,
+        );
+
+        #[cfg(debug_assertions)]
+        self.assert_balance_with_messages(balance_before, None, None);
+    }
+
+    /// Implementation of `induct_messages_to_self`. Separated, to make it easier to
+    /// write debug assertions.
+    fn induct_messages_to_self_impl(
+        &mut self,
+        subnet_available_guaranteed_response_memory: &mut i64,
+        own_subnet_type: SubnetType,
+    ) {
         // Bail out if the canister is not running.
         let call_context_manager = match &self.status {
             CanisterStatus::Running {
@@ -1424,6 +1437,8 @@ impl SystemState {
 
                     // Best effort response whose callback is gone. Silently drop it.
                     Ok(false) => {
+                        // Borrow checker does not allow calling `credit_refund()` here.
+                        self.cycles_balance += response.refund;
                         self.queues
                             .pop_canister_output(&self.canister_id)
                             .expect("Message peeked above so pop should not fail.");
@@ -1443,7 +1458,7 @@ impl SystemState {
                 Ok(None) => {}
                 // Silently dropped duplicate best-effort response.
                 Ok(Some(response)) => {
-                    // Borrow checker doesn't allow calling `credit_refund()` here.
+                    // Borrow checker does not allow calling `credit_refund()` here.
                     self.cycles_balance += response.refund;
                 }
                 // Full input queue.
@@ -1482,13 +1497,19 @@ impl SystemState {
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) {
+        #[cfg(debug_assertions)]
+        let balance_before = self.balance_with_messages(Some(refunds), None);
+
         self.queues.time_out_messages(
             current_time,
             own_canister_id,
             local_canisters,
             refunds,
             metrics,
-        )
+        );
+
+        #[cfg(debug_assertions)]
+        self.assert_balance_with_messages(balance_before, Some(refunds), None);
     }
 
     /// Queries whether the `CallContextManager` in `self.state` holds any not
@@ -1577,8 +1598,17 @@ impl SystemState {
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) -> bool {
-        self.queues
-            .shed_largest_message(own_canister_id, local_canisters, refunds, metrics)
+        #[cfg(debug_assertions)]
+        let balance_before = self.balance_with_messages(Some(refunds), None);
+
+        let message_shed =
+            self.queues
+                .shed_largest_message(own_canister_id, local_canisters, refunds, metrics);
+
+        #[cfg(debug_assertions)]
+        self.assert_balance_with_messages(balance_before, Some(refunds), None);
+
+        message_shed
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
@@ -1602,6 +1632,7 @@ impl SystemState {
             self.canister_id, response
         );
         debug_assert!(response.is_best_effort());
+
         if !response.refund.is_zero() {
             self.add_cycles(response.refund, CyclesUseCase::NonConsumed);
         }
@@ -1878,6 +1909,43 @@ impl SystemState {
             wasm_memory_limit,
             wasm_memory_threshold,
         )
+    }
+
+    /// Computes the canister's total cycle balance including cycles attached to
+    /// messages in queues; pooled refunds; plus any `extra_cycles` (e.g. messages
+    /// being enqueued; or returned wrapped in an `Err`).
+    ///
+    /// To be used together with `assert_balance_with_messages()` to ensure that no
+    /// cycles were lost or duplicated while inducting, timing out or shedding
+    /// messages.
+    #[cfg(debug_assertions)]
+    fn balance_with_messages(
+        &self,
+        refunds: Option<&RefundPool>,
+        extra_cycles: Option<Cycles>,
+    ) -> Cycles {
+        self.cycles_balance
+            + self.queues.attached_cycles()
+            + refunds.map(RefundPool::compute_total).unwrap_or_default()
+            + extra_cycles.unwrap_or_default()
+    }
+
+    /// Validates that the canister's total cycle balance including cycles attached
+    /// to messages in queues; pooled refunds, plus any cycles being returned is the
+    /// same as `balance_before` (computed at the top of the function being
+    /// validated).
+    #[cfg(debug_assertions)]
+    fn assert_balance_with_messages(
+        &self,
+        balance_before: Cycles,
+        refunds: Option<&RefundPool>,
+        returned_cycles: Option<Cycles>,
+    ) {
+        let balance_after = self.balance_with_messages(refunds, returned_cycles);
+        assert_eq!(
+            balance_before, balance_after,
+            "Cycles lost or duplicated: before = {balance_before}, after = {balance_after}",
+        );
     }
 }
 

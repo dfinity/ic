@@ -2511,7 +2511,7 @@ fn test_stats_best_effort() {
     assert_eq!(
         (
             true,
-            refund_pool(&[(response2.originator, Cycles::new(10))])
+            refund_pool(&[(response2.originator, response2.refund)])
         ),
         shed_largest_message(&mut queues, &response2.respondent, &BTreeMap::new())
     );
