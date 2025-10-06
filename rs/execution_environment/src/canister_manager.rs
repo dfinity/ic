@@ -3088,7 +3088,7 @@ pub fn uninstall_canister(
                     )),
                     deadline: *deadline,
                 })),
-                CallOrigin::CanisterQuery(_, _, _) | CallOrigin::Query(_, _) => fatal!(
+                CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => fatal!(
                     log,
                     "No callbacks with a query origin should be found when uninstalling"
                 ),

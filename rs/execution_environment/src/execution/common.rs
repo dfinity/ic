@@ -80,7 +80,7 @@ pub(crate) fn action_to_response(
         CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             action_to_request_response(canister, action, caller_canister_id, callback_id, deadline)
         }
-        CallOrigin::CanisterQuery(_, _, _) | CallOrigin::Query(_, _) => fatal!(
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => fatal!(
             log,
             "The update path should not have created a callback with a query origin",
         ),
@@ -257,7 +257,7 @@ pub(crate) fn wasm_result_to_query_response(
             };
             ExecutionResponse::Request(response)
         }
-        CallOrigin::CanisterQuery(_, _, _) | CallOrigin::Query(_, _) => {
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
             fatal!(log, "The update path should not have a query origin",)
         }
         CallOrigin::SystemTask => {

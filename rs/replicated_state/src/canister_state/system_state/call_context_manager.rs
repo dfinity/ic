@@ -252,10 +252,7 @@ impl CallContextManagerStats {
             .values()
             .filter(|call_context| !call_context.responded)
             .filter(|call_context| {
-                matches!(
-                    call_context.call_origin,
-                    CallOrigin::CanisterUpdate(_, _, _, _)
-                )
+                matches!(call_context.call_origin, CallOrigin::CanisterUpdate(..))
             })
             .count();
         let unresponded_guaranteed_response_call_contexts = call_contexts
@@ -343,7 +340,7 @@ impl CallContextManagerStats {
             .values()
             .filter(|call_context| !call_context.responded)
             .filter_map(|call_context| match call_context.call_origin {
-                CallOrigin::CanisterUpdate(originator, _, _, _) => Some(originator),
+                CallOrigin::CanisterUpdate(originator, ..) => Some(originator),
                 _ => None,
             })
             .fold(
@@ -424,10 +421,10 @@ impl CallOrigin {
     /// Returns the principal ID associated with this call origin.
     pub fn get_principal(&self) -> PrincipalId {
         match self {
-            CallOrigin::Ingress(user_id, _, _) => user_id.get(),
-            CallOrigin::CanisterUpdate(canister_id, _, _, _) => canister_id.get(),
-            CallOrigin::Query(user_id, _) => user_id.get(),
-            CallOrigin::CanisterQuery(canister_id, _, _) => canister_id.get(),
+            CallOrigin::Ingress(user_id, ..) => user_id.get(),
+            CallOrigin::CanisterUpdate(canister_id, ..) => canister_id.get(),
+            CallOrigin::Query(user_id, ..) => user_id.get(),
+            CallOrigin::CanisterQuery(canister_id, ..) => canister_id.get(),
             CallOrigin::SystemTask => IC_00.get(),
         }
     }
