@@ -719,11 +719,8 @@ impl NeuronStore {
                     proposal_id,
                     vote,
                 )?;
-                let should_record_voting_history = if is_known_neuron_voting_history_enabled() {
-                    stable_neuron_store.is_known_neuron(neuron_id)
-                } else {
-                    false
-                };
+                let should_record_voting_history = is_known_neuron_voting_history_enabled()
+                    && stable_neuron_store.is_known_neuron(neuron_id);
                 Ok(should_record_voting_history)
             },
         )?;
