@@ -36,9 +36,9 @@ use ic_replicated_state::{
     page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
-    MAX_WASM_MEMORY_IN_BYTES, MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId,
-    Randomness, ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES,
+    MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness,
+    ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
