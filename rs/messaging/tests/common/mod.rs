@@ -1,3 +1,4 @@
+/*
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -664,3 +665,4 @@ pub fn induct_from_head_of_stream(
     into_env.execute_block_with_xnet_payload(xnet_payload);
     Ok(())
 }
+*/

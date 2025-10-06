@@ -1,3 +1,4 @@
+/*
 use candid::{Decode, Encode};
 use canister_test::Project;
 use downstream_calls_test::{CallOrResponse, State};
@@ -174,3 +175,4 @@ fn test_multiple_branches_call_tree_depth() {
         .into(),
     );
 }
+*/

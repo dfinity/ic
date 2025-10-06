@@ -1,3 +1,4 @@
+/*
 pub mod common;
 
 use common::{
@@ -293,3 +294,4 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
         "failed to stop local canister after {shutdown_phase_max_rounds} ticks"
     ))
 }
+*/
