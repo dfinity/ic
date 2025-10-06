@@ -60,7 +60,7 @@ fn benchmark_signature_scenario<M: Measurement, R: Rng + CryptoRng>(
     group.bench_function(&scenario.name, |bench| {
         bench.iter_batched_ref(
             || {
-                let input = random_input_of_size(scenario.request_bytes, rng);
+                let input = fixed_input_of_size(scenario.request_bytes);
                 (input, scenario.response_bytes)
             },
             |(input, response_bytes)| {
@@ -134,7 +134,11 @@ fn temp_crypto<R: Rng + CryptoRng>(
 }
 
 fn random_input_of_size<R: Rng + CryptoRng>(bytes_size: usize, rng: &mut R) -> Vec<u8> {
-    let mut buffer = vec![99; bytes_size];
+    let mut buffer = vec![0; bytes_size];
     rng.fill_bytes(&mut buffer);
     buffer
+}
+
+fn fixed_input_of_size(bytes_size: usize) -> Vec<u8> {
+    vec![107; bytes_size]
 }
