@@ -885,8 +885,8 @@ impl StreamHandlerImpl {
                     // Message silently dropped, all done.
                     Ok(false) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
-                        // Cycles were lost.
-                        Accept(msg_cycles)
+                        // Cycles were credited.
+                        Accept(Cycles::zero())
                     }
 
                     // Message not inducted.
