@@ -61,7 +61,7 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
-const BACKUP_USERNAME: &str = "backup";
+pub const BACKUP_USERNAME: &str = "backup";
 
 const ADMIN_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
 const BACKUP_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/backup_key";

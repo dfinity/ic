@@ -31,7 +31,8 @@
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
+    BACKUP_USERNAME, SetupConfig, grant_backup_access_to_all_nns_nodes,
+    replace_nns_with_unassigned_nodes,
 };
 use ic_recovery::get_node_metrics;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
@@ -40,7 +41,7 @@ use ic_system_test_driver::driver::driver_setup::{
 };
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
+use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::util::block_on;
@@ -93,14 +94,19 @@ fn log_instructions(env: TestEnv) {
         );
     }
 
-    let ssh_priv_key_path = env
+    // Generate a new backup keypair
+    env.ssh_keygen_for_user(BACKUP_USERNAME)
+        .expect("ssh-keygen failed for backup key");
+    let ssh_backup_priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-        .join(SSH_USERNAME);
-    let ssh_pub_key_path = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME);
+        .join(BACKUP_USERNAME);
+    let ssh_backup_pub_key_path = env
+        .get_path(SSH_AUTHORIZED_PUB_KEYS_DIR)
+        .join(BACKUP_USERNAME);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &ssh_priv_key_path, &ssh_pub_key_path);
+    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
 
     env.sync_with_prometheus();
 
