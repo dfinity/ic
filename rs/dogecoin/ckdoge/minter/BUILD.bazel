@@ -20,6 +20,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/ic-secp256k1",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
         "@crate_index//:bs58",
         "@crate_index//:candid",
