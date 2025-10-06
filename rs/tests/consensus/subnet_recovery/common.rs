@@ -553,7 +553,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     } else {
         // In cases where we cannot deploy read-only access, we download the state & pool using
         // admin access instead of read-only, so we need admin access on the download node as well
-        vec![&download_node.0, &upload_node]
+        vec![&upload_node, &download_node.0]
     };
     info!(
         logger,
