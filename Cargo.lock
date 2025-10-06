@@ -7446,14 +7446,18 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "bs58 0.5.1",
  "candid",
  "candid_parser",
+ "hex",
  "ic-cdk",
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
  "icrc-ledger-types",
  "pocket-ic",
  "serde",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
