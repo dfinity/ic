@@ -35,7 +35,6 @@ use ic_nested_nns_recovery_common::{
     replace_nns_with_unassigned_nodes,
 };
 use ic_recovery::get_node_metrics;
-use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
