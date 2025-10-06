@@ -332,7 +332,7 @@ pub struct SystemState {
     pub log_visibility: LogVisibilityV2,
 
     /// The capacity of the canister log in bytes.
-    pub log_capacity: NumBytes,
+    pub log_memory_limit: NumBytes,
 
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
@@ -515,7 +515,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_capacity: NumBytes::new(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64), // TODO(EXC-2118): replace with default canister log capacity.
+            log_memory_limit: NumBytes::new(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64), // TODO(EXC-2118): replace with default canister log capacity.
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -545,7 +545,7 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
-        log_capacity: NumBytes,
+        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
@@ -576,7 +576,7 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
-            log_capacity,
+            log_memory_limit,
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
@@ -2094,7 +2094,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_capacity: NumBytes::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64), // TODO(EXC-2118): replace with default canister log capacity.
+            log_memory_limit: NumBytes::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64), // TODO(EXC-2118): replace with default canister log capacity.
             canister_log: Default::default(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

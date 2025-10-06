@@ -26,7 +26,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
-    pub(crate) log_capacity: Option<NumBytes>,
+    pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
@@ -40,7 +40,7 @@ impl CanisterSettings {
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
-        log_capacity: Option<NumBytes>,
+        log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
     ) -> Self {
@@ -52,7 +52,7 @@ impl CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
-            log_capacity,
+            log_memory_limit,
             wasm_memory_limit,
             environment_variables,
         }
@@ -86,8 +86,8 @@ impl CanisterSettings {
         self.log_visibility.as_ref()
     }
 
-    pub fn log_capacity(&self) -> Option<NumBytes> {
-        self.log_capacity
+    pub fn log_memory_limit(&self) -> Option<NumBytes> {
+        self.log_memory_limit
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
@@ -133,7 +133,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
-        let log_capacity = match input.log_capacity {
+        let log_memory_limit = match input.log_memory_limit {
             Some(ls) => Some(NumBytes::from(
                 ls.0.to_u64()
                     .ok_or(UpdateSettingsError::LogCapacityOutOfRange { provided: ls })?,
@@ -193,7 +193,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
-            log_capacity,
+            log_memory_limit,
             wasm_memory_limit,
             environment_variables,
         ))
@@ -219,7 +219,7 @@ pub(crate) struct CanisterSettingsBuilder {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
-    log_capacity: Option<NumBytes>,
+    log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
 }
@@ -235,7 +235,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
-            log_capacity: None,
+            log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
         }
@@ -250,7 +250,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
-            log_capacity: self.log_capacity,
+            log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
         }
@@ -305,9 +305,9 @@ impl CanisterSettingsBuilder {
         }
     }
 
-    pub fn with_log_capacity(self, log_capacity: NumBytes) -> Self {
+    pub fn with_log_memory_limit(self, log_memory_limit: NumBytes) -> Self {
         Self {
-            log_capacity: Some(log_capacity),
+            log_memory_limit: Some(log_memory_limit),
             ..self
         }
     }
@@ -414,7 +414,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
-    log_capacity: Option<NumBytes>,
+    log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
 }
@@ -429,7 +429,7 @@ impl ValidatedCanisterSettings {
         reserved_cycles_limit: Option<Cycles>,
         reservation_cycles: Cycles,
         log_visibility: Option<LogVisibilityV2>,
-        log_capacity: Option<NumBytes>,
+        log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
     ) -> Self {
@@ -442,7 +442,7 @@ impl ValidatedCanisterSettings {
             reserved_cycles_limit,
             reservation_cycles,
             log_visibility,
-            log_capacity,
+            log_memory_limit,
             wasm_memory_limit,
             environment_variables,
         }
@@ -480,8 +480,8 @@ impl ValidatedCanisterSettings {
         self.log_visibility.as_ref()
     }
 
-    pub fn log_capacity(&self) -> Option<NumBytes> {
-        self.log_capacity
+    pub fn log_memory_limit(&self) -> Option<NumBytes> {
+        self.log_memory_limit
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {

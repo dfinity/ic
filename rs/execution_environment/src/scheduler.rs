@@ -1586,7 +1586,7 @@ impl Scheduler for SchedulerImpl {
                     // TODO(EXC-2141): Remove this temporary code of setting the log capacity to default value.
                     // This code is added to make sure that all the canisters (existing and new ones)
                     // have the log capacity set to the default value.
-                    canister.system_state.log_capacity =
+                    canister.system_state.log_memory_limit =
                         NumBytes::new(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64);
                 }
                 // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.

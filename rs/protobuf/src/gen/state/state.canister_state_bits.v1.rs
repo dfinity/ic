@@ -677,7 +677,7 @@ pub struct CanisterStateBits {
     pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     /// The capacity of the canister log in bytes.
     #[prost(uint64, tag = "56")]
-    pub log_capacity: u64,
+    pub log_memory_limit: u64,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
