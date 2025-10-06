@@ -1,4 +1,6 @@
 use super::*;
+use crate::storage::with_voting_history_store;
+use crate::temporarily_enable_known_neuron_voting_history;
 use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
@@ -1171,7 +1173,7 @@ fn test_pre_and_post_upgrade_first_time() {
         },
     )
     .build();
-    governance.add_neuron(1, neuron, false).unwrap();
+    governance.add_neuron(1, neuron).unwrap();
 
     // Simulate seeding the randomness in a running governance canister.
     governance.randomness.seed_rng([12; 32]);
@@ -1563,10 +1565,10 @@ fn test_update_neuron_errors_out_expectedly() {
     );
     let neuron = new_neuron(vec![1; 32]);
     let neuron_subaccount = neuron.subaccount();
-    governance.add_neuron(1, neuron, false).unwrap();
+    governance.add_neuron(1, neuron).unwrap();
 
     assert_eq!(
-        governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default())),
+        governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default(), false)),
         Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!("Cannot change the subaccount {neuron_subaccount} of a neuron."),
@@ -1614,12 +1616,12 @@ fn test_compute_ballots_for_new_proposal() {
         Box::new(MockRandomness::new()),
     );
 
-    governance.add_neuron(10, neuron_10, false).unwrap();
+    governance.add_neuron(10, neuron_10).unwrap();
     governance
-        .add_neuron(200, new_neuron_builder(200).build(), false)
+        .add_neuron(200, new_neuron_builder(200).build())
         .unwrap();
     governance
-        .add_neuron(3_000, new_neuron_builder(3_000).build(), false)
+        .add_neuron(3_000, new_neuron_builder(3_000).build())
         .unwrap();
 
     let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
@@ -1819,4 +1821,55 @@ fn test_validate_add_or_remove_node_provider() {
         result.is_err(),
         "Expected to fail, but got success: {result:?}"
     );
+}
+
+#[test]
+fn test_record_known_neuron_abstentions() {
+    let _t = temporarily_enable_known_neuron_voting_history();
+
+    record_known_neuron_abstentions(
+        &[NeuronId { id: 1 }, NeuronId { id: 2 }],
+        ProposalId { id: 1 },
+        hashmap! {
+            1 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+            2 => Ballot { voting_power: 1, vote: Vote::Yes as i32 },
+            3 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+            4 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        },
+    );
+
+    with_voting_history_store(|voting_history| {
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 1 }),
+            vec![(ProposalId { id: 1 }, Vote::Unspecified)]
+        );
+        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 2 }), vec![]);
+        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 3 }), vec![]);
+        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
+        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+    });
+
+    record_known_neuron_abstentions(
+        &[NeuronId { id: 1 }, NeuronId { id: 2 }, NeuronId { id: 3 }],
+        ProposalId { id: 2 },
+        hashmap! {
+            1 => Ballot { voting_power: 1, vote: Vote::Yes as i32 },
+            3 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+            4 => Ballot { voting_power: 1, vote: Vote::No as i32 },
+        },
+    );
+
+    with_voting_history_store(|voting_history| {
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 1 }),
+            vec![(ProposalId { id: 1 }, Vote::Unspecified),]
+        );
+        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 2 }), vec![]);
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 3 }),
+            vec![(ProposalId { id: 2 }, Vote::Unspecified)]
+        );
+        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
+        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+    });
 }

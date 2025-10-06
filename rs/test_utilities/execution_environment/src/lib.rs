@@ -327,12 +327,11 @@ impl ExecutionTest {
 
     pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
         // In case of any error or missing state, default to Wasm32.
-        if let Some(state) = self.state.as_ref() {
-            if let Some(canister) = state.canister_state(&canister_id).as_ref() {
-                if let Some(execution_state) = canister.execution_state.as_ref() {
-                    return execution_state.wasm_execution_mode;
-                }
-            }
+        if let Some(state) = self.state.as_ref()
+            && let Some(canister) = state.canister_state(&canister_id).as_ref()
+            && let Some(execution_state) = canister.execution_state.as_ref()
+        {
+            return execution_state.wasm_execution_mode;
         }
         WasmExecutionMode::Wasm32
     }
@@ -1032,6 +1031,10 @@ impl ExecutionTest {
         self.canister_from_cycles_and_wat(self.initial_canister_cycles, wat)
     }
 
+    pub fn create_canister_with_default_cycles(&mut self) -> CanisterId {
+        self.create_canister(self.initial_canister_cycles)
+    }
+
     /// Creates and installs a universal canister.
     pub fn universal_canister(&mut self) -> Result<CanisterId, UserError> {
         self.canister_from_binary(UNIVERSAL_CANISTER_WASM.to_vec())
@@ -1367,14 +1370,14 @@ impl ExecutionTest {
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
-        if let Some(canister_id) = maybe_canister_id {
-            if let Some(instructions_used) = instructions_used {
-                self.update_execution_stats(
-                    canister_id,
-                    self.install_code_instruction_limits.message(),
-                    instructions_used,
-                );
-            }
+        if let Some(canister_id) = maybe_canister_id
+            && let Some(instructions_used) = instructions_used
+        {
+            self.update_execution_stats(
+                canister_id,
+                self.install_code_instruction_limits.message(),
+                instructions_used,
+            );
         }
         true
     }
@@ -2690,6 +2693,23 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
         .1
         .unwrap();
     serialized_module.compilation_cost
+}
+
+// This function copies the behavior of the actual logging cost computation in
+// rs/embedders/src/wasmtime_embedder/linker.rs.
+fn logging_charge_bytes(message_num_bytes: usize) -> usize {
+    const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let capacity = MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    let remaining_space = capacity;
+    let allocated_num_bytes = message_num_bytes.min(capacity);
+    let transmitted_num_bytes = message_num_bytes.min(remaining_space);
+    2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
+}
+
+/// Helper function to compute the cost of logging during `debug_print` and `trap`.
+pub fn bytes_and_logging_cost(num_bytes: usize) -> usize {
+    num_bytes + logging_charge_bytes(num_bytes)
 }
 
 /// Create a routing table with an allocation range for the creation of canisters with specified Canister IDs.

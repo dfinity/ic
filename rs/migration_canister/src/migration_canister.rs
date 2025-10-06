@@ -5,16 +5,16 @@
 use std::fmt::Display;
 
 use candid::{CandidType, Principal};
-use ic_cdk::{api::msg_caller, init, post_upgrade, println, update};
-use itertools::Itertools;
+use ic_cdk::{api::msg_caller, init, post_upgrade, println, query, update};
 use serde::Deserialize;
 use strum::Display;
 
 use crate::{
     RequestState, ValidationError,
     canister_state::{
+        events::find_event,
         migrations_disabled,
-        requests::{insert_request, list_by},
+        requests::{find_request, insert_request},
     },
     rate_limited, start_timers,
     validation::validate_request,
@@ -70,25 +70,54 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
 
 #[derive(Clone, Display, CandidType, Deserialize)]
 enum MigrationStatus {
-    Unknown,
     #[strum(to_string = "MigrationStatus::InProgress {{ status: {status} }}")]
-    InProgress {
-        status: String,
-    },
-    #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason} }}")]
-    Failed {
-        reason: String,
-    },
-    Succeeded,
+    InProgress { status: String },
+    #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason}, time: {time} }}")]
+    Failed { reason: String, time: u64 },
+    #[strum(to_string = "MigrationStatus::Succeeded {{ time: {time} }}")]
+    Succeeded { time: u64 },
 }
 
-#[update]
-/// we return a vector.
+#[query]
 /// The same (source, target) pair might be present in the `HISTORY`, and valid to process again, so
-fn migration_status(_args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
-    // TODO
-    println!("[{}]", list_by(|_| true).iter().format(", "));
-    vec![MigrationStatus::Unknown]
+/// we return a vector.
+fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
+    let mut active: Vec<MigrationStatus> = find_request(args.source, args.target)
+        .into_iter()
+        .map(|r| MigrationStatus::InProgress {
+            status: r.name().to_string(),
+        })
+        .collect();
+    let events: Vec<MigrationStatus> = find_event(args.source, args.target)
+        .into_iter()
+        .map(|event| match event.event {
+            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: event.time },
+            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
+                reason,
+                time: event.time,
+            },
+        })
+        .collect();
+    active.extend(events);
+    active
 }
 
-// TODO: history endpoint
+#[derive(Clone, CandidType, Deserialize)]
+struct ListEventsArgs {
+    page_index: u64,
+    page_size: u64,
+}
+
+#[query]
+fn list_events(args: ListEventsArgs) -> Vec<MigrationStatus> {
+    crate::canister_state::events::list_events(args.page_index, args.page_size)
+        .into_iter()
+        .map(|e| match e.event {
+            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: e.time },
+            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
+                reason,
+                time: e.time,
+            },
+        })
+        .collect()
+}

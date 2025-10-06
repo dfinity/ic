@@ -10,6 +10,13 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+# 2025-09-19: Proposal 138584
+
+https://dashboard.internetcomputer.org/proposal/138584
+
+## Added
+
+* The feature flag `SNS_EXTENSIONS_ENABLED` is turned on. Enabling it allows for deployment of SNS extensions.
 
 # 2025-09-05: Proposal 138373
 

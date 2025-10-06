@@ -10,8 +10,8 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::{
-        AuthMean, get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted,
+        AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
+        update_subnet_record, wait_until_authentication_is_granted,
     },
     upgrade::assert_assigned_replica_version,
 };
@@ -25,9 +25,9 @@ use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        nested::NestedVm,
-        nested::{HasNestedVms, NestedNodes},
-        test_env::TestEnv,
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+        nested::{HasNestedVms, NestedNodes, NestedVm},
+        test_env::{SshKeyGen, TestEnv},
         test_env_api::*,
     },
     nns::change_subnet_membership,
@@ -39,6 +39,12 @@ use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{Logger, info};
 use tokio::task::JoinSet;
+
+pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
+    vcpus: Some(NrOfVCPUs::new(8)),
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
+    boot_image_minimal_size_gibibytes: None,
+};
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
@@ -54,6 +60,8 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual version of the recovery
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
+
+const BACKUP_USERNAME: &str = "backup";
 
 const ADMIN_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
 const BACKUP_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/backup_key";
@@ -147,7 +155,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
 
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
 
-    let backup_mean = AuthMean::PrivateKey(ssh_priv_key);
+    let auth_mean = AuthMean::PrivateKey(ssh_priv_key);
     for node in nns_subnet.nodes() {
         info!(
             logger,
@@ -155,7 +163,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
             node.node_id,
             node.get_ip_addr()
         );
-        wait_until_authentication_is_granted(&node.get_ip_addr(), "backup", &backup_mean);
+        wait_until_authentication_is_granted(&node.get_ip_addr(), BACKUP_USERNAME, &auth_mean);
     }
 
     info!(logger, "Success: Backup access granted to all NNS nodes");
@@ -169,7 +177,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new(&host_vm_names)
+    NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
         .setup_and_start(&env)
         .unwrap();
 }
@@ -185,14 +193,23 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
-    let ssh_priv_key_path = env
-        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-        .join(SSH_USERNAME);
-    let ssh_pub_key_path = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME);
+    let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
+    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+
+    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
+    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
+        .expect("Failed to read admin SSH private key");
+    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
+
+    // Generate a new backup keypair
+    env.ssh_keygen_for_user(BACKUP_USERNAME)
+        .expect("ssh-keygen failed for backup key");
+    let ssh_backup_priv_key_path = ssh_authorized_priv_keys_dir.join(BACKUP_USERNAME);
+    let ssh_backup_pub_key_path = ssh_authorized_pub_keys_dir.join(BACKUP_USERNAME);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &ssh_priv_key_path, &ssh_pub_key_path);
+    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
 
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
@@ -299,6 +316,32 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         "Success: Subnet is broken - cannot store new messages"
     );
 
+    // Mirror production setup by removing admin SSH access from all nodes except the DFINITY-owned node
+    info!(
+        logger,
+        "Remove admin SSH access from all NNS nodes except the DFINITY-owned node"
+    );
+    let nodes_except_dfinity_owned = nns_subnet
+        .nodes()
+        .filter(|n| n.node_id != dfinity_owned_node.node_id)
+        .collect::<Vec<_>>();
+    for node in nodes_except_dfinity_owned {
+        info!(
+            logger,
+            "Removing admin SSH access from node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+
+        let _ = disable_ssh_access_to_node(&node, SSH_USERNAME, &admin_auth).unwrap();
+    }
+    // Ensure we can still SSH into the DFINITY-owned node with the admin key
+    wait_until_authentication_is_granted(
+        &dfinity_owned_node.get_ip_addr(),
+        SSH_USERNAME,
+        &admin_auth,
+    );
+
     // Download pool from the node with the highest certification share height
     let (download_pool_node, highest_certification_share_height) = nns_subnet
         .nodes()
@@ -313,7 +356,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
         replica_version: Some(ic_version),
-        key_file: Some(ssh_priv_key_path.clone()),
+        admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -328,10 +371,10 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
-        download_state_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
-        upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        keep_downloaded_state: Some(false),
         wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
-        backup_key_file: Some(ssh_priv_key_path),
+        backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
         skip: None,
@@ -558,7 +601,7 @@ fn local_recovery(
     let node_ip = node.get_ip_addr();
 
     let maybe_admin_key_file =
-        if let Some(admin_key_file) = &subnet_recovery_tool.recovery_args.key_file {
+        if let Some(admin_key_file) = &subnet_recovery_tool.recovery_args.admin_key_file {
             info!(
                 logger,
                 "Copying the admin key file to node {node_id} with IP {node_ip} ..."
@@ -571,7 +614,7 @@ fn local_recovery(
                 0o400,
             );
 
-            format!("--key-file {ADMIN_KEY_FILE_REMOTE_PATH} ")
+            format!("--admin-key-file {ADMIN_KEY_FILE_REMOTE_PATH} ")
         } else {
             String::default()
         };
@@ -622,6 +665,11 @@ fn local_recovery(
         .download_pool_node
         .map(|n| format!("--download-pool-node {n} "))
         .unwrap_or_default();
+    let maybe_keep_downloaded_state = subnet_recovery_tool
+        .params
+        .keep_downloaded_state
+        .map(|b| format!("--keep-downloaded-state {b} "))
+        .unwrap_or_default();
     let maybe_skips = subnet_recovery_tool
         .params
         .skip
@@ -638,7 +686,7 @@ fn local_recovery(
         r#"/opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         {maybe_admin_key_file}\
-        --test --skip-prompts --use-local-binaries \
+        --test --skip-prompts \
         nns-recovery-same-nodes \
         --subnet-id {subnet_id} \
         {maybe_upgrade_version}\
@@ -646,8 +694,8 @@ fn local_recovery(
         {maybe_upgrade_image_url}\
         {maybe_upgrade_image_hash}\
         {maybe_download_pool_node}\
-        --download-state-method local \
-        --upload-method local \
+        --admin-access-location local \
+        {maybe_keep_downloaded_state}\
         --wait-for-cup-node {node_ip} \
         {maybe_backup_key_file}\
         --output-dir {OUTPUT_DIR_REMOTE_PATH} \

@@ -149,7 +149,7 @@ class Args:
         self.csv_filename = self.csv_filename or csv_filename_env_var
 
         assert (self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway) or not (
-            self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway
+            self.inject_image_ipv6_prefix or self.inject_image_ipv6_gateway
         ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
             assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
@@ -171,8 +171,8 @@ class BMCInfo:
     username: str
     password: str
     network_image_url: str
-    guestos_ipv6_address: Optional[IPv6Address] = None
-    hostos_ipv6_address: Optional[IPv6Address] = None
+    guestos_ipv6_address: IPv6Address
+    hostos_ipv6_address: IPv6Address
 
     def __post_init__(self):
         def assert_not_empty(name: str, x: Any) -> None:
@@ -184,7 +184,7 @@ class BMCInfo:
 
     # Don't print secrets
     def __str__(self):
-        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, hostos_ipv6_address={self.hostos_ipv6_address}), guestos_ipv6_address={self.guestos_ipv6_address})"
+        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, hostos_ipv6_address={self.hostos_ipv6_address}, guestos_ipv6_address={self.guestos_ipv6_address})"
 
     def __repr__(self):
         return self.__str__()
@@ -209,10 +209,6 @@ class Ipv4Args:
 
 
 def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
-    if len(row) == 3:
-        ip_address, username, password = row
-        return BMCInfo(ip_address, username, password, network_image_url)
-
     if len(row) == 4:
         ip_address, username, password, guestos_ipv6_address = row
         hostos_ipv6_address = guestos_ipv6_address.replace("6801", "6800", 1)
@@ -226,7 +222,7 @@ def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
             IPv6Address(hostos_ipv6_address),
         )
 
-    assert False, f"Invalid csv row found. Must be 3 or 4 items: {row}"
+    assert False, f"Invalid csv row found. Must be 4 items: {row}"
 
 
 def parse_from_csv_file(csv_filename: str, network_image_url: str) -> List["BMCInfo"]:
@@ -472,16 +468,10 @@ def deploy_server(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
 
-        # If guestos ipv6 address is present, loop on checking connectivity.
-        # Otherwise, just wait.
         timeout_secs = 5
 
-        def wait_func() -> bool:
-            wait(timeout_secs)
-            return False
-
         def check_connectivity_func() -> bool:
-            assert bmc_info.guestos_ipv6_address is not None, "Logic error"
+            log.info(f"Checking guestos ({bmc_info.guestos_ipv6_address}) connectivity...")
 
             result = check_guestos_ping_connectivity(bmc_info.guestos_ipv6_address, timeout_secs)
             result = result and check_guestos_metrics_version(bmc_info.guestos_ipv6_address, timeout_secs)
@@ -491,13 +481,11 @@ def deploy_server(
 
             return result
 
-        iterate_func = check_connectivity_func if bmc_info.guestos_ipv6_address else wait_func
-
         log.info(f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}")
         start_time = time.time()
         end_time = start_time + wait_time_mins * 60
         while time.time() < end_time:
-            if iterate_func():
+            if check_connectivity_func():
                 log.info("*** Deployment SUCCESS!")
                 return OperationResult(bmc_info, success=True)
             time.sleep(timeout_secs)
@@ -728,14 +716,15 @@ def inject_config_into_image(
 
     image_part = f"--image-path {img_path}"
     reward_part = f"--node-reward-type {node_reward_type}"
-    prefix_part = f"--ipv6-prefix {ipv6_prefix}"
+    prefix_part = f"--ipv6-prefix {ipv6_prefix} "
+    prefix_part += "--ipv6-prefix-length 64"
     gateway_part = f"--ipv6-gateway {ipv6_gateway}"
     ipv4_part = ""
     if ipv4_args:
         ipv4_part = f"--ipv4-address {ipv4_args.address} "
         ipv4_part += f"--ipv4-gateway {ipv4_args.gateway} "
         ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
-        ipv4_part += f"--domain {ipv4_args.domain} "
+        ipv4_part += f"--domain-name {ipv4_args.domain} "
 
     enable_trusted_execution_environment_part = ""
     if inject_enable_trusted_execution_environment is not None:

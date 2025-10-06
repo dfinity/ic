@@ -453,6 +453,15 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    CanisterSnapshotNotController {
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
+    CanisterSnapshotNotLoadable {
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
     CanisterSnapshotExecutionStateNotFound {
         canister_id: CanisterId,
     },
@@ -498,6 +507,13 @@ pub(crate) enum CanisterManagerError {
     EnvironmentVariablesValueTooLong {
         value: String,
         max_value_length: usize,
+    },
+    CanisterMetadataNoWasmModule {
+        canister_id: CanisterId,
+    },
+    CanisterMetadataSectionNotFound {
+        canister_id: CanisterId,
+        section_name: String,
     },
 }
 
@@ -646,6 +662,20 @@ impl AsErrorHelp for CanisterManagerError {
                         .to_string(),
                 doc_link: doc_ref("canister-snapshot-invalid-ownership"),
             },
+            CanisterManagerError::CanisterSnapshotNotController { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Make sure you are a controller of the canister that the snapshot belongs to."
+                        .to_string(),
+                    doc_link: "canister-snapshot-not-controller".to_string(),
+                }
+            }
+            CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Snapshot is not currently loadable on the specified canister. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes)."
+                        .to_string(),
+                    doc_link: "canister-snapshot-not-loadable".to_string(),
+                }
+            }
             CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "".to_string(),
@@ -720,6 +750,14 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
                 suggestion: "Shorten the environment variable value to fit within the allowed limit.".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataNoWasmModule { .. } => ErrorHelp::UserError {
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-no-wasm-module".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-section-not-found".to_string(),
             },
         }
     }
@@ -1007,6 +1045,27 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterSnapshotImmutable,
                 "Only canister snapshots created by metadata upload can be mutated.".to_string(),
             ),
+            CanisterSnapshotNotController {
+                sender,
+                canister_id,
+                snapshot_id,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}.{additional_help}",
+                    snapshot_id, canister_id, sender,
+                ),
+            ),
+            CanisterSnapshotNotLoadable {
+                canister_id,
+                snapshot_id,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Snapshot {} is not currently loadable on the specified canister {}. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes).",
+                    snapshot_id, canister_id,
+                ),
+            ),
             LongExecutionAlreadyInProgress { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
@@ -1072,6 +1131,21 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::InvalidManagementPayload,
                 format!(
                     "Environment variable value \"{value}\" exceeds the maximum allowed length of {max_value_length}."
+                ),
+            ),
+            CanisterMetadataNoWasmModule { canister_id } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no Wasm module and hence no metadata is available."
+                ),
+            ),
+            CanisterMetadataSectionNotFound {
+                canister_id,
+                section_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no metadata section with the name {section_name}."
                 ),
             ),
         }

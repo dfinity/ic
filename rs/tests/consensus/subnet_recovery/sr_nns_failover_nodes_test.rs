@@ -172,7 +172,7 @@ pub fn test(env: TestEnv) {
         dir: recovery_dir,
         nns_url: parent_nns_node.get_public_url(),
         replica_version: Some(ic_version.clone()),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
+        admin_key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -212,8 +212,7 @@ pub fn test(env: TestEnv) {
     for node in faulty_nodes {
         subnet_recovery
         .get_recovery_api()
-        .execute_ssh_command(
-            "admin",
+        .execute_admin_ssh_command(
             node.get_ip_addr(),
             "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
         )

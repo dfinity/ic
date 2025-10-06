@@ -13,10 +13,8 @@ use ic_config::{
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
 };
-use ic_consensus::{
-    consensus::payload_builder::PayloadBuilderImpl, make_registry_cup,
-    make_registry_cup_from_cup_contents,
-};
+use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
+use ic_consensus_cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
@@ -99,8 +97,7 @@ use ic_registry_keys::{
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, RoutingTable,
-    routing_table_insert_subnet,
+    CanisterIdRange, CanisterIdRanges, RoutingTable, routing_table_insert_subnet,
 };
 use ic_registry_subnet_features::{
     ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig, SubnetFeatures,
@@ -108,7 +105,10 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
-    canister_state::{NumWasmPages, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase},
+    canister_state::{
+        NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::{CanisterHistory, CyclesUseCase},
+    },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
 };
@@ -232,6 +232,7 @@ impl Verifier for FakeVerifier {
 /// - routing table record;
 /// - subnet list record;
 /// - chain key records;
+/// - (empty) node rewards table.
 pub fn add_global_registry_records(
     nns_subnet_id: SubnetId,
     routing_table: RoutingTable,
@@ -369,7 +370,7 @@ fn add_subnet_local_registry_records(
     ni_dkg_transcript: NiDkgTranscript,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_version: RegistryVersion,
-) -> FakeRegistryClient {
+) {
     for node in nodes {
         let node_record = NodeRecord {
             node_operator_id: vec![0],
@@ -512,10 +513,6 @@ fn add_subnet_local_registry_records(
         subnet_id,
         public_key,
     );
-
-    let registry_client = FakeRegistryClient::new(Arc::clone(&registry_data_provider) as _);
-    registry_client.update_to_latest_version();
-    registry_client
 }
 
 /// Convert an object into CBOR binary.
@@ -691,35 +688,43 @@ impl PocketXNetImpl {
             refill_stream_slice_indices(self.pool.clone(), self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
-            let sm = self.subnets.get(subnet_id).unwrap();
-            match sm.generate_certified_stream_slice(
-                self.own_subnet_id,
-                Some(indices.witness_begin),
-                Some(indices.msg_begin),
-                None,
-                Some(indices.byte_limit),
-            ) {
-                Ok(slice) => {
-                    if indices.witness_begin != indices.msg_begin {
-                        // Pulled a stream suffix, append to pooled slice.
-                        self.pool
-                            .lock()
-                            .unwrap()
-                            .append(subnet_id, slice, registry_version, log.clone())
-                            .unwrap();
-                    } else {
-                        // Pulled a complete stream, replace pooled slice (if any).
-                        self.pool
-                            .lock()
-                            .unwrap()
-                            .put(subnet_id, slice, registry_version, log.clone())
-                            .unwrap();
+            // When restoring a PocketIC instance from its state,
+            // subnets are created sequentially and thus it is expected
+            // that some subnets might not exist yet.
+            if let Some(sm) = self.subnets.get(subnet_id) {
+                match sm.generate_certified_stream_slice(
+                    self.own_subnet_id,
+                    Some(indices.witness_begin),
+                    Some(indices.msg_begin),
+                    None,
+                    Some(indices.byte_limit),
+                ) {
+                    Ok(slice) => {
+                        if indices.witness_begin != indices.msg_begin {
+                            // Pulled a stream suffix, append to pooled slice.
+                            self.pool
+                                .lock()
+                                .unwrap()
+                                .append(subnet_id, slice, registry_version, log.clone())
+                                .unwrap();
+                        } else {
+                            // Pulled a complete stream, replace pooled slice (if any).
+                            self.pool
+                                .lock()
+                                .unwrap()
+                                .put(subnet_id, slice, registry_version, log.clone())
+                                .unwrap();
+                        }
                     }
+                    Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
+                    Err(err) => panic!("Unexpected XNetClient error: {err}"),
                 }
-                Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
-                Err(err) => panic!("Unexpected XNetClient error: {err}"),
             }
         }
+    }
+
+    fn subnets(&self) -> Arc<dyn Subnets> {
+        self.subnets.clone()
     }
 }
 
@@ -1002,7 +1007,10 @@ pub struct StateMachineBuilder {
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
-    create_at_registry_version: RegistryVersion,
+    /// If a registry version is provided, then new registry records are created for the `StateMachine`
+    /// at the provided registry version.
+    /// Otherwise, no new registry records are created.
+    create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
 }
 
@@ -1042,7 +1050,7 @@ impl StateMachineBuilder {
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
             remove_old_states: true,
-            create_at_registry_version: INITIAL_REGISTRY_VERSION,
+            create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
@@ -1273,7 +1281,10 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn create_at_registry_version(self, registry_version: RegistryVersion) -> Self {
+    /// If a registry version is provided, then new registry records are created for the `StateMachine`
+    /// at the provided registry version.
+    /// Otherwise, no new registry records are created.
+    pub fn create_at_registry_version(self, registry_version: Option<RegistryVersion>) -> Self {
         Self {
             create_at_registry_version: registry_version,
             ..self
@@ -1662,7 +1673,7 @@ impl StateMachine {
         seed: [u8; 32],
         log_level: Option<Level>,
         remove_old_states: bool,
-        create_at_registry_version: RegistryVersion,
+        create_at_registry_version: Option<RegistryVersion>,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
@@ -1730,24 +1741,22 @@ impl StateMachine {
             malicious_flags.clone(),
         ));
 
-        let registry_client = add_subnet_local_registry_records(
-            subnet_id,
-            subnet_type,
-            features,
-            &nodes,
-            public_key,
-            &chain_keys_enabled_status,
-            ni_dkg_transcript,
-            registry_data_provider.clone(),
-            create_at_registry_version,
-        );
+        if let Some(create_registry_version) = create_at_registry_version {
+            add_subnet_local_registry_records(
+                subnet_id,
+                subnet_type,
+                features,
+                &nodes,
+                public_key,
+                &chain_keys_enabled_status,
+                ni_dkg_transcript,
+                registry_data_provider.clone(),
+                create_registry_version,
+            );
+        }
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            subnet_type,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
+        let registry_client = FakeRegistryClient::new(Arc::clone(&registry_data_provider) as _);
+        registry_client.update_to_latest_version();
 
         // get the CUP from the registry
         let cup: CatchUpPackage =
@@ -1805,9 +1814,8 @@ impl StateMachine {
                 &metrics_registry,
                 subnet_id,
                 subnet_type,
-                subnet_config.scheduler_config.clone(),
                 hypervisor_config.clone(),
-                Arc::clone(&cycles_account_manager),
+                subnet_config.clone(),
                 Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&state_manager.get_fd_factory()),
                 completed_execution_messages_tx,
@@ -1821,7 +1829,7 @@ impl StateMachine {
             Arc::clone(&execution_services.ingress_history_writer) as _,
             execution_services.scheduler,
             hypervisor_config,
-            cycles_account_manager.clone(),
+            Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
@@ -1981,7 +1989,7 @@ impl StateMachine {
             subnet_id,
             replica_logger.clone(),
             state_manager.clone(),
-            cycles_account_manager.clone(),
+            Arc::clone(&execution_services.cycles_account_manager),
             malicious_flags,
             RandomStateKind::Deterministic,
         ));
@@ -2045,7 +2053,7 @@ impl StateMachine {
             query_stats_payload_builder: pocket_query_stats_payload_builder,
             vetkd_payload_builder,
             remove_old_states,
-            cycles_account_manager,
+            cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
         }
     }
@@ -3078,6 +3086,127 @@ impl StateMachine {
         Err(format!("No canister state for canister id {canister_id}."))
     }
 
+    /// Simulates a subnet split where the provided `canister_range` is assigned to a new subnet.
+    ///
+    /// The process has the following steps:
+    /// - Write a checkpoint on `self`.
+    /// - Clone its enire state directory into a new `state_dir`.
+    /// - Create a new `StateMachine` using this `state_dir` and the provided `seed`.
+    /// - Generate a new routing table that reflects the split.
+    /// - Use this routing table to perform the split on both state machines respectively.
+    /// - Adapt the registry with the new routing table and append the subnet to the subnets list.
+    ///
+    /// Returns an error if there is no XNet layer or if splitting the state fails.
+    pub fn split(
+        &self,
+        seed: [u8; 32],
+        canister_range: std::ops::RangeInclusive<CanisterId>,
+    ) -> Result<Arc<StateMachine>, String> {
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+
+        // Write a checkpoint.
+        self.checkpointed_tick();
+        self.state_manager.flush_tip_channel();
+
+        // Create a state dir for the new env; then clone the contents of the entire state directory.
+        let state_dir = Box::new(TempDir::new().expect("failed to create a temporary directory"));
+        fs_extra::dir::copy(
+            self.state_manager.state_layout().raw_path(),
+            state_dir.path(),
+            &fs_extra::dir::CopyOptions {
+                content_only: true,
+                ..fs_extra::dir::CopyOptions::new()
+            },
+        )
+        .expect("failed to clone state directory.");
+
+        // Create a new `StateMachine` using the same XNet pool.
+        let env = StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(self.nonce.load(Ordering::Relaxed))
+            .with_time(Time::from_nanos_since_unix_epoch(
+                self.time.load(Ordering::Relaxed),
+            ))
+            .with_checkpoint_interval_length(
+                self.checkpoint_interval_length.load(Ordering::Relaxed),
+            )
+            .with_subnet_size(self.nodes.len())
+            .with_subnet_seed(seed)
+            .with_subnet_id(ic_test_utilities_types::ids::subnet_test_id(1221))
+            .with_registry_data_provider(self.registry_data_provider.clone())
+            .build_with_subnets(
+                (*self.pocket_xnet.read().unwrap())
+                    .as_ref()
+                    .ok_or("no XNet layer found")?
+                    .subnets(),
+            );
+
+        let last_version = self.registry_client.get_latest_version();
+        let mut routing_table = self
+            .registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table");
+
+        // Add the new subnet and assign the split canister range to it.
+        routing_table_insert_subnet(&mut routing_table, env.get_subnet_id()).unwrap();
+        routing_table
+            .assign_ranges(
+                CanisterIdRanges::try_from(vec![CanisterIdRange {
+                    start: *canister_range.start(),
+                    end: *canister_range.end(),
+                }])
+                .unwrap(),
+                env.get_subnet_id(),
+            )
+            .expect("ranges are not well formed");
+
+        // Perform the split on `self`.
+        let (height, state) = self.state_manager.take_tip();
+        let mut state = state.split(self.get_subnet_id(), &routing_table, None)?;
+        state.after_split();
+
+        self.state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Full,
+            None,
+        );
+
+        // Perform the split on `env`, which requires preserving the `prev_state_hash`
+        // (as opposed to MVP subnet splitting where it is adjusted manually).
+        let (height, state) = env.state_manager.take_tip();
+        let prev_state_hash = state.metadata.prev_state_hash.clone();
+        let mut state = state.split(env.get_subnet_id(), &routing_table, None)?;
+        state.metadata.prev_state_hash = prev_state_hash;
+        state.after_split();
+
+        env.state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Full,
+            None,
+        );
+
+        // Adapt the registry.
+        let pb_routing_table = PbRoutingTable::from(routing_table);
+        self.registry_data_provider
+            .add(
+                &make_canister_ranges_key(CanisterId::from_u64(0)),
+                last_version.increment(),
+                Some(pb_routing_table.clone()),
+            )
+            .unwrap();
+        self.registry_client.update_to_latest_version();
+        assert!(self.add_subnet_to_subnets_list(env.get_subnet_id()));
+
+        // Reload registry to ensure consistency.
+        self.reload_registry();
+        env.reload_registry();
+
+        Ok(env)
+    }
+
     /// Returns the controllers of a canister or `None` if the canister does not exist.
     pub fn get_controllers(&self, canister_id: CanisterId) -> Option<Vec<PrincipalId>> {
         let state = self.state_manager.get_latest_state().take();
@@ -4052,6 +4181,34 @@ impl StateMachine {
         assert_eq!(next_version, self.registry_client.get_latest_version());
     }
 
+    /// Adds a `subnet_id` to the subnet list record.
+    ///
+    /// Returns `true` if the `subnet_id` was added as a new entry.
+    pub fn add_subnet_to_subnets_list(&self, subnet_id: SubnetId) -> bool {
+        use ic_registry_client_helpers::subnet::SubnetListRegistry;
+
+        let last_version = self.registry_client.get_latest_version();
+        let next_version = last_version.increment();
+
+        let mut subnet_ids = self
+            .registry_client
+            .get_subnet_ids(last_version)
+            .expect("malformed subnet list")
+            .unwrap_or_default();
+
+        let initial_len = subnet_ids.len();
+        subnet_ids.push(subnet_id);
+        subnet_ids.sort();
+        subnet_ids.dedup();
+
+        if subnet_ids.len() > initial_len {
+            add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Returns the subnet type of this state machine.
     pub fn get_subnet_type(&self) -> SubnetType {
         self.subnet_type
@@ -4399,6 +4556,19 @@ impl StateMachine {
 
         self.execute_payload(payload);
     }
+
+    /// Returns the history of the given canister_id.
+    ///
+    /// # Panics
+    /// Panics if the canister_id does not exist in the replicated state.
+    pub fn get_canister_history(&self, canister_id: CanisterId) -> CanisterHistory {
+        self.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .clone()
+    }
 }
 
 /// Make sure the latest state is certified.
@@ -4631,7 +4801,7 @@ impl Subnets for SubnetsImpl {
 }
 
 fn multi_subnet_setup(
-    subnets: Arc<SubnetsImpl>,
+    subnets: Arc<dyn Subnets>,
     subnet_seed: u8,
     subnet_type: SubnetType,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -4668,17 +4838,10 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     // Set up routing table with two subnets.
     let subnet_id1 = env1.get_subnet_id();
     let subnet_id2 = env2.get_subnet_id();
-    let range1 = CanisterIdRange {
-        start: CanisterId::from_u64(0),
-        end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
-    };
-    let range2 = CanisterIdRange {
-        start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
-        end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
-    };
+
     let mut routing_table = RoutingTable::new();
-    routing_table.insert(range1, subnet_id1).unwrap();
-    routing_table.insert(range2, subnet_id2).unwrap();
+    routing_table_insert_subnet(&mut routing_table, subnet_id1).unwrap();
+    routing_table_insert_subnet(&mut routing_table, subnet_id2).unwrap();
 
     // Set up subnet list for registry.
     let subnet_list = vec![subnet_id1, subnet_id2];
@@ -4699,6 +4862,15 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     env2.reload_registry();
 
     (env1, env2)
+}
+
+/// Generates the subnet ID from `seed`.
+pub fn subnet_id_from(seed: [u8; 32]) -> SubnetId {
+    let (ni_dkg_transcript, _) =
+        dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
+    let public_key = (&ni_dkg_transcript).try_into().unwrap();
+    let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+    PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
 // This test should panic on a critical error due to non-monotone timestamps.

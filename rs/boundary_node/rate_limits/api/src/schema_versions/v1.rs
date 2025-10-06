@@ -19,11 +19,17 @@ pub const SCHEMA_VERSION: u64 = 1;
 #[serde(rename_all = "snake_case")]
 pub enum RequestType {
     Unknown,
-    Query,
-    Call,
-    SyncCall,
-    ReadState,
-    ReadStateSubnet,
+    QueryV2,
+    QueryV3,
+    #[serde(alias = "call")]
+    CallV2,
+    #[serde(alias = "sync_call")]
+    CallV3,
+    CallV4,
+    ReadStateV2,
+    ReadStateV3,
+    ReadStateSubnetV2,
+    ReadStateSubnetV3,
 }
 
 /// Implement serde parser for Action
@@ -393,20 +399,20 @@ mod test {
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
           request_types:
-            - query
+            - query_v2
           methods_regex: ^(foo|bar)$
           limit: block
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
           request_types:
-            - call
-            - sync_call
+            - query_v2
+            - call_v3
           limit: block
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
           request_types:
-            - call
-            - sync_call
+            - call_v2
+            - call_v3
           limit: pass
           "};
 
@@ -462,7 +468,7 @@ mod test {
                 RateLimitRule {
                     subnet_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_types: Some(vec![RequestType::Query]),
+                    request_types: Some(vec![RequestType::QueryV2]),
                     methods_regex: Some(Regex::new("^(foo|bar)$").unwrap()),
                     ip: None,
                     ip_prefix_group: None,
@@ -471,7 +477,7 @@ mod test {
                 RateLimitRule {
                     subnet_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_types: Some(vec![RequestType::Call, RequestType::SyncCall]),
+                    request_types: Some(vec![RequestType::QueryV2, RequestType::CallV3]),
                     methods_regex: None,
                     ip: None,
                     ip_prefix_group: None,
@@ -480,7 +486,7 @@ mod test {
                 RateLimitRule {
                     subnet_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_types: Some(vec![RequestType::Call, RequestType::SyncCall]),
+                    request_types: Some(vec![RequestType::CallV2, RequestType::CallV3]),
                     methods_regex: None,
                     ip: None,
                     ip_prefix_group: None,
@@ -557,5 +563,59 @@ mod test {
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
         assert!(rules.unwrap_err().to_string().contains("request_type"));
+
+        // Backwards compatibility for call_v2 (call) and call_v3 (sync_call)
+        let rules = indoc! {"
+        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
+          request_types:
+            - call
+          limit: block
+
+        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
+          request_types:
+            - sync_call
+          limit: pass
+
+        - canister_id: aaaaa-aa
+          request_types:
+            - call
+            - sync_call
+          limit: pass
+          "};
+
+        let rules: Vec<RateLimitRule> = serde_yaml::from_str(rules).unwrap();
+
+        assert_eq!(
+            rules,
+            vec![
+                RateLimitRule {
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
+                    request_types: Some(vec![RequestType::CallV2]),
+                    methods_regex: None,
+                    ip: None,
+                    ip_prefix_group: None,
+                    limit: Action::Block,
+                },
+                RateLimitRule {
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
+                    request_types: Some(vec![RequestType::CallV3]),
+                    methods_regex: None,
+                    ip: None,
+                    ip_prefix_group: None,
+                    limit: Action::Pass,
+                },
+                RateLimitRule {
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("aaaaa-aa").unwrap()),
+                    request_types: Some(vec![RequestType::CallV2, RequestType::CallV3]),
+                    methods_regex: None,
+                    ip: None,
+                    ip_prefix_group: None,
+                    limit: Action::Pass,
+                },
+            ],
+        );
     }
 }

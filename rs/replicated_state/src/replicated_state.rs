@@ -10,7 +10,7 @@ use crate::{
     canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
-        system_state::{CanisterOutputQueuesIterator, push_input},
+        system_state::{CanisterOutputQueuesIterator, CyclesUseCase, push_input},
     },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
 };
@@ -26,11 +26,13 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
-    messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    messages::{
+        CallbackId, CanisterMessage, Ingress, MessageId, Refund, RequestOrResponse, Response,
+    },
     time::CoarseTime,
 };
 use ic_validate_eq::ValidateEq;
@@ -815,22 +817,19 @@ impl ReplicatedState {
             mut best_effort_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
-            wasm_chunk_store_memory_usage,
         ) = self
             .canisters_iter()
             .map(|canister| {
                 (
-                    match canister.memory_allocation() {
-                        MemoryAllocation::Reserved(bytes) => bytes,
-                        MemoryAllocation::BestEffort => canister.execution_memory_usage(),
-                    },
+                    canister
+                        .memory_allocation()
+                        .allocated_bytes(canister.memory_usage()),
                     canister
                         .system_state
                         .guaranteed_response_message_memory_usage(),
                     canister.system_state.best_effort_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
-                    canister.wasm_chunk_store_memory_usage(),
                 )
             })
             .reduce(|accum, val| {
@@ -840,7 +839,6 @@ impl ReplicatedState {
                     accum.2 + val.2,
                     accum.3 + val.3,
                     accum.4 + val.4,
-                    accum.5 + val.5,
                 )
             })
             .unwrap_or_default();
@@ -850,13 +848,8 @@ impl ReplicatedState {
         best_effort_message_memory_taken +=
             (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
 
-        let canister_snapshots_memory_taken = self.canister_snapshots.memory_taken();
-
         MemoryTaken {
-            execution: raw_memory_taken
-                + canister_history_memory_taken
-                + wasm_chunk_store_memory_usage
-                + canister_snapshots_memory_taken,
+            execution: raw_memory_taken,
             guaranteed_response_messages: guaranteed_response_message_memory_taken,
             best_effort_messages: best_effort_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
@@ -928,10 +921,6 @@ impl ReplicatedState {
 
     /// Pushes a `RequestOrResponse` into the induction pool (canister or subnet
     /// input queue).
-    ///
-    /// The messages from the same subnet get pushed into the local subnet
-    /// queue, while the messages from the other subnets get pushed to the inter
-    /// subnet queues.
     ///
     /// On success, returns `Ok(true)` if the message was successfully inducted; or
     /// `Ok(false)` if the message was a best-effort response that was silently
@@ -1013,6 +1002,21 @@ impl ReplicatedState {
             canister.push_ingress(msg);
         }
         Ok(())
+    }
+
+    /// Credits the cycles in `refund` to the recipient canister's balance.
+    ///
+    /// Returns `true` if the recipient canister exists and was credited, `false`
+    /// otherwise.
+    pub fn credit_refund(&mut self, refund: &Refund) -> bool {
+        if let Some(canister) = self.canister_states.get_mut(&refund.recipient()) {
+            canister
+                .system_state
+                .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);
+            true
+        } else {
+            false
+        }
     }
 
     /// Extracts the next inter-canister or ingress message (round-robin) from

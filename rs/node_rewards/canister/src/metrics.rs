@@ -1,14 +1,16 @@
 #![allow(deprecated)]
 use crate::KeyRange;
+use crate::chrono_utils::{first_unix_timestamp_nanoseconds, last_unix_timestamp_nanoseconds};
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use async_trait::async_trait;
 use candid::Principal;
+use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
-use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, UnixTsNanos};
+use rewards_calculation::types::{NodeMetricsDailyRaw, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
@@ -178,57 +180,58 @@ where
         }
     }
 
-    /// Computes daily node metrics for a specific day.
+    /// Computes daily node metrics for a specific date.
     ///
     /// This is done by subtracting the total metrics of the
-    /// previous day from those of the current day.
+    /// previous date from those of the current date.
     pub fn metrics_by_subnet(
         &self,
-        day_utc: &DayUtc,
+        date: &NaiveDate,
     ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
         let mut metrics_by_subnet = BTreeMap::new();
-        let previous_day_ts = day_utc.previous_day().unix_ts_at_day_start_nanoseconds();
         let first_key = SubnetMetricsKey {
-            timestamp_nanos: previous_day_ts,
+            timestamp_nanos: first_unix_timestamp_nanoseconds(&date.pred()),
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
-            timestamp_nanos: day_utc.get(),
+            timestamp_nanos: last_unix_timestamp_nanoseconds(date),
             ..SubnetMetricsKey::max_key()
         };
 
-        let mut subnets_metrics_by_day: BTreeMap<DayUtc, _> = self
+        let mut subnets_metrics_by_date: BTreeMap<NaiveDate, _> = self
             .subnets_metrics
             .borrow()
             .range(first_key..=last_key)
-            .into_group_map_by(|(k, _)| k.timestamp_nanos.into())
+            .into_group_map_by(|(k, _)| {
+                DateTime::from_timestamp_nanos(k.timestamp_nanos as i64).date_naive()
+            })
             .into_iter()
             .collect();
 
         let mut initial_total_metrics: HashMap<_, _> = HashMap::new();
-        if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value() {
-            if timestamp_nanos < day_utc {
-                initial_total_metrics = subnets_metrics_by_day
-                    .pop_first()
-                    .unwrap()
-                    .1
-                    .into_iter()
-                    .flat_map(|(k, v)| {
-                        v.nodes_metrics.into_iter().map(move |node_metrics| {
+        if let Some((stored_date, _)) = subnets_metrics_by_date.first_key_value()
+            && stored_date < date
+        {
+            initial_total_metrics = subnets_metrics_by_date
+                .pop_first()
+                .unwrap()
+                .1
+                .into_iter()
+                .flat_map(|(k, v)| {
+                    v.nodes_metrics.into_iter().map(move |node_metrics| {
+                        (
+                            (k.subnet_id, node_metrics.node_id),
                             (
-                                (k.subnet_id, node_metrics.node_id),
-                                (
-                                    node_metrics.num_blocks_proposed_total,
-                                    node_metrics.num_blocks_failed_total,
-                                ),
-                            )
-                        })
+                                node_metrics.num_blocks_proposed_total,
+                                node_metrics.num_blocks_failed_total,
+                            ),
+                        )
                     })
-                    .collect();
-            }
+                })
+                .collect();
         };
 
-        for (_, subnets_metrics) in subnets_metrics_by_day {
+        for (_, subnets_metrics) in subnets_metrics_by_date {
             for (k, v) in subnets_metrics {
                 let subnet_id = SubnetId::from(k.subnet_id.unwrap());
 

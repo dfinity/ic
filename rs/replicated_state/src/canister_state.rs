@@ -309,7 +309,7 @@ impl CanisterState {
     /// Returns an iterator that loops over the canister's output queues,
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
-    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator<'_> {
         self.system_state.output_into_iter()
     }
 
@@ -594,11 +594,6 @@ impl CanisterState {
         } = self;
 
         system_state.drop_in_progress_management_calls_after_split();
-    }
-
-    /// Appends the given log to the canister log.
-    pub fn append_log(&mut self, other: &mut CanisterLog) {
-        self.system_state.canister_log.append(other);
     }
 
     /// Clears the canister log.

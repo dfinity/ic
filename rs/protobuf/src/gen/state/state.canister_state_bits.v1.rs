@@ -439,6 +439,8 @@ pub struct CanisterLoadSnapshot {
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "SnapshotSource", tag = "4")]
     pub source: i32,
+    #[prost(message, optional, tag = "5")]
+    pub from_canister_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterControllers {
