@@ -1659,7 +1659,7 @@ fn canister_history_memory_usage_ignored_in_invariant_checks() {
 /// - loading canister snapshot;
 /// - changing canister settings (controllers).
 ///
-/// The tests also exercises the case of decreasing canister history memory usage
+/// The test also exercises the case of decreasing canister history memory usage
 /// after filling canister history with entries of the maximum possible size.
 #[test]
 fn subnet_available_memory() {
@@ -1733,7 +1733,9 @@ fn subnet_available_memory() {
     .unwrap();
     check_subnet_available_memory(&test, true);
 
-    // memory usage decreases after loading snapshot since the snapshot was taken with empty stable memory
+    // memory usage decreases after loading snapshot since the snapshot was taken with empty stable memory;
+    // this way, we also test that `CanisterManager::cycles_and_memory_usage_updates` can handle the case
+    // of decreasing memory usage
     let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     test.subnet_message(
         Method::LoadCanisterSnapshot,
