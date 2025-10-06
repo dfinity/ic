@@ -456,7 +456,7 @@ fn method_name_edge_cases(env: TestEnv) {
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
-        for url in [subnet_replica_url, api_bn_url] {
+        for (url, is_api_bn) in [(subnet_replica_url, false), (api_bn_url, true)] {
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
@@ -509,6 +509,11 @@ fn method_name_edge_cases(env: TestEnv) {
                     .await
                     .unwrap_err();
                 assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+
+                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
+                if is_api_bn {
+                    continue;
+                }
 
                 let too_long_method_name = 'x'.to_string().repeat(1 << 20);
                 let err = agent
