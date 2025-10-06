@@ -36,6 +36,10 @@ use ic_types::{
     messages::{MessageId, QueryResponseHash, WebAuthnEnvelope},
 };
 
+pub trait DummySizedVaultResponse {
+    fn dummy_vault_response(&self, input: Vec<u8>, response_size_bytes: usize) -> Vec<u8>;
+}
+
 /// The functionality offered by the crypto component
 pub trait Crypto:
     KeyManager
@@ -96,6 +100,7 @@ pub trait Crypto:
     // RandomTape
     + ThresholdSigner<RandomTapeContent>
     + ThresholdSigVerifier<RandomTapeContent>
+    + DummySizedVaultResponse
     // Traits for signing/verifying a MerkleRoot
     // (both Multi- and ThresholdSig) will be added at a later stage.
     //
@@ -158,5 +163,6 @@ impl<T> Crypto for T where
         + ThresholdSigVerifier<RandomBeaconContent>
         + ThresholdSigner<RandomTapeContent>
         + ThresholdSigVerifier<RandomTapeContent>
+        + DummySizedVaultResponse
 {
 }

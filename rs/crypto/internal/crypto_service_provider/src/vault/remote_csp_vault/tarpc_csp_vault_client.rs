@@ -5,12 +5,13 @@ use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
     CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError,
-    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
-    IDkgTranscriptInternalBytes, MultiSignatureCspVault, NiDkgCspVault, PksAndSksContainsErrors,
-    PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
-    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault,
-    ValidatePksAndSksError, VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError,
+    DummySizedRandomResponseGenerator, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
+    IDkgProtocolCspVault, IDkgTranscriptInternalBytes, MultiSignatureCspVault, NiDkgCspVault,
+    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault,
+    PublicRandomSeedGenerator, PublicRandomSeedGeneratorError, SecretKeyStoreCspVault,
+    ThresholdEcdsaSignerCspVault, ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault,
+    ThresholdSignatureCspVault, ValidatePksAndSksError, VetKdCspVault,
+    VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
 use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
@@ -856,5 +857,22 @@ impl PublicRandomSeedGenerator for RemoteCspVault {
                 internal_error: rpc_error.to_string(),
             })
         })
+    }
+}
+
+impl DummySizedRandomResponseGenerator for RemoteCspVault {
+    #[instrument(skip_all)]
+    fn dummy_response(
+        &self,
+        input: Vec<u8>,
+        response_size_bytes: usize,
+    ) -> Result<Vec<u8>, String> {
+        self.tokio_block_on(self.tarpc_csp_client.dummy_response(
+            context_with_timeout(self.rpc_timeout),
+            ByteBuf::from(input),
+            response_size_bytes,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| Err(rpc_error.to_string()))
+        .map(|x| x.into_vec())
     }
 }

@@ -254,6 +254,8 @@ pub trait TarpcCspVault {
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
 
     async fn new_public_seed() -> Result<Seed, PublicRandomSeedGeneratorError>;
+
+    async fn dummy_response(input: ByteBuf, response_size_bytes: usize) -> Result<ByteBuf, String>;
 }
 
 pub async fn run_csp_vault_server(

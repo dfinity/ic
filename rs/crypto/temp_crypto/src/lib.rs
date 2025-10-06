@@ -45,12 +45,7 @@ pub mod internal {
     use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_interfaces::crypto::{
-        BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
-        IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
-        LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
-        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
-        ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
-        ThresholdSigner, VetKdProtocol,
+        BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError, DummySizedVaultResponse, IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager, LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol
     };
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
@@ -1037,6 +1032,15 @@ pub mod internal {
         ) -> CryptoResult<IndividualMultiSigOf<T>> {
             self.crypto_component
                 .sign_multi(message, signer, registry_version)
+        }
+    }
+
+    impl<C: CryptoServiceProvider, R: CryptoComponentRng> DummySizedVaultResponse
+        for TempCryptoComponentGeneric<C, R>
+    {
+        fn dummy_vault_response(&self, input: Vec<u8>, response_size_bytes: usize) -> Vec<u8> {
+            self.crypto_component
+                .dummy_vault_response(input, response_size_bytes)
         }
     }
 

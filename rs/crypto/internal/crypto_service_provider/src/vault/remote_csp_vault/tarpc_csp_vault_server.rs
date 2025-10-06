@@ -561,6 +561,21 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let job = move || vault.new_public_seed();
         execute_on_thread_pool(&self.thread_pool, job).await
     }
+
+    async fn dummy_response(
+        self,
+        _: context::Context,
+        input: ByteBuf,
+        response_size_bytes: usize,
+    ) -> Result<ByteBuf, String> {
+        let vault = self.local_csp_vault;
+        let job = move || {
+            vault
+                .dummy_response(input.into_vec(), response_size_bytes)
+                .map(ByteBuf::from)
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
 }
 
 type VaultFactory<C> = dyn Fn(&ReplicaLogger, Arc<CryptoMetrics>) -> Arc<C> + Send + Sync;

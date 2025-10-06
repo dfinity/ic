@@ -30,7 +30,7 @@ use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_interfaces::crypto::KeyManager;
+use ic_interfaces::crypto::{DummySizedVaultResponse, KeyManager};
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, new_logger};
@@ -237,6 +237,14 @@ impl CryptoComponentImpl<Csp> {
 
     fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
         let _ = self.check_keys_with_registry(registry_version);
+    }
+}
+
+impl<C: CryptoServiceProvider> DummySizedVaultResponse for CryptoComponentImpl<C> {
+    fn dummy_vault_response(&self, input: Vec<u8>, response_size_bytes: usize) -> Vec<u8> {
+        self.vault
+            .dummy_response(input, response_size_bytes)
+            .expect("Failed to generate dummy response")
     }
 }
 
