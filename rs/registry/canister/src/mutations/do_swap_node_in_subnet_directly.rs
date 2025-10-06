@@ -1,5 +1,7 @@
 use crate::common::LOG_PREFIX;
-use crate::mutations::node_management::common::get_node_provider_id_for_operator_id;
+use crate::mutations::node_management::common::{
+    get_node_provider_id_for_node_id, get_node_provider_id_for_operator_id,
+};
 use crate::rate_limits::{
     commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
 };
@@ -54,16 +56,12 @@ impl Registry {
         let subnet_id = self.find_subnet_for_old_node(old_node_id)?;
         Self::swapping_allowed_on_subnet(subnet_id)?;
         // TODO - get rid of panics before feature enabled, and return nicer errors.
-        let node = self
-            .get_node(NodeId::from(payload.old_node_id.clone().unwrap()))
-            .ok_or(SwapError::NodeNotFound(
-                payload.old_node_id.clone().unwrap(),
-            ))?;
-        // Node should have valid bytes for node operator id
-        let node_operator_id = PrincipalId::try_from(node.node_operator_id).unwrap();
-        // NodeOperatorRecord should have valid bytes for node provider.
-        let node_provider_id =
-            get_node_provider_id_for_operator_id(self, node_operator_id).unwrap();
+        let old_node_id = NodeId::from(
+            payload
+                .old_node_id
+                .expect("Old Node Id should be validated as existing before this call."),
+        );
+        let node_provider_id = get_node_provider_id_for_node_id(self, old_node_id).unwrap();
 
         let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)
             .map_err(|e| SwapError::RateLimiterError(e))?;

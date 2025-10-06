@@ -1,5 +1,6 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, get_node_operator_record, node_exists_with_ipv4,
+    get_node_operator_id_for_node, get_node_operator_record, get_node_provider_id_for_operator_id,
+    node_exists_with_ipv4,
 };
 use crate::{common::LOG_PREFIX, mutations::common::node_exists_or_panic, registry::Registry};
 
@@ -46,13 +47,10 @@ impl Registry {
 
         // Ensure caller is actual node operator of the node in question
         self.check_caller_is_node_operator(caller_id, node_id);
-
-        // We know caller is node operator after last check.
-        let node_operator_record = get_node_operator_record(self, caller_id)?;
+        let node_operator_id = caller_id;
 
         // Unwrap should be safe because node_provider_principal_id has to be valid bytes.
-        let node_provider_id =
-            PrincipalId::try_from(node_operator_record.node_provider_principal_id).unwrap();
+        let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)?;
         let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
 
         // Ensure payload is valid

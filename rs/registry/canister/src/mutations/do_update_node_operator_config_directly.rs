@@ -68,7 +68,8 @@ impl Registry {
         }
 
         // 3. Check Rate Limits
-        let reservation = try_reserve_node_provider_op_capacity(now, caller, 1)?;
+        let current_node_provider = caller;
+        let reservation = try_reserve_node_provider_op_capacity(now, current_node_provider, 1)?;
 
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload

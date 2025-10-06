@@ -1,7 +1,10 @@
 use crate::mutations::node_management::common::{
     find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_node_provider_id_for_operator_id, get_subnet_list_record,
+    get_node_provider_id_for_node_id, get_node_provider_id_for_operator_id, get_subnet_list_record,
     make_remove_node_registry_mutations, make_update_node_operator_mutation,
+};
+use crate::rate_limits::{
+    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
 };
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
@@ -46,11 +49,18 @@ impl Registry {
         &mut self,
         payload: RemoveNodeDirectlyPayload,
         caller_id: PrincipalId,
-        _now: SystemTime,
+        now: SystemTime,
     ) -> Result<(), String> {
+        let node_provider_id = get_node_provider_id_for_node_id(self, payload.node_id)?;
+        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
+
         let mutations = self.make_remove_or_replace_node_mutations(payload, caller_id, None);
         // Check invariants and apply mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+            std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
+        }
 
         Ok(())
     }

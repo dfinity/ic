@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, get_node_operator_record,
+    get_node_operator_id_for_node, get_node_operator_record, get_node_provider_id_for_operator_id,
 };
 use crate::rate_limits::{
     commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
@@ -57,12 +57,7 @@ impl Registry {
             "The caller does not match this node's node operator id."
         );
 
-        // We know caller is node operator after last check.
-        let node_operator_record = get_node_operator_record(self, caller_id)?;
-
-        // Unwrap should be safe because node_provider_principal_id has to be valid bytes.
-        let node_provider_id =
-            PrincipalId::try_from(node_operator_record.node_provider_principal_id).unwrap();
+        let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)?;
         let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
 
         // Ensure domain name is valid

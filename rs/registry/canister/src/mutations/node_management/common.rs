@@ -108,6 +108,14 @@ pub fn get_node_provider_id_for_operator_id(
         )
 }
 
+pub fn get_node_provider_id_for_node_id(
+    registry: &Registry,
+    node_id: NodeId,
+) -> Result<PrincipalId, String> {
+    let node_operator_id = get_node_operator_id_for_node(registry, node_id)?;
+    get_node_provider_id_for_operator_id(registry, node_operator_id)
+}
+
 pub fn get_node_operator_record(
     registry: &Registry,
     node_operator_id: PrincipalId,
