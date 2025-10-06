@@ -722,3 +722,70 @@ fn test_archiving() {
 
     test_blocks_with_index();
 }
+
+#[test]
+fn test_archiving_all_blocks() {
+    let (env, ledger_id) = setup_icrc3_test_ledger();
+
+    const NUM_BLOCKS: u64 = 5;
+
+    for block_id in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(block_id, block_id)
+            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id as u32)))
+            .build();
+        let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+        assert_eq!(result, Nat::from(block_id));
+    }
+
+    verify_blocks_in_ledger(&env, ledger_id, 0, NUM_BLOCKS);
+
+    let archive1 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive1, NUM_BLOCKS);
+    assert_eq!(archived_count, NUM_BLOCKS);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, NUM_BLOCKS);
+    verify_blocks_in_ledger(&env, ledger_id, 0, 0);
+
+    let blocks_req = GetBlocksRequest {
+        start: Nat::from(0u64),
+        length: Nat::from(u64::MAX),
+    };
+
+    let blocks = get_blocks(&env, ledger_id, &blocks_req);
+    assert_eq!(blocks.first_index, NUM_BLOCKS);
+    assert_eq!(blocks.chain_length, NUM_BLOCKS);
+    assert!(blocks.blocks.is_empty());
+
+    let index_init_arg = IndexArg::Init(InitArg {
+        ledger_id: Principal::from(ledger_id),
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    });
+    let index = env
+        .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
+        .unwrap();
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+    let balance = icrc1_balance_of(&env, index, TEST_ACCOUNT_1);
+    assert_eq!(balance, 2u64.pow(NUM_BLOCKS as u32) - 1);
+
+    let block = BlockBuilder::new(NUM_BLOCKS, NUM_BLOCKS)
+        .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(NUM_BLOCKS as u32)))
+        .build();
+    let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+    assert_eq!(result, Nat::from(NUM_BLOCKS));
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+    let balance = icrc1_balance_of(&env, index, TEST_ACCOUNT_1);
+    assert_eq!(balance, 2u64.pow((NUM_BLOCKS + 1) as u32) - 1);
+
+    let blocks = get_blocks(&env, ledger_id, &blocks_req);
+    assert_eq!(blocks.first_index, NUM_BLOCKS);
+    assert_eq!(blocks.chain_length, NUM_BLOCKS + 1);
+    assert_eq!(blocks.blocks.len(), 1);
+}

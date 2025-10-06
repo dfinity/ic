@@ -37,6 +37,13 @@ thread_local! {
 fn next_block_id() -> u64 {
     BLOCKS.with(|blocks| match blocks.borrow().last_key_value() {
         Some((k, _)) => *k + 1,
+        None => first_non_archive_index(),
+    })
+}
+
+fn first_non_archive_index() -> u64 {
+    ARCHIVES.with(|archives| match archives.borrow().last() {
+        Some(archive) => archive.block_range.end,
         None => 0u64,
     })
 }
@@ -273,19 +280,15 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
             .map(|b| Value::from(b.block.clone()))
             .collect();
 
-        let first_non_archive = ARCHIVES.with(|archives| match archives.borrow().last() {
-            Some(archive) => archive.block_range.end,
-            None => 0u64,
-        });
         let first_index = match blocks.first_key_value() {
             Some((idx, _)) => {
                 let local_range = *idx..next_id;
                 match range_utils::intersect(&local_range, &requested_range) {
                     Ok(intersection) => intersection.start,
-                    Err(_) => first_non_archive,
+                    Err(_) => first_non_archive_index(),
                 }
             }
-            None => first_non_archive,
+            None => first_non_archive_index(),
         };
 
         let archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>> = blocks_res
