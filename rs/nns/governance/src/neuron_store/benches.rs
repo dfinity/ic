@@ -542,3 +542,38 @@ fn neuron_data_validation() -> BenchResult {
         validate_all_neurons(&neuron_store, &mut validator);
     })
 }
+
+#[bench(raw)]
+fn set_and_clear_known_neuron_data() -> BenchResult {
+    let mut rng = new_rng();
+    let mut neuron_store = set_up_neuron_store(&mut rng, 0, 0);
+    let neuron_ids = (0..3_000)
+        .map(|_| {
+            let neuron =
+                new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Typical).build();
+            let neuron_id = neuron.id();
+            neuron_store.add_neuron(neuron).unwrap();
+            neuron_id
+        })
+        .collect::<Vec<_>>();
+
+    bench_fn(|| {
+        for neuron_id in neuron_ids {
+            neuron_store
+                .with_neuron_mut(&neuron_id, |neuron| {
+                    neuron.set_known_neuron_data(KnownNeuronData {
+                        name: "a".repeat(KNOWN_NEURON_NAME_MAX_LEN),
+                        description: Some("b".repeat(KNOWN_NEURON_DESCRIPTION_MAX_LEN)),
+                        links: vec!["http://example.com".to_string()],
+                    });
+                })
+                .unwrap();
+
+            neuron_store
+                .with_neuron_mut(&neuron_id, |neuron| {
+                    neuron.clear_known_neuron_data();
+                })
+                .unwrap();
+        }
+    })
+}

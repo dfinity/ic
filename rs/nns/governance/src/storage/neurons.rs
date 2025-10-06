@@ -992,6 +992,15 @@ fn update_singleton_field<Element, Memory>(
         None => map.remove(&neuron_id),
         Some(element) => map.insert(neuron_id, element),
     };
+    // The following cause a memory leak that's observable in the `set_and_clear_known_neuron_data`
+    // benchmark.
+
+    // match element {
+    //     None => {}
+    //     Some(element) => {
+    //         map.insert(neuron_id, element);
+    //     }
+    // };
 }
 
 fn read_repeated_field<Element, Memory>(
