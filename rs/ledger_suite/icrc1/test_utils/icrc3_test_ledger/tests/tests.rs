@@ -743,7 +743,7 @@ fn test_archiving_all_blocks() {
         .install_canister(icrc3_test_ledger_wasm(), vec![], None)
         .unwrap();
 
-    let archived_count = archive_blocks(&env, ledger_id, archive1, NUM_BLOCKS);
+    let archived_count = archive_blocks(&env, ledger_id, archive1, u64::MAX);
     assert_eq!(archived_count, NUM_BLOCKS);
     env.advance_time(Duration::from_secs(60));
     env.tick();
