@@ -1,4 +1,4 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
@@ -6,6 +6,7 @@ use ic_certification::{
     hash_tree::{HashTreeNode, Label, LookupResult, SubtreeLookupResult, empty},
 };
 use ic_icrc1::endpoints::StandardRecord;
+use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
@@ -42,6 +43,22 @@ fn icrc3_test_ledger_wasm() -> Vec<u8> {
         "icrc3_test_ledger_canister",
         &[],
     )
+}
+
+pub fn index_ng_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").unwrap()).unwrap()
+}
+
+fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
+    let res = env
+        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .expect("Failed to send icrc1_balance_of")
+        .bytes();
+    Decode!(&res, Nat)
+        .expect("Failed to decode icrc1_balance_of response")
+        .0
+        .to_u64()
+        .expect("Balance must be a u64!")
 }
 
 fn setup_icrc3_test_ledger() -> (StateMachine, CanisterId) {
@@ -625,9 +642,11 @@ fn verify_blocks_in_ledger(env: &StateMachine, canister_id: CanisterId, start: u
 fn test_archiving() {
     let (env, ledger_id) = setup_icrc3_test_ledger();
 
-    for block_id in 0..20 {
-        let block = BlockBuilder::new(block_id, block_id)
-            .mint(TEST_ACCOUNT_1, Tokens::from(1u64))
+    const NUM_BLOCKS: u32 = 20;
+
+    for block_id in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(block_id as u64, block_id as u64)
+            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id)))
             .build();
         let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
         assert_eq!(result, Nat::from(block_id));
@@ -682,4 +701,24 @@ fn test_archiving() {
     verify_blocks_in_ledger(&env, archive2, 2, 4);
     verify_blocks_in_ledger(&env, archive3, 6, 10);
     verify_blocks_in_ledger(&env, ledger_id, 16, 4);
+
+    let test_blocks_with_index = || {
+        let index_init_arg = IndexArg::Init(InitArg {
+            ledger_id: Principal::from(ledger_id),
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        });
+        let index = env
+            .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
+            .unwrap();
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+        let balance = icrc1_balance_of(&env, index, TEST_ACCOUNT_1);
+        assert_eq!(balance, 2u64.pow(NUM_BLOCKS) - 1);
+    };
+
+    test_blocks_with_index();
+
+    set_icrc3_enabled(&env, ledger_id, false);
+
+    test_blocks_with_index();
 }

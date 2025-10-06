@@ -139,7 +139,7 @@ service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
 
-    add_block_with_index : (BlockWithId) -> (AddBlockResult);
+    add_block_with_id : (BlockWithId) -> (AddBlockResult);
 
     icrc1_supported_standards : () -> (vec StandardRecord) query;
 

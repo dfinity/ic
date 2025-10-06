@@ -58,7 +58,7 @@ pub fn add_block(block: ICRC3Value) -> AddBlockResult {
 /// Add a block to the ledger storage
 #[candid_method(update)]
 #[update]
-pub fn add_block_with_index(block_with_id: BlockWithId) -> AddBlockResult {
+pub fn add_block_with_id(block_with_id: BlockWithId) -> AddBlockResult {
     let next_id = next_block_id();
     if next_id > 0 {
         assert_eq!(block_with_id.id, next_id);
@@ -66,7 +66,7 @@ pub fn add_block_with_index(block_with_id: BlockWithId) -> AddBlockResult {
     let result = BLOCKS.with(|blocks| {
         let mut blocks = blocks.borrow_mut();
         blocks.insert(block_with_id.id.0.to_u64().unwrap(), block_with_id.block);
-        Ok(Nat::from(block_with_id.id))
+        Ok(block_with_id.id)
     });
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
     result
@@ -119,7 +119,7 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
     });
 
     for block in &blocks_to_archive {
-        let result = Call::unbounded_wait(args.archive_id, "add_block_with_index")
+        let result = Call::unbounded_wait(args.archive_id, "add_block_with_id")
             .with_arg(&BlockWithId {
                 id: Nat::from(block.0),
                 block: block.1.clone(),
