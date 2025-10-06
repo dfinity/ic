@@ -100,13 +100,11 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
 
     ARCHIVES.with(|archives| {
         let mut archives = archives.borrow_mut();
-        let last_archive = archives.last().cloned();
+        let last_archive = archives.last_mut();
         match last_archive {
-            Some(archive) => {
-                if archive.archive_id == args.archive_id {
-                    let last_idx = archives.len() - 1;
-                    archives[last_idx].block_range =
-                        archive.block_range.start..last_block_index + 1;
+            Some(last_archive) => {
+                if last_archive.archive_id == args.archive_id {
+                    last_archive.block_range = last_archive.block_range.start..last_block_index + 1;
                 } else {
                     archives.push(ArchiveInfo {
                         archive_id: args.archive_id,
