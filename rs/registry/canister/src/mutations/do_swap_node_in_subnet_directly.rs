@@ -152,8 +152,10 @@ mod tests {
     use crate::{
         common::test_helpers::get_invariant_compliant_subnet_record,
         flags::{
-            enable_swapping_for_callers, enable_swapping_on_subnets,
             temporarily_disable_node_swapping, temporarily_enable_node_swapping,
+            temporary_overrides::{
+                test_set_swapping_enabled_subnets, test_set_swapping_whitelisted_callers,
+            },
         },
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         registry::Registry,
@@ -320,7 +322,7 @@ mod tests {
         ]);
         registry.apply_mutations_for_test(mutations);
 
-        enable_swapping_on_subnets(vec![subnet_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             new_node_id: Some(new_node_id.get()),
@@ -339,7 +341,7 @@ mod tests {
         );
 
         // Enable the feature for the caller
-        enable_swapping_for_callers(vec![operator_id]);
+        test_set_swapping_whitelisted_callers(vec![operator_id]);
         let response = registry.swap_nodes_inner(payload, operator_id);
         // Expect the first next error which is the missing
         // subnet in the registry.
@@ -371,7 +373,7 @@ mod tests {
         ]);
         registry.apply_mutations_for_test(mutations);
 
-        enable_swapping_for_callers(vec![operator_id]);
+        test_set_swapping_whitelisted_callers(vec![operator_id]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
@@ -388,7 +390,7 @@ mod tests {
         );
 
         // Now enable the feature and call again.
-        enable_swapping_on_subnets(vec![subnet_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
         let response = registry.swap_nodes_inner(payload, operator_id);
         assert!(
             response.is_ok(),
@@ -425,8 +427,8 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        enable_swapping_for_callers(vec![operator_id]);
-        enable_swapping_on_subnets(vec![subnet_id]);
+        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
 
         let response = registry.swap_nodes_inner(payload, operator_id);
         assert!(
