@@ -242,11 +242,9 @@ impl ThresholdSignerImpl {
                         state_snapshot.get_height(),
                     ) {
                         Action::Process(sig_inputs) => {
-                            let key = (share.request_id(), share.signer());
                             self.validate_signature_share(idkg_pool, id.clone(), share, sig_inputs)
-                                .map(|action| (Some((id, key)), action))
                         }
-                        Action::Drop => Some((None, IDkgChangeAction::RemoveUnvalidated(id))),
+                        Action::Drop => Some(IDkgChangeAction::RemoveUnvalidated(id)),
                         Action::Defer => None,
                     }
                 })
@@ -256,14 +254,15 @@ impl ThresholdSignerImpl {
         let mut ret = Vec::new();
         // Collection of validated shares
         let mut validated_sig_shares = BTreeSet::new();
-        for (maybe_key, action) in results {
-            if let (Some((id, key)), IDkgChangeAction::MoveToValidated(msg)) = (maybe_key, &action)
+        for action in results {
+            if let IDkgChangeAction::MoveToValidated(msg) = &action
+                && let Some(key) = msg.sig_share_dedup_key()
                 && !validated_sig_shares.insert(key)
             {
                 self.metrics
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
+                    msg.message_id(),
                     format!("Duplicate share in unvalidated batch: {msg:?}"),
                 ));
                 continue;
