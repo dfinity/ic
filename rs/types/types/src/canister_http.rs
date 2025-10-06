@@ -527,8 +527,8 @@ pub struct CanisterHttpRequest {
     /// The context of the request which captures all the metadata about this request
     pub context: CanisterHttpRequestContext,
     /// The most up to date api boundary nodes address that should be used as a socks proxy in the case of a request to an IPv4 address.
-    /// The addresses should be sent in the following format: "socks5://[<ip>]:<port>", for example:
-    /// "socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080"
+    /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
+    /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
 }
 
@@ -715,7 +715,7 @@ pub type CanisterHttpResponseShare =
     Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
 
 /// Contains a share and optionally the full response.
-/// 
+///
 /// This is the artifact that will actually be gossiped.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CanisterHttpResponseArtifact {

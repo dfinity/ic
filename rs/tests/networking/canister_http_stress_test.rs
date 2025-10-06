@@ -176,7 +176,7 @@ async fn do_request(
                         }),
                         method: HttpMethod::GET,
                         max_response_bytes: None,
-                        is_replicated: Some(false),
+                        is_replicated: Some(true),
                     },
                     cycles: 500_000_000_000,
                 },

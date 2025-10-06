@@ -403,8 +403,7 @@ impl CanisterHttpPoolManagerImpl {
                                     "Share signed by node that is not the delegated node for the request".to_string(),
                                 ));
                             }
-                            let unvalidated_artifact = canister_http_pool.get_unvalidated_artifact(share);
-                            let Some(artifact) = unvalidated_artifact else {
+                            let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
                                 // This should never happen
                                 return Some(CanisterHttpChangeAction::HandleInvalid(
                                     share.clone(),
@@ -425,9 +424,7 @@ impl CanisterHttpPoolManagerImpl {
                             }
                         } else {
                             // Fully replicated requests must not have a response attached. 
-
-                            let unvalidated_artifact = canister_http_pool.get_unvalidated_artifact(share);
-                            let Some(artifact) = unvalidated_artifact else {
+                            let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
                                 // This should never happen
                                 return Some(CanisterHttpChangeAction::HandleInvalid(
                                     share.clone(),
@@ -989,6 +986,252 @@ pub mod test {
     }
 
     #[test]
+    fn test_non_replicated_share_validation_logic() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let response = empty_canister_http_response(0);
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    replica_version: ReplicaVersion::default(),
+                };
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        delegated_node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    signature,
+                };
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager.clone(),
+                    shim.clone(),
+                    crypto.clone(),
+                    pool.get_cache(),
+                    replica_config.clone(),
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log.clone(),
+                );
+
+                // TEST 1: Non-replicated request artifact is missing the response.
+                // It should be removed from the unvalidated pool.
+                {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                    let artifact_without_response = CanisterHttpResponseArtifact {
+                        share: share.clone(),
+                        response: None, // Missing response
+                    };
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: artifact_without_response,
+                        peer_id: delegated_node_id,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+                }
+
+                // TEST 2: Non-replicated request artifact has a mismatched content hash.
+                // It should be marked as invalid.
+                {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.content_hash = CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
+
+                    let artifact_with_mismatched_hash = CanisterHttpResponseArtifact {
+                        share: bad_share,
+                        response: Some(response),
+                    };
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: artifact_with_mismatched_hash,
+                        peer_id: delegated_node_id,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content hash does not match the response"
+                    );
+                }
+            })
+        });
+    }
+
+    #[test]
+    fn test_fully_replicated_share_with_response_is_invalid() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                // This request is fully replicated across the committee.
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let response = empty_canister_http_response(0);
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    replica_version: ReplicaVersion::default(),
+                };
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    signature,
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Create an artifact that incorrectly includes a response for a fully replicated request.
+                let artifact_with_response = CanisterHttpResponseArtifact {
+                    share,
+                    response: Some(response), // This should NOT be here for a fully replicated request
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: artifact_with_response,
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                // The change action should be HandleInvalid because a fully replicated request's
+                // artifact must not contain a response in the unvalidated pool.
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Artifact should not contain response"
+                );
+            })
+        });
+    }
+
+    #[test]
     pub fn test_already_created_shares_not_re_requested() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
@@ -1135,6 +1378,104 @@ pub mod test {
                 );
                 let change_set = pool_manager.generate_change_set(&canister_http_pool);
                 assert_eq!(change_set.len(), 2);
+            });
+        });
+    }
+
+    #[test]
+    pub fn test_non_replicated_response_is_gossiped() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+                let callback_id = CallbackId::from(5);
+
+                // 1. Set up the state to contain a non-replicated request context.
+                let request_context = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                };
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            callback_id,
+                            request_context,
+                        )]))),
+                    ));
+
+                // 2. Mock the adapter shim to return a response matching the non-replicated request.
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                let mut sequence = Sequence::new();
+                shim_mock
+                    .expect_try_receive()
+                    .times(1)
+                    .returning(move || Ok(empty_canister_http_response(callback_id.get())))
+                    .in_sequence(&mut sequence);
+                shim_mock
+                    .expect_try_receive()
+                    .times(1)
+                    .returning(|| Err(TryReceiveError::Empty))
+                    .in_sequence(&mut sequence);
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config.clone(),
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // 3. Call the function and get the change set.
+                let change_set = pool_manager.create_shares_from_responses(Height::from(1));
+
+                // 4. Assert that the correct change action for gossiping the response was produced.
+                assert_eq!(change_set.len(), 1);
+
+                if let CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) =
+                    &change_set[0]
+                {
+                    let expected_response = empty_canister_http_response(callback_id.get());
+                    assert_eq!(*response, expected_response);
+
+                    assert_eq!(share.content.id, callback_id);
+                    assert_eq!(share.content.timeout, expected_response.timeout);
+                    assert_eq!(
+                        share.content.content_hash,
+                        ic_types::crypto::crypto_hash(&expected_response)
+                    );
+                    assert_eq!(share.content.registry_version, RegistryVersion::from(1));
+                    assert_eq!(share.signature.signer, replica_config.node_id);
+                } else {
+                    panic!(
+                        "Expected CanisterHttpChangeAction::AddToValidatedAndGossipResponse, but got {:?}",
+                        change_set[0]
+                    );
+                }
             });
         });
     }
