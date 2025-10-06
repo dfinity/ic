@@ -215,6 +215,7 @@ pub struct RemoveNodeDirectlyPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::rate_limits::{
         commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
         try_reserve_node_provider_op_capacity,
@@ -238,6 +239,39 @@ mod tests {
     use prost::Message;
     use std::str::FromStr;
 
+    /// Returns Registry, NodeId, node operator id, node principal id
+    fn setup_registry_for_test() -> (Registry, Vec<NodeId>, PrincipalId, PrincipalId) {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add node to registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+            1, // mutation id
+            2, // node count
+        );
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
+                .expect("failed to get the node operator id");
+
+        let node_provider_id = PrincipalId::new_user_test_id(20_002);
+
+        let payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_id),
+            node_provider_principal_id: Some(node_provider_id),
+            node_allowance: 0,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+        };
+
+        registry.do_add_node_operator(payload);
+
+        (registry, node_ids, node_operator_id, node_provider_id)
+    }
+
     #[test]
     #[should_panic(expected = "Node Id 2vxsx-fae not found in the registry")]
     fn should_panic_if_node_is_not_found() {
@@ -246,24 +280,17 @@ mod tests {
         let node_id = NodeId::from(node_operator_id);
         let payload = RemoveNodeDirectlyPayload { node_id };
 
-        registry.do_remove_node_directly_(payload, node_operator_id, now_system_time());
+        registry
+            .do_remove_node_directly_(payload, node_operator_id, now_system_time())
+            .expect("failed to do remove node directly");
     }
 
     #[test]
     #[should_panic(expected = "Cannot remove this node, as it is an active API boundary node")]
     fn should_panic_if_node_is_api_boundary_node_and_no_replacement() {
-        let mut registry = invariant_compliant_registry(0);
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) =
-            prepare_registry_with_nodes(1 /* mutation id */, 1 /* node count */);
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("should contain at least one node ID")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
+        let node_id = node_ids[0];
+
         // Add API BN to registry
         let api_bn = ApiBoundaryNodeRecord {
             version: ReplicaVersion::default().to_string(),
@@ -279,22 +306,9 @@ mod tests {
 
     #[test]
     fn should_succeed_to_replace_api_boundary_node() {
-        let mut registry = invariant_compliant_registry(0);
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) =
-            prepare_registry_with_nodes(1 /* mutation id */, 2 /* node count */);
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let mut node_ids = node_ids_and_dkg_pks.keys();
-        let old_node_id = node_ids
-            .next()
-            .expect("should contain at least one node ID")
-            .to_owned();
-        let new_node_id = node_ids
-            .next()
-            .expect("should contain at least two node IDs")
-            .to_owned();
-
-        let node_operator_id = registry_add_node_operator_for_node(&mut registry, old_node_id, 0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
+        let old_node_id = node_ids[0];
+        let new_node_id = node_ids[1];
 
         // turn first node into an API BN by adding the record to the registry
         let api_bn = ApiBoundaryNodeRecord {
@@ -353,22 +367,9 @@ mod tests {
         expected = "invariant check failed with message: domain field of the NodeRecord"
     )]
     fn should_panic_to_replace_api_boundary_node_if_new_node_has_no_domain() {
-        let mut registry = invariant_compliant_registry(0);
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) =
-            prepare_registry_with_nodes(1 /* mutation id */, 2 /* node count */);
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let mut node_ids = node_ids_and_dkg_pks.keys();
-        let old_node_id = node_ids
-            .next()
-            .expect("should contain at least one node ID")
-            .to_owned();
-        let new_node_id = node_ids
-            .next()
-            .expect("should contain at least two node IDs")
-            .to_owned();
-
-        let node_operator_id = registry_add_node_operator_for_node(&mut registry, old_node_id, 0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
+        let old_node_id = node_ids[0];
+        let new_node_id = node_ids[1];
 
         // turn first node into an API BN by adding the record to the registry
         let api_bn = ApiBoundaryNodeRecord {
@@ -687,39 +688,17 @@ mod tests {
 
     #[test]
     fn test_do_remove_node_directly_fails_when_rate_limits_exceeded() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, node_provider_id) =
+            setup_registry_for_test();
 
         let now = now_system_time();
-
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
-        // Add node operator record
-        let node_operator_record = NodeOperatorRecord::default();
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_node_operator_record_key(node_operator_id),
-            node_operator_record.encode_to_vec(),
-        )]);
 
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(node_operator_id, now);
+        let available = get_available_node_provider_op_capacity(node_provider_id, now);
         let reservation =
-            try_reserve_node_provider_op_capacity(now, node_operator_id, available).unwrap();
+            try_reserve_node_provider_op_capacity(now, node_provider_id, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
         let error = registry
