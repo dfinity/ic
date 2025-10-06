@@ -2,7 +2,9 @@ use std::{collections::BTreeMap, time::Duration};
 
 use ic_metrics::{
     MetricsRegistry,
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
+    buckets::{
+        binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
+    },
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
@@ -186,52 +188,14 @@ impl SchedulerMetrics {
             canister_log_memory_usage_v3: metrics_registry.histogram(
                 "canister_log_memory_usage_bytes_v3",
                 "Canisters log memory usage distribution in bytes.",
-                unique_sorted_buckets(&[
-                    0,
-                    KIB,
-                    2 * KIB,
-                    5 * KIB,
-                    10 * KIB,
-                    20 * KIB,
-                    50 * KIB,
-                    100 * KIB,
-                    200 * KIB,
-                    500 * KIB,
-                    MIB,
-                    2 * MIB,
-                    5 * MIB,
-                    10 * MIB,
-                    20 * MIB,
-                    50 * MIB,
-                    100 * MIB,
-                    200 * MIB,
-                    500 * MIB,
-                    GIB,
-                    2 * GIB,
-                    5 * GIB,
-                    10 * GIB,
-                ])
+                // 4 KiB (2^12) .. 8 GiB (2^33), plus zero — 23 total buckets (0 + 22 powers).
+                binary_buckets_with_zero(12, 33)
             ),
             canister_log_delta_memory_usage: metrics_registry.histogram(
                 "canister_log_delta_memory_usage_bytes",
                 "Canisters log delta (per single execution) memory usage distribution in bytes.",
-                unique_sorted_buckets(&[
-                    0,
-                    KIB,
-                    2 * KIB,
-                    5 * KIB,
-                    10 * KIB,
-                    20 * KIB,
-                    50 * KIB,
-                    100 * KIB,
-                    200 * KIB,
-                    500 * KIB,
-                    MIB,
-                    2 * MIB,
-                    5 * MIB,
-                    10 * MIB,
-                    20 * MIB,
-                ])
+                // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
+                binary_buckets_with_zero(10, 23)
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
