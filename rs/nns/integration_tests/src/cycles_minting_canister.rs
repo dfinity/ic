@@ -15,7 +15,7 @@ use ic_ledger_core::tokens::CheckedSub;
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, EnvironmentVariable,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_TRILLION};
