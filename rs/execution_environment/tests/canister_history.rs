@@ -1724,7 +1724,7 @@ fn subnet_available_memory() {
     test.uninstall_code(canister_id).unwrap();
     check_subnet_available_memory(&test, false);
 
-    // memory usage increases after reinstalling code
+    // memory usage increases after reinstalling code and growing stable memory in init
     test.reinstall_canister_with_args(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
