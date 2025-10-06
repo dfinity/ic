@@ -29,6 +29,10 @@ use crate::{
 };
 use anyhow::{Context, Result, bail};
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config::setupos::{
+    config_ini::ConfigIniSettings,
+    deployment_json::{self, DeploymentSettings},
+};
 use config_types::{
     CONFIG_VERSION, DeploymentEnvironment, FixedIpv6Config, GuestOSConfig, GuestOSDevSettings,
     GuestOSSettings, GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config,
@@ -44,7 +48,6 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use setupos_image_config::{ConfigIni, DeploymentConfig};
 use slog::{Logger, info, warn};
 use std::{
     collections::BTreeMap,
@@ -54,7 +57,7 @@ use std::{
     io,
     io::Write,
     net::{IpAddr, SocketAddr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     thread::{self, JoinHandle},
 };
@@ -369,13 +372,7 @@ pub fn setup_and_start_nested_vms(
             info!(logger, "No gateway found, using dummy URL");
             url::Url::parse("http://localhost:8080").unwrap()
         });
-    let nns_public_key_override = env
-        .prep_dir("")
-        .and_then(|v| std::fs::read_to_string(v.root_public_key_path()).ok())
-        .unwrap_or_else(|| {
-            info!(logger, "No NNS public key found, using dummy key");
-            "dummy_public_key_for_recovery_test".to_string()
-        });
+    let nns_public_key_override = env.prep_dir("").map(|v| v.root_public_key_path());
 
     let setupos_url = get_setupos_img_url();
     let setupos_hash = get_setupos_img_sha256();
@@ -396,7 +393,7 @@ pub fn setup_and_start_nested_vms(
                 &t_env,
                 &vm_name,
                 &t_ic_gateway_url,
-                &t_nns_public_key_override,
+                t_nns_public_key_override.as_deref(),
             )?;
             let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
                 &t_group_name,
@@ -662,7 +659,7 @@ fn create_setupos_config_image(
     env: &TestEnv,
     name: &str,
     nns_url: &Url,
-    nns_public_key_override: &str,
+    nns_public_key_override: Option<&Path>,
 ) -> anyhow::Result<PathBuf> {
     info!(
         env.logger(),
@@ -714,22 +711,35 @@ fn create_setupos_config_image(
     setupos_image_config::create_setupos_config(
         &config_dir,
         &data_dir,
-        ConfigIni {
+        ConfigIniSettings {
+            ipv6_prefix: prefix,
+            ipv6_prefix_length: Default::default(),
+            ipv6_gateway: gateway.parse().context("Failed to parse ipv6 gateway")?,
+            ipv4_address: Default::default(),
+            ipv4_gateway: Default::default(),
+            ipv4_prefix_length: Default::default(),
+            domain_name: Default::default(),
+            verbose: Default::default(),
             node_reward_type: Some("type3.1".to_string()),
-            ipv6_prefix: Some(prefix),
-            ipv6_gateway: Some(gateway.parse().context("Failed to parse ipv6 gateway")?),
-            ..ConfigIni::default()
+            enable_trusted_execution_environment: Default::default(),
         },
         node_operator_private_key.as_deref(),
+        nns_public_key_override,
         Some(&ssh_authorized_pub_keys_dir.join("admin")),
-        DeploymentConfig {
-            nns_urls: Some(nns_url.clone()),
-            nns_public_key_override: Some(nns_public_key_override.to_string()),
-            memory_gb: Some((vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32),
-            cpu: Some(cpu.to_string()),
-            nr_of_vcpus: Some((vm_spec.v_cpus / 2) as u32),
-            mgmt_mac: Some(mac.to_string()),
-            deployment_environment: Some(DeploymentEnvironment::Testnet),
+        DeploymentSettings {
+            deployment: deployment_json::Deployment {
+                deployment_environment: DeploymentEnvironment::Testnet,
+                mgmt_mac: Some(mac.to_string()),
+            },
+            logging: deployment_json::Logging {},
+            nns: deployment_json::Nns {
+                urls: vec![nns_url.clone()],
+            },
+            vm_resources: deployment_json::VmResources {
+                memory: Some((vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32),
+                cpu: cpu.to_string(),
+                nr_of_vcpus: Some((vm_spec.v_cpus / 2) as u32),
+            },
         },
     )
     .context("Could not create SetupOS config")?;

@@ -257,7 +257,7 @@ pub async fn process_updated(
         return ProcessingResult::NoProgress;
     };
     println!(
-        "Registry version: {} {} {}",
+        "Registry versions: waiting for: {} source subnet: {} target subnet: {}",
         registry_version, source_subnet_version, target_subnet_version
     );
     if source_subnet_version < registry_version || target_subnet_version < registry_version {
