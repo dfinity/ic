@@ -95,8 +95,8 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
         return 0;
     }
 
-    let first_block_index = blocks_to_archive.first().unwrap().0;
-    let last_block_index = blocks_to_archive.last().unwrap().0;
+    let start_index = blocks_to_archive.first().unwrap().0;
+    let archive_blocks_len = blocks_to_archive.len() as u64;
 
     ARCHIVES.with(|archives| {
         let mut archives = archives.borrow_mut();
@@ -104,36 +104,38 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
         match last_archive {
             Some(last_archive) => {
                 if last_archive.archive_id == args.archive_id {
-                    last_archive.block_range = last_archive.block_range.start..last_block_index + 1;
+                    last_archive.block_range = last_archive.block_range.start
+                        ..last_archive.block_range.end + archive_blocks_len
                 } else {
                     archives.push(ArchiveInfo {
                         archive_id: args.archive_id,
-                        block_range: first_block_index..last_block_index + 1,
+                        block_range: start_index..start_index + archive_blocks_len,
                     });
                 }
             }
             None => archives.push(ArchiveInfo {
                 archive_id: args.archive_id,
-                block_range: first_block_index..last_block_index + 1,
+                block_range: start_index..start_index + archive_blocks_len,
             }),
         };
     });
 
-    for block in &blocks_to_archive {
+    for block in blocks_to_archive {
+        let block_id = block.0;
         let result = Call::unbounded_wait(args.archive_id, "add_block_with_id")
             .with_arg(&BlockWithId {
-                id: Nat::from(block.0),
-                block: block.1.clone(),
+                id: Nat::from(block_id),
+                block: block.1,
             })
             .await
             .expect("failed to add block to archive")
             .candid::<AddBlockResult>()
             .expect("Could not decode AddBlockResult")
             .expect("adding block failed");
-        assert_eq!(result, Nat::from(block.0));
+        assert_eq!(result, Nat::from(block_id));
     }
 
-    blocks_to_archive.len() as u64
+    archive_blocks_len
 }
 
 #[query]
