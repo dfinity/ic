@@ -315,13 +315,14 @@ impl Logs {
 }
 
 #[tokio::test]
-async fn validation_succeeds() {
+async fn migration_succeeds() {
     let Setup {
         pic,
         source,
         target,
         source_controllers,
         system_controller,
+        target_subnet,
         ..
     } = setup(Settings::default()).await;
     let sender = source_controllers[0];
@@ -333,7 +334,8 @@ async fn validation_succeeds() {
     let mut logs = Logs::default();
 
     for _ in 0..100 {
-        pic.advance_time(Duration::from_millis(100)).await;
+        // advance time by a lot such that the task which waits 5m can succeed quickly.
+        pic.advance_time(Duration::from_secs(250)).await;
         pic.tick().await;
 
         let log = pic
@@ -354,7 +356,15 @@ async fn validation_succeeds() {
         "Entering `renamed_target` with 1 pending",
         "Exiting `renamed_target` with 1 successful",
         "Entering `updated_routing_table` with 1 pending",
+        "Exiting `updated_routing_table` with 1 successful",
+        "Entering `routing_table_change_accepted` with 1 pending",
+        "Exiting `routing_table_change_accepted` with 1 successful",
+        "Entering `source_deleted` with 1 pending",
+        "Exiting `source_deleted` with 1 successful",
     ]));
+
+    // let source_new_subnet = pic.get_subnet(source).await.unwrap();
+    // assert_eq!(source_new_subnet, target_subnet);
 }
 
 #[tokio::test]
