@@ -127,7 +127,7 @@ mod get_doge_address {
 
 mod deposit {
     use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
-    use ic_ckdoge_minter::{OutPoint, Utxo};
+    use ic_ckdoge_minter::{OutPoint, UpdateBalanceArgs, Utxo};
     use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, txid};
 
     #[test]
@@ -135,12 +135,13 @@ mod deposit {
         let setup = Setup::default();
         let minter = setup.minter();
         let dogecoin = setup.dogecoin();
+        let subaccount = Some([42_u8; 32]);
 
         let deposit_address = minter.get_doge_address(
             USER_PRINCIPAL,
             &GetDogeAddressArgs {
                 owner: None,
-                subaccount: Some([42_u8; 32]),
+                subaccount,
             },
         );
 
@@ -153,5 +154,16 @@ mod deposit {
             value: 1_000_000_000,
         };
         dogecoin.simulate_transaction(utxo, deposit_address);
+
+        let utxo_status = minter
+            .update_balance(
+                USER_PRINCIPAL,
+                &UpdateBalanceArgs {
+                    owner: Some(USER_PRINCIPAL),
+                    subaccount,
+                },
+            )
+            .unwrap();
+        assert_eq!(utxo_status.len(), 1);
     }
 }

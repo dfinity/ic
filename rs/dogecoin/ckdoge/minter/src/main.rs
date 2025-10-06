@@ -1,6 +1,7 @@
 use ic_cdk::{init, post_upgrade, update};
 use ic_ckbtc_minter::state::eventlog::EventType;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
+use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME,
@@ -40,6 +41,15 @@ fn post_upgrade() {
 #[update]
 async fn get_doge_address(args: GetDogeAddressArgs) -> String {
     updates::get_doge_address(args).await.unwrap()
+}
+
+#[update]
+async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
+    check_anonymous_caller();
+    check_postcondition(
+        ic_ckbtc_minter::updates::update_balance::update_balance(args, &DOGECOIN_CANISTER_RUNTIME)
+            .await,
+    )
 }
 
 #[update]

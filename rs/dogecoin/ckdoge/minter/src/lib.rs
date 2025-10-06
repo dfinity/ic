@@ -10,11 +10,14 @@ use candid::Principal;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse,
     address::BitcoinAddress, management::CallError, state::CkBtcMinterState, tx,
-    updates::retrieve_btc::BtcAddressCheckStatus, updates::update_balance::UpdateBalanceError,
+    updates::retrieve_btc::BtcAddressCheckStatus,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 
-pub use ic_ckbtc_minter::{OutPoint, Page, Txid, Utxo};
+pub use ic_ckbtc_minter::{
+    OutPoint, Page, Txid, Utxo,
+    updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
+};
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
