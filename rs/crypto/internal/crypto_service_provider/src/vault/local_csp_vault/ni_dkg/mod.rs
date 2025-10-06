@@ -405,7 +405,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 // Check if threshold key has been computed already
                 let threshold_secret_key: Option<CspSecretKey> =
                     self.sks_read_lock().get(&threshold_key_id);
-                if let Some(secret_key) = threshold_secret_key {
+                if let Some(_secret_key) = threshold_secret_key {
                     // DO NOT MERGE: uncomment me
 
                     // // this adds a sanity check to ensure the key is well formed:
