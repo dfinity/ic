@@ -33,7 +33,7 @@ use ic_types::QueryStatsEpoch;
 use ic_types::batch::QueryStats;
 use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
-    CanisterId, NumInstructions, SubnetId,
+    CanisterId, NumInstructions,
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
 };
@@ -103,7 +103,6 @@ pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     own_subnet_type: SubnetType,
-    own_subnet_id: SubnetId,
     config: Config,
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
@@ -117,7 +116,6 @@ impl InternalHttpQueryHandler {
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         own_subnet_type: SubnetType,
-        own_subnet_id: SubnetId,
         config: Config,
         metrics_registry: &MetricsRegistry,
         max_instructions_per_query: NumInstructions,
@@ -131,7 +129,6 @@ impl InternalHttpQueryHandler {
             log,
             hypervisor,
             own_subnet_type,
-            own_subnet_id,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
@@ -217,7 +214,7 @@ impl InternalHttpQueryHandler {
                             .get_ref()
                             .metadata
                             .network_topology
-                            .get_subnet_size(&self.own_subnet_id)
+                            .get_subnet_size(&self.hypervisor.subnet_id())
                             .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
                         state.get_ref().get_own_cost_schedule(),
                         ready_for_migration,

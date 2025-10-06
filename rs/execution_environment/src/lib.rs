@@ -161,7 +161,6 @@ impl ExecutionServices {
             logger.clone(),
             hypervisor,
             own_subnet_type,
-            own_subnet_id,
             config.clone(),
             metrics_registry,
             scheduler_config.max_instructions_per_message_without_dts,
