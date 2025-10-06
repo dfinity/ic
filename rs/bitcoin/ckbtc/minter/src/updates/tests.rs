@@ -847,7 +847,7 @@ mod update_balance {
             .expect_check_transaction()
             .times(1)
             .withf(move |btc_checker_principal, utxo_, _cycles| {
-                btc_checker_principal == &BTC_CHECKER_CANISTER_ID && utxo_ == &utxo
+                btc_checker_principal == &Some(BTC_CHECKER_CANISTER_ID) && utxo_ == &utxo
             })
             .return_const(Ok(response));
     }
@@ -861,7 +861,7 @@ mod update_balance {
             .expect_check_transaction()
             .times(responses.len())
             .returning(move |btc_checker_principal, utxo_, _cycles| {
-                assert!(btc_checker_principal == BTC_CHECKER_CANISTER_ID && utxo_ == &utxo);
+                assert!(btc_checker_principal == Some(BTC_CHECKER_CANISTER_ID) && utxo_ == &utxo);
                 assert!(!responses.is_empty());
                 Ok(responses.remove(0))
             });

@@ -3,8 +3,7 @@ use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::queries::WithdrawalFee;
 use crate::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
-use crate::tx::DisplayOutpoint;
-use crate::updates::update_balance::{ErrorCode, UpdateBalanceArgs, UpdateBalanceError};
+use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::log;
@@ -20,7 +19,7 @@ use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use crate::state::{CkBtcMinterState, UtxoCheckStatus};
+use crate::state::CkBtcMinterState;
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
@@ -1456,7 +1455,7 @@ pub trait CanisterRuntime {
 
     async fn check_transaction(
         &self,
-        btc_checker_principal: Principal,
+        btc_checker_principal: Option<Principal>,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError>;
@@ -1487,14 +1486,6 @@ pub trait CanisterRuntime {
         btc_checker_principal: Option<Principal>,
         address: String,
     ) -> Result<BtcAddressCheckStatus, CallError>;
-
-    /// Check if UTXO is tainted
-    async fn check_utxo(
-        &self,
-        btc_checker_principal: Option<Principal>,
-        utxo: &Utxo,
-        args: &UpdateBalanceArgs,
-    ) -> Result<UtxoCheckStatus, UpdateBalanceError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1511,10 +1502,12 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn check_transaction(
         &self,
-        btc_checker_principal: Principal,
+        btc_checker_principal: Option<Principal>,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError> {
+        let btc_checker_principal = btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set");
         management::check_transaction(btc_checker_principal, utxo, cycle_payment).await
     }
 
@@ -1589,80 +1582,6 @@ impl CanisterRuntime for IcCanisterRuntime {
                 CheckAddressResponse::Passed => BtcAddressCheckStatus::Clean,
             })
             .map_err(|e| CallError::from_cdk_call_error("check_address", e))
-    }
-
-    async fn check_utxo(
-        &self,
-        btc_checker_principal: Option<Principal>,
-        utxo: &Utxo,
-        args: &UpdateBalanceArgs,
-    ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
-        use ic_btc_checker::{CHECK_TRANSACTION_CYCLES_REQUIRED, CheckTransactionStatus};
-
-        // Max number of times of calling check_transaction with cycle payment, to avoid spending too
-        // many cycles.
-        const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
-
-        let btc_checker_principal = btc_checker_principal
-            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set");
-
-        for i in 0..MAX_CHECK_TRANSACTION_RETRY {
-            match self
-                .check_transaction(
-                    btc_checker_principal,
-                    utxo,
-                    CHECK_TRANSACTION_CYCLES_REQUIRED,
-                )
-                .await
-                .map_err(|call_err| {
-                    UpdateBalanceError::TemporarilyUnavailable(format!(
-                        "Failed to call Bitcoin checker canister: {call_err}"
-                    ))
-                })? {
-                CheckTransactionResponse::Failed(addresses) => {
-                    log!(
-                        P0,
-                        "Discovered a tainted UTXO {} (due to input addresses {}) for update_balance({:?}) call",
-                        DisplayOutpoint(&utxo.outpoint),
-                        addresses.join(","),
-                        args,
-                    );
-                    return Ok(UtxoCheckStatus::Tainted);
-                }
-                CheckTransactionResponse::Passed => return Ok(UtxoCheckStatus::Clean),
-                CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles) => {
-                    log!(
-                        P1,
-                        "The Bitcoin checker canister requires more cycles, Remaining tries: {}",
-                        MAX_CHECK_TRANSACTION_RETRY - i - 1
-                    );
-                    continue;
-                }
-                CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(status)) => {
-                    log!(
-                        P1,
-                        "The Bitcoin checker canister is temporarily unavailable: {:?}",
-                        status
-                    );
-                    return Err(UpdateBalanceError::TemporarilyUnavailable(format!(
-                        "The Bitcoin checker canister is temporarily unavailable: {status:?}"
-                    )));
-                }
-                CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(error)) => {
-                    log!(P1, "Bitcoin checker error: {:?}", error);
-                    return Err(UpdateBalanceError::GenericError {
-                        error_code: ErrorCode::KytError as u64,
-                        error_message: format!("Bitcoin checker error: {error:?}"),
-                    });
-                }
-            }
-        }
-        Err(UpdateBalanceError::GenericError {
-            error_code: ErrorCode::KytError as u64,
-            error_message:
-                "The Bitcoin checker canister required too many calls to check_transaction"
-                    .to_string(),
-        })
     }
 }
 
