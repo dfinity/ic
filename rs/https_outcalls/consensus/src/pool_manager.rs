@@ -21,7 +21,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, ReplicaVersion, canister_http::*, consensus::HasHeight, crypto::Signed,
+    CountBytes, Height, ReplicaVersion, canister_http::*, consensus::HasHeight, crypto::Signed,
     messages::CallbackId, replica_config::ReplicaConfig,
 };
 use std::{
@@ -422,6 +422,22 @@ impl CanisterHttpPoolManagerImpl {
                                     "Content hash does not match the response".to_string(),
                                 ));
                             }
+
+                            //TODO: we should also check the response size when validating the payload.
+
+                            let response_size = response.content.count_bytes() as u64;
+
+                            let max_response_size = match context.max_response_bytes {
+                                Some(response_size) => response_size.get(),
+                                None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                            };
+
+                            if response_size > max_response_size {
+                                return Some(CanisterHttpChangeAction::HandleInvalid(
+                                    share.clone(),
+                                    format!("Response size {response_size} exceeds the maximum allowed size of {max_response_size}"),
+                                ));
+                            }
                         } else {
                             // Fully replicated requests must not have a response attached. 
                             let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
@@ -587,7 +603,7 @@ pub mod test {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        Height, RegistryVersion, Time,
+        Height, NumBytes, RegistryVersion, Time,
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
         time::UNIX_EPOCH,
@@ -1227,6 +1243,176 @@ pub mod test {
                     &changes[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Artifact should not contain response"
                 );
+            })
+        });
+    }
+
+    #[test]
+    fn test_non_replicated_share_response_size_validation() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+                let max_response_bytes = NumBytes::from(100);
+
+                // 1. Set up a state context with a specific max_response_bytes limit.
+                let request_context = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: Some(max_response_bytes),
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request_context,
+                        )]))),
+                    ));
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager.clone(),
+                    shim,
+                    crypto.clone(),
+                    pool.get_cache(),
+                    replica_config.clone(),
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // SCENARIO A: Response size is LARGER than the limit.
+                // It should be marked as invalid.
+                {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    // Create a response with content that is one byte too large.
+                    let response_body_too_large = vec![0; (max_response_bytes.get() + 1) as usize];
+                    let response = CanisterHttpResponse {
+                        id: CallbackId::from(0),
+                        canister_id: ic_types::CanisterId::from(0),
+                        timeout: Time::from_nanos_since_unix_epoch(0),
+                        content: CanisterHttpResponseContent::Success(response_body_too_large),
+                    };
+
+                    let response_metadata = CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
+                        replica_version: ReplicaVersion::default(),
+                    };
+                    let share = Signed {
+                        content: response_metadata.clone(),
+                        signature: crypto
+                            .sign(
+                                &response_metadata,
+                                delegated_node_id,
+                                RegistryVersion::from(1),
+                            )
+                            .unwrap(),
+                    };
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share,
+                            response: Some(response),
+                        },
+                        peer_id: delegated_node_id,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    let expected_err = format!(
+                        "Response size {} exceeds the maximum allowed size of {}",
+                        max_response_bytes.get() + 1,
+                        max_response_bytes.get()
+                    );
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == &expected_err
+                    );
+                }
+
+                // SCENARIO B: Response size is EXACTLY the limit.
+                // It should be successfully validated.
+                {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    // Create a response with content that is exactly the max size.
+                    let response_body_ok = vec![0; max_response_bytes.get() as usize];
+                    let response = CanisterHttpResponse {
+                        id: CallbackId::from(0),
+                        canister_id: ic_types::CanisterId::from(0),
+                        timeout: Time::from_nanos_since_unix_epoch(0),
+                        content: CanisterHttpResponseContent::Success(response_body_ok),
+                    };
+
+                    let response_metadata = CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
+                        replica_version: ReplicaVersion::default(),
+                    };
+                    let share = Signed {
+                        content: response_metadata.clone(),
+                        signature: crypto
+                            .sign(
+                                &response_metadata,
+                                delegated_node_id,
+                                RegistryVersion::from(1),
+                            )
+                            .unwrap(),
+                    };
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share,
+                            response: Some(response),
+                        },
+                        peer_id: delegated_node_id,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                }
             })
         });
     }
