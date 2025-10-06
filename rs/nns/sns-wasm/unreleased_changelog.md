@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added an option `skip_update_latest_version` to skip updating latest version during `add_wasm`.
+
 ## Changed
 
 ## Deprecated

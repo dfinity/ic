@@ -541,6 +541,14 @@ http_file(
     url = "https://download.dfinity.systems/testdata/mainnet_headers_800k.json.gz",
 )
 
+# Contains the first 800_000 headers of the Dogecoin mainnet blockchain with auxiliary proof-of-work.
+http_file(
+    name = "doge_headers_800k_mainnet_auxpow",
+    downloaded_file_path = "doge_headers_800k_mainnet_auxpow.json.gz",
+    sha256 = "e138d7c59d237d0eea70943b60038b8755d9aa1f04bc94f315a74775cf8bfc2d",
+    url = "http://download.dfinity.systems/testdata/doge/doge_headers_800k_mainnet_auxpow.json.gz",
+)
+
 # Contains blocks 350_990 to 350_999 (inclusive) of the Bitcoin mainnet blockchain.
 http_file(
     name = "bitcoin_adapter_mainnet_blocks",
@@ -563,6 +571,56 @@ http_file(
     downloaded_file_path = "testnet_blocks.json.gz",
     sha256 = "ae57b5b58d8a1e89545c0caedeb114d0dd179e0c5fd4a44e43321b2cdbac74fb",
     url = "https://download.dfinity.systems/testdata/testnet_blocks.json.gz",
+)
+
+# Contains blocks 0 to 700_000 (inclusive) of the Dogecoin mainnet blockchain.
+http_file(
+    name = "dogecoin_adapter_mainnet_headers",
+    downloaded_file_path = "doge_headers_mainnet_0_700000_raw.csv",
+    sha256 = "42c9f72499308f847312cae8fdb5148dcaed71120041a60d336f5628dd93e1fc",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_mainnet_0_700000_raw.csv",
+)
+
+# Contains blocks 1 to 15_000 (inclusive) of the Dogecoin mainnet blockchain in parsed format.
+http_file(
+    name = "dogecoin_adapter_mainnet_headers_parsed",
+    downloaded_file_path = "doge_headers_mainnet_1_15000_parsed.csv",
+    sha256 = "a76d47758cf8251e1a524510cd2372287888784f2587cea0834b6af9582b6448",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_mainnet_1_15000_parsed.csv",
+)
+
+# Contains blocks 521_337 to 536_336 (inclusive) of the Dogecoin mainnet blockchain in parsed format.
+# Contains 14_955 AuxPow headers out of 15,000 headers.
+http_file(
+    name = "dogecoin_adapter_mainnet_headers_auxpow_parsed",
+    downloaded_file_path = "doge_headers_mainnet_521337_536336_auxpow_parsed.csv",
+    sha256 = "248e36cf7962cb0d55f9e8f20d2beecee9611045713d118a6ad6ff8c98cd2070",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_mainnet_521337_536336_auxpow_parsed.csv",
+)
+
+# Contains blocks 0 to 2_000_000 (inclusive) of the Dogecoin testnet blockchain.
+http_file(
+    name = "dogecoin_adapter_testnet_headers",
+    downloaded_file_path = "doge_headers_testnet_0_2000000_raw.csv",
+    sha256 = "feefd751b10c174622f9a81bb0777eac035936a6a6f4ec3604fdcfa1201b0e42",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_0_2000000_raw.csv",
+)
+
+# Contains blocks 1 to 15_000 (inclusive) of the Dogecoin testnet blockchain in parsed format.
+http_file(
+    name = "dogecoin_adapter_testnet_headers_parsed",
+    downloaded_file_path = "doge_headers_testnet_1_15000_parsed.csv",
+    sha256 = "39d12178923b95e4f98257aaf537336e42ce1940b6b6c69277164c8c556fd15e",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_1_15000_parsed.csv",
+)
+
+# Contains blocks 293_100 to 308_099 (inclusive) of the Dogecoin testnet blockchain in parsed format.
+# Contains 14_746 AuxPow headers out of 15_000 headers.
+http_file(
+    name = "dogecoin_adapter_testnet_headers_auxpow_parsed",
+    downloaded_file_path = "doge_headers_testnet_293100_308099_auxpow_parsed.csv",
+    sha256 = "2aeb78d9564153607900a8e86d2e0fae72fb9fda362c2ce475e60c5d3e43f5e2",
+    url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_293100_308099_auxpow_parsed.csv",
 )
 
 # Internet Identity canister (test build)

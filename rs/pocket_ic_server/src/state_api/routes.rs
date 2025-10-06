@@ -49,8 +49,14 @@ use pocket_ic::common::rest::{
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::Arc, sync::atomic::AtomicU64, time::Duration};
-use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    sync::Arc,
+    sync::atomic::AtomicU64,
+    time::{Duration, SystemTime},
+};
+use tokio::runtime::Runtime;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
 
@@ -82,7 +88,8 @@ const RETRY_TIMEOUT_S: u64 = 300;
 pub struct AppState {
     pub api_state: Arc<ApiState>,
     pub pending_requests: Arc<AtomicU64>,
-    pub min_alive_until: Arc<RwLock<Instant>>,
+    /// TTL in nanoseconds since UNIX epoch
+    pub min_alive_until: Arc<AtomicU64>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
 }
@@ -1037,28 +1044,26 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
     }
 }
 
-/// Read a node in the graph of computations. Needed for polling for a previous ApiResponse::Started reply.
+/// Read a result. Needed for polling for a previous ApiResponse::Started reply.
 pub async fn handler_read_graph(
     State(AppState { api_state, .. }): State<AppState>,
     // TODO: type state label and op id correctly but such that axum can handle it
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> Response {
     let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
-        return (StatusCode::BAD_REQUEST, "malformed state_label").into_response();
+        return (StatusCode::BAD_REQUEST, "Malformed state label.").into_response();
     };
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        match api_state.read_graph(&state_label, &op_id) {
+        match api_state.read_graph(state_label, op_id).await {
             Some((_new_state_label, op_out)) => op_out_to_response(op_out).await,
             _ => (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::Error {
                     message: format!(
-                        "state_label / op_id not found: {} (base64: {}) / {}",
-                        state_label_str,
-                        base64::encode_config(state_label.0, base64::URL_SAFE),
-                        op_id_str,
+                        "state_label / op_id not found: {} / {}",
+                        state_label_str, op_id_str,
                     ),
                 }),
             )
@@ -1068,10 +1073,47 @@ pub async fn handler_read_graph(
         (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::Error {
-                message: "Bad state_label".to_string(),
+                message: "Malformed state label.".to_string(),
             }),
         )
             .into_response()
+    }
+}
+
+/// Prune a result. Needed for releasing memory after successfully polling for a previous ApiResponse::Started reply.
+pub async fn handler_prune_graph(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path((state_label_str, op_id_str)): Path<(String, String)>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::Error {
+                message: "Malformed state label.".to_string(),
+            }),
+        );
+    };
+    if let Ok(state_label) = StateLabel::try_from(vec) {
+        let op_id = OpId(op_id_str.clone());
+        match api_state.prune_graph(state_label, op_id).await {
+            Some(()) => (StatusCode::OK, Json(ApiResponse::Success(()))),
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::Error {
+                    message: format!(
+                        "state_label / op_id not found: {} / {}",
+                        state_label_str, op_id_str,
+                    ),
+                }),
+            ),
+        }
+    } else {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::Error {
+                message: "Malformed state label.".to_string(),
+            }),
+        )
     }
 }
 
@@ -1333,7 +1375,8 @@ pub async fn create_instance(
         Some(InitialTime::Timestamp(raw_time)) => Some(
             ic_types::Time::from_nanos_since_unix_epoch(raw_time.nanos_since_epoch),
         ),
-        Some(InitialTime::AutoProgress(_)) | None => None,
+        Some(InitialTime::AutoProgress(_)) => Some(SystemTime::now().try_into().unwrap()),
+        None => None,
     };
     let auto_progress = match instance_config.initial_time {
         Some(InitialTime::AutoProgress(config)) => Some(config),

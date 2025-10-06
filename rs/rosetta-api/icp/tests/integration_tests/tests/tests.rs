@@ -3,7 +3,7 @@ use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta_client::RosettaClient;
-use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::convert;
 use ic_rosetta_api::models::{
     BlockIdentifier, CallResponse, NetworkIdentifier, NetworkListResponse, NetworkStatusResponse,
@@ -46,11 +46,7 @@ fn icp_ledger_wasm_bytes() -> Vec<u8> {
             .unwrap()
             .join("icp_ledger")
             .join("ledger");
-    ic_test_utilities_load_wasm::load_wasm(
-        icp_ledger_project_path,
-        "ledger-canister",
-        &["notify-method"],
-    )
+    ic_test_utilities_load_wasm::load_wasm(icp_ledger_project_path, "ledger-canister", &[])
 }
 
 fn icp_ledger_init(sender_id: Principal) -> Vec<u8> {

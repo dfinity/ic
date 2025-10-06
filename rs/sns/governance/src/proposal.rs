@@ -1059,10 +1059,10 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     } = upgrade;
 
     // Make sure `mode` is not None, and not an invalid/unknown value.
-    if let Some(mode) = mode {
-        if let Err(err) = CanisterInstallMode::try_from(*mode) {
-            defects.push(format!("Invalid mode: {err}"));
-        }
+    if let Some(mode) = mode
+        && let Err(err) = CanisterInstallMode::try_from(*mode)
+    {
+        defects.push(format!("Invalid mode: {err}"));
     }
     // Assume mode is the default if it is not set
     let mode = upgrade.mode_or_upgrade();

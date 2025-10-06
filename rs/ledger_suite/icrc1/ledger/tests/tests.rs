@@ -10,16 +10,17 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HASH_LENGTH, HashOf};
+use ic_ledger_suite_in_memory_ledger::{AllowancesRecentlyPurged, verify_ledger_state};
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, get_all_ledger_and_archive_blocks, send_approval, send_transfer_from,
+};
+use ic_ledger_suite_state_machine_tests::MINTER;
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    AllowancesRecentlyPurged, verify_ledger_state,
-};
-use ic_ledger_suite_state_machine_tests::{
-    ARCHIVE_TRIGGER_THRESHOLD, AllowanceProvider, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES,
-    FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
-    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, get_all_ledger_and_archive_blocks,
-    send_approval, send_transfer_from,
+use ic_ledger_suite_state_machine_tests_constants::{
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -1613,7 +1614,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
     use ic_cbor::CertificateToCbor;
     use ic_certification::hash_tree::{HashTreeNode, SubtreeLookupResult};
     use ic_certification::{Certificate, HashTree};
-    use ic_ledger_suite_state_machine_tests::send_transfer;
+    use ic_ledger_suite_state_machine_helpers::send_transfer;
     use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 
     const NUM_BLOCKS: u64 = 10;

@@ -717,6 +717,45 @@ fn install_calls_canister_start_and_canister_init() {
 }
 
 #[test]
+fn certified_data_can_be_set_during_install_code() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let certified_data = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .certified_data
+            .clone()
+    };
+
+    // In canister init.
+    test.install_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        wasm()
+            .certified_data_set(b"FOO")
+            .set_pre_upgrade(wasm().certified_data_set(b"BAR").build())
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(certified_data(&test), b"FOO");
+
+    // In canister pre-upgrade.
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(certified_data(&test), b"BAR");
+
+    // In canister post-upgrade.
+    test.upgrade_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        wasm().certified_data_set(b"BAZ").build(),
+    )
+    .unwrap();
+    assert_eq!(certified_data(&test), b"BAZ");
+}
+
+#[test]
 fn install_puts_canister_back_after_invalid_wasm() {
     let mut test = ExecutionTestBuilder::new().build();
 
@@ -743,44 +782,57 @@ fn install_puts_canister_back_after_invalid_wasm() {
 }
 
 #[test]
-fn reinstall_clears_stable_memory() {
+fn install_does_not_change_canister_if_init_traps() {
     let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
 
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
-    test.install_code_v2(InstallCodeArgsV2::new(
-        CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    ))
-    .unwrap();
+    // Explicit trap.
+    let err = test
+        .install_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm().trap().build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
 
-    let data = [1, 2, 3, 5, 8, 13];
-    let payload = wasm()
-        .stable_grow(1)
-        .stable_write(42, &data)
-        .reply()
-        .build();
-    test.ingress(canister_id, "update", payload).unwrap();
+    // Trying to make a call in init traps.
+    let err = test
+        .install_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm()
+                .call_simple(canister_id, "update", CallArgs::default())
+                .build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size.get(),
-        1
-    );
+    // Trying to reply in init traps.
+    let err = test
+        .install_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm().reply().build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
-    // Reinstall the canister, should clear its stable memory.
-    test.install_code_v2(InstallCodeArgsV2::new(
-        CanisterInstallModeV2::Reinstall,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    ))
-    .unwrap();
+    // Trying to reject in init traps.
+    let err = test
+        .install_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm().push_bytes(b"FOO").reject().build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size.get(),
-        0
-    );
+    // Canister is still empty.
+    let result = test.canister_status(canister_id);
+    let reply = get_reply(result);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(status.module_hash(), None);
 }
 
 #[test]
@@ -4836,13 +4888,110 @@ fn upload_chunk_counts_to_memory_usage() {
 }
 
 #[test]
-fn uninstall_clears_wasm_chunk_store() {
+fn uninstall_code_on_empty_canister() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(CYCLES);
 
-    // Upload a chunk
+    let status = test.canister_status(canister_id);
+    let reply = get_reply(status);
+    let empty_canister_status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(empty_canister_status.status(), CanisterStatusType::Running);
+    assert!(empty_canister_status.module_hash().is_none());
+
+    test.uninstall_code(canister_id).unwrap();
+
+    let status = test.canister_status(canister_id);
+    let reply = get_reply(status);
+    let uninstalled_canister_status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(
+        uninstalled_canister_status.status(),
+        CanisterStatusType::Running
+    );
+    assert_eq!(
+        uninstalled_canister_status.controllers(),
+        empty_canister_status.controllers()
+    );
+    assert!(uninstalled_canister_status.module_hash().is_none());
+}
+
+#[test]
+fn uninstall_code_with_wrong_controller_fails() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(CYCLES);
+
+    // Switch user id so the request comes from a non-controller.
+    test.set_user_id(user_test_id(42));
+
+    let err = test.uninstall_code(canister_id).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+}
+
+/* Test that a given operation on a canister clears
+ * - heap memory;
+ * - stable memory;
+ * - certified data;
+ * - wasm chunk store (if `clears_chunk_store` is `true`).
+ */
+fn operation_clears_canister_state<F>(op: F, clears_chunk_store: bool)
+where
+    F: FnOnce(&mut ExecutionTest, CanisterId),
+{
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let certified_data_are_empty = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .certified_data
+            .is_empty()
+    };
+    let chunk_store_is_empty = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .wasm_chunk_store
+            .keys()
+            .collect::<Vec<_>>()
+            .is_empty()
+    };
+
+    // Set heap memory.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().set_global_data(b"BAR").reply().build(),
+    )
+    .unwrap();
+
+    // Set stable memory.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .stable_grow(1)
+            .stable_write(0, b"FOO")
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    // Set certified data.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().certified_data_set(b"CERT").reply().build(),
+    )
+    .unwrap();
+    assert!(!certified_data_are_empty(&test));
+
+    // Upload a chunk.
     let chunk = vec![1, 2, 3, 4, 5];
     let reply = UploadChunkReply {
         hash: ic_crypto_sha2::Sha256::hash(&chunk).to_vec(),
@@ -4854,16 +5003,57 @@ fn uninstall_clears_wasm_chunk_store() {
     };
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert_eq!(result, Ok(WasmResult::Reply(reply)));
+    assert!(!chunk_store_is_empty(&test));
 
-    // Uninstall canister and check that chunk is gone.
-    test.uninstall_code(canister_id).unwrap();
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .wasm_chunk_store
-            .memory_usage(),
-        NumBytes::from(0)
+    // Run operation.
+    op(&mut test, canister_id);
+
+    // Check that heap memory is cleared.
+    let res = test.ingress(
+        canister_id,
+        "query",
+        wasm().get_global_data().append_and_reply().build(),
     );
+    assert!(get_reply(res).is_empty());
+
+    // Check that stable memory is cleared.
+    let res = test.ingress(
+        canister_id,
+        "query",
+        wasm().stable64_size().reply_int64().build(),
+    );
+    assert_eq!(get_reply(res), 0_u64.to_le_bytes());
+
+    // Check that certified data are cleared.
+    assert!(certified_data_are_empty(&test));
+
+    // Check that wasm chunk store is cleared.
+    if clears_chunk_store {
+        assert!(chunk_store_is_empty(&test));
+    } else {
+        assert!(!chunk_store_is_empty(&test));
+    }
+}
+
+#[test]
+fn uninstall_code_clears_canister_state() {
+    let uninstall_code = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        test.uninstall_code(canister_id).unwrap();
+        test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+    };
+
+    operation_clears_canister_state(uninstall_code, true);
+}
+
+#[test]
+fn reinstall_clears_canister_state() {
+    let reinstall_canister = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+    };
+
+    operation_clears_canister_state(reinstall_canister, false);
 }
 
 #[test]
@@ -5694,24 +5884,23 @@ fn helper_update_settings_updates_hook_status(
 
     let mut settings = CanisterSettingsArgsBuilder::new();
 
-    if updated_memory_state.wasm_memory_threshold != initial_memory_state.wasm_memory_threshold {
-        if let Some(updated_wasm_memory_threshold) = updated_memory_state.wasm_memory_threshold {
-            settings = settings.with_wasm_memory_threshold(updated_wasm_memory_threshold.get());
-        }
+    if updated_memory_state.wasm_memory_threshold != initial_memory_state.wasm_memory_threshold
+        && let Some(updated_wasm_memory_threshold) = updated_memory_state.wasm_memory_threshold
+    {
+        settings = settings.with_wasm_memory_threshold(updated_wasm_memory_threshold.get());
     }
 
-    if updated_memory_state.wasm_memory_limit != initial_memory_state.wasm_memory_limit {
-        if let Some(updated_wasm_memory_limit) = updated_memory_state.wasm_memory_limit {
-            settings = settings.with_wasm_memory_limit(updated_wasm_memory_limit.get());
-        }
+    if updated_memory_state.wasm_memory_limit != initial_memory_state.wasm_memory_limit
+        && let Some(updated_wasm_memory_limit) = updated_memory_state.wasm_memory_limit
+    {
+        settings = settings.with_wasm_memory_limit(updated_wasm_memory_limit.get());
     }
 
-    if updated_memory_state.memory_allocation != initial_memory_state.memory_allocation {
-        if let Some(MemoryAllocation::Reserved(updated_memory_allocation)) =
+    if updated_memory_state.memory_allocation != initial_memory_state.memory_allocation
+        && let Some(MemoryAllocation::Reserved(updated_memory_allocation)) =
             updated_memory_state.memory_allocation
-        {
-            settings = settings.with_memory_allocation(updated_memory_allocation.get());
-        }
+    {
+        settings = settings.with_memory_allocation(updated_memory_allocation.get());
     }
 
     let payload = UpdateSettingsArgs {
@@ -7764,4 +7953,192 @@ fn create_canister_sets_default_reserved_cycles_limit() {
                 .default_reserved_balance_limit()
         )
     );
+}
+
+#[test]
+fn persist_state_to_stable_memory_during_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let data = [42, 43, 44, 45];
+
+    let check_data = |test: &mut ExecutionTest| {
+        let res = test.ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        );
+        assert_eq!(get_reply(res), data);
+    };
+
+    let pre_upgrade = wasm()
+        .stable_grow(1)
+        .push_int(0)
+        .get_global_data()
+        .stable_write_offset_blob()
+        .build();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(&data)
+            .set_pre_upgrade(pre_upgrade)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test);
+
+    let post_upgrade = wasm()
+        .stable_read(0, 4)
+        .set_global_data_from_stack()
+        .build();
+    test.upgrade_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), post_upgrade)
+        .unwrap();
+
+    check_data(&mut test);
+}
+
+const HEAP_DATA: &[u8] = &[1, 2, 3, 4];
+const STABLE_DATA: &[u8] = &[42, 43, 44, 45];
+
+fn check_data(test: &mut ExecutionTest, canister_id: CanisterId) {
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm().get_global_data().append_and_reply().build(),
+    );
+    assert_eq!(get_reply(res), HEAP_DATA);
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm().stable_read(0, 4).append_and_reply().build(),
+    );
+    assert_eq!(get_reply(res), STABLE_DATA);
+}
+
+#[test]
+fn trap_during_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let zeros = [0, 0, 0, 0];
+    let pre_upgrade = wasm()
+        .set_global_data(&zeros)
+        .stable_write(0, &zeros)
+        .trap()
+        .build();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .set_pre_upgrade(pre_upgrade)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
+
+    let err = test
+        .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    check_data(&mut test, canister_id);
+}
+
+#[test]
+fn trap_during_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let zeros = [0, 0, 0, 0];
+    let pre_upgrade = wasm()
+        .set_global_data(&zeros)
+        .stable_write(0, &zeros)
+        .build();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .set_pre_upgrade(pre_upgrade)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
+
+    let err = test
+        .upgrade_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm()
+                .set_global_data(&zeros)
+                .stable_write(0, &zeros)
+                .trap()
+                .build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    check_data(&mut test, canister_id);
+}
+
+#[test]
+fn trap_during_reinstall() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
+
+    let err = test
+        .reinstall_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm().trap().build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    check_data(&mut test, canister_id);
+}
+
+#[test]
+fn set_heap_and_stable_memory_during_reinstall() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.reinstall_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        wasm()
+            .set_global_data(HEAP_DATA)
+            .stable_grow(1)
+            .stable_write(0, STABLE_DATA)
+            .build(),
+    )
+    .unwrap();
+
+    check_data(&mut test, canister_id);
 }

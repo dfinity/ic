@@ -1,6 +1,8 @@
+use bitcoin::dogecoin::Header as AuxPowHeader;
 use bitcoin::{
     BlockHash, CompactTarget, Network, Target, block::Header as BlockHeader, block::ValidationError,
 };
+use std::time::Duration;
 
 use crate::{
     BlockHeight,
@@ -11,7 +13,7 @@ use crate::{
 };
 
 /// An error thrown when trying to validate a header.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ValidateHeaderError {
     /// Used when the timestamp in the header is lower than
     /// the median of timestamps of past 11 headers.
@@ -40,9 +42,35 @@ pub enum ValidateHeaderError {
     PrevHeaderNotFound,
 }
 
-pub trait HeaderStore<Header> {
+#[derive(Debug, PartialEq)]
+pub enum ValidateAuxPowHeaderError {
+    /// Used when the PureHeader fails validation
+    ValidatePureHeader(ValidateHeaderError),
+    /// Used when version field is obsolete
+    VersionObsolete,
+    /// Used when legacy blocks are not allowed
+    LegacyBlockNotAllowed,
+    /// Used when AuxPow blocks are not allowed
+    AuxPowBlockNotAllowed,
+    /// Used when the chain ID in the header is invalid
+    InvalidChainId,
+    /// Used when the AuxPow bit in the version field is not set properly
+    InconsistentAuxPowBitSet,
+    /// Used when the AuxPow proof is incorrect
+    InvalidAuxPoW,
+    /// Used when the PoW in the parent block is invalid
+    InvalidParentPoW,
+}
+
+impl From<ValidateHeaderError> for ValidateAuxPowHeaderError {
+    fn from(err: ValidateHeaderError) -> Self {
+        ValidateAuxPowHeaderError::ValidatePureHeader(err)
+    }
+}
+
+pub trait HeaderStore {
     /// Returns the header with the given block hash.
-    fn get_header(&self, hash: &BlockHash) -> Option<(Header, BlockHeight)>;
+    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)>;
 
     /// Returns the initial hash the store starts from.
     fn get_initial_hash(&self) -> BlockHash;
@@ -50,11 +78,124 @@ pub trait HeaderStore<Header> {
     fn get_height(&self) -> BlockHeight;
 }
 
+pub trait HeaderValidator {
+    type Network;
+
+    fn network(&self) -> &Self::Network;
+
+    /// Returns the maximum difficulty target depending on the network
+    fn max_target(&self) -> Target;
+
+    /// Returns false iff PoW difficulty level of blocks can be
+    /// readjusted in the network after a fixed time interval.
+    fn no_pow_retargeting(&self) -> bool;
+
+    /// Returns the PoW limit bits depending on the network
+    fn pow_limit_bits(&self) -> CompactTarget;
+
+    /// Returns the target spacing between blocks in seconds.
+    fn pow_target_spacing(&self) -> Duration;
+
+    /// Returns the number of blocks between difficulty adjustments at the given height.
+    fn difficulty_adjustment_interval(&self, height: u32) -> u32;
+
+    /// Returns `true` if mining a min-difficulty block is allowed after some delay.
+    fn allow_min_difficulty_blocks(&self, height: u32) -> bool;
+
+    /// Checkpoints used to validate blocks at certain heights.
+    fn checkpoints(&self) -> &[(BlockHeight, &str)];
+
+    /// This validates the header against the network's checkpoints.
+    /// 1. If the next header is at a checkpoint height, the checkpoint is compared to the next header's block hash.
+    /// 2. If the header is not the same height, the function then compares the height to the latest checkpoint.
+    ///    If the next header's height is less than the last checkpoint's height, the header is invalid.
+    fn is_checkpoint_valid(
+        &self,
+        prev_height: BlockHeight,
+        header: &BlockHeader,
+        chain_height: BlockHeight,
+    ) -> bool;
+
+    /// Validates a header. If a failure occurs, a
+    /// [ValidateHeaderError](ValidateHeaderError) will be returned.
+    fn validate_header(
+        &self,
+        store: &impl HeaderStore,
+        header: &BlockHeader,
+    ) -> Result<(), ValidateHeaderError>;
+
+    /// Returns the next required target at the given timestamp.
+    /// The target is the number that a block hash must be below for it to be accepted.
+    fn get_next_target(
+        &self,
+        store: &impl HeaderStore,
+        prev_header: &BlockHeader,
+        prev_height: BlockHeight,
+        timestamp: u32,
+    ) -> Target;
+
+    /// This method is only valid when used for testnet and regtest networks.
+    /// As per "https://en.bitcoin.it/wiki/Testnet",
+    /// "If no block has been found in 20 minutes, the difficulty automatically
+    /// resets back to the minimum for a single block, after which it
+    /// returns to its previous value." This function is used to compute the
+    /// difficulty target in case the block has been found within 20
+    /// minutes.
+    fn find_next_difficulty_in_chain(
+        &self,
+        store: &impl HeaderStore,
+        prev_header: &BlockHeader,
+        prev_height: BlockHeight,
+    ) -> CompactTarget;
+
+    /// This function returns the difficulty target to be used for the current
+    /// header given the previous header in the Bitcoin network
+    fn compute_next_difficulty(
+        &self,
+        store: &impl HeaderStore,
+        prev_header: &BlockHeader,
+        prev_height: BlockHeight,
+    ) -> CompactTarget;
+
+    /// This validates that the header has a height that is within 1 year of the tip height.
+    fn is_header_within_one_year_of_tip(
+        &self,
+        prev_height: BlockHeight,
+        chain_height: BlockHeight,
+    ) -> bool;
+}
+
+pub trait AuxPowHeaderValidator: HeaderValidator {
+    /// Returns `true` if the strict-chain-id rule is enabled.
+    fn strict_chain_id(&self) -> bool;
+
+    /// Returns the chain id used in this blockchain for AuxPow mining.
+    fn auxpow_chain_id(&self) -> i32;
+
+    /// Returns `true` if mining a legacy block is allowed.
+    fn allow_legacy_blocks(&self, height: u32) -> bool;
+
+    /// Performs context-dependent validity checks for AuxPow headers.
+    fn contextual_check_header_auxpow(
+        &self,
+        header: &BlockHeader,
+        height: BlockHeight,
+    ) -> Result<(), ValidateAuxPowHeaderError>;
+
+    /// Validates an AuxPow header. If a failure occurs, a
+    /// [ValidateAuxPowHeaderError](ValidateAuxPowHeaderError) will be returned.
+    fn validate_auxpow_header(
+        &self,
+        store: &impl HeaderStore,
+        header: &AuxPowHeader,
+    ) -> Result<(), ValidateAuxPowHeaderError>;
+}
+
 /// Validates a header. If a failure occurs, a
 /// [ValidateHeaderError](ValidateHeaderError) will be returned.
 pub fn validate_header(
     network: &Network,
-    store: &impl HeaderStore<BlockHeader>,
+    store: &impl HeaderStore,
     header: &BlockHeader,
 ) -> Result<(), ValidateHeaderError> {
     let chain_height = store.get_height();
@@ -115,7 +256,10 @@ fn is_checkpoint_valid(
     chain_height: BlockHeight,
 ) -> bool {
     let checkpoints = checkpoints(network);
-    let next_height = prev_height.saturating_add(1);
+    if prev_height == u32::MAX {
+        return false;
+    }
+    let next_height = prev_height + 1;
     if let Some(next_hash) = checkpoints.get(&next_height) {
         return *next_hash == header.block_hash();
     }
@@ -139,7 +283,7 @@ fn is_header_within_one_year_of_tip(prev_height: BlockHeight, chain_height: Bloc
 /// Validates if a header's timestamp is valid.
 /// Bitcoin Protocol Rules wiki https://en.bitcoin.it/wiki/Protocol_rules says,
 /// "Reject if timestamp is the median time of the last 11 blocks or before"
-fn is_timestamp_valid(store: &impl HeaderStore<BlockHeader>, header: &BlockHeader) -> bool {
+pub(crate) fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
     let mut times = vec![];
     let mut current_header = *header;
     let initial_hash = store.get_initial_hash();
@@ -162,7 +306,7 @@ fn is_timestamp_valid(store: &impl HeaderStore<BlockHeader>, header: &BlockHeade
 // The target is the number that a block hash must be below for it to be accepted.
 fn get_next_compact_target(
     network: &Network,
-    store: &impl HeaderStore<BlockHeader>,
+    store: &impl HeaderStore,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
     timestamp: u32,
@@ -204,7 +348,7 @@ fn get_next_compact_target(
 /// minutes.
 fn find_next_difficulty_in_chain(
     network: &Network,
-    store: &impl HeaderStore<BlockHeader>,
+    store: &impl HeaderStore,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
 ) -> CompactTarget {
@@ -253,7 +397,7 @@ fn find_next_difficulty_in_chain(
 /// header given the previous header
 fn compute_next_difficulty(
     network: &Network,
-    store: &impl HeaderStore<BlockHeader>,
+    store: &impl HeaderStore,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
 ) -> CompactTarget {
@@ -305,7 +449,6 @@ fn compute_next_difficulty(
 
 #[cfg(test)]
 mod test {
-
     use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
     use bitcoin::{
@@ -371,7 +514,7 @@ mod test {
         }
     }
 
-    impl HeaderStore<BlockHeader> for SimpleHeaderStore {
+    impl HeaderStore for SimpleHeaderStore {
         fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
             self.headers
                 .get(hash)

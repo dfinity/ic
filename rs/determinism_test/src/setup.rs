@@ -1,5 +1,4 @@
 use ic_config::{Config, subnet_config::SubnetConfig};
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::execution_environment::IngressHistoryReader;
 use ic_messaging::MessageRoutingImpl;
@@ -113,13 +112,6 @@ pub(crate) fn setup() -> (
         &[replica_config.node_id],
     );
 
-    let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-        subnet_config.scheduler_config.max_instructions_per_message,
-        subnet_type,
-        subnet_id,
-        subnet_config.cycles_account_manager_config,
-    ));
-
     let state_manager = Arc::new(StateManagerImpl::new(
         Arc::new(FakeVerifier::new()),
         replica_config.subnet_id,
@@ -138,9 +130,8 @@ pub(crate) fn setup() -> (
         &metrics_registry,
         replica_config.subnet_id,
         subnet_type,
-        subnet_config.scheduler_config.clone(),
         config.hypervisor.clone(),
-        Arc::clone(&cycles_account_manager),
+        subnet_config.clone(),
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager.get_fd_factory()),
         completed_execution_messages_tx,
@@ -153,7 +144,7 @@ pub(crate) fn setup() -> (
         Arc::clone(&execution_services.ingress_history_writer) as _,
         execution_services.scheduler,
         config.hypervisor.clone(),
-        cycles_account_manager,
+        Arc::clone(&execution_services.cycles_account_manager),
         replica_config.subnet_id,
         &metrics_registry,
         log.clone().into(),

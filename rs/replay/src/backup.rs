@@ -87,19 +87,15 @@ pub(crate) fn insert_cup_at_height(
     height: Height,
 ) -> Result<(), ReplayError> {
     let file = &cup_file_name(backup_dir, height);
-    match read_cup_file(file) {
-        Some(cup) => {
-            pool.apply(
-                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                    msg: cup.into_message(),
-                    timestamp: UNIX_EPOCH,
-                })
-                .into(),
-            );
-            Ok(())
-        }
-        _ => Err(ReplayError::CUPVerificationFailed(height)),
-    }
+    let cup = read_cup_file(file).ok_or(ReplayError::CUPVerificationFailed(height))?;
+    pool.apply(
+        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+            msg: cup.into_message(),
+            timestamp: UNIX_EPOCH,
+        })
+        .into(),
+    );
+    Ok(())
 }
 
 pub(crate) fn read_cup_proto_file(file: &Path) -> Option<pb::CatchUpPackage> {
@@ -267,12 +263,12 @@ pub(crate) fn deserialize_consensus_artifacts(
         if height > Height::from(0) && height_artifacts.contains_cup {
             last_cup_height = Some(height);
             let file = &path.join("catch_up_package.bin");
-            if let Some(cup) = read_cup_file(file) {
-                if cup.height() != height {
-                    println!("A CUP with an unexpected height detected: {file:?}");
-                    rename_file(file);
-                    return Ok(());
-                }
+            if let Some(cup) = read_cup_file(file)
+                && cup.height() != height
+            {
+                println!("A CUP with an unexpected height detected: {file:?}");
+                rename_file(file);
+                return Ok(());
             }
         }
 
@@ -457,11 +453,12 @@ pub(crate) fn deserialize_consensus_artifacts(
 
         // If we just inserted a height_artifacts, which finalizes the last seen CUP
         // height, we need to deliver all batches before we insert the cup.
-        if let Some(cup_height) = last_cup_height {
-            if height >= cup_height && !height_artifacts.finalizations.is_empty() {
-                println!("Found a CUP at height {cup_height:?}, finalized at height {height:?}");
-                return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
-            }
+        if let Some(cup_height) = last_cup_height
+            && height >= cup_height
+            && !height_artifacts.finalizations.is_empty()
+        {
+            println!("Found a CUP at height {cup_height:?}, finalized at height {height:?}");
+            return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
         }
     }
 }

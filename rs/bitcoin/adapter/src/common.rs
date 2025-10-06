@@ -1,8 +1,8 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
 use bitcoin::{BlockHash, Work, block::Header as PureHeader};
-use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::{fmt, str::FromStr};
 
 /// This const represents the default version that the adapter will support.
@@ -108,10 +108,10 @@ impl FromStr for AdapterNetwork {
             if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
                 return Ok(network.into());
             }
-        } else if let Some(s) = s.strip_prefix("bitcoin:") {
-            if let Ok(network) = bitcoin::Network::from_str(s) {
-                return Ok(network.into());
-            }
+        } else if let Some(s) = s.strip_prefix("bitcoin:")
+            && let Ok(network) = bitcoin::Network::from_str(s)
+        {
+            return Ok(network.into());
         }
         Err(format!("unknown network name {s}"))
     }
@@ -131,21 +131,15 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
 }
 
 /// Trait that implements differences between Bitcoin and Dogecoin networks.
-pub trait BlockchainNetwork: Copy {
+pub trait BlockchainNetwork: Copy + 'static {
     /// Header type.
-    type Header: BlockchainHeader;
+    type Header: BlockchainHeader + Send + Sync;
     /// Block type.
     type Block: BlockchainBlock<Header = Self::Header>;
     /// P2P protocol version number.
     const P2P_PROTOCOL_VERSION: u32;
     /// Return genesis block header.
     fn genesis_block_header(&self) -> Self::Header;
-    /// Validate the given block header.
-    fn validate_header(
-        &self,
-        store: &impl HeaderStore<Self::Header>,
-        header: &Self::Header,
-    ) -> Result<(), ValidateHeaderError>;
     /// Helper used to determine if multiple blocks should be returned
     /// in [GetSuccessorsResponse].
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool;
@@ -169,13 +163,6 @@ impl BlockchainNetwork for bitcoin::Network {
     const P2P_PROTOCOL_VERSION: u32 = bitcoin::p2p::PROTOCOL_VERSION;
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::blockdata::constants::genesis_block(self).header
-    }
-    fn validate_header(
-        &self,
-        store: &impl HeaderStore<Self::Header>,
-        header: &Self::Header,
-    ) -> Result<(), ValidateHeaderError> {
-        ic_btc_validation::validate_header(self, store, header)
     }
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
         use bitcoin::Network::*;
@@ -223,14 +210,6 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::dogecoin::constants::genesis_block(self).header
     }
-    fn validate_header(
-        &self,
-        _store: &impl HeaderStore<Self::Header>,
-        _header: &Self::Header,
-    ) -> Result<(), ValidateHeaderError> {
-        // TODO(XC-422): use real dogecoin validation
-        Ok(())
-    }
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
         use bitcoin::dogecoin::Network::*;
         match self {
@@ -261,7 +240,7 @@ pub trait BlockchainHeader: Decodable + Encodable + Clone {
     fn block_hash(&self) -> BlockHash;
     /// Return previous block hash.
     fn prev_block_hash(&self) -> BlockHash;
-    /// Check if the merkle root in block header matches what is computed.
+    /// Return the total work of the block.
     fn work(&self) -> Work;
     /// Return the 80-byte header.
     fn into_pure_header(self) -> PureHeader;
@@ -345,9 +324,21 @@ impl BlockchainBlock for bitcoin::dogecoin::Block {
     }
 }
 
+/// A trait for validating block headers in a blockchain network.
+pub trait HeaderValidator<Network: BlockchainNetwork> {
+    /// The error type returned when validation fails.
+    type HeaderError: Debug;
+
+    /// Validate a block header against the rules of the given blockchain network.
+    fn validate_header(
+        &self,
+        network: &Network,
+        header: &Network::Header,
+    ) -> Result<(), Self::HeaderError>;
+}
+
 #[cfg(test)]
 pub mod test_common {
-
     use std::{
         collections::{HashSet, VecDeque},
         net::SocketAddr,

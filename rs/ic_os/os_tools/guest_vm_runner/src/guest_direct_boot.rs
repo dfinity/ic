@@ -142,9 +142,9 @@ pub async fn prepare_direct_boot(
     let boot_args =
         read_boot_args(&boot_args_path, boot_args_var_name).context("Failed to read boot args")?;
 
-    let kernel = NamedTempFile::new()?;
-    let initrd = NamedTempFile::new()?;
-    let ovmf_sev = NamedTempFile::new()?;
+    let kernel = NamedTempFile::with_prefix("kernel")?;
+    let initrd = NamedTempFile::with_prefix("initrd")?;
+    let ovmf_sev = NamedTempFile::with_prefix("ovmf_sev")?;
 
     tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel)
         .await
