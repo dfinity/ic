@@ -655,13 +655,11 @@ impl CanisterState {
             .add_canister_change(timestamp_nanos, change_origin, change_details);
         let new_allocated_bytes = self.memory_allocated_bytes();
         if new_allocated_bytes >= old_allocated_bytes {
-            SubnetAvailableExecutionMemoryChange::Allocated(
-                new_allocated_bytes - old_allocated_bytes,
-            )
+            let allocated_bytes = new_allocated_bytes - old_allocated_bytes;
+            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes)
         } else {
-            SubnetAvailableExecutionMemoryChange::Deallocated(
-                old_allocated_bytes - new_allocated_bytes,
-            )
+            let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
+            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
         }
     }
 }
