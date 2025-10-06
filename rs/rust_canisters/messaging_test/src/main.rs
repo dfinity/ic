@@ -1,5 +1,5 @@
 use ic_base_types::{CanisterId, PrincipalId};
-use random_traffic_test::{
+use messaging_test::{
     Message, Response, decode_message, decode_reply, encode_message, encode_reply,
 };
 use std::cell::{Cell, RefCell};

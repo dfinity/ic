@@ -62,7 +62,7 @@ pub struct Reply {
 
 /// A `Reply` encoded with Candid and some padding to reach a target payload size.
 #[derive(Serialize, Deserialize, CandidType)]
-pub struct ReplyWithPadding {
+struct ReplyWithPadding {
     #[serde(with = "serde_bytes")]
     reply: Vec<u8>,
     #[serde(with = "serde_bytes")]
@@ -72,7 +72,7 @@ pub struct ReplyWithPadding {
 /// Encodes a `Message` such that the resulting blob has a target size.
 pub fn encode_message(msg: &Message, target_bytes_count: usize) -> Vec<u8> {
     let message = candid::Encode!(msg).expect("encoding message failed");
-    let padding = vec![123_u8; target_bytes_count.saturating_sub(message.len())];
+    let padding = vec![13_u8; target_bytes_count.saturating_sub(message.len())];
     let result = candid::Encode!(&MessageWithPadding { message, padding })
         .expect("encoding with padding failed");
     assert_eq!(result.len(), target_bytes_count);

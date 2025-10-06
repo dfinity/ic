@@ -1,10 +1,10 @@
 [package]
-name = "random-traffic-test"
+name = "messaging-test"
 version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "random-traffic-test-canister"
+name = "messaging-test-canister"
 path = "src/main.rs"
 
 [dependencies]
