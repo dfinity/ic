@@ -140,7 +140,6 @@ pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
-const GIB: u64 = 1024 * MIB;
 
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
