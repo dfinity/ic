@@ -206,14 +206,11 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["make_new_requests"])
             .start_timer();
 
-        let http_requests = self
-            .state_reader
-            .get_latest_state()
-            .get_ref()
+        let http_requests = &self
+            .latest_state()
             .metadata
             .subnet_call_context_manager
-            .canister_http_request_contexts
-            .clone();
+            .canister_http_request_contexts;
 
         self.metrics
             .in_flight_requests
@@ -246,16 +243,16 @@ impl CanisterHttpPoolManagerImpl {
                 continue;
             }
 
-            if !request_ids_already_made.contains(&id) {
+            if !request_ids_already_made.contains(id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
                 if let Err(err) = self
                     .http_adapter_shim
                     .lock()
                     .unwrap()
                     .send(CanisterHttpRequest {
-                        id,
+                        id: *id,
                         timeout,
-                        context,
+                        context: context.clone(),
                         socks_proxy_addrs: socks_proxy_addrs.clone(),
                     })
                 {
@@ -264,7 +261,7 @@ impl CanisterHttpPoolManagerImpl {
                         "Failed to add canister http request to queue {:?}", err
                     )
                 } else {
-                    self.requested_id_cache.borrow_mut().insert(id);
+                    self.requested_id_cache.borrow_mut().insert(*id);
                 }
             }
         }
@@ -320,6 +317,22 @@ impl CanisterHttpPoolManagerImpl {
                     };
                     self.requested_id_cache.borrow_mut().remove(&response.id);
                     self.metrics.shares_signed.inc();
+
+                    let active_contexts = &self
+                        .latest_state()
+                        .metadata
+                        .subnet_call_context_manager
+                        .canister_http_request_contexts;
+
+                    if let Some(context) = active_contexts.get(&response.id)
+                        && let Replication::NonReplicated(_) = context.replication
+                    {
+                        change_set.push(CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
+                            share, response,
+                        ));
+                        continue;
+                    };
+
                     change_set.push(CanisterHttpChangeAction::AddToValidated(share, response));
                 }
             }
@@ -383,11 +396,51 @@ impl CanisterHttpPoolManagerImpl {
 
                 match active_contexts.get(&share.content.id) {
                     Some(context) => {
-                        if matches!(context.replication, Replication::NonReplicated(node_id) if node_id != share.signature.signer) {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Share signed by node that is not the delegated node for the request".to_string(),
-                            ));
+                        if let Replication::NonReplicated(node_id) = context.replication {
+                            if node_id != share.signature.signer {
+                                return Some(CanisterHttpChangeAction::HandleInvalid(
+                                    share.clone(),
+                                    "Share signed by node that is not the delegated node for the request".to_string(),
+                                ));
+                            }
+                            let unvalidated_artifact = canister_http_pool.get_unvalidated_artifact(share);
+                            let Some(artifact) = unvalidated_artifact else {
+                                // This should never happen
+                                return Some(CanisterHttpChangeAction::HandleInvalid(
+                                    share.clone(),
+                                    "Share exists without artifact".to_string(),
+                                ));
+                            };
+
+                            let Some(response) = &artifact.response else {
+                                // The request is not fully replicated, but the response is missing.
+                                return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                            };
+
+                            if share.content.content_hash != ic_types::crypto::crypto_hash(response) {
+                                return Some(CanisterHttpChangeAction::HandleInvalid(
+                                    share.clone(),
+                                    "Content hash does not match the response".to_string(),
+                                ));
+                            }
+                        } else {
+                            // Fully replicated requests must not have a response attached. 
+
+                            let unvalidated_artifact = canister_http_pool.get_unvalidated_artifact(share);
+                            let Some(artifact) = unvalidated_artifact else {
+                                // This should never happen
+                                return Some(CanisterHttpChangeAction::HandleInvalid(
+                                    share.clone(),
+                                    "Share exists without artifact".to_string(),
+                                ));
+                            };
+
+                            if artifact.response.is_some() {
+                                return Some(CanisterHttpChangeAction::HandleInvalid(
+                                    share.clone(),
+                                    "Artifact should not contain response".to_string(),
+                                ));
+                            }
                         }
                     }
                     None => {
@@ -429,6 +482,7 @@ impl CanisterHttpPoolManagerImpl {
                     ))
                 } else {
                     // Update the set of existing signed requests.
+                    //TODO(gossip): fully replicated shares should not have a response.
                     existing_signed_requests.insert(key_from_share(share));
                     self.metrics.shares_validated.inc();
                     Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
@@ -652,8 +706,14 @@ pub mod test {
                         content: response_metadata.clone(),
                         signature,
                     };
+
+                    let artifact = CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    };
+
                     canister_http_pool.insert(UnvalidatedArtifact {
-                        message: share,
+                        message: artifact,
                         peer_id: replica_config.node_id,
                         timestamp: UNIX_EPOCH,
                     });
@@ -761,8 +821,14 @@ pub mod test {
                 // add an unvalidated copy of the share, that has an outdated version instead
                 share.content.replica_version =
                     ReplicaVersion::from_str("outdated_version").unwrap();
+
+                let artifact = CanisterHttpResponseArtifact {
+                    share,
+                    response: None,
+                };
+
                 canister_http_pool.insert(UnvalidatedArtifact {
-                    message: share,
+                    message: artifact,
                     peer_id: replica_config.node_id,
                     timestamp: UNIX_EPOCH,
                 });
@@ -879,8 +945,14 @@ pub mod test {
                         content: response_metadata.clone(),
                         signature,
                     };
+
+                    let artifact = CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    };
+
                     canister_http_pool.insert(UnvalidatedArtifact {
-                        message: share,
+                        message: artifact,
                         peer_id: replica_config.node_id,
                         timestamp: UNIX_EPOCH,
                     });

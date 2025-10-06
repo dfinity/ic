@@ -45,16 +45,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
-    Height, NodeId, SubnetId,
-    artifact::UnvalidatedArtifactMutation,
-    canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseShare},
-    consensus::{
-        CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage, dkg,
-        idkg::IDkgMessage,
-    },
-    malicious_flags::MaliciousFlags,
-    messages::SignedIngress,
-    replica_config::ReplicaConfig,
+    artifact::UnvalidatedArtifactMutation, canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseArtifact}, consensus::{
+        certification::CertificationMessage, dkg, idkg::IDkgMessage, CatchUpPackage, ConsensusMessage, HasHeight
+    }, malicious_flags::MaliciousFlags, messages::SignedIngress, replica_config::ReplicaConfig, Height, NodeId, SubnetId
 };
 use std::{
     net::{IpAddr, SocketAddr},
@@ -189,7 +182,7 @@ struct AbortableBroadcastChannels {
     certifier: AbortableBroadcastChannel<CertificationMessage>,
     dkg: AbortableBroadcastChannel<dkg::Message>,
     idkg: AbortableBroadcastChannel<IDkgMessage>,
-    https_outcalls: AbortableBroadcastChannel<CanisterHttpResponseShare>,
+    https_outcalls: AbortableBroadcastChannel<CanisterHttpResponseArtifact>,
 }
 
 impl AbortableBroadcastChannels {

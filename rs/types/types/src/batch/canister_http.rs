@@ -1,13 +1,7 @@
 use crate::{
-    ReplicaVersion, Time,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
-    },
-    crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
-    messages::CallbackId,
-    signature::{BasicSignature, BasicSignatureBatch},
+        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus
+    }, crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed}, messages::CallbackId, signature::{BasicSignature, BasicSignatureBatch}, ReplicaVersion, Time
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
 use ic_error_types::RejectCode;
@@ -247,6 +241,62 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 signature: BasicSigOf::new(BasicSig(signature.signature)),
             },
         })
+    }
+}
+
+impl TryFrom<pb::CanisterHttpResponse> for CanisterHttpResponse {
+    type Error = ProxyDecodeError;
+
+    fn try_from(response: pb::CanisterHttpResponse) -> Result<Self, Self::Error> {
+        let id = CanisterHttpRequestId::new(response.id);
+        let timeout = Time::from_nanos_since_unix_epoch(response.timeout);
+        let canister_id = try_from_option_field(
+            response.canister_id,
+            "CanisterHttpResponse::canister_id",
+        )?;
+        let content = try_from_option_field(
+            response.content,
+            "CanisterHttpResponse::content",
+        )?;
+        Ok(CanisterHttpResponse {
+            id,
+            timeout,
+            canister_id,
+            content,
+        })
+    }
+}
+
+impl From<CanisterHttpResponse> for pb::CanisterHttpResponse {
+    fn from(response: CanisterHttpResponse) -> Self {
+        pb::CanisterHttpResponse {
+            id: response.id.get(),
+            timeout: response.timeout.as_nanos_since_unix_epoch(),
+            content: Some(pb::CanisterHttpResponseContent::from(&response.content)),
+            canister_id: Some(pb::CanisterId::from(response.canister_id)),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpArtifact> for CanisterHttpResponseArtifact {
+    type Error = ProxyDecodeError;
+
+    fn try_from(artifact: pb::CanisterHttpArtifact) -> Result<Self, Self::Error> {
+        let share: CanisterHttpResponseShare = try_from_option_field(artifact.share, "CanisterHttpArtifact::share")?;
+
+        Ok(CanisterHttpResponseArtifact {
+            share: share.try_into()?,
+            response: artifact.response.map(|response| response.try_into()).transpose()?,
+        })
+    }
+}
+
+impl From<CanisterHttpResponseArtifact> for pb::CanisterHttpArtifact {
+    fn from(artifact: CanisterHttpResponseArtifact) -> Self {
+        pb::CanisterHttpArtifact {
+            share: Some(artifact.share.into()),
+            response: artifact.response.map(|response| response.into()),
+        }
     }
 }
 

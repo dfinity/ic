@@ -3,12 +3,7 @@ use crate::validation::ValidationError;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    NodeId, Time,
-    artifact::CanisterHttpResponseId,
-    canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
-    consensus::Threshold,
-    crypto::{CryptoError, CryptoHashOf},
-    messages::CallbackId,
+    artifact::CanisterHttpResponseId, canister_http::{CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare}, consensus::Threshold, crypto::{CryptoError, CryptoHashOf}, messages::CallbackId, NodeId, Time
 };
 
 #[derive(Debug)]
@@ -91,6 +86,7 @@ pub type CanisterHttpPayloadValidationError =
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
     AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
+    AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
     MoveToValidated(CanisterHttpResponseShare),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
@@ -104,6 +100,7 @@ pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
+    fn get_unvalidated_artifact(&self, share: &CanisterHttpResponseShare) -> Option<&CanisterHttpResponseArtifact>;
     // TODO: Likely not needed
     fn get_response_content_items(
         &self,
@@ -122,5 +119,5 @@ pub trait CanisterHttpPool: Send + Sync {
     fn lookup_unvalidated(
         &self,
         msg_id: &CanisterHttpResponseId,
-    ) -> Option<CanisterHttpResponseShare>;
+    ) -> Option<CanisterHttpResponseArtifact>;
 }
