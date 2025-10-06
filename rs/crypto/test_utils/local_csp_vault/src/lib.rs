@@ -10,6 +10,7 @@ use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
 use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
 use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 use ic_crypto_internal_csp::vault::api::CspTlsSignError;
+use ic_crypto_internal_csp::vault::api::DummySizedRandomResponseGenerator;
 use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
 use ic_crypto_internal_csp::vault::api::IDkgDealingInternalBytes;
 use ic_crypto_internal_csp::vault::api::IDkgProtocolCspVault;
@@ -268,5 +269,11 @@ mock! {
         ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
         fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError>;
+    }
+
+    impl DummySizedRandomResponseGenerator for LocalCspVault {
+        fn dummy_response(&self, _input: Vec<u8>, _response_size_bytes: usize) -> Result<Vec<u8>, String> {
+            Ok(vec![])
+        }
     }
 }
