@@ -203,7 +203,7 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             freezing_threshold: settings.freezing_threshold,
             reserved_cycles_limit: settings.reserved_cycles_limit,
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
-            log_size: Some(candid::Nat::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE)),
+            log_size: Some(candid::Nat::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE)), // TODO: properly implement log_size.
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
             environment_variables: None,
