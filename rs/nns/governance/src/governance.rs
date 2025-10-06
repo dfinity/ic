@@ -1990,7 +1990,7 @@ impl Governance {
             // requested_neuron_ids are supplied by the caller.
             let _ignore_when_neuron_not_found = self.with_neuron(neuron_id, |neuron| {
                 // Populate neuron_infos.
-                let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller);
+                let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller, true);
                 neuron_infos.insert(neuron_id.id, neuron_info);
 
                 // Populate full_neurons.
@@ -2004,7 +2004,7 @@ impl Governance {
                             && neuron.visibility() == Visibility::Public
                         );
                 if let_caller_read_full_neuron {
-                    full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics()));
+                    full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics(), true));
                 }
             });
         }
@@ -3455,7 +3455,7 @@ impl Governance {
     ) -> Result<NeuronInfo, GovernanceError> {
         let now = self.env.now();
         self.with_neuron(id, |neuron| {
-            neuron.get_neuron_info(self.voting_power_economics(), now, requester)
+            neuron.get_neuron_info(self.voting_power_economics(), now, requester, false)
         })
     }
 
@@ -3468,7 +3468,12 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronInfo, GovernanceError> {
         self.with_neuron_by_neuron_id_or_subaccount(find_by, |neuron| {
-            neuron.get_neuron_info(self.voting_power_economics(), self.env.now(), requester)
+            neuron.get_neuron_info(
+                self.voting_power_economics(),
+                self.env.now(),
+                requester,
+                false,
+            )
         })
     }
 
@@ -3503,7 +3508,7 @@ impl Governance {
 
         let now_seconds = self.env.now();
         let voting_power_economics = self.voting_power_economics();
-        Ok(native_neuron.into_api(now_seconds, voting_power_economics))
+        Ok(native_neuron.into_api(now_seconds, voting_power_economics, false))
     }
 
     // Returns the set of currently registered node providers.

@@ -1568,7 +1568,7 @@ fn test_update_neuron_errors_out_expectedly() {
     governance.add_neuron(1, neuron).unwrap();
 
     assert_eq!(
-        governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default())),
+        governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default(), false)),
         Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!("Cannot change the subaccount {neuron_subaccount} of a neuron."),

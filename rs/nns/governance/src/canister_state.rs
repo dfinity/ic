@@ -472,6 +472,7 @@ mod tests {
                 canister_type,
             }),
             hash: hash.clone(),
+            skip_update_latest_version: Some(false),
         })
         .unwrap();
 
@@ -486,7 +487,8 @@ mod tests {
                     wasm,
                     canister_type
                 }),
-                hash
+                hash,
+                skip_update_latest_version: Some(false),
             }
         );
     }
