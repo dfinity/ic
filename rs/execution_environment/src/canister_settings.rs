@@ -387,7 +387,7 @@ impl From<UpdateSettingsError> for UserError {
             ),
             UpdateSettingsError::LogMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!("Log capacity expected to be in the range of [0..2^64-1], got {provided}"),
+                format!("Log memory limit expected to be in the range of [0..2^64-1], got {provided}"),
             ),
         }
     }
