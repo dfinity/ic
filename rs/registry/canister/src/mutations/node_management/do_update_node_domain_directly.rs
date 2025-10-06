@@ -178,14 +178,16 @@ mod tests {
 
         // Assert setting domain name to Some() works
         let new_domain = Some("_invalid".to_string());
-        registry.do_update_node_domain(
-            UpdateNodeDomainDirectlyPayload {
-                node_id,
-                domain: new_domain.clone(),
-            },
-            node_operator_id,
-            now_system_time(),
-        );
+        registry
+            .do_update_node_domain(
+                UpdateNodeDomainDirectlyPayload {
+                    node_id,
+                    domain: new_domain.clone(),
+                },
+                node_operator_id,
+                now_system_time(),
+            )
+            .expect("Foo!");
     }
 
     #[test]

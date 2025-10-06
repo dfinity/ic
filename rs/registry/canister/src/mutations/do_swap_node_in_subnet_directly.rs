@@ -179,16 +179,13 @@ mod tests {
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::{
         common::test_helpers::get_invariant_compliant_subnet_record,
+        common::test_helpers::prepare_registry_with_nodes_and_node_operator_id,
         flags::{
             temporarily_disable_node_swapping, temporarily_enable_node_swapping,
             temporary_overrides::{
                 test_set_swapping_enabled_subnets, test_set_swapping_whitelisted_callers,
             },
         },
-    };
-    use crate::{
-        common::test_helpers::prepare_registry_with_nodes_and_node_operator_id,
-        flags::{temporarily_disable_node_swapping, temporarily_enable_node_swapping},
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         rate_limits::{
             commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
@@ -198,9 +195,7 @@ mod tests {
     };
     use ic_base_types::NodeId;
     use ic_nervous_system_time_helpers::now_system_time;
-    use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
-    use ic_registry_keys::make_node_record_key;
     use ic_registry_keys::{
         make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
     };

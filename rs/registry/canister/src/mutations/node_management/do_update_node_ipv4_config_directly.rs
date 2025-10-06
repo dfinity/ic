@@ -118,8 +118,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
-
+    use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::rate_limits::{
         commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
         try_reserve_node_provider_op_capacity,
@@ -130,9 +129,44 @@ mod tests {
     };
     use ic_base_types::{NodeId, PrincipalId};
     use ic_registry_canister_api::IPv4Config;
+    use maplit::btreemap;
+    use std::str::FromStr;
 
     fn init_ipv4_config() -> IPv4Config {
         IPv4Config::try_new("193.118.59.140".into(), "193.118.59.137".into(), 29).unwrap()
+    }
+
+    /// Returns Registry, NodeId, node operator id, node principal id
+    fn setup_registry_for_test() -> (Registry, Vec<NodeId>, PrincipalId, PrincipalId) {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add node to registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+            1, // mutation id
+            1, // node count
+        );
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
+                .expect("failed to get the node operator id");
+
+        let node_provider_id = PrincipalId::new_user_test_id(20_002);
+
+        let payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_id),
+            node_provider_principal_id: Some(node_provider_id),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+        };
+
+        registry.do_add_node_operator(payload);
+
+        (registry, node_ids, node_operator_id, node_provider_id)
     }
 
     #[test]
@@ -159,52 +193,29 @@ mod tests {
     #[test]
     #[should_panic(expected = "The caller does not match this node's node operator id.")]
     fn should_panic_if_caller_is_not_node_operator() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, _, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_operator_id = PrincipalId::new_user_test_id(101);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-
+        let node_id = node_ids[0];
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
             ipv4_config: Some(init_ipv4_config()),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let wrong_node_operator_id = PrincipalId::new_user_test_id(101);
+
+        registry.do_update_node_ipv4_config_directly_(
+            payload,
+            wrong_node_operator_id,
+            now_system_time(),
+        );
     }
 
     #[test]
     #[should_panic(expected = "InvalidIPv4Address")]
     fn should_panic_if_ip_address_is_invalid() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         // create IPv4 config with invalid IP address
         let ipv4_config =
             IPv4Config::maybe_invalid_new("193.118.256.140".into(), "193.118.59.137".into(), 29);
@@ -220,24 +231,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "InvalidGatewayAddress")]
     fn should_panic_if_gateway_is_invalid() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         // create IPv4 config with invalid gateway IP
         let ipv4_config =
             IPv4Config::maybe_invalid_new("193.118.59.140".into(), "193.118.999.137".into(), 29);
@@ -253,24 +249,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "NotInSameSubnet")]
     fn should_panic_if_address_and_gateway_not_in_same_subnet() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         // create IPv4 config with invalid gateway IP
         let ipv4_config =
             IPv4Config::maybe_invalid_new("193.118.59.140".into(), "193.105.231.137".into(), 29);
@@ -286,24 +267,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "NotGlobalIPv4Address")]
     fn should_panic_if_address_is_private() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         // create IPv4 config with private IP addresses
         let ipv4_config =
             IPv4Config::maybe_invalid_new("192.168.178.6".into(), "192.168.178.1".into(), 29);
@@ -319,24 +285,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "InvalidPrefixLength")]
     fn should_panic_if_prefix_length_is_invalid() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         // create IPv4 config with an invalid prefix length
         let ipv4_config =
             IPv4Config::maybe_invalid_new("193.118.59.140".into(), "193.118.59.137".into(), 34);
@@ -351,24 +302,9 @@ mod tests {
 
     #[test]
     fn should_succeed_if_payload_is_valid_and_some() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         let ipv4_config = init_ipv4_config();
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
@@ -377,7 +313,7 @@ mod tests {
 
         registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
 
-        let node_record = registry.get_node_or_panic(node_id);
+        let node_record = registry.get_node_or_panic(node_ids[0]);
         let expected_intf_config = Some(IPv4InterfaceConfig {
             ip_addr: ipv4_config.ip_addr().to_string(),
             gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
@@ -388,24 +324,9 @@ mod tests {
 
     #[test]
     fn should_succeed_updating_ipv4_config_two_times() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids
-            .first_entry()
-            .expect("no node ids found")
-            .key()
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         let ipv4_config = init_ipv4_config();
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
@@ -437,26 +358,10 @@ mod tests {
         expected = "There is already at least one other node with the same IPv4 address"
     )]
     fn should_panic_if_other_node_has_same_ipv4() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            2, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id_1 = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-
-        let node_id_2 = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
+        let node_id_1 = node_ids[0];
+        let node_id_2 = node_ids[1];
 
         let node_operator_id =
             PrincipalId::try_from(registry.get_node_or_panic(node_id_1).node_operator_id)
@@ -482,31 +387,16 @@ mod tests {
 
     #[test]
     fn test_do_update_node_ipv4_config_directly_fails_when_rate_limits_exceeded() {
-        let mut registry = invariant_compliant_registry(0);
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
-        let now = now_system_time();
-
-        // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, // mutation id
-            1, // node count
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("no node ids found")
-            .to_owned();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
-                .expect("failed to get the node operator id");
-
+        let node_id = node_ids[0];
         let ipv4_config = init_ipv4_config();
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
             ipv4_config: Some(ipv4_config),
         };
+
+        let now = now_system_time();
 
         // Exhaust the rate limit capacity
         let available = get_available_node_provider_op_capacity(node_operator_id, now);
@@ -514,8 +404,6 @@ mod tests {
             try_reserve_node_provider_op_capacity(now, node_operator_id, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
-        // This test should fail until rate limiting is implemented
-        // The method should return a Result<(), String> to support rate limiting
         let error = registry
             .do_update_node_ipv4_config_directly_(payload, node_operator_id, now)
             .unwrap_err();
