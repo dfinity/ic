@@ -646,13 +646,13 @@ impl CanisterManager {
         // In particular, we never produce a canister history entry of the form `settings_change`.
         /*
         match self.environment_variables_flag {
-                      FlagStatus::Enabled => {
+            FlagStatus::Enabled => {
                 let new_environment_variables_hash = validated_settings
                     .environment_variables()
                     .map(|environment_variables| environment_variables.hash());
 
                 if new_environment_variables_hash.is_some() || new_controllers.is_some() {
-                    canister.system_state.add_canister_change(
+                    let available_execution_memory_change = canister.add_canister_change(
                         timestamp_nanos,
                         origin,
                         CanisterChangeDetails::settings_change(
@@ -660,16 +660,22 @@ impl CanisterManager {
                             new_environment_variables_hash,
                         ),
                     );
+                    round_limits
+                        .subnet_available_memory
+                        .update_execution_memory_unchecked(available_execution_memory_change);
                 }
             }
             FlagStatus::Disabled => {
         */
         if let Some(new_controllers) = new_controllers {
-            canister.system_state.add_canister_change(
+            let available_execution_memory_change = canister.add_canister_change(
                 timestamp_nanos,
                 origin,
                 CanisterChangeDetails::controllers_change(new_controllers),
             );
+            round_limits
+                .subnet_available_memory
+                .update_execution_memory_unchecked(available_execution_memory_change);
         }
         /*
             }
@@ -925,6 +931,7 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         canister_id: CanisterId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
         canister_not_found_error: &IntCounter,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
@@ -945,7 +952,7 @@ impl CanisterManager {
             &self.log,
             canister,
             time,
-            AddCanisterChangeToHistory::Yes(origin),
+            AddCanisterChangeToHistory::Yes(origin, round_limits),
             Arc::clone(&self.fd_factory),
         );
         crate::util::process_responses(
@@ -1408,28 +1415,29 @@ impl CanisterManager {
             .copied()
             .collect();
 
-        match self.environment_variables_flag {
+        let available_execution_memory_change = match self.environment_variables_flag {
             FlagStatus::Enabled => {
                 let environment_variables_hash = settings
                     .environment_variables()
                     .map(|env_vars| env_vars.hash());
-                new_canister.system_state.add_canister_change(
+                new_canister.add_canister_change(
                     state.time(),
                     origin,
                     CanisterChangeDetails::canister_creation(
                         controllers,
                         environment_variables_hash,
                     ),
-                );
+                )
             }
-            FlagStatus::Disabled => {
-                new_canister.system_state.add_canister_change(
-                    state.time(),
-                    origin,
-                    CanisterChangeDetails::canister_creation(controllers, None),
-                );
-            }
-        }
+            FlagStatus::Disabled => new_canister.add_canister_change(
+                state.time(),
+                origin,
+                CanisterChangeDetails::canister_creation(controllers, None),
+            ),
+        };
+        round_limits
+            .subnet_available_memory
+            .update_execution_memory_unchecked(available_execution_memory_change);
 
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
@@ -2351,7 +2359,7 @@ impl CanisterManager {
 
         // Increment canister version.
         new_canister.system_state.canister_version += 1;
-        new_canister.system_state.add_canister_change(
+        let available_execution_memory_change = new_canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::load_snapshot(
@@ -2362,6 +2370,9 @@ impl CanisterManager {
                 from_canister_id,
             ),
         );
+        round_limits
+            .subnet_available_memory
+            .update_execution_memory_unchecked(available_execution_memory_change);
         state
             .metadata
             .unflushed_checkpoint_ops
@@ -2937,6 +2948,7 @@ impl CanisterManager {
         to_version: u64,
         to_total_num_changes: u64,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         // In addition to this endpoint only being available from the NNS subnet, the calling canister
         // has to be a controller of the canister to be renamed.
@@ -2968,7 +2980,7 @@ impl CanisterManager {
             .set_canister_history_total_num_changes(to_total_num_changes);
         let old_version = canister.system_state.canister_version;
         canister.system_state.canister_version = std::cmp::max(old_version, to_version) + 1;
-        canister.system_state.add_canister_change(
+        let available_execution_memory_change = canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::rename_canister(
@@ -2979,6 +2991,9 @@ impl CanisterManager {
                 to_total_num_changes,
             ),
         );
+        round_limits
+            .subnet_available_memory
+            .update_execution_memory_unchecked(available_execution_memory_change);
 
         if let Some(execution_state) = canister.execution_state.as_mut() {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
@@ -3041,12 +3056,15 @@ pub fn uninstall_canister(
     // Increment canister version.
     canister.system_state.canister_version += 1;
     match add_canister_change {
-        AddCanisterChangeToHistory::Yes(origin) => {
-            canister.system_state.add_canister_change(
+        AddCanisterChangeToHistory::Yes(origin, round_limits) => {
+            let available_execution_memory_change = canister.add_canister_change(
                 time,
                 origin,
                 CanisterChangeDetails::CanisterCodeUninstall,
             );
+            round_limits
+                .subnet_available_memory
+                .update_execution_memory_unchecked(available_execution_memory_change);
         }
         AddCanisterChangeToHistory::No => {}
     };
