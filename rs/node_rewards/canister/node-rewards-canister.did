@@ -4,8 +4,10 @@ type Decimal = record {
   human_readable: opt text;
 };
 
-type DayUtc = record {
-  last_ts_nanoseconds: opt nat64;
+type DateUtc = record {
+  day: opt nat32;
+  month: opt nat32;
+  year: opt nat32;
 };
 
 type NodeMetricsDaily = record {
@@ -57,15 +59,15 @@ type NodeProviderRewards = record {
 };
 
 type NodeProviderRewardsDaily = record {
-    day_utc: opt DayUtc;
+    day_utc: opt DateUtc;
     node_provider_rewards: opt NodeProviderRewards;
 };
 
 type GetNodeProviderRewardsCalculationResponse = variant { Ok: vec NodeProviderRewardsDaily; Err: text };
 
 type GetNodeProviderRewardsCalculationRequest = record {
-  from_day: DayUtc;
-  to_day: DayUtc;
+  from_day: DateUtc;
+  to_day: DateUtc;
   provider_id: principal;
 };
 
@@ -79,8 +81,8 @@ type NodeProvidersRewards = record {
 };
 
 type GetNodeProvidersRewardsRequest = record {
-  from_day: DayUtc;
-  to_day: DayUtc;
+  from_day: DateUtc;
+  to_day: DateUtc;
 };
 
 type GetNodeProvidersRewardsResponse = variant { Ok: NodeProvidersRewards; Err: text };

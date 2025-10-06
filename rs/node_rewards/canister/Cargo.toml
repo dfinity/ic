@@ -37,6 +37,7 @@ mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 itertools = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }

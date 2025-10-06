@@ -2008,8 +2008,8 @@ dependencies = [
  "canister-test",
  "dfn_core",
  "dfn_json",
- "dfn_macro",
  "futures",
+ "ic-cdk",
  "ic-management-canister-types-private",
  "ic-state-machine-tests",
  "ic-types",
@@ -3866,16 +3866,6 @@ dependencies = [
  "on_wire",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "dfn_macro"
-version = "0.9.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -7448,6 +7438,34 @@ dependencies = [
  "serde_json",
  "simple_asn1",
  "tokio",
+]
+
+[[package]]
+name = "ic-ckdoge-minter"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "async-trait",
+ "candid",
+ "candid_parser",
+ "ic-cdk",
+ "ic-ckbtc-minter",
+ "ic-ckdoge-minter-test-utils",
+ "icrc-ledger-types",
+ "pocket-ic",
+ "serde",
+]
+
+[[package]]
+name = "ic-ckdoge-minter-test-utils"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-ckdoge-minter",
+ "ic-icrc1-ledger",
+ "ic-management-canister-types",
+ "icrc-ledger-types",
+ "pocket-ic",
 ]
 
 [[package]]
@@ -11313,6 +11331,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-rate-limits"
+version = "0.0.1"
+dependencies = [
+ "ic-stable-structures 0.6.8",
+ "serde",
+]
+
+[[package]]
 name = "ic-nervous-system-root"
 version = "0.9.0"
 dependencies = [
@@ -11410,6 +11436,18 @@ name = "ic-nervous-system-timestamp"
 version = "0.0.1"
 dependencies = [
  "time",
+]
+
+[[package]]
+name = "ic-nervous-system-tools-neuron-subaccount"
+version = "0.9.0"
+dependencies = [
+ "clap 4.5.27",
+ "hex",
+ "ic-base-types",
+ "ic-nervous-system-common",
+ "ic-nns-constants",
+ "icp-ledger",
 ]
 
 [[package]]
@@ -11605,6 +11643,7 @@ dependencies = [
  "ic-nervous-system-linear-map",
  "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
+ "ic-nervous-system-rate-limits",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-nervous-system-temporary",
@@ -12070,6 +12109,7 @@ dependencies = [
  "async-trait",
  "candid",
  "candid_parser",
+ "chrono",
  "futures",
  "futures-util",
  "ic-base-types",
@@ -12107,6 +12147,7 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "chrono",
  "ic-base-types",
  "ic-nervous-system-proto",
  "rewards-calculation",
@@ -14025,6 +14066,7 @@ dependencies = [
  "ciborium",
  "clap 4.5.27",
  "ed25519-dalek",
+ "fs_extra",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
@@ -15623,7 +15665,6 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-ledger-suite-in-memory-ledger",
  "ic-ledger-suite-state-machine-helpers",
- "ic-ledger-suite-state-machine-tests",
  "ic-ledger-test-utils",
  "ic-nns-constants",
  "ic-nns-test-utils-golden-nns-state",
@@ -18529,6 +18570,7 @@ dependencies = [
  "backoff",
  "candid",
  "clap 4.5.27",
+ "config",
  "env-file-reader",
  "exec",
  "get_if_addrs",
@@ -19227,14 +19269,17 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
+ "ic-registry-transport",
  "ic-sns-wasm",
  "ic-transport-types",
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256 0.13.4",
+ "prost 0.13.4",
  "registry-canister",
  "reqwest 0.12.15",
  "schemars",
+ "semver",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -19317,7 +19362,9 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-handler-root",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
@@ -20929,7 +20976,6 @@ dependencies = [
  "chrono",
  "ic-base-types",
  "ic-protobuf",
- "ic-types",
  "itertools 0.12.1",
  "maplit",
  "rust_decimal",
@@ -21100,7 +21146,6 @@ dependencies = [
  "lazy_static",
  "num-bigint 0.4.6",
  "prometheus 0.13.4",
- "proptest",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -21267,8 +21312,8 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "dfn_json",
- "dfn_macro",
  "ic-canister-client-sender",
+ "ic-cdk",
  "ic-error-types 0.2.0",
  "ic-management-canister-types-private",
  "ic-test-identity",

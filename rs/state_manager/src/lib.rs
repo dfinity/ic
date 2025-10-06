@@ -39,7 +39,10 @@ use ic_interfaces_state_manager::{
     StateHashError, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, warn};
-use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use ic_metrics::{
+    MetricsRegistry,
+    buckets::{decimal_buckets, exponential_buckets},
+};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
@@ -173,6 +176,10 @@ pub struct ManifestMetrics {
     file_group_chunks: IntGauge,
     sub_manifest_chunks: IntGauge,
     chunk_id_usage_nearing_limits_critical: IntCounter,
+    file_size_bytes: HistogramVec,
+    new_file_sizes_bytes: HistogramVec,
+    duplicated_chunks_num: IntGauge,
+    duplicated_chunks_size_bytes: IntGauge,
 }
 
 #[derive(Clone)]
@@ -528,6 +535,43 @@ impl ManifestMetrics {
             "Number of chunks of the manifest after it is encoded and split into sub-manifests.",
         );
 
+        let file_size_bytes = metrics_registry.histogram_vec(
+            "state_manager_file_size_bytes",
+            "File sizes in bytes by file type (canister.pbuf, overlay, queues.pbuf, snapshot.pbuf, software.wasm).",
+            // 1KiB, 2KiB, 4KiB, 8KiB(current limit for grouping), 16KiB, …,
+            // 1MiB(state manager chunk size), 2MiB, …, 1GiB
+            exponential_buckets(1024.0, 2.0, 21),
+            &["file_type"],
+        );
+
+        let new_file_sizes_bytes = metrics_registry.histogram_vec(
+            "state_manager_new_file_sizes_bytes",
+            "File sizes in bytes for files that are new since the previous manifest, by file type.",
+            // 1KiB, 2KiB, 4KiB, 8KiB(current limit for grouping), 16KiB, …,
+            // 1MiB(state manager chunk size), 2MiB, …, 1GiB
+            exponential_buckets(1024.0, 2.0, 21),
+            &["file_type"],
+        );
+
+        // Note [Metrics preallocation]
+        for file_type in crate::manifest::FILE_TYPES_TO_OBSERVE_SIZE
+            .iter()
+            .chain(std::iter::once(&"other"))
+        {
+            file_size_bytes.with_label_values(&[*file_type]);
+            new_file_sizes_bytes.with_label_values(&[*file_type]);
+        }
+
+        let duplicated_chunks_num = metrics_registry.int_gauge(
+            "state_manager_duplicated_chunks_num",
+            "Number of all duplicated chunks in the manifest.",
+        );
+
+        let duplicated_chunks_size_bytes = metrics_registry.int_gauge(
+            "state_manager_duplicated_chunks_size_bytes",
+            "Size of all duplicated chunks in bytes in the manifest.",
+        );
+
         Self {
             // Number of bytes that are either reused, hashed, or hashed and compared during the
             // manifest computation
@@ -543,6 +587,10 @@ impl ManifestMetrics {
             sub_manifest_chunks,
             chunk_id_usage_nearing_limits_critical: metrics_registry
                 .error_counter(CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS),
+            file_size_bytes,
+            new_file_sizes_bytes,
+            duplicated_chunks_num,
+            duplicated_chunks_size_bytes,
         }
     }
 }
@@ -1424,7 +1472,7 @@ impl StateManagerImpl {
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
             // build the manifest data from this height.
-            let manifest_delta = states
+            let base_manifest_info = states
                 .read()
                 .states_metadata
                 .iter()
@@ -1435,7 +1483,7 @@ impl StateManagerImpl {
                         checkpoint_layout: Some(checkpoint_layout),
                         bundled_manifest: Some(bundled_manifest),
                         ..
-                    } => Some(crate::manifest::ManifestDelta {
+                    } => Some(crate::manifest::BaseManifestInfo {
                         base_manifest: bundled_manifest.manifest.clone(),
                         base_height: *height,
                         target_height: checkpoint_layout.height(),
@@ -1447,7 +1495,7 @@ impl StateManagerImpl {
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta,
+                    base_manifest_info,
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
@@ -2281,7 +2329,7 @@ impl StateManagerImpl {
             //   4) Resetting the tip and merging the overlays.
             //
             // In particular, we need the previous manifest computation to complete because:
-            //   1) We need it to speed up the next manifest computation using ManifestDelta
+            //   1) We need it to speed up the next manifest computation using BaseManifestInfo
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
 
@@ -2347,12 +2395,12 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        let manifest_delta = {
+        let base_manifest_info = {
             let _timer = self
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["manifest_delta"])
+                .with_label_values(&["base_manifest_info"])
                 .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
@@ -2360,7 +2408,7 @@ impl StateManagerImpl {
                      base_manifest,
                      base_height,
                  }| {
-                    manifest::ManifestDelta {
+                    manifest::BaseManifestInfo {
                         base_manifest,
                         base_height,
                         target_height: height,
@@ -2392,7 +2440,7 @@ impl StateManagerImpl {
                 },
                 compute_manifest_request: TipRequest::ComputeManifest {
                     checkpoint_layout: cp_layout,
-                    manifest_delta,
+                    base_manifest_info,
                     states: self.states.clone(),
                     persist_metadata_guard: self.persist_metadata_guard.clone(),
                 },

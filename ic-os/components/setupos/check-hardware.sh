@@ -49,40 +49,22 @@ function get_cpu_info_json() {
 }
 
 ###############################################################################
-# Hardware Generation Detection
+# Hardware Generation Inference
 ###############################################################################
 
 function detect_hardware_generation() {
-    echo "* Detecting hardware generation..."
+    echo "* Inferring hardware generation from node reward type..."
 
-    local cpu_json="$(get_cpu_info_json)"
+    local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
-        if [[ ${socket_id} =~ .*:.* ]]; then
-            unit=$(echo "${socket_id}" | awk -F ':' '{ print $2 }')
-        else
-            unit="${socket_id}"
-        fi
-
-        echo "* Checking CPU socket ${unit}..."
-        local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
-
-        if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
-            if [[ ${HARDWARE_GENERATION} =~ ^(|1)$ ]]; then
-                HARDWARE_GENERATION=1
-            else
-                log_and_halt_installation_on_error "1" "CPU Socket Hardware Generations inconsistent."
-            fi
-        elif [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
-            if [[ ${HARDWARE_GENERATION} =~ ^(|2)$ ]]; then
-                HARDWARE_GENERATION=2
-            else
-                log_and_halt_installation_on_error "1" "CPU Socket Hardware Generations inconsistent."
-            fi
-        else
-            log_and_halt_installation_on_error "1" "CPU Model does NOT meet system requirements."
-        fi
-    done
+    # All type1.* are considered gen1, all type3.* are gen2
+    if [[ $node_reward_type =~ ^type1(\.[0-9]+)?$ ]]; then
+        HARDWARE_GENERATION=1
+    elif [[ $node_reward_type =~ ^type3(\.[0-9]+)?$ ]]; then
+        HARDWARE_GENERATION=2
+    else
+        log_and_halt_installation_on_error "1" "Unknown or unsupported node reward type '${node_reward_type}'."
+    fi
 
     echo "* Hardware generation ${HARDWARE_GENERATION} detected"
 }
