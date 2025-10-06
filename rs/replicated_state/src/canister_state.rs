@@ -641,6 +641,8 @@ impl CanisterState {
             )
     }
 
+    /// Adds a canister change to canister history and returns the change
+    /// of subnet available execution memory due to updating canister history.
     #[must_use]
     pub fn add_canister_change(
         &mut self,
