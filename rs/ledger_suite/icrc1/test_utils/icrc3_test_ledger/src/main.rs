@@ -54,8 +54,7 @@ fn first_non_archive_index() -> u64 {
 pub fn add_block(block: ICRC3Value) -> AddBlockResult {
     let next_id = next_block_id();
     let result = BLOCKS.with(|blocks| {
-        let mut blocks = blocks.borrow_mut();
-        blocks.insert(next_id, block);
+        blocks.borrow_mut().insert(next_id, block);
         Ok(Nat::from(next_id))
     });
     ic_cdk::api::certified_data_set(construct_hash_tree().digest());
@@ -105,12 +104,9 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
         match last_archive {
             Some(archive) => {
                 if archive.archive_id == args.archive_id {
-                    let updated_archive = ArchiveInfo {
-                        block_range: archive.block_range.start..last_block_index + 1,
-                        ..archive
-                    };
                     let last_idx = archives.len() - 1;
-                    archives[last_idx] = updated_archive;
+                    archives[last_idx].block_range =
+                        archive.block_range.start..last_block_index + 1;
                 } else {
                     archives.push(ArchiveInfo {
                         archive_id: args.archive_id,
