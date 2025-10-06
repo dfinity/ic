@@ -877,7 +877,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
 fn time_out_messages_updates_subnet_input_schedules_correctly() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
-    // Enqueue 3 outgoing requests for `CANISTER_ID`:
+    // Enqueue 3 outgoing requests from `CANISTER_ID`:
     // - one to self.
     // - one to a another local canister.
     // - one to a remote canister.
@@ -910,6 +910,29 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
     assert_eq!(
         fixture.remote_subnet_input_schedule(&CANISTER_ID),
         &VecDeque::from(vec![remote_canister_id])
+    );
+}
+
+#[test]
+fn time_out_messages_generates_refunds() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+    let remote_canister_id = CanisterId::from_u64(123);
+
+    // Enqueue an inbound best-effort request from `remote_canister_id`.
+    let request = Request {
+        payment: Cycles::new(13),
+        ..best_effort_request_from(remote_canister_id)
+    };
+    assert_eq!(Ok(true), fixture.push_input(request.into()));
+
+    // Time it out.
+    fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
+    assert_eq!(1, fixture.time_out_messages());
+
+    // Check that a refund to `remote_canister_id` was generated.
+    assert_eq!(
+        [(remote_canister_id, Cycles::new(13))],
+        *fixture.state.take_all_refunds()
     );
 }
 
