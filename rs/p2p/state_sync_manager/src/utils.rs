@@ -151,6 +151,10 @@ impl PeerState {
     }
 
     pub(crate) fn deregister_download(&mut self) {
+        // We do a saturating sub here because it can happen (in rare cases) that a peer that just joined this sync
+        // was previously removed from the sync and still had outstanding downloads. As a consequence there is the possibiliy
+        // of an underflow. In the case where we close old download task while having active downloads we might start to
+        // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
         self.num_downloads = self.num_downloads.saturating_sub(1);
     }
 
