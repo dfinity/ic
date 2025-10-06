@@ -110,6 +110,10 @@ impl CanisterRuntime for DogeCanisterRuntime {
         })
     }
 
+    fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
+        updates::account_to_p2pkh_address_from_state(state, account)
+    }
+
     async fn check_address(
         &self,
         _btc_checker_principal: Option<Principal>,

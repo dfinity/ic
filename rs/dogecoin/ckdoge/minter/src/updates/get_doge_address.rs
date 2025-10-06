@@ -2,7 +2,6 @@ use crate::address::DogecoinAddress;
 use crate::candid_api::GetDogeAddressArgs;
 use crate::lifecycle::init::Network;
 use candid::Principal;
-use ic_cdk::management_canister::EcdsaPublicKeyResult;
 use ic_ckbtc_minter::ECDSAPublicKey;
 use ic_ckbtc_minter::state::{CkBtcMinterState, read_state};
 use icrc_ledger_types::icrc1::account::Account;
@@ -30,7 +29,7 @@ pub fn account_to_p2pkh_address_from_state(state: &CkBtcMinterState, account: &A
             .expect("bug: the ECDSA public key must be initialized"),
         Network::from(state.btc_network),
     );
-    let public_key: [u8; 33] = derive_public_key(&ecdsa_public_key, &account)
+    let public_key: [u8; 33] = derive_public_key(&ecdsa_public_key, account)
         .public_key
         .try_into()
         .expect("BUG: invalid ECDSA compressed public key");

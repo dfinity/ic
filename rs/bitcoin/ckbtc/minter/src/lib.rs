@@ -1445,6 +1445,8 @@ pub trait CanisterRuntime {
 
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
 
+    fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
+
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
@@ -1549,6 +1551,10 @@ impl CanisterRuntime for IcCanisterRuntime {
         network: Network,
     ) -> Result<BitcoinAddress, std::string::String> {
         BitcoinAddress::parse(address, network).map_err(|e| e.to_string())
+    }
+
+    fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
+        get_btc_address::account_to_p2wpkh_address_from_state(state, account)
     }
 
     async fn check_address(

@@ -3,7 +3,6 @@
 use crate::{ECDSAPublicKey, Network};
 use bech32::Variant;
 use ic_crypto_sha2::Sha256;
-use ic_secp256k1::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
@@ -120,7 +119,7 @@ pub fn derive_public_key(
     ecdsa_public_key: &ECDSAPublicKey,
     path: &ic_secp256k1::DerivationPath,
 ) -> ECDSAPublicKey {
-    use ic_secp256k1::{DerivationPath, PublicKey};
+    use ic_secp256k1::PublicKey;
 
     let pk = PublicKey::deserialize_sec1(&ecdsa_public_key.public_key)
         .expect("Failed to parse ECDSA public key");

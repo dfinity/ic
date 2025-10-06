@@ -27,7 +27,6 @@ use crate::{
     metrics::observe_update_call_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
-    updates::get_btc_address,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -167,9 +166,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     };
     let _guard = balance_update_guard(caller_account)?;
 
-    let address = state::read_state(|s| {
-        get_btc_address::account_to_p2wpkh_address_from_state(s, &caller_account)
-    });
+    let address = state::read_state(|s|runtime.derive_user_address(s, &caller_account));
 
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));

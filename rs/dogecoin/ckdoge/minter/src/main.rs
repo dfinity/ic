@@ -40,7 +40,7 @@ fn post_upgrade() {
 
 #[update]
 async fn get_doge_address(args: GetDogeAddressArgs) -> String {
-    updates::get_doge_address(args).await.unwrap()
+    updates::get_doge_address(args).await
 }
 
 #[update]
