@@ -1026,7 +1026,7 @@ impl SystemState {
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         #[cfg(debug_assertions)]
-        let cycles_before = self.balance_with_queues(Some(msg.cycles()));
+        let balance_before = self.balance_with_messages(Some(msg.cycles()));
 
         let res = self.push_input_impl(
             msg,
@@ -1036,8 +1036,8 @@ impl SystemState {
         );
 
         #[cfg(debug_assertions)]
-        self.assert_balance_with_queues(
-            cycles_before,
+        self.assert_balance_with_messages(
+            balance_before,
             res.as_ref().err().map(|(_, msg)| msg.cycles()),
         );
 
@@ -1386,7 +1386,7 @@ impl SystemState {
         own_subnet_type: SubnetType,
     ) {
         #[cfg(debug_assertions)]
-        let cycles_before = self.balance_with_queues(None);
+        let balance_before = self.balance_with_messages(None);
 
         self.induct_messages_to_self_impl(
             subnet_available_guaranteed_response_memory,
@@ -1394,7 +1394,7 @@ impl SystemState {
         );
 
         #[cfg(debug_assertions)]
-        self.assert_balance_with_queues(cycles_before, None);
+        self.assert_balance_with_messages(balance_before, None);
     }
 
     /// Implementation of `induct_messages_to_self`. Separated, to make it easier to
@@ -1496,14 +1496,14 @@ impl SystemState {
         metrics: &impl DroppedMessageMetrics,
     ) -> Cycles {
         #[cfg(debug_assertions)]
-        let cycles_before = self.balance_with_queues(None);
+        let balance_before = self.balance_with_messages(None);
 
         let cycles_lost =
             self.queues
                 .time_out_messages(current_time, own_canister_id, local_canisters, metrics);
 
         #[cfg(debug_assertions)]
-        self.assert_balance_with_queues(cycles_before, Some(cycles_lost));
+        self.assert_balance_with_messages(balance_before, Some(cycles_lost));
 
         cycles_lost
     }
@@ -1595,14 +1595,14 @@ impl SystemState {
         metrics: &impl DroppedMessageMetrics,
     ) -> (bool, Cycles) {
         #[cfg(debug_assertions)]
-        let cycles_before = self.balance_with_queues(None);
+        let balance_before = self.balance_with_messages(None);
 
         let res = self
             .queues
             .shed_largest_message(own_canister_id, local_canisters, metrics);
 
         #[cfg(debug_assertions)]
-        self.assert_balance_with_queues(cycles_before, Some(res.1));
+        self.assert_balance_with_messages(balance_before, Some(res.1));
 
         res
     }
@@ -1911,23 +1911,27 @@ impl SystemState {
     /// messages in queues; plus any `extra_cycles` (e.g. messages being enqueued or
     /// returned wrapped in an `Err`).
     ///
-    /// To be used together with `assert_balance_with_queues()` to ensure that no
+    /// To be used together with `assert_balance_with_messages()` to ensure that no
     /// cycles were lost or duplicated while inducting, timing out or shedding
     /// messages.
     #[cfg(debug_assertions)]
-    fn balance_with_queues(&self, extra_cycles: Option<Cycles>) -> Cycles {
+    fn balance_with_messages(&self, extra_cycles: Option<Cycles>) -> Cycles {
         self.cycles_balance + self.queues.attached_cycles() + extra_cycles.unwrap_or_default()
     }
 
     /// Validates that the canister's total cycle balance including cycles attached
     /// to messages in queues (plus any cycles being returned) is the same as
-    /// `cycles_before` (the balance computed at the top of the caller function).
+    /// `balance_before` (the balance computed at the top of the caller function).
     #[cfg(debug_assertions)]
-    fn assert_balance_with_queues(&self, cycles_before: Cycles, returned_cycles: Option<Cycles>) {
-        let cycles_after = self.balance_with_queues(returned_cycles);
+    fn assert_balance_with_messages(
+        &self,
+        balance_before: Cycles,
+        returned_cycles: Option<Cycles>,
+    ) {
+        let balance_after = self.balance_with_messages(returned_cycles);
         assert_eq!(
-            cycles_before, cycles_after,
-            "Cycles lost or duplicated: before = {cycles_before}, after = {cycles_after}",
+            balance_before, balance_after,
+            "Cycles lost or duplicated: before = {balance_before}, after = {balance_after}",
         );
     }
 }
