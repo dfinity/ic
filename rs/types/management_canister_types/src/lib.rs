@@ -2327,7 +2327,7 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
-    /// Sets the log size in bytes.
+    /// Sets the log capacity in bytes.
     pub fn with_log_capacity(self, log_capacity: u64) -> Self {
         Self {
             log_capacity: Some(candid::Nat::from(log_capacity)),

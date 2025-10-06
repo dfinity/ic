@@ -723,7 +723,7 @@ fn can_get_canister_information() {
                 2592000,
                 Some(5_000_000_000_000u128),
                 LogVisibilityV2::default(),
-                4_096_u64,           // Default log size 4 KiB.
+                4_096_u64,           // Default log capacity 4 KiB.
                 0u128,
                 0u128,
                 0u128,
@@ -792,7 +792,7 @@ fn can_get_canister_information() {
                     259200,
                     None,
                     LogVisibilityV2::default(),
-                    4_096_u64,           // Default log size 4 KiB.
+                    4_096_u64,           // Default log capacity 4 KiB.
                     0u128,
                     0u128,
                     0u128,
