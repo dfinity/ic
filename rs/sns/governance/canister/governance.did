@@ -288,7 +288,7 @@ type TreasuryMetrics = record {
 };
 
 type VotingPowerMetrics = record {
-  governance_total_potential_voting_power : opt nat64; 
+  governance_total_potential_voting_power : opt nat64;
 
   // When the metrics were last updated.
   timestamp_seconds : opt nat64;

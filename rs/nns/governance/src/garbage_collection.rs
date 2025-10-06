@@ -75,6 +75,9 @@ impl Governance {
                         && prop.can_be_purged(now_seconds, voting_period_seconds)
                     {
                         self.heap_data.proposals.remove(prop_id);
+                        self.heap_data
+                            .topic_of_garbage_collected_proposals
+                            .insert(*prop_id, topic);
                     }
                 }
             }
