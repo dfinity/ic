@@ -769,6 +769,7 @@ mod update_balance {
 
         runtime.checkpoint();
 
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
         mock_constant_time(&mut runtime, NOW, 6);
         match &reason {
@@ -796,6 +797,7 @@ mod update_balance {
 
         runtime.checkpoint();
 
+        mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
         mock_constant_time(&mut runtime, NOW.saturating_add(Duration::from_secs(1)), 8);
 
@@ -911,6 +913,7 @@ mod update_balance {
             .expect_derive_user_address()
             .withf(move |_state, account_| account_ == &account)
             .return_const("bc1p3jcdy9fn2g68jzafdlayrkvsltq8ttm7y2vkhxpxhxr9yw3jukks03ufup");
+        println!("Account: {:?}", account);
     }
 
     fn mock_get_utxos_for_account(
