@@ -19,7 +19,7 @@ const ONE_BYTE: usize = 1;
 const THREE_KB: usize = 3 * ONE_KB;
 const FIFTY_KB: usize = 50 * ONE_KB;
 
-const DEFAULT_MULTIPLES: [usize; 4] = [1, 5, 10, 20];
+const DEFAULT_MULTIPLES: [usize; 5] = [1, 5, 10, 15, 20];
 
 criterion_main!(benches);
 criterion_group! {
