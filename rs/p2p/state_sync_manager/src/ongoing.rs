@@ -124,17 +124,19 @@ impl OngoingStateSync {
                     break
                 },
                 Some((new_peer, partial_state)) = self.new_peers_rx.recv() => {
-                    // For now, adverts with a partial state are ignored
-                    if partial_state.is_some() {
-                        info!(self.log, "STATE_SYNC: Received a partial state advert from {}", new_peer);
-                        continue;
+                    match self.peer_state.entry(new_peer){
+                        Entry::Vacant(entry) => {
+                            info!(self.log, "STATE_SYNC: Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
+                            entry.insert(PeerState::new(partial_state));
+                        }
+                        Entry::Occupied(mut entry) => {
+                            if let Some(partial_state) = partial_state {
+                                info!(self.log, "STATE_SYNC: Updating peers {} partial state", new_peer);
+                                entry.get_mut().update_partial_state(partial_state);
+                            }
+                        }
                     }
-
-                    if let Entry::Vacant(entry) = self.peer_state.entry(new_peer) {
-                        info!(self.log, "STATE_SYNC: Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
-                        entry.insert(PeerState::new(partial_state));
-                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
-                    }
+                    self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
                 }
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
