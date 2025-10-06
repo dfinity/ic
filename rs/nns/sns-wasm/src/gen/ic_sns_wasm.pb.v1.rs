@@ -108,6 +108,9 @@ pub struct AddWasmRequest {
     #[prost(bytes = "vec", tag = "2")]
     #[serde(with = "serde_bytes")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
+    /// If true, the latest version will not be updated.
+    #[prost(bool, optional, tag = "3")]
+    pub skip_update_latest_version: ::core::option::Option<bool>,
 }
 /// The response from add_wasm, which is either Ok or Error.
 #[derive(

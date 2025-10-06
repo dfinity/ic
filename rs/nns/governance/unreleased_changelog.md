@@ -13,6 +13,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
+  limit.
+
 ## Deprecated
 
 * The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`

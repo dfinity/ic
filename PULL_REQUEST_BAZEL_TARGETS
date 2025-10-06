@@ -53,7 +53,7 @@ mainnet-icos-revisions.json
   //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
   //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_colocate
 
-ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_test
+ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
 *ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test
