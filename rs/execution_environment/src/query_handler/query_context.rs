@@ -195,7 +195,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = CallOrigin::Query(query.source().into());
+        let call_origin = CallOrigin::Query(query.source().into(), query.method_name.clone());
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
@@ -824,7 +824,11 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
+        let call_origin = CallOrigin::CanisterQuery(
+            request.sender,
+            request.sender_reply_callback,
+            request.method_name.clone(),
+        );
 
         let method = match wasm_query_method(canister, request.method_name.clone()) {
             Ok(method) => method,
@@ -986,7 +990,7 @@ impl<'a> QueryContext<'a> {
                     Err(err) => ExecutionResult::SystemError(err),
                 },
             },
-            CallOrigin::CanisterQuery(originator, callback_id, _method_name) => {
+            CallOrigin::CanisterQuery(originator, callback_id, ref _method_name) => {
                 let canister_id = canister.canister_id();
                 let to_query_result = |payload| {
                     let response = Response {

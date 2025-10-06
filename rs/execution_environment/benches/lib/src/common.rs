@@ -121,6 +121,7 @@ where
         canister_test_id(REMOTE_CANISTER_ID),
         CallbackId::new(0),
         NO_DEADLINE,
+        String::from(""),
     );
     let call_context_id = canister_state
         .system_state

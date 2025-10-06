@@ -13,7 +13,7 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
-    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7")]
+    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
 /// Nested message and enum types in `CallContext`.
@@ -24,6 +24,15 @@ pub mod call_context {
         pub user_id: ::core::option::Option<super::super::super::super::types::v1::UserId>,
         #[prost(bytes = "vec", tag = "2")]
         pub message_id: ::prost::alloc::vec::Vec<u8>,
+        #[prost(string, tag = "3")]
+        pub method_name: ::prost::alloc::string::String,
+    }
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Query {
+        #[prost(message, optional, tag = "1")]
+        pub user_id: ::core::option::Option<super::super::super::super::types::v1::UserId>,
+        #[prost(string, tag = "2")]
+        pub method_name: ::prost::alloc::string::String,
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct CanisterUpdateOrQuery {
@@ -34,6 +43,8 @@ pub mod call_context {
         /// If non-zero, this originates from a best-effort canister update call.
         #[prost(uint32, tag = "3")]
         pub deadline_seconds: u32,
+        #[prost(string, tag = "4")]
+        pub method_name: ::prost::alloc::string::String,
     }
     /// System task is either a Heartbeat or a GlobalTimer.
     #[derive(Clone, Copy, PartialEq, ::prost::Message)]
@@ -50,6 +61,8 @@ pub mod call_context {
         CanisterQuery(CanisterUpdateOrQuery),
         #[prost(message, tag = "7")]
         SystemTask(SystemTask),
+        #[prost(message, tag = "12")]
+        UserQuery(Query),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

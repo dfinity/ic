@@ -358,8 +358,8 @@ impl SystemStateModifications {
                 .map_err(Self::error)?;
             if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                 match call_context.call_origin() {
-                    CallOrigin::CanisterUpdate(origin_canister_id, _, _)
-                    | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
+                    CallOrigin::CanisterUpdate(origin_canister_id, _, _, _)
+                    | CallOrigin::CanisterQuery(origin_canister_id, _, _) => info!(
                         logger,
                         "Canister {} accepted {} cycles from canister {}.",
                         own_canister_id,
