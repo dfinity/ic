@@ -52,8 +52,7 @@ fn should_fail_to_parse_invalid_addresses() {
 }
 
 fn test_vectors<T: DeserializeOwned>(filename: &str) -> T {
-    // Return something like
-    // "rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_invalid.json rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_valid.json"
+    // Return something like "rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_invalid.json rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_valid.json"
     let test_vector_files = std::env::var("TEST_VECTORS").expect(
         "environment variable 'TEST_VECTORS' should be a space-separated list of test vectors",
     );
