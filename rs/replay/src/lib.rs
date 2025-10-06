@@ -209,7 +209,7 @@ pub fn consent_given(question: &str) -> bool {
 }
 
 // Creates a recovery CUP by using the latest CUP and overriding the height and
-// the state hash.
+// the state hash, intended to be used in NNS recovery on same nodes.
 fn cmd_get_recovery_cup(
     player: &crate::player::Player,
     cmd: &crate::cmd::GetRecoveryCupCmd,
@@ -245,11 +245,7 @@ fn cmd_get_recovery_cup(
         height: cmd.height,
         time: time.as_nanos_since_unix_epoch(),
         state_hash,
-        registry_store_uri: Some(RegistryStoreUri {
-            uri: cmd.registry_store_uri.clone().unwrap_or_default(),
-            hash: cmd.registry_store_sha256.clone().unwrap_or_default(),
-            registry_version: registry_version.get(),
-        }),
+        registry_store_uri: None,
         ecdsa_initializations: vec![],
         chain_key_initializations: vec![],
     };

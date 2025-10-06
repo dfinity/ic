@@ -893,8 +893,6 @@ impl Step for GetRecoveryCUPStep {
             Some(SubCommand::GetRecoveryCup(GetRecoveryCupCmd {
                 state_hash: self.state_hash.clone(),
                 height: self.recovery_height.get(),
-                registry_store_uri: None,
-                registry_store_sha256: None,
                 output_file: self.work_dir.join("cup.proto"),
             })),
             None,
