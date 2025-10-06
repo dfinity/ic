@@ -36,9 +36,9 @@ use ic_replicated_state::{
     page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES,
-    MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness,
-    ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    MAX_WASM_MEMORY_IN_BYTES, MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId,
+    Randomness, ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
@@ -1582,6 +1582,12 @@ impl Scheduler for SchedulerImpl {
 
                     // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                     // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+
+                    // TODO(EXC-2141): Remove this temporary code of setting the log size to default value.
+                    // This code is added to make sure that all the canisters (existing and new ones)
+                    // have the log size set to the default value.
+                    canister.system_state.log_size =
+                        NumBytes::new(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64);
                 }
                 // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                 // cycles_out_sum += total_canister_balance;
