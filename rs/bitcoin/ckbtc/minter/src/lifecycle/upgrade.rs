@@ -1,4 +1,4 @@
-use crate::IC_CANISTER_RUNTIME;
+use crate::CanisterRuntime;
 use crate::logs::P0;
 use crate::state::eventlog::{EventType, replay};
 use crate::state::invariants::CheckInvariantsImpl;
@@ -51,14 +51,14 @@ pub struct UpgradeArgs {
     pub get_utxos_cache_expiration_seconds: Option<u64>,
 }
 
-pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
+pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {
     if let Some(upgrade_args) = upgrade_args {
         log!(
             P0,
             "[upgrade]: updating configuration with {:?}",
             upgrade_args
         );
-        record_event(EventType::Upgrade(upgrade_args), &IC_CANISTER_RUNTIME);
+        record_event(EventType::Upgrade(upgrade_args), runtime);
     };
 
     let start = ic_cdk::api::instruction_counter();

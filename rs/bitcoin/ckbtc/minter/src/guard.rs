@@ -100,7 +100,7 @@ pub fn retrieve_btc_guard(account: Account) -> Result<Guard<RetrieveBtcUpdates>,
 #[cfg(test)]
 mod tests {
     use crate::{
-        Network,
+        IC_CANISTER_RUNTIME, Network,
         guard::{GuardError, MAX_CONCURRENT},
         lifecycle::init::{InitArgs, init},
         state::read_state,
@@ -144,7 +144,7 @@ mod tests {
         // test that two guards for the same principal cannot exist in the same block
         // and that a guard is properly dropped at end of the block
 
-        init(test_state_args());
+        init(test_state_args(), &IC_CANISTER_RUNTIME);
         // a1 and a2 are effectively the same Account
         let a1 = test_account(0, None);
         let a2 = test_account(0, Some(0));
@@ -161,7 +161,7 @@ mod tests {
         // test that at most MAX_CONCURRENT guards can be created if each one
         // is for a different principal
 
-        init(test_state_args());
+        init(test_state_args(), &IC_CANISTER_RUNTIME);
         let guards: Vec<_> = (0..MAX_CONCURRENT / 2)
             .map(|id| {
                 balance_update_guard(test_account(0, Some(id as u8))).unwrap_or_else(|e| {
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn guard_timer_guard() {
-        init(test_state_args());
+        init(test_state_args(), &IC_CANISTER_RUNTIME);
         assert!(!read_state(|s| s.is_timer_running));
 
         let guard = TimerLogicGuard::new().expect("could not grab timer logic guard");
