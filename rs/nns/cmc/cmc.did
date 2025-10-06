@@ -4,6 +4,10 @@ type log_visibility = variant {
   controllers;
   public;
 };
+type environment_variable = record { 
+  name: text; 
+  value: text;
+};
 type CanisterSettings = record {
   controllers : opt vec principal;
   compute_allocation : opt nat;
@@ -13,6 +17,7 @@ type CanisterSettings = record {
   log_visibility : opt log_visibility;
   wasm_memory_limit : opt nat;
   wasm_memory_threshold : opt nat;
+  environment_variables : opt vec environment_variable;
 };
 type Subaccount = opt blob;
 type Memo = opt blob;
