@@ -25,7 +25,7 @@ use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        ic::{NrOfVCPUs, VmResources},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
         nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
@@ -42,7 +42,7 @@ use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
     vcpus: Some(NrOfVCPUs::new(8)),
-    memory_kibibytes: None,
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
     boot_image_minimal_size_gibibytes: None,
 };
 
