@@ -690,6 +690,7 @@ mod tests {
     fn test_do_remove_node_directly_fails_when_rate_limits_exceeded() {
         let (mut registry, node_ids, node_operator_id, node_provider_id) =
             setup_registry_for_test();
+        let node_id = node_ids[0];
 
         let now = now_system_time();
 
