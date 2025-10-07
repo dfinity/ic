@@ -126,14 +126,20 @@ mod get_doge_address {
 }
 
 mod deposit {
-    use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
-    use ic_ckdoge_minter::{OutPoint, UpdateBalanceArgs, Utxo};
+    use ic_ckdoge_minter::{
+        MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus, candid_api::GetDogeAddressArgs,
+        memo_encode,
+    };
     use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, txid};
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::Memo;
+    use icrc_ledger_types::icrc3::transactions::Mint;
 
     #[test]
     fn should_mint_ckdoge() {
         let setup = Setup::default();
         let minter = setup.minter();
+        let ledger = setup.ledger();
         let dogecoin = setup.dogecoin();
         let subaccount = Some([42_u8; 32]);
 
@@ -153,7 +159,7 @@ mod deposit {
             },
             value: 1_000_000_000,
         };
-        dogecoin.simulate_transaction(utxo, deposit_address);
+        dogecoin.simulate_transaction(utxo.clone(), deposit_address);
 
         let utxo_status = minter
             .update_balance(
@@ -164,6 +170,29 @@ mod deposit {
                 },
             )
             .unwrap();
-        assert_eq!(utxo_status.len(), 1);
+        assert_eq!(
+            utxo_status,
+            vec![UtxoStatus::Minted {
+                block_index: 0,
+                minted_amount: utxo.value,
+                utxo: utxo.clone(),
+            }]
+        );
+
+        ledger
+            .assert_that_transaction(0_u64)
+            .is_equal_to_mint_ignoring_timestamp(Mint {
+                amount: utxo.value.into(),
+                to: Account {
+                    owner: USER_PRINCIPAL,
+                    subaccount,
+                },
+                memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
+                    txid: Some(utxo.outpoint.txid.as_ref()),
+                    vout: Some(utxo.outpoint.vout),
+                    kyt_fee: Some(0),
+                }))),
+                created_at_time: None,
+            });
     }
 }

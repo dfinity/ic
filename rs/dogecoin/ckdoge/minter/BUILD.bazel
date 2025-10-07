@@ -116,6 +116,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckdoge_minter_lib",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//:pocket-ic-server",
         "//packages/pocket-ic",
         "//rs/dogecoin/ckdoge/test_utils",

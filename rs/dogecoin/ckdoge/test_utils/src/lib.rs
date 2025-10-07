@@ -1,7 +1,9 @@
 mod dogecoin;
+mod ledger;
 mod minter;
 
 use crate::dogecoin::DogecoinCanister;
+use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
 use candid::{Encode, Principal};
 use ic_ckdoge_minter::{
@@ -29,7 +31,7 @@ pub struct Setup {
     env: Arc<PocketIc>,
     dogecoin: CanisterId,
     minter: CanisterId,
-    _ledger: CanisterId,
+    ledger: CanisterId,
 }
 
 impl Setup {
@@ -149,7 +151,7 @@ impl Setup {
             env,
             dogecoin,
             minter,
-            _ledger: ledger,
+            ledger,
         }
     }
 
@@ -164,6 +166,13 @@ impl Setup {
         MinterCanister {
             env: self.env.clone(),
             id: self.minter,
+        }
+    }
+
+    pub fn ledger(&self) -> LedgerCanister {
+        LedgerCanister {
+            env: self.env.clone(),
+            id: self.ledger,
         }
     }
 }
