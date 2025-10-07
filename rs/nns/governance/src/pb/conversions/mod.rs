@@ -2139,8 +2139,10 @@ impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
         let committed_topics = Some(
             item.committed_topics
                 .iter()
-                .filter_map(|&topic_i32| pb::Topic::try_from(topic_i32).ok())
-                .map(pb_api::TopicToFollow::from)
+                .map(|&topic_i32| {
+                    let topic = pb::Topic::try_from(topic_i32).ok();
+                    topic.map(pb_api::TopicToFollow::from)
+                })
                 .collect(),
         );
 
@@ -2159,7 +2161,7 @@ impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
             .committed_topics
             .unwrap_or_default()
             .into_iter()
-            .map(|topic| pb::Topic::from(topic) as i32)
+            .filter_map(|topic| topic.map(|topic| pb::Topic::from(topic) as i32))
             .collect();
 
         Self {

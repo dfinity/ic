@@ -449,7 +449,7 @@ type KnownNeuronData = record {
   name : text;
   description : opt text;
   links : opt vec text;
-  committed_topics : opt vec TopicToFollow;
+  committed_topics : opt vec opt TopicToFollow;
 };
 
 type LedgerParameters = record {

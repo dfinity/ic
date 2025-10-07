@@ -211,8 +211,8 @@ fn test_known_neurons() {
                 description: Some("Third test neuron".to_string()),
                 links: Some(vec!["https://example.com".to_string()]),
                 committed_topics: Some(vec![
-                    TopicToFollow::NetworkEconomics,
-                    TopicToFollow::Governance,
+                    Some(TopicToFollow::NetworkEconomics),
+                    Some(TopicToFollow::Governance),
                 ]),
             }),
         },
@@ -229,8 +229,8 @@ fn test_known_neurons() {
                     description: Some("Third test neuron".to_string()),
                     links: Some(vec!["https://example.com".to_string()]),
                     committed_topics: Some(vec![
-                        TopicToFollow::NetworkEconomics,
-                        TopicToFollow::Governance
+                        Some(TopicToFollow::NetworkEconomics),
+                        Some(TopicToFollow::Governance)
                     ]),
                 }),
             }],
@@ -246,8 +246,8 @@ fn test_known_neurons() {
             description: Some("Third test neuron".to_string()),
             links: Some(vec!["https://example.com".to_string()]),
             committed_topics: Some(vec![
-                TopicToFollow::NetworkEconomics,
-                TopicToFollow::Governance
+                Some(TopicToFollow::NetworkEconomics),
+                Some(TopicToFollow::Governance)
             ]),
         }
     );

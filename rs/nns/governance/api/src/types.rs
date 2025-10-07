@@ -2222,7 +2222,7 @@ pub enum TopicToFollow {
 pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
-    pub committed_topics: Option<Vec<TopicToFollow>>,
+    pub committed_topics: Option<Vec<Option<TopicToFollow>>>,
     pub links: Option<Vec<String>>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.

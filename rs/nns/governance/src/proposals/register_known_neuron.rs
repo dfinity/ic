@@ -127,7 +127,7 @@ impl KnownNeuron {
         // - An existing known neuron has this name but it's the same neuron ID (clobbering OK)
         if let Some(existing_neuron_id) =
             neuron_store.known_neuron_id_by_name(&known_neuron_data.name)
-            && existing_neuron_id != *neuron_id
+            && existing_neuron_id != neuron_id
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
