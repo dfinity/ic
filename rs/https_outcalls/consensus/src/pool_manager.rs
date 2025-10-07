@@ -452,7 +452,7 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
                     }
-                    _ => {
+                    Replication::FullyReplicated => {
                         // Fully replicated requests must not have a response attached.
                         if artifact.response.is_some() {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
