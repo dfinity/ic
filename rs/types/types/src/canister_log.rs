@@ -5,27 +5,42 @@ use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
 use std::collections::VecDeque;
 
-/// The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+#[allow(non_upper_case_globals)]
+const KiB: usize = 1024;
 
+/// The maximum allowed size of a canister log buffer.
+pub const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+
+/// The maximum allowed size of a canister log record.
+const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
+
+/// Truncates the content of a canister log record to ensure it does not exceed the maximum allowed size.
 fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_content_size =
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - std::mem::size_of::<CanisterLogRecord>();
+    let max_content_size = MAX_ALLOWED_LOG_RECORD_SIZE - std::mem::size_of::<CanisterLogRecord>();
     record.content.truncate(max_content_size);
     record
 }
 
-// Helper struct to hold canister log records and keep track of the used space.
-// This is needed to avoid iterating over all records to calculate the used space.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize, ValidateEq)]
+/// Helper struct to hold canister log records and keep track of the used space.
+/// This is needed to avoid iterating over all records to calculate the used space.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, ValidateEq)]
 struct Records {
     #[validate_eq(Ignore)]
     records: VecDeque<CanisterLogRecord>,
+    capacity: usize,
     used_space: usize,
 }
 
 impl Records {
-    fn from(records: Vec<CanisterLogRecord>) -> Self {
+    fn new_with_capacity(capacity: usize) -> Self {
+        Self {
+            records: VecDeque::new(),
+            capacity,
+            used_space: 0,
+        }
+    }
+
+    fn from(capacity: usize, records: Vec<CanisterLogRecord>) -> Self {
         let records: Vec<_> = records
             .into_iter()
             .map(truncate_content) // Apply size limit to each record's content.
@@ -33,6 +48,7 @@ impl Records {
         let used_space = records.iter().map(|r| r.data_size()).sum();
         let mut result = Self {
             records: records.into(),
+            capacity,
             used_space,
         };
         // Make sure the buffer is within limit.
@@ -82,7 +98,7 @@ impl Records {
     }
 
     fn capacity(&self) -> usize {
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
+        self.capacity
     }
 
     fn make_free_space_within_limit(&mut self, new_data_size: usize) {
@@ -95,6 +111,12 @@ impl Records {
                 break; // No more records to pop, limit reached.
             }
         }
+    }
+}
+
+impl Default for Records {
+    fn default() -> Self {
+        Self::new_with_capacity(DEFAULT_LOG_MEMORY_LIMIT)
     }
 }
 
@@ -111,7 +133,7 @@ impl CanisterLog {
     pub fn new(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
         Self {
             next_idx,
-            records: Records::from(records),
+            records: Records::from(DEFAULT_LOG_MEMORY_LIMIT, records),
         }
     }
 
@@ -119,7 +141,7 @@ impl CanisterLog {
     pub fn new_with_next_index(next_idx: u64) -> Self {
         Self {
             next_idx,
-            records: Default::default(),
+            records: Records::new_with_capacity(DEFAULT_LOG_MEMORY_LIMIT),
         }
     }
 
