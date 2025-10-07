@@ -1,6 +1,11 @@
-use std::fmt::Display;
+use std::{
+    cell::RefCell,
+    fmt::Display,
+    time::{Duration, SystemTime},
+};
 
 use candid::CandidType;
+use ic_nervous_system_rate_limits::{InMemoryRateLimiter, RateLimiterConfig, Reservation};
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -13,6 +18,105 @@ use crate::{
     mutations::node_management::common::find_subnet_for_node,
     registry::Registry,
 };
+
+struct SwappingRateLimiter {
+    subnet_limiter: InMemoryRateLimiter<SubnetId>,
+    provider_subnet_limiter: InMemoryRateLimiter<String>,
+}
+
+impl SwappingRateLimiter {
+    fn new() -> Self {
+        Self {
+            subnet_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(2 * 60 * 60),
+                max_capacity: 1,
+                max_reservations: 1,
+            }),
+            provider_subnet_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(12 * 60 * 60),
+                max_capacity: 1,
+                max_reservations: 1,
+            }),
+        }
+    }
+
+    fn reserve_subnet_now(
+        &mut self,
+        subnet_id: SubnetId,
+    ) -> Result<Reservation<SubnetId>, SwapError> {
+        self.reserve_subnet(subnet_id, SystemTime::now())
+    }
+
+    fn reserve_subnet(
+        &mut self,
+        subnet_id: SubnetId,
+        now: SystemTime,
+    ) -> Result<Reservation<SubnetId>, SwapError> {
+        self.subnet_limiter
+            .try_reserve(now, subnet_id, 1)
+            .map_err(|e| match e {
+                ic_nervous_system_rate_limits::RateLimiterError::MaxReservationsReached => {
+                    SwapError::SubnetRateLimited { subnet_id }
+                }
+                re => panic!("Unexpected subnet rate limiter error: {re:?}"),
+            })
+    }
+
+    fn commit_subnet_now(&mut self, reservation: Reservation<SubnetId>) {
+        self.commit_subnet(reservation, SystemTime::now())
+    }
+
+    fn commit_subnet(&mut self, reservation: Reservation<SubnetId>, now: SystemTime) {
+        // This would fail only if two in parallel calls were being processed
+        // which is not possible since swapping is an update call.
+        self.subnet_limiter.commit(now, reservation).unwrap()
+    }
+
+    fn reserve_provider_on_subnet_now(
+        &mut self,
+        subnet_id: SubnetId,
+        provider: PrincipalId,
+    ) -> Result<Reservation<String>, SwapError> {
+        self.reserve_provider_on_subnet(subnet_id, provider, SystemTime::now())
+    }
+
+    fn reserve_provider_on_subnet(
+        &mut self,
+        subnet_id: SubnetId,
+        provider: PrincipalId,
+        now: SystemTime,
+    ) -> Result<Reservation<String>, SwapError> {
+        self.provider_subnet_limiter
+            .try_reserve(now, format!("{provider}-{subnet_id}"), 1)
+            .map_err(|e| match e {
+                ic_nervous_system_rate_limits::RateLimiterError::MaxReservationsReached => {
+                    SwapError::ProviderRateLimitedOnSubnet {
+                        subnet_id,
+                        caller: provider,
+                    }
+                }
+                re => panic!("Unexpected subnet rate limiter error: {re:?}"),
+            })
+    }
+
+    fn commit_provider_on_subnet_now(&mut self, reservation: Reservation<String>) {
+        self.commit_provider_on_subnet(reservation, SystemTime::now());
+    }
+
+    fn commit_provider_on_subnet(&mut self, reservation: Reservation<String>, now: SystemTime) {
+        // This would fail only if two in parallel calls were being processed
+        // which is not possible since swapping is an update call.
+        self.provider_subnet_limiter
+            .commit(now, reservation)
+            .unwrap()
+    }
+}
+
+thread_local! {
+    static SWAPPING_LIMITER: RefCell<SwappingRateLimiter> = RefCell::new(SwappingRateLimiter::new());
+}
 
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
@@ -43,8 +147,17 @@ impl Registry {
         Self::swapping_allowed_on_subnet(subnet_id)?;
 
         //TODO(DRE-553): Rate-limiting mechanism
+        let subnet_reservation =
+            SWAPPING_LIMITER.with_borrow_mut(|limiter| limiter.reserve_subnet_now(subnet_id))?;
+        let provider_subnet_reservation = SWAPPING_LIMITER
+            .with_borrow_mut(|limiter| limiter.reserve_provider_on_subnet_now(subnet_id, caller))?;
 
         //TODO(DRE-548): Implement the swapping functionality
+
+        SWAPPING_LIMITER.with_borrow_mut(|limiter| limiter.commit_subnet_now(subnet_reservation));
+        SWAPPING_LIMITER.with_borrow_mut(|limiter| {
+            limiter.commit_provider_on_subnet_now(provider_subnet_reservation)
+        });
         Ok(())
     }
 
@@ -95,9 +208,22 @@ pub enum SwapError {
     FeatureDisabled,
     MissingInput,
     SamePrincipals,
-    FeatureDisabledForCaller { caller: PrincipalId },
-    FeatureDisabledOnSubnet { subnet_id: SubnetId },
-    SubnetNotFoundForNode { old_node_id: PrincipalId },
+    FeatureDisabledForCaller {
+        caller: PrincipalId,
+    },
+    FeatureDisabledOnSubnet {
+        subnet_id: SubnetId,
+    },
+    SubnetNotFoundForNode {
+        old_node_id: PrincipalId,
+    },
+    SubnetRateLimited {
+        subnet_id: SubnetId,
+    },
+    ProviderRateLimitedOnSubnet {
+        subnet_id: SubnetId,
+        caller: PrincipalId,
+    },
 }
 
 impl Display for SwapError {
@@ -117,6 +243,12 @@ impl Display for SwapError {
                     format!("Swapping is disabled on subnet `{subnet_id}`."),
                 SwapError::SubnetNotFoundForNode { old_node_id } =>
                     format!("Node {old_node_id} is not a member of any subnet."),
+                SwapError::SubnetRateLimited { subnet_id } => format!(
+                    "Subnet {subnet_id} had a swap performed within last two hours. Try again later."
+                ),
+                SwapError::ProviderRateLimitedOnSubnet { subnet_id, caller } => format!(
+                    "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hourse. Try again later."
+                ),
             }
         )
     }
