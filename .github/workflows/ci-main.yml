@@ -364,10 +364,6 @@ jobs:
 
           # Determine bazel_args based on event type or branch name
           bazel_args=(
-            --noworkspace_rc
-            --bazelrc=./bazel/conf/.bazelrc.build
-            --bazelrc=/tmp/bazel-cache.bazelrc
-
             --config=lint # enable lint checks
             --config=flaky_retry # auto retry eg systests
             )
@@ -435,7 +431,11 @@ jobs:
 
             echo "Running bazel command: $bazel_cmd"
 
-            bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+            bazel \
+              --noworkspace_rc \
+              --bazelrc=./bazel/conf/.bazelrc.build \
+              --bazelrc=/tmp/bazel-cache.bazelrc \
+              "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
           }
 
           bazel_do build
