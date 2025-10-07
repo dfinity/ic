@@ -85,14 +85,20 @@ pub async fn prepare_direct_boot(
     let grubenv_path = grub_partition.mount_point().join("grubenv");
     let grubenv_res = File::open(&grubenv_path).context("Could not open grubenv");
     let Ok(grubenv_file) = grubenv_res else {
+        // If grubenv is not found, add a list of files from the grub partition
+        // to the error context.
         let ls_output = Command::new("ls")
             .arg("-lah")
-            .arg(grubenv_path)
+            .arg(grub_partition.mount_point())
             .output()
             .context("Failed to list grubenv_path")?;
-        println!("{}", String::from_utf8_lossy(&ls_output.stdout));
 
-        return Err(grubenv_res.unwrap_err());
+        return Err(grubenv_res
+            .context(format!(
+                "grub partition files: {{{}}}",
+                String::from_utf8_lossy(&ls_output.stdout)
+            ))
+            .unwrap_err());
     };
 
     let mut grubenv = GrubEnv::read_from(grubenv_file)?;
@@ -448,6 +454,7 @@ mod tests {
     }
 
     // Test empty grubenv (happens on the very first boot)
+    // NOTE: This grubenv has contents (filler '#'s), but no variables.
     #[tokio::test]
     async fn test_empty_grubenv() {
         let setup = TestSetupBuilder::new().build();
@@ -587,6 +594,24 @@ mod tests {
                 .to_string()
                 .contains("Could not mount boot partition A")
         );
+    }
+
+    #[tokio::test]
+    async fn test_missing_grubenv() {
+        let setup = TestSetupBuilder::new().without_grubenv().build();
+
+        // NOTE: The default formatter does not include multiple levels of
+        // context. Debug representation is used if the error makes it all of
+        // the way out of main.
+        let debug_error = format!(
+            "{:?}",
+            setup
+                .prepare_direct_boot(GuestVMType::Default)
+                .await
+                .expect_err("prepare_direct_boot should fail")
+        );
+        assert!(debug_error.contains("Could not open grubenv"));
+        assert!(debug_error.contains("grub partition files"));
     }
 
     #[tokio::test]
