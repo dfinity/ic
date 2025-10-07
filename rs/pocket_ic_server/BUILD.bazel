@@ -349,7 +349,7 @@ rust_test(
             #    )
             #  }
             "requires-network",
-            "test_macos",
+            "test_all_platforms",
         ],
         deps = TEST_DEPENDENCIES,
     )
@@ -412,7 +412,7 @@ rust_test(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = TEST_DEPENDENCIES,
 )
