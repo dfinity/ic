@@ -277,7 +277,7 @@ jobs:
 
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file" --jobs=1
+              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
             }
 
             bazel_do build "${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
