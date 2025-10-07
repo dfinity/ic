@@ -8,6 +8,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
 };
+use ic_management_canister_types::{HttpRequestArgs, HttpMethod};
 use ic_types::{Height, epoch_from_height};
 use ic_universal_canister::wasm;
 use itertools::Itertools;
@@ -82,6 +83,41 @@ pub(crate) async fn round_robin_query_call(canister: &Principal, agents: &[Agent
     let equals = join_all(agents.iter().map(|agent| {
         agent
             .query(canister, "query")
+            .with_arg(wasm().get_global_data().append_and_reply())
+            .call()
+    }))
+    .await
+    .iter()
+    .tuple_windows()
+    .all(|(a, b)| a == b);
+
+    if !equals {
+        panic!("Nodes returned different values in round robin query call");
+    }
+}
+
+pub(crate) async fn round_robin_https_outcall(canister: &Principal, agents: &[Agent]) {
+    let payload = wasm().set_transform(wasm().append_and_reply());
+    agent.update(canister, "update").with_arg(payload).call().await.unwrap();
+
+    let args = HttpRequestArgs {
+        url: http_server_addr,
+        max_response_bytes: None,
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                method: "transform".to_string(),
+                principal: canister,
+            }),
+            context: vec![],
+        }),
+    };
+
+    let equals = join_all(agents.iter().map(|agent| {
+        agent
+            .update(canister, "update")
             .with_arg(wasm().get_global_data().append_and_reply())
             .call()
     }))
