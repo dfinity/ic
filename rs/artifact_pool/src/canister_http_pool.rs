@@ -97,9 +97,9 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
 
     fn lookup_validated(
         &self,
-        msg_id: &CanisterHttpResponseId,
+        share: &CanisterHttpResponseShare,
     ) -> Option<CanisterHttpResponseShare> {
-        self.validated.get(msg_id).map(|()| msg_id.clone())
+        self.validated.get(share).map(|()| share.clone())
     }
 }
 
