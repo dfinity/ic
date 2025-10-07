@@ -170,7 +170,6 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
 def targets(
     command: str,
     skip_system_tests: bool,
-    skip_icos: bool,
     skip_long_tests: bool,
     skip_didc_checks: bool,
     skip_buf_checks: bool,
@@ -179,7 +178,6 @@ def targets(
 ):
     """Print the bazel targets to build or test to stdout."""
     # If no base is specified, form a query to return all targets
-    # but exclude all //ic-os/... targets (in case --skip_icos was specified)
     # but exclude those tagged with 'system_test' (in case --skip_system_tests was specified)
     # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified)
     # and exclude those tagged with 'didc' (in case --skip_didc_checks was specified)
@@ -202,9 +200,6 @@ def targets(
         excluded_tags.append("buf")
     excluded_tags_regex = "|".join(excluded_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
-
-    if skip_icos:
-        query = f"({query}) except //ic-os/..."
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
@@ -283,7 +278,6 @@ def main():
         choices=["build", "test", "check"],
         help="Bazel command to generate targets for. If 'check' then check PULL_REQUEST_BAZEL_TARGETS for correctness",
     )
-    parser.add_argument("--skip_icos", action="store_true", help="Exclude all //ic-os/... targets")
     parser.add_argument("--skip_system_tests", action="store_true", help="Exclude tests tagged as 'system_test'")
     parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
     parser.add_argument("--skip_didc_checks", action="store_true", help="Exclude tests tagged as 'didc'")
@@ -300,7 +294,6 @@ def main():
 
     targets(
         args.command,
-        args.skip_icos,
         args.skip_system_tests,
         args.skip_long_tests,
         args.skip_didc_checks,
