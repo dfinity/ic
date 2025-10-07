@@ -40,7 +40,7 @@ pub fn account_to_p2pkh_address_from_state(state: &CkBtcMinterState, account: &A
 /// specified account.
 fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
     const SCHEMA_V1: u8 = 1;
-    const PREFIX: [u8; 4] = [b'd', b'o', b'g', b'e'];
+    const PREFIX: [u8; 4] = *b"doge";
 
     vec![
         vec![SCHEMA_V1],

@@ -101,7 +101,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
         let doge_address =
             DogecoinAddress::parse(address, &doge_network).map_err(|e| e.to_string())?;
 
-        // This convertion is a hack to use the same type of address as in RetrieveBtcRequest,
+        // This conversion is a hack to use the same type of address as in RetrieveBtcRequest,
         // since this type is used both in the event logs (event `AcceptedRetrieveBtcRequest`)
         // and in the minter state (field `pending_retrieve_btc_requests`)
         Ok(match doge_address {
