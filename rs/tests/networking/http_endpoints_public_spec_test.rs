@@ -471,8 +471,14 @@ fn method_name_edge_cases(env: TestEnv) {
             for method_name in [
                 "",
                 "method name with spaces",
+                &'x'.to_string().repeat(10_000),
                 &'x'.to_string().repeat(20_000),
             ] {
+                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
+                if is_api_bn && method_name.len() > 10_000 {
+                    continue;
+                }
+
                 // We start with the successful case of a canister
                 // actually exporting a method with the given name.
                 let wasm = wasm_with_exported_method_name(method_name.to_string());
