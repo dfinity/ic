@@ -363,8 +363,14 @@ async fn migration_succeeds() {
         "Exiting `source_deleted` with 1 successful",
     ]));
 
-    // let source_new_subnet = pic.get_subnet(source).await.unwrap();
-    // assert_eq!(source_new_subnet, target_subnet);
+    let source_new_subnet = pic.get_subnet(source).await.unwrap();
+    assert_eq!(source_new_subnet, target_subnet);
+    pic.start_canister(source, Some(sender)).await.unwrap();
+    let err = pic
+        .update_call(source, sender, "yesn't", vec![])
+        .await
+        .unwrap_err();
+    assert!(format!("{:?}", err).contains("no wasm module"));
 }
 
 #[tokio::test]
