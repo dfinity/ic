@@ -416,15 +416,14 @@ impl IDkgPreSignerImpl {
                     &support.transcript_id,
                 ) {
                     Action::Process(transcript_params_ref) => {
+                        let signer = support.sig_share.signer;
                         // Dedup dealing support by checking whether a previous (transcript_id, dealer_id,
                         // dealing_hash) was already signed by the signer
                         let key = IDkgValidatedDealingSupportIdentifier::from(&support);
                         {
                             let valid_dealing_supports = self.validated_dealing_supports.read().unwrap();
                             let maybe_signers = valid_dealing_supports.get(&key);
-                            if maybe_signers
-                                .is_some_and(|signers| signers.contains(&support.sig_share.signer))
-                            {
+                            if maybe_signers.is_some_and(|signers| signers.contains(&signer)) {
                                 return Some(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!("Duplicate dealing support found in cache: {support}"),
@@ -439,10 +438,7 @@ impl IDkgPreSignerImpl {
                             }
                         }
 
-                        if !transcript_params_ref
-                            .receivers
-                            .contains(&support.sig_share.signer)
-                        {
+                        if !transcript_params_ref.receivers.contains(&signer) {
                             // The node is not in the receiver list for this transcript,
                             // a support share is not expected from it
                             self.metrics.pre_sign_errors_inc("unexpected_support");
@@ -459,7 +455,7 @@ impl IDkgPreSignerImpl {
                                 idkg_pool,
                                 &signed_dealing.idkg_dealing().transcript_id,
                                 &signed_dealing.dealer_id(),
-                                &support.sig_share.signer,
+                                &signer,
                                 &support.dealing_hash,
                             ) {
                                 // The node already sent a valid support for this dealing
@@ -500,7 +496,6 @@ impl IDkgPreSignerImpl {
                                 ));
                             };
 
-                            let signer = support.sig_share.signer;
                             let action = self.crypto_verify_dealing_support(
                                 &id,
                                 &transcript_params,
