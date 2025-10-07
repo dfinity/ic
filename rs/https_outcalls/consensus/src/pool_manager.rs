@@ -401,6 +401,14 @@ impl CanisterHttpPoolManagerImpl {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
+                let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
+                    // This should never happen
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Share exists without artifact".to_string(),
+                    ));
+                };
+
                 match context.replication {
                     Replication::NonReplicated(node_id) => {
                         if node_id != share.signature.signer {
@@ -409,13 +417,6 @@ impl CanisterHttpPoolManagerImpl {
                                 "Share signed by node that is not the delegated node for the request".to_string(),
                             ));
                         }
-                        let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
-                            // This should never happen
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Share exists without artifact".to_string(),
-                            ));
-                        };
 
                         let Some(response) = &artifact.response else {
                             // The request is not fully replicated, but the response is missing.
@@ -452,14 +453,6 @@ impl CanisterHttpPoolManagerImpl {
                     }
                     _ => {
                         // Fully replicated requests must not have a response attached.
-                        let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
-                            // This should never happen
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Share exists without artifact".to_string(),
-                            ));
-                        };
-
                         if artifact.response.is_some() {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
