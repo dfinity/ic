@@ -163,7 +163,7 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24-large
     container: *container-setup
     timeout-minutes: 150
     steps:
