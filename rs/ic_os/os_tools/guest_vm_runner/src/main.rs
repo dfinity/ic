@@ -167,9 +167,10 @@ impl VirtualMachine {
     fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
         println!("Attempting to destroy existing '{vm_domain_name}' domain");
         if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
-            match existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
-                Ok(_) => println!("Successfully destroyed existing domain"),
-                Err(e) => eprintln!("Failed to destroy existing domain: {e}"),
+            if let Err(e) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
+                eprintln!("Failed to destroy existing domain: {e}");
+            } else {
+                println!("Successfully destroyed existing domain");
             }
         } else {
             println!("No existing domain found to destroy");
