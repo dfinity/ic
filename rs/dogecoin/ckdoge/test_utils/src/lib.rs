@@ -26,6 +26,7 @@ pub const DOGECOIN_MAINNET_CANISTER: Principal =
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
 pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
+pub const MIN_CONFIRMATIONS: u32 = 60;
 
 pub struct Setup {
     env: Arc<PocketIc>,
@@ -63,7 +64,7 @@ impl Setup {
             dogecoin,
             NNS_ROOT_PRINCIPAL,
             "set_tip_height",
-            Encode!(&101_u32).unwrap(),
+            Encode!(&MIN_CONFIRMATIONS).unwrap(),
         )
         .unwrap();
 
@@ -96,7 +97,7 @@ impl Setup {
                 retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
                 max_time_in_queue_nanos: Duration::from_secs(10).as_nanos() as u64,
-                min_confirmations: Some(60),
+                min_confirmations: Some(MIN_CONFIRMATIONS),
                 mode: Mode::GeneralAvailability,
                 get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
             });

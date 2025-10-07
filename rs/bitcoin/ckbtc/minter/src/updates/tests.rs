@@ -913,7 +913,6 @@ mod update_balance {
             .expect_derive_user_address()
             .withf(move |_state, account_| account_ == &account)
             .return_const("bc1p3jcdy9fn2g68jzafdlayrkvsltq8ttm7y2vkhxpxhxr9yw3jukks03ufup");
-        println!("Account: {:?}", account);
     }
 
     fn mock_get_utxos_for_account(

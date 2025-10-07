@@ -1,6 +1,5 @@
 use candid::{Encode, Principal};
-use ic_bitcoin_canister_mock::PushUtxoToAddress;
-use ic_bitcoin_canister_mock::Utxo;
+use ic_bitcoin_canister_mock::{PushUtxoToAddress, Utxo};
 use ic_management_canister_types::CanisterId;
 use pocket_ic::PocketIc;
 use std::sync::Arc;

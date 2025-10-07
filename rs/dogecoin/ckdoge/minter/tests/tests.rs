@@ -126,6 +126,7 @@ mod get_doge_address {
 }
 
 mod deposit {
+    use candid::Principal;
     use ic_ckdoge_minter::{
         MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus, candid_api::GetDogeAddressArgs,
         memo_encode,
@@ -141,13 +142,16 @@ mod deposit {
         let minter = setup.minter();
         let ledger = setup.ledger();
         let dogecoin = setup.dogecoin();
-        let subaccount = Some([42_u8; 32]);
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
 
         let deposit_address = minter.get_doge_address(
-            USER_PRINCIPAL,
+            Principal::anonymous(),
             &GetDogeAddressArgs {
-                owner: None,
-                subaccount,
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
             },
         );
 
@@ -163,10 +167,10 @@ mod deposit {
 
         let utxo_status = minter
             .update_balance(
-                USER_PRINCIPAL,
+                account.owner,
                 &UpdateBalanceArgs {
-                    owner: Some(USER_PRINCIPAL),
-                    subaccount,
+                    owner: Some(account.owner),
+                    subaccount: account.subaccount,
                 },
             )
             .unwrap();
@@ -183,10 +187,7 @@ mod deposit {
             .assert_that_transaction(0_u64)
             .equals_mint_ignoring_timestamp(Mint {
                 amount: utxo.value.into(),
-                to: Account {
-                    owner: USER_PRINCIPAL,
-                    subaccount,
-                },
+                to: account,
                 memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
                     txid: Some(utxo.outpoint.txid.as_ref()),
                     vout: Some(utxo.outpoint.vout),
@@ -194,5 +195,7 @@ mod deposit {
                 }))),
                 created_at_time: None,
             });
+
+        // TODO XC-495: retrieve and assert on expected events
     }
 }

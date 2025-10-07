@@ -19,8 +19,8 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/ic-secp256k1",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
         "@crate_index//:bs58",
         "@crate_index//:candid",
@@ -116,8 +116,8 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckdoge_minter_lib",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//:pocket-ic-server",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
         "//rs/dogecoin/ckdoge/test_utils",
         "@crate_index//:assert_matches",
