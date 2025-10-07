@@ -368,7 +368,7 @@ impl fmt::Display for DtsInstallCodeStatus {
 
 impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -4283,6 +4283,18 @@ impl ExecutionEnvironment {
     #[doc(hidden)]
     pub fn own_subnet_type(&self) -> SubnetType {
         self.own_subnet_type
+    }
+
+    // Insert a compiled module in the compilation cache speed up tests by
+    // skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        self.hypervisor
+            .compilation_cache_insert_for_testing(bytes, compiled_module);
     }
 }
 

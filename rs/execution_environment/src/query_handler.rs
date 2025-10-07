@@ -112,7 +112,7 @@ pub struct InternalHttpQueryHandler {
 }
 
 impl InternalHttpQueryHandler {
-    pub fn new(
+    pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         own_subnet_type: SubnetType,
