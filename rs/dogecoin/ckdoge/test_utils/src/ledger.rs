@@ -56,7 +56,7 @@ pub struct LedgerTransactionAssert<T> {
 }
 
 impl<T> LedgerTransactionAssert<T> {
-    pub fn is_equal_to_mint_ignoring_timestamp(self, expected: Mint) -> T {
+    pub fn equals_mint_ignoring_timestamp(self, expected: Mint) -> T {
         assert_eq!(self.ledger_transaction.kind, "mint");
         assert_eq!(self.ledger_transaction.mint, Some(expected));
         assert_eq!(self.ledger_transaction.burn, None);
@@ -66,7 +66,7 @@ impl<T> LedgerTransactionAssert<T> {
         self.setup
     }
 
-    pub fn is_equal_to_burn_ignoring_timestamp(self, expected: Burn) -> T {
+    pub fn equals_burn_ignoring_timestamp(self, expected: Burn) -> T {
         assert_eq!(self.ledger_transaction.kind, "burn");
         assert_eq!(self.ledger_transaction.mint, None);
         assert_eq!(self.ledger_transaction.burn, Some(expected));

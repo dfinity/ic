@@ -181,7 +181,7 @@ mod deposit {
 
         ledger
             .assert_that_transaction(0_u64)
-            .is_equal_to_mint_ignoring_timestamp(Mint {
+            .equals_mint_ignoring_timestamp(Mint {
                 amount: utxo.value.into(),
                 to: Account {
                     owner: USER_PRINCIPAL,
