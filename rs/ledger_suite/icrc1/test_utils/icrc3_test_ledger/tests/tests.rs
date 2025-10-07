@@ -10,7 +10,9 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
-use ic_ledger_suite_state_machine_helpers::balance_of;
+use ic_ledger_suite_state_machine_helpers::{
+    balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -604,21 +606,7 @@ fn test_supported_standards() {
 }
 
 fn verify_blocks_in_ledger(env: &StateMachine, canister_id: CanisterId, start: u64, length: u64) {
-    let result = Decode!(
-        &env.query(
-            canister_id,
-            "icrc3_get_blocks",
-            Encode!(&vec![GetBlocksRequest {
-                start: Nat::from(0u64),
-                length: Nat::from(u64::MAX),
-            }])
-            .unwrap()
-        )
-        .expect("failed to get blocks")
-        .bytes(),
-        GetBlocksResult
-    )
-    .expect("failed to decode icrc3_get_blocks response");
+    let result = icrc3_get_blocks_helper(env, canister_id, 0, usize::MAX);
     if length == 0 {
         assert!(result.blocks.is_empty());
     } else {
