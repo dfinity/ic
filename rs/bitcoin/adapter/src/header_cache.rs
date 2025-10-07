@@ -10,7 +10,7 @@ use bitcoin::{
     consensus::{Decodable, Encodable, encode},
     io,
 };
-use ic_logger::{ReplicaLogger, error};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use lmdb::{
     Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
@@ -356,6 +356,15 @@ impl LMDBHeaderCache {
             cache.log,
             "iniialize genesis"
         )?;
+        let start = std::time::Instant::now();
+        let (key_bytes, val_bytes) = cache.total_header_bytes()?;
+        info!(
+            cache.log,
+            "LMDB header scanned ({} ms), key_bytes = {} val_bytes = {}",
+            start.elapsed().as_millis(),
+            key_bytes,
+            val_bytes
+        );
         Ok(cache)
     }
 
@@ -445,6 +454,22 @@ impl LMDBHeaderCache {
         let last_page = info.last_pgno() + 1; // page number is 0-based
         let used_pages = last_page - freelist;
         Ok(used_pages * page_size as usize)
+    }
+
+    fn total_header_bytes(&self) -> Result<(usize, usize), LMDBCacheError> {
+        use lmdb::Cursor;
+
+        let mut key_bytes = 0;
+        let mut val_bytes = 0;
+        self.run_ro_txn(|tx| {
+            let mut cursor = tx.open_ro_cursor(self.headers)?;
+            let mut iter = cursor.iter_start();
+            while let Some(Ok((key, val))) = iter.next() {
+                key_bytes += key.len();
+                val_bytes += val.len();
+            }
+            Ok((key_bytes, val_bytes))
+        })
     }
 }
 
