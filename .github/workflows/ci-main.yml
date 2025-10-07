@@ -56,6 +56,7 @@ jobs:
     outputs:
       release-build: ${{ steps.config.outputs.release-build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
+      skip_icos: ${{ steps.config.outputs.skip_icos }}
       skip_system_tests: ${{ steps.config.outputs.skip_system_tests }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
       full_macos_build: ${{ steps.config.outputs.full_macos_build }}
@@ -127,6 +128,7 @@ jobs:
           fi
 
           # TODO: only set this to true for external PRs:
+          skip_icos="true"
           skip_system_tests="true"
 
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
@@ -139,6 +141,14 @@ jobs:
           echo "diff_only: $diff_only"
           echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
           echo "| \`diff_only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_icos: $skip_icos"
+          echo "skip_icos=$skip_icos" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_icos\` | \`$skip_icos\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_system_tests: $skip_system_tests"
+          echo "skip_system_tests=$skip_system_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_system_tests\` | \`$skip_system_tests\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_system_tests: $skip_system_tests"
           echo "skip_system_tests=$skip_system_tests" >> "$GITHUB_OUTPUT"
@@ -217,6 +227,9 @@ jobs:
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
             targets_args=()
+            if [[ '${{ needs.config.outputs.skip_icos }}' == 'true' ]]; then
+              targets_args+=("--skip_icos")
+            fi
             if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
               targets_args+=("--skip_system_tests")
             fi
