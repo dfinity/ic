@@ -3792,8 +3792,12 @@ impl From<pb::NnsFunction> for pb_api::NnsFunction {
                 pb_api::NnsFunction::DeployHostosToSomeNodes
             }
             pb::NnsFunction::SubnetRentalRequest => pb_api::NnsFunction::SubnetRentalRequest,
-            pb::NnsFunction::PauseMigrations => pb_api::NnsFunction::PauseMigrations,
-            pb::NnsFunction::UnpauseMigrations => pb_api::NnsFunction::UnpauseMigrations,
+            pb::NnsFunction::PauseCanisterMigrations => {
+                pb_api::NnsFunction::PauseCanisterMigrations
+            }
+            pb::NnsFunction::UnpauseCanisterMigrations => {
+                pb_api::NnsFunction::UnpauseCanisterMigrations
+            }
         }
     }
 }
@@ -3894,8 +3898,12 @@ impl From<pb_api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::DeployHostosToSomeNodes
             }
             pb_api::NnsFunction::SubnetRentalRequest => pb::NnsFunction::SubnetRentalRequest,
-            pb_api::NnsFunction::PauseMigrations => pb::NnsFunction::PauseMigrations,
-            pb_api::NnsFunction::UnpauseMigrations => pb::NnsFunction::UnpauseMigrations,
+            pb_api::NnsFunction::PauseCanisterMigrations => {
+                pb::NnsFunction::PauseCanisterMigrations
+            }
+            pb_api::NnsFunction::UnpauseCanisterMigrations => {
+                pb::NnsFunction::UnpauseCanisterMigrations
+            }
         }
     }
 }

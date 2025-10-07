@@ -6,7 +6,7 @@ use canister_test::Canister;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_test_utils::governance::{pause_migrations, unpause_migrations};
+use ic_nns_test_utils::governance::{pause_canister_migrations, unpause_canister_migrations};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{
@@ -180,7 +180,7 @@ async fn test_async(env: TestEnv) {
 
     info!(logger, "Pausing migrations");
 
-    pause_migrations(&governance_canister).await;
+    pause_canister_migrations(&governance_canister).await;
 
     let args = Encode!(&MigrateCanisterArgs {
         source: source_canister.canister_id(),
@@ -209,7 +209,7 @@ async fn test_async(env: TestEnv) {
 
     info!(logger, "Unpausing migrations");
 
-    unpause_migrations(&governance_canister).await;
+    unpause_canister_migrations(&governance_canister).await;
 
     info!(logger, "Calling migrate_canister on unpaused canister");
 

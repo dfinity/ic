@@ -4073,9 +4073,9 @@ pub enum NnsFunction {
     /// The proposal requests a subnet rental.
     SubnetRentalRequest = 52,
     /// Instruct the migration canister to not accept any more migration requests.
-    PauseMigrations = 53,
+    PauseCanisterMigrations = 53,
     /// Instruct the migration canister to accept migration requests again.
-    UnpauseMigrations = 54,
+    UnpauseCanisterMigrations = 54,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4156,8 +4156,8 @@ impl NnsFunction {
             }
             NnsFunction::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
             NnsFunction::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
-            NnsFunction::PauseMigrations => "NNS_FUNCTION_PAUSE_MIGRATIONS",
-            NnsFunction::UnpauseMigrations => "NNS_FUNCTION_UNPAUSE_MIGRATIONS",
+            NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
+            NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4235,8 +4235,8 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
             "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
-            "NNS_FUNCTION_PAUSE_MIGRATIONS" => Some(Self::PauseMigrations),
-            "NNS_FUNCTION_UNPAUSE_MIGRATIONS" => Some(Self::UnpauseMigrations),
+            "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
+            "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             _ => None,
         }
     }

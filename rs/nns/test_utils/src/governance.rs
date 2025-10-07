@@ -571,31 +571,31 @@ pub async fn invalid_bitcoin_set_config_by_proposal(
     .await
 }
 
-pub async fn pause_migrations(governance: &Canister<'_>) {
+pub async fn pause_canister_migrations(governance: &Canister<'_>) {
     let proposal: Vec<u8> = Vec::new();
 
     submit_external_update_proposal(
         governance,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::PauseMigrations,
+        NnsFunction::PauseCanisterMigrations,
         proposal,
-        "Pause Migrations".to_string(),
+        "Pause Canister Migrations".to_string(),
         "".to_string(),
     )
     .await;
 }
 
-pub async fn unpause_migrations(governance: &Canister<'_>) {
+pub async fn unpause_canister_migrations(governance: &Canister<'_>) {
     let proposal: Vec<u8> = Vec::new();
 
     submit_external_update_proposal(
         governance,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::UnpauseMigrations,
+        NnsFunction::UnpauseCanisterMigrations,
         proposal,
-        "Unpause Migrations".to_string(),
+        "Unpause Canister Migrations".to_string(),
         "".to_string(),
     )
     .await;

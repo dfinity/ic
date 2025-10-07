@@ -592,8 +592,8 @@ impl NnsFunction {
             NnsFunction::SubnetRentalRequest => {
                 (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
             }
-            NnsFunction::PauseMigrations => (MIGRATION_CANISTER_ID, "disable_api"),
-            NnsFunction::UnpauseMigrations => (MIGRATION_CANISTER_ID, "enable_api"),
+            NnsFunction::PauseCanisterMigrations => (MIGRATION_CANISTER_ID, "disable_api"),
+            NnsFunction::UnpauseCanisterMigrations => (MIGRATION_CANISTER_ID, "enable_api"),
             NnsFunction::BlessReplicaVersion
             | NnsFunction::RetireReplicaVersion
             | NnsFunction::UpdateElectedHostosVersions
@@ -687,7 +687,7 @@ impl NnsFunction {
             NnsFunction::AddSnsWasm | NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 Topic::ServiceNervousSystemManagement
             }
-            NnsFunction::PauseMigrations | NnsFunction::UnpauseMigrations => {
+            NnsFunction::PauseCanisterMigrations | NnsFunction::UnpauseCanisterMigrations => {
                 Topic::ProtocolCanisterManagement
             }
         };
