@@ -355,6 +355,16 @@ fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollec
     .expect("failed to decode get_fee_collectors_ranges response")
 }
 
+fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
+    Decode!(
+        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
+            .expect("failed to set_icrc3_enabled")
+            .bytes(),
+        ()
+    )
+    .expect("failed to decode set_icrc3_enabled response")
+}
+
 // Assert that the index canister contains the same blocks as the ledger.
 #[track_caller]
 fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
@@ -482,20 +492,7 @@ fn test_ledger_growing() {
     );
 }
 
-#[test]
-fn test_unknown_block() {
-    // check that the index canister can incrementally get the blocks from the ledger.
-
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-
-    // Test initial mint block.
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
-
-    // Test first transfer block.
-
+fn verify_unknown_block_handling(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
     const TA1: Account = Account {
         owner: PrincipalId::new_user_test_id(44).0,
         subaccount: None,
@@ -506,11 +503,15 @@ fn test_unknown_block() {
         subaccount: None,
     };
 
-    let block0 = BlockBuilder::new(0, 1000)
-        .mint(TA1, Tokens::from(1_000u64))
-        .build();
-    let block1 = BlockBuilder::new(1, 2000)
-        .with_parent_hash(block0.clone().hash().to_vec())
+    let mut blocks = vec![];
+
+    blocks.push(
+        BlockBuilder::new(0, 0)
+            .mint(TA1, Tokens::from(1_000u64))
+            .build(),
+    );
+    let block1 = BlockBuilder::new(1, 1)
+        .with_parent_hash(blocks[0].clone().hash().to_vec())
         .transfer(TA1, TA2, Tokens::from(50u64))
         .build();
     let mut block1_map = match block1 {
@@ -518,13 +519,20 @@ fn test_unknown_block() {
         _ => panic!("block should be a map"),
     };
     block1_map.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
-    let block1 = ICRC3Value::Map(block1_map);
-    let block2 = BlockBuilder::new(2, 3000)
-        .with_parent_hash(block1.clone().hash().to_vec())
-        .mint(TA1, Tokens::from(1_000u64))
-        .build();
+    blocks.push(ICRC3Value::Map(block1_map));
 
-    add_block(env, ledger_id, &block0);
+    const NUM_BLOCKS: u64 = 10;
+
+    for i in 2..NUM_BLOCKS {
+        blocks.push(
+            BlockBuilder::new(i, i)
+                .with_parent_hash(blocks[i as usize - 1].clone().hash().to_vec())
+                .mint(TA1, Tokens::from(1_000u64))
+                .build(),
+        );
+    }
+
+    add_block(env, ledger_id, &blocks[0]);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
@@ -536,16 +544,17 @@ fn test_unknown_block() {
     assert_eq!(icrc1_balance_of(env, index_id, TA1), 1_000u64);
     assert_eq!(icrc1_balance_of(env, index_id, TA2), 0u64);
 
-    add_block(env, ledger_id, &block1);
-    add_block(env, ledger_id, &block2);
-
-    for _i in 0..3 {
-        env.advance_time(Duration::from_secs(60));
-        env.tick();
+    for i in 1..NUM_BLOCKS {
+        add_block(env, ledger_id, &blocks[i as usize]);
     }
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
     let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
     let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
-    assert_eq!(ledger_blocks.chain_length, index_blocks.chain_length + 2);
+    assert_eq!(ledger_blocks.chain_length, NUM_BLOCKS);
+    assert_eq!(index_blocks.chain_length, 1);
 
     assert_eq!(icrc1_balance_of(env, index_id, TA1), 1_000u64);
     assert_eq!(icrc1_balance_of(env, index_id, TA2), 0u64);
@@ -556,6 +565,26 @@ fn test_unknown_block() {
         status.sync_error,
         Some("Unknown block at index 1.".to_string())
     );
+}
+
+#[test]
+fn test_ledger_unknown_block_icrc3() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    verify_unknown_block_handling(env, ledger_id, index_id);
+}
+
+#[test]
+fn test_ledger_unknown_block_legacy() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    set_icrc3_enabled(env, ledger_id, false);
+
+    verify_unknown_block_handling(env, ledger_id, index_id);
 }
 
 #[test]

@@ -583,6 +583,10 @@ pub async fn build_index() -> Option<()> {
         GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
     };
     if let Ok(num_indexed) = num_indexed {
+        assert!(
+            sync_active(),
+            "Indexing succeeded but the sync timer is stopped."
+        );
         let retrieve_blocks_from_ledger_interval =
             with_state(|state| state.retrieve_blocks_from_ledger_interval());
         log!(
@@ -715,7 +719,7 @@ fn stop_timer_with_error(error: String) {
 fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()> {
     measure_span(&PROFILING_DATA, "append_blocks", move || {
         assert!(
-            TIMER_ID.with(|tid| *tid.borrow()).is_some(),
+            sync_active(),
             "Trying to append a block, even though the sync is stopped."
         );
 
@@ -1087,10 +1091,14 @@ fn status() -> Status {
     Status { num_blocks_synced }
 }
 
+fn sync_active() -> bool {
+    TIMER_ID.with(|tid| *tid.borrow()).is_some()
+}
+
 #[query]
 fn sync_status() -> SyncStatus {
     SyncStatus {
-        sync_active: TIMER_ID.with(|tid| *tid.borrow()).is_some(),
+        sync_active: sync_active(),
         sync_error: SYNC_ERROR.with(|error| error.borrow().clone()),
     }
 }
