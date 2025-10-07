@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::io::BufReader;
 use std::path::PathBuf;
 
-//https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_valid.json
+// Content copied from https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_valid.json
 const VALID_BASE58_KEYS: &str = "base58_keys_valid.json";
-// https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_invalid.json
+// Content copied from https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/test/data/base58_keys_invalid.json
 const INVALID_BASE58_KEYS: &str = "base58_keys_invalid.json";
 
 #[test]
@@ -55,8 +55,7 @@ fn should_fail_to_parse_invalid_addresses() {
 }
 
 fn test_vectors<T: DeserializeOwned>(filename: &str) -> T {
-    // Return something like
-    // "rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_invalid.json rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_valid.json"
+    // Return something like "rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_invalid.json rs/dogecoin/ckdoge/minter/test_vectors/base58_keys_valid.json"
     let test_vector_files = std::env::var("TEST_VECTORS").expect(
         "environment variable 'TEST_VECTORS' should be a space-separated list of test vectors",
     );

@@ -1,6 +1,6 @@
-use dfn_core::{call, CanisterId};
+use dfn_core::{CanisterId, call};
 use dfn_json::json;
-use dfn_macro::{query, update};
+use ic_cdk::{query, update};
 use std::convert::TryFrom;
 
 #[query]
