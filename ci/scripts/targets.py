@@ -204,7 +204,7 @@ def targets(
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
     if skip_icos:
-        query = f'({query}) except //ic-os/...'
+        query = f"({query}) except //ic-os/..."
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
