@@ -338,15 +338,20 @@ jobs:
     runs-on: namespace-profile-ubuntu-24-04-big
     permissions:
       id-token: write
-    container: *container-setup
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:d8d56ab4a9500b9baff64dd12d6190af7d03699f3177c5b2e6870b2e780250b9
+      options: >-
+         -e NODE_NAME --privileged --cgroupns host
+      volumes:
+        - /var/run/nsc/:/var/run/nsc/
     timeout-minutes: 150
     steps:
-      - *checkout
-      - run: nsc auth exchange-github-token
+      - uses: namespacelabs/nscloud-setup@v0
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+      - *checkout
       - name: Run Bazel Commands (Namespace)
         shell: bash
         run: |
