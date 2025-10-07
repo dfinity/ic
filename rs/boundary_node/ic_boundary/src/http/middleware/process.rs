@@ -7,7 +7,7 @@ use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OP
 use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*};
 use ic_bn_lib_common::types::http::Error as HttpError;
 use ic_types::messages::Blob;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     core::{MAX_REQUEST_BODY_SIZE, decoder_config},
@@ -27,6 +27,7 @@ const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
 struct ICRequestContent {
     sender: Principal,
     canister_id: Option<Principal>,
+    #[serde(deserialize_with = "truncate_method_name")]
     method_name: Option<String>,
     nonce: Option<Blob>,
     ingress_expiry: Option<u64>,
@@ -36,6 +37,18 @@ struct ICRequestContent {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ICRequestEnvelope {
     content: ICRequestContent,
+}
+
+// Restrict the method name to its max length
+fn truncate_method_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::<String>::deserialize(deserializer)?;
+    Ok(s.map(|mut val| {
+        val.truncate(20_000);
+        val
+    }))
 }
 
 // Middleware: preprocess the request before handing it over to handlers
@@ -217,4 +230,74 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
     }
 
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candid::Principal;
+    use serde_bytes::ByteBuf as Blob;
+    use serde_cbor;
+
+    #[test]
+    fn deserialize_short_method_name() {
+        let content = ICRequestContent {
+            sender: Principal::anonymous(),
+            canister_id: None,
+            method_name: Some("short".to_string()),
+            nonce: None,
+            ingress_expiry: None,
+            arg: None,
+        };
+        let envelope = ICRequestEnvelope { content };
+
+        let serialized = serde_cbor::to_vec(&envelope).unwrap();
+        let deserialized: ICRequestEnvelope = serde_cbor::from_slice(&serialized).unwrap();
+
+        assert_eq!(
+            deserialized.content.method_name.unwrap(),
+            "short".to_string()
+        );
+    }
+
+    #[test]
+    fn deserialize_long_method_name_truncated() {
+        // 25_000 characters, will be truncated to 20_000
+        let long_name = "x".repeat(25_000);
+
+        let content = ICRequestContent {
+            sender: Principal::anonymous(),
+            canister_id: None,
+            method_name: Some(long_name.clone()),
+            nonce: None,
+            ingress_expiry: None,
+            arg: None,
+        };
+        let envelope = ICRequestEnvelope { content };
+
+        let serialized = serde_cbor::to_vec(&envelope).unwrap();
+        let deserialized: ICRequestEnvelope = serde_cbor::from_slice(&serialized).unwrap();
+
+        let method_name = deserialized.content.method_name.unwrap();
+        assert_eq!(method_name.len(), 20_000);
+        assert!(method_name.chars().all(|c| c == 'x'));
+    }
+
+    #[test]
+    fn deserialize_none_method_name() {
+        let content = ICRequestContent {
+            sender: Principal::anonymous(),
+            canister_id: None,
+            method_name: None,
+            nonce: None,
+            ingress_expiry: None,
+            arg: None,
+        };
+        let envelope = ICRequestEnvelope { content };
+
+        let serialized = serde_cbor::to_vec(&envelope).unwrap();
+        let deserialized: ICRequestEnvelope = serde_cbor::from_slice(&serialized).unwrap();
+
+        assert!(deserialized.content.method_name.is_none());
+    }
 }
