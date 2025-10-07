@@ -91,6 +91,10 @@ pub struct GetRecoveryCupCmd {
     pub height: u64,
     /// Output file
     pub output_file: PathBuf,
+    /// Registry store URI
+    pub registry_store_uri: Option<String>,
+    /// Registry store SHA256 hash
+    pub registry_store_sha256: Option<String>,
 }
 
 #[derive(Clone, Parser)]
