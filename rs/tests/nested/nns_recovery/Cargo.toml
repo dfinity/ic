@@ -36,7 +36,3 @@ path = "nr_local.rs"
 [[bin]]
 name = "ic-systest-nested-nns-recovery-no-bless"
 path = "nr_no_bless.rs"
-
-[[bin]]
-name = "ic-systest-nested-nns-recovery-remote"
-path = "nr_remote.rs"
