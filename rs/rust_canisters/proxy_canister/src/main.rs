@@ -8,7 +8,6 @@
 #![allow(deprecated)]
 use candid::Principal;
 use futures::future::join_all;
-use futures::stream::{FuturesUnordered, StreamExt};
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::time;
 use ic_cdk::{caller, spawn};
@@ -90,23 +89,31 @@ pub async fn start_continuous_requests(
     ))
 }
 
+// TODO: instead of sequentially awaiting on each batch, try to send the next requests anyway, with backoff.
+// This should improve the overall qps, as the canister message queue is the bottleneck, and it's not being saturated.
 async fn run_continuous_request_loop(request: RemoteHttpRequest) {
-    const PARALLEL_REQUESTS: usize = 500;
+    const BATCH_SIZE: usize = 500;
+    let futures_iter = (0..BATCH_SIZE).map(|_| send_request(request.clone()));
+    let results = join_all(futures_iter).await;
 
-    let mut futures = FuturesUnordered::new();
-
-    for _ in 0..PARALLEL_REQUESTS {
-        futures.push(send_request(request.clone()));
-    }
-
-    while let Some(result) = futures.next().await {
+    let mut successes = 0;
+    let mut errors = 0;
+    for result in results {
         match result {
-            Ok(_resp) => {}
-            Err((_rejection_code, _msg)) => {}
+            Ok(_resp) => {
+                successes += 1;
+            }
+            Err((rejection_code, msg)) => {
+                errors += 1;
+                println!("Request failed: {rejection_code:?} - {msg}");
+            }
         }
-
-        futures.push(send_request(request.clone()));
     }
+    println!("Finished batch of {BATCH_SIZE} requests => successes: {successes}, errors: {errors}");
+
+    spawn(async move {
+        run_continuous_request_loop(request).await;
+    });
 }
 
 #[update]

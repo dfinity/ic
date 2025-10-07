@@ -839,7 +839,6 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
         let delegated_node_id = node_test_id(1);
         let callback_id = CallbackId::from(42);
 
-        // 1. Setup a non-replicated request delegated to our block maker (`delegated_node_id`).
         let request_context = CanisterHttpRequestContext {
             request: RequestBuilder::default().build(),
             url: "https://example.com".to_string(),
@@ -913,7 +912,7 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
             "Expected exactly one response in the payload"
         );
 
-        // The response must contain one seignature.
+        // The response must contain one signature.
         let proof = &parsed_payload.responses[0].proof;
         assert_eq!(
             proof.signature.signatures_map.len(),
@@ -942,7 +941,7 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
         let other_node_id = node_test_id(1);
         let callback_id = CallbackId::from(42);
 
-        // 1. Setup a non-replicated request delegated to our block maker (`delegated_node_id`).
+        Setup a non-replicated request delegated to our block maker (`delegated_node_id`).
         let request_context = CanisterHttpRequestContext {
             request: RequestBuilder::default().build(),
             url: "https://example.com".to_string(),

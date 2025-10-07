@@ -36,6 +36,7 @@ type ContentCanisterHttpPoolSection =
 pub struct CanisterHttpPoolImpl {
     validated: ValidatedCanisterHttpPoolSection,
     unvalidated: UnvalidatedCanisterHttpPoolSection,
+    // This section will contain responses coming from either the local adapter, or from other peers.
     content: ContentCanisterHttpPoolSection,
     invalidated_artifacts: IntCounter,
     log: ReplicaLogger,
@@ -157,6 +158,8 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                 }
                 CanisterHttpChangeAction::MoveToValidated(share) => {
                     if let Some(artifact) = self.unvalidated.remove(&share) {
+                        // If there is a response associated with this share, we want to move it to the `content`
+                        // section of the pool, corresponding to valid responses. 
                         if let Some(content) = artifact.response {
                             self.content
                                 .insert(ic_types::crypto::crypto_hash(&content), content);
