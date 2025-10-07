@@ -378,7 +378,7 @@ fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
 }
 
 #[query]
-fn get_neuron_index(request: GetNeuronIndexRequest) -> GetNeuronIndexResponse {
+fn get_neuron_index(_req: GetNeuronIndexRequest) -> GetNeuronIndexResponse {
     debug_log("get_neuron_index");
     GetNeuronIndexResponse::default()
 }
