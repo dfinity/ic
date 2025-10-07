@@ -473,7 +473,8 @@ impl CanisterHttpPoolManagerImpl {
 
                         let Some(response) = &artifact.response else {
                             // The request is not fully replicated, but the response is missing.
-                            return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                            return Some(CanisterHttpChangeAction::HandleInvalid(share.clone(),
+                                "Artifact should contain response".to_string()));
                         };
 
                         if share.content.content_hash != ic_types::crypto::crypto_hash(response) {
