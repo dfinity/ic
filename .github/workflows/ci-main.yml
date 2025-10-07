@@ -125,6 +125,7 @@ jobs:
               skip_buf_checks="false"
           fi
 
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -135,10 +136,6 @@ jobs:
           echo "diff_only: $diff_only"
           echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
           echo "| \`diff_only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "skip_system_tests: $skip_system_tests"
-          echo "skip_system_tests=$skip_system_tests" >> "$GITHUB_OUTPUT"
-          echo "| \`skip_system_tests\` | \`$skip_system_tests\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_long_tests: $skip_long_tests"
           echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
