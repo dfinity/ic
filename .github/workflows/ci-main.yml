@@ -336,7 +336,7 @@ jobs:
     name: Bazel Test All (Namespace)
     needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
-    runs-on: namespace-profile-ubuntu-24-04-big
+    runs-on: namespace-profile-amd64-linux-32x64
     permissions:
       id-token: write
     container:
