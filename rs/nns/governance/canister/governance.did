@@ -449,6 +449,9 @@ type KnownNeuronData = record {
   name : text;
   description : opt text;
   links : opt vec text;
+  // The first `opt` makes it so that the field can be renamed/deprecated in the future, and
+  // the second `opt` makes it so that an older client not recognizing a new variant can still
+  // get the rest of the `vec`.
   committed_topics : opt vec opt TopicToFollow;
 };
 
