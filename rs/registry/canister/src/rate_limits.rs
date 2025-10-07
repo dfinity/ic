@@ -1,4 +1,4 @@
-use crate::storage::get_rate_limiter_memory;
+use crate::storage::get_node_proivder_rate_limiter_memory;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_rate_limits::{
@@ -30,7 +30,7 @@ thread_local! {
             // should never actually be a factor
             max_reservations: NODE_PROVIDER_MAX_SPIKE * 2,
         },
-        get_rate_limiter_memory(),
+        get_node_proivder_rate_limiter_memory(),
     ));
 }
 
@@ -74,7 +74,6 @@ pub fn get_available_node_provider_op_capacity(node_provider: PrincipalId, now: 
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     #[test]

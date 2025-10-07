@@ -69,7 +69,7 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
 }
 
 // Used to create the rate limiter
-pub(crate) fn get_rate_limiter_memory() -> VM {
+pub(crate) fn get_node_proivder_rate_limiter_memory() -> VM {
     MEMORY_MANAGER.with(|mm| mm.borrow().get(NODE_OPERATOR_RATE_LIMITER_MEMORY_ID))
 }
 
