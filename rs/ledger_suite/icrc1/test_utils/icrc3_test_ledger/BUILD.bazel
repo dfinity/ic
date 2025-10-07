@@ -78,6 +78,7 @@ rust_ic_test_suite(
         "//rs/ledger_suite/icrc1/index-ng",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",

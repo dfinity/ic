@@ -10,6 +10,7 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
+use ic_ledger_suite_state_machine_helpers::balance_of;
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -47,18 +48,6 @@ fn icrc3_test_ledger_wasm() -> Vec<u8> {
 
 pub fn index_ng_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").unwrap()).unwrap()
-}
-
-fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
-    let res = env
-        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
-        .expect("Failed to send icrc1_balance_of")
-        .bytes();
-    Decode!(&res, Nat)
-        .expect("Failed to decode icrc1_balance_of response")
-        .0
-        .to_u64()
-        .expect("Balance must be a u64!")
 }
 
 fn setup_icrc3_test_ledger() -> (StateMachine, CanisterId) {
@@ -712,7 +701,7 @@ fn test_archiving() {
             .unwrap();
         env.advance_time(Duration::from_secs(60));
         env.tick();
-        let balance = icrc1_balance_of(&env, index, TEST_ACCOUNT_1);
+        let balance = balance_of(&env, index, TEST_ACCOUNT_1);
         assert_eq!(balance, 2u64.pow(NUM_BLOCKS) - 1);
     };
 
@@ -770,7 +759,7 @@ fn test_archiving_all_blocks() {
         .unwrap();
     env.advance_time(Duration::from_secs(60));
     env.tick();
-    let balance = icrc1_balance_of(&env, index, TEST_ACCOUNT_1);
+    let balance = balance_of(&env, index, TEST_ACCOUNT_1);
     assert_eq!(balance, 2u64.pow(NUM_BLOCKS as u32) - 1);
 
     let block = BlockBuilder::new(NUM_BLOCKS, NUM_BLOCKS)
@@ -781,7 +770,7 @@ fn test_archiving_all_blocks() {
 
     env.advance_time(Duration::from_secs(60));
     env.tick();
-    let balance = icrc1_balance_of(&env, index, TEST_ACCOUNT_1);
+    let balance = balance_of(&env, index, TEST_ACCOUNT_1);
     assert_eq!(balance, 2u64.pow((NUM_BLOCKS + 1) as u32) - 1);
 
     let blocks = get_blocks(&env, ledger_id, &blocks_req);
