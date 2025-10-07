@@ -394,7 +394,7 @@ jobs:
 
       - name: Run tests tagged to run on all platforms
         run: |
-          # We do not use `/...` here to exclude `//publish/...` which does not build on arm64-linux.
+          # We do not use `//...` here to exclude `//publish/...` which does not build on arm64-linux.
           bazel_test_targets=(
             //rs/...
             //packages/...
