@@ -82,33 +82,33 @@ struct Scenario {
 }
 
 fn production_scenarios() -> Vec<Scenario> {
-    let mut scenarios = Vec::new();
-    scenarios.push(Scenario {
-        name: "idkg_create_dealing".to_string(),
-        request_bytes: THREE_KB,
-        response_bytes: THREE_KB,
-    });
-    scenarios.push(Scenario {
-        name: "idkg_load_transcript".to_string(),
-        request_bytes: FIFTY_KB,
-        response_bytes: ONE_BYTE,
-    });
-    scenarios.push(Scenario {
-        name: "idkg_verify_dealing_private".to_string(),
-        request_bytes: THREE_KB,
-        response_bytes: ONE_BYTE,
-    });
-    scenarios.push(Scenario {
-        name: "idkg_retain_active_keys".to_string(),
-        request_bytes: THREE_KB,
-        response_bytes: ONE_BYTE,
-    });
-    scenarios.push(Scenario {
-        name: "create_ecdsa_sig_share".to_string(),
-        request_bytes: THREE_KB,
-        response_bytes: 128 * ONE_BYTE,
-    });
-    scenarios
+    vec![
+        Scenario {
+            name: "idkg_create_dealing".to_string(),
+            request_bytes: THREE_KB,
+            response_bytes: THREE_KB,
+        },
+        Scenario {
+            name: "idkg_load_transcript".to_string(),
+            request_bytes: FIFTY_KB,
+            response_bytes: ONE_BYTE,
+        },
+        Scenario {
+            name: "idkg_verify_dealing_private".to_string(),
+            request_bytes: THREE_KB,
+            response_bytes: ONE_BYTE,
+        },
+        Scenario {
+            name: "idkg_retain_active_keys".to_string(),
+            request_bytes: THREE_KB,
+            response_bytes: ONE_BYTE,
+        },
+        Scenario {
+            name: "create_ecdsa_sig_share".to_string(),
+            request_bytes: THREE_KB,
+            response_bytes: 128 * ONE_BYTE,
+        },
+    ]
 }
 
 fn temp_crypto<R: Rng + CryptoRng>(
