@@ -83,7 +83,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
         &self,
         address: &str,
         network: ic_ckbtc_minter::Network,
-    ) -> Result<BitcoinAddress, std::string::String> {
+    ) -> Result<BitcoinAddress, String> {
         let doge_network = match network {
             ic_ckbtc_minter::Network::Mainnet => Network::Mainnet,
             ic_ckbtc_minter::Network::Testnet => Network::Testnet,
