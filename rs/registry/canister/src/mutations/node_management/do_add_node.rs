@@ -53,8 +53,7 @@ impl Registry {
             PrincipalId::try_from(node_operator_record.node_provider_principal_id.clone())
                 .expect("Could not convert node_provider_principal_id bytes into PrincipalId");
 
-        let reservation =
-            try_reserve_node_provider_op_capacity(now, node_provider_principal, 20)?;
+        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_principal, 20)?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
@@ -1098,8 +1097,7 @@ mod tests {
         // Exhaust the rate limit capacity
         let available = get_available_node_provider_op_capacity(node_provider_id, now);
         let reservation =
-            try_reserve_node_provider_op_capacity(now, node_provider_id, available)
-                .unwrap();
+            try_reserve_node_provider_op_capacity(now, node_provider_id, available).unwrap();
         commit_node_provider_op_reservation(now, reservation).unwrap();
 
         let error = registry
