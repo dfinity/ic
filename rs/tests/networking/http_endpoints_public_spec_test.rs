@@ -449,7 +449,7 @@ fn method_name_edge_cases(env: TestEnv) {
     // We use an application subnet in this test
     // since its update call size limits are lower
     // and thus we can easily test the case of
-    // an update call already failing with HTTP status code 429
+    // an update call already failing with HTTP status code 413
     // and a query call still returning a reject.
     let (_primary, _sys_uc, app_uc) = get_canister_ids(&snapshot);
     let subnet_replica_url = get_app_subnet_replica_url(&snapshot);
