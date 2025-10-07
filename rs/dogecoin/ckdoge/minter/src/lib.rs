@@ -84,11 +84,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
         address: &str,
         network: ic_ckbtc_minter::Network,
     ) -> Result<BitcoinAddress, String> {
-        let doge_network = match network {
-            ic_ckbtc_minter::Network::Mainnet => Network::Mainnet,
-            ic_ckbtc_minter::Network::Testnet => Network::Testnet,
-            ic_ckbtc_minter::Network::Regtest => Network::Regtest,
-        };
+        let doge_network = Network::from(network);
         let doge_address =
             DogecoinAddress::parse(address, &doge_network).map_err(|e| e.to_string())?;
 
