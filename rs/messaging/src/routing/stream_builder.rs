@@ -234,6 +234,7 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
+                state.observe_lost_cycles_due_to_dropped_messages(req.payment);
             });
     }
 

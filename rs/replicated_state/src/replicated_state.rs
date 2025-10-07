@@ -1507,6 +1507,14 @@ impl ReplicatedState {
             subnet_queues,
         );
     }
+
+    /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
+    /// responses to deleted canisters).
+    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: Cycles) {
+        self.metadata
+            .subnet_metrics
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles.into());
+    }
 }
 
 /// Converts a `CanisterInput` popped from a subnet input queue into a
