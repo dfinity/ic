@@ -1,8 +1,5 @@
 use crate::common::LOG_PREFIX;
 use crate::mutations::node_management::common::get_node_provider_id_for_node_id;
-use crate::rate_limits::{
-    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
-};
 use crate::{
     flags::{
         is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
@@ -56,7 +53,8 @@ impl Registry {
         );
         let node_provider_id = get_node_provider_id_for_node_id(self, old_node_id).unwrap();
 
-        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)
+        let reservation = self
+            .try_reserve_node_provider_op_capacity(now, node_provider_id, 1)
             .map_err(SwapError::RateLimiterError)?;
 
         //TODO(DRE-547): Check if the feature is allowed on the target subnet and for the caller
@@ -65,7 +63,7 @@ impl Registry {
 
         //TODO(DRE-548): Implement the swapping functionality
 
-        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
             println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
         Ok(())
@@ -179,10 +177,6 @@ mod tests {
             },
         },
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
-        rate_limits::{
-            commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
-            try_reserve_node_provider_op_capacity,
-        },
         registry::Registry,
     };
     use ic_nervous_system_time_helpers::now_system_time;
@@ -517,9 +511,13 @@ mod tests {
         let caller = valid_np;
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(caller, now);
-        let reservation = try_reserve_node_provider_op_capacity(now, caller, available).unwrap();
-        commit_node_provider_op_reservation(now, reservation).unwrap();
+        let available = registry.get_available_node_provider_op_capacity(caller, now);
+        let reservation = registry
+            .try_reserve_node_provider_op_capacity(now, caller, available)
+            .unwrap();
+        registry
+            .commit_node_provider_op_reservation(now, reservation)
+            .unwrap();
 
         // For now, the method doesn't implement rate limiting yet
         // This test will be updated when rate limiting is implemented

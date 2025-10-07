@@ -1,9 +1,6 @@
 use crate::mutations::node_management::common::{
     get_node_operator_id_for_node, get_node_provider_id_for_operator_id,
 };
-use crate::rate_limits::{
-    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
-};
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -58,7 +55,7 @@ impl Registry {
         );
 
         let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)?;
-        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
+        let reservation = self.try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain
@@ -78,7 +75,7 @@ impl Registry {
         // Check invariants before applying the mutation
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
             std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
@@ -91,10 +88,6 @@ mod tests {
     use super::UpdateNodeDomainDirectlyPayload;
     use crate::common::test_helpers::prepare_registry_with_nodes_and_node_operator_id;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
-    use crate::rate_limits::{
-        commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
-        try_reserve_node_provider_op_capacity,
-    };
     use crate::registry::Registry;
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
@@ -317,10 +310,13 @@ mod tests {
         let now = now_system_time();
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(node_provider_id, now);
-        let reservation =
-            try_reserve_node_provider_op_capacity(now, node_provider_id, available).unwrap();
-        commit_node_provider_op_reservation(now, reservation).unwrap();
+        let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let reservation = registry
+            .try_reserve_node_provider_op_capacity(now, node_provider_id, available)
+            .unwrap();
+        registry
+            .commit_node_provider_op_reservation(now, reservation)
+            .unwrap();
 
         let error = registry
             .do_update_node_domain(payload, node_operator_id, now)

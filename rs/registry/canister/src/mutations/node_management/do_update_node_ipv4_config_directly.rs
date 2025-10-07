@@ -13,9 +13,6 @@ use std::time::SystemTime;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use crate::rate_limits::{
-    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
-};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nervous_system_time_helpers::now_system_time;
 
@@ -50,7 +47,7 @@ impl Registry {
 
         // Unwrap should be safe because node_provider_principal_id has to be valid bytes.
         let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)?;
-        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
+        let reservation = self.try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
 
         // Ensure payload is valid
         self.validate_update_node_ipv4_config_directly_payload(&payload);
@@ -75,7 +72,7 @@ impl Registry {
         // Check invariants before applying the mutation
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
             std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
@@ -116,10 +113,6 @@ impl Registry {
 mod tests {
     use super::*;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
-    use crate::rate_limits::{
-        commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
-        try_reserve_node_provider_op_capacity,
-    };
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
         mutations::common::test::TEST_NODE_ID,
@@ -401,10 +394,13 @@ mod tests {
         let now = now_system_time();
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(node_provider_id, now);
-        let reservation =
-            try_reserve_node_provider_op_capacity(now, node_provider_id, available).unwrap();
-        commit_node_provider_op_reservation(now, reservation).unwrap();
+        let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let reservation = registry
+            .try_reserve_node_provider_op_capacity(now, node_provider_id, available)
+            .unwrap();
+        registry
+            .commit_node_provider_op_reservation(now, reservation)
+            .unwrap();
 
         let error = registry
             .do_update_node_ipv4_config_directly_(payload, node_operator_id, now)

@@ -12,9 +12,6 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 
-use crate::rate_limits::{
-    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
-};
 use ic_nervous_system_time_helpers::now_system_time;
 use prost::Message;
 
@@ -69,7 +66,8 @@ impl Registry {
 
         // 3. Check Rate Limits
         let current_node_provider = caller;
-        let reservation = try_reserve_node_provider_op_capacity(now, current_node_provider, 1)?;
+        let reservation =
+            self.try_reserve_node_provider_op_capacity(now, current_node_provider, 1)?;
 
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
@@ -94,7 +92,7 @@ impl Registry {
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
             println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
@@ -127,7 +125,6 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::mutations::node_management::common::get_node_operator_record;
-    use crate::rate_limits::get_available_node_provider_op_capacity;
     use maplit::btreemap;
 
     #[test]
@@ -206,13 +203,13 @@ mod tests {
         // Original should be able to change this.
         let caller = node_provider_id;
 
-        let available = get_available_node_provider_op_capacity(caller, now);
+        let available = registry.get_available_node_provider_op_capacity(caller, now);
 
         registry
             .do_update_node_operator_config_directly_(request, caller, now)
             .unwrap();
 
-        let next_available = get_available_node_provider_op_capacity(caller, now);
+        let next_available = registry.get_available_node_provider_op_capacity(caller, now);
         assert_eq!(available - 1, next_available);
     }
 
@@ -246,9 +243,13 @@ mod tests {
         // Original should be able to change this.
         let caller = node_provider_id;
 
-        let available = get_available_node_provider_op_capacity(caller, now);
-        let reservation = try_reserve_node_provider_op_capacity(now, caller, available).unwrap();
-        commit_node_provider_op_reservation(now, reservation).unwrap();
+        let available = registry.get_available_node_provider_op_capacity(caller, now);
+        let reservation = registry
+            .try_reserve_node_provider_op_capacity(now, caller, available)
+            .unwrap();
+        registry
+            .commit_node_provider_op_reservation(now, reservation)
+            .unwrap();
 
         let error = registry
             .do_update_node_operator_config_directly_(request, caller, now)

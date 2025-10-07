@@ -3,9 +3,6 @@ use crate::mutations::node_management::common::{
     get_node_provider_id_for_node_id, get_node_provider_id_for_operator_id, get_subnet_list_record,
     make_remove_node_registry_mutations, make_update_node_operator_mutation,
 };
-use crate::rate_limits::{
-    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
-};
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -52,13 +49,13 @@ impl Registry {
         now: SystemTime,
     ) -> Result<(), String> {
         let node_provider_id = get_node_provider_id_for_node_id(self, payload.node_id)?;
-        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
+        let reservation = self.try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
 
         let mutations = self.make_remove_or_replace_node_mutations(payload, caller_id, None);
         // Check invariants and apply mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
             std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
@@ -216,10 +213,6 @@ pub struct RemoveNodeDirectlyPayload {
 mod tests {
     use super::*;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
-    use crate::rate_limits::{
-        commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
-        try_reserve_node_provider_op_capacity,
-    };
     use crate::{
         common::test_helpers::{
             invariant_compliant_registry, prepare_registry_with_nodes,
@@ -697,10 +690,13 @@ mod tests {
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(node_provider_id, now);
-        let reservation =
-            try_reserve_node_provider_op_capacity(now, node_provider_id, available).unwrap();
-        commit_node_provider_op_reservation(now, reservation).unwrap();
+        let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let reservation = registry
+            .try_reserve_node_provider_op_capacity(now, node_provider_id, available)
+            .unwrap();
+        registry
+            .commit_node_provider_op_reservation(now, reservation)
+            .unwrap();
 
         let error = registry
             .do_remove_node_directly_(payload, node_operator_id, now)

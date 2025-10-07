@@ -20,9 +20,6 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
-use crate::rate_limits::{
-    commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
-};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
@@ -53,7 +50,8 @@ impl Registry {
             PrincipalId::try_from(node_operator_record.node_provider_principal_id.clone())
                 .expect("Could not convert node_provider_principal_id bytes into PrincipalId");
 
-        let reservation = try_reserve_node_provider_op_capacity(now, node_provider_principal, 20)?;
+        let reservation =
+            self.try_reserve_node_provider_op_capacity(now, node_provider_principal, 20)?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
@@ -193,7 +191,7 @@ impl Registry {
 
         println!("{LOG_PREFIX}do_add_node finished: {payload:?}");
 
-        if let Err(e) = commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
             println!("{LOG_PREFIX}do_add_node did not use reservation capacity: {e}");
         }
 
@@ -322,10 +320,6 @@ mod tests {
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
     use crate::mutations::common::test::TEST_NODE_ID;
-    use crate::rate_limits::{
-        commit_node_provider_op_reservation, get_available_node_provider_op_capacity,
-        try_reserve_node_provider_op_capacity,
-    };
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -1095,10 +1089,13 @@ mod tests {
         let (payload, _) = prepare_add_node_payload(1);
 
         // Exhaust the rate limit capacity
-        let available = get_available_node_provider_op_capacity(node_provider_id, now);
-        let reservation =
-            try_reserve_node_provider_op_capacity(now, node_provider_id, available).unwrap();
-        commit_node_provider_op_reservation(now, reservation).unwrap();
+        let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let reservation = registry
+            .try_reserve_node_provider_op_capacity(now, node_provider_id, available)
+            .unwrap();
+        registry
+            .commit_node_provider_op_reservation(now, reservation)
+            .unwrap();
 
         let error = registry
             .do_add_node_(payload, node_operator_id, now)
