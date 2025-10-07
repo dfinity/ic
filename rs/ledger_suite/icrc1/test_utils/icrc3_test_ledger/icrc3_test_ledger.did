@@ -135,6 +135,11 @@ type BlockWithId = record {
   block : ICRC3Value
 };
 
+type ArchiveBlocksResult = variant {
+    Ok : nat64;
+    Err : text;
+};
+
 service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
@@ -156,5 +161,5 @@ service : () -> {
 
     set_icrc3_enabled : (bool) -> ();
 
-    archive_blocks : (ArchiveBlocksArgs) -> (nat64);
+    archive_blocks : (ArchiveBlocksArgs) -> (ArchiveBlocksResult);
 }
