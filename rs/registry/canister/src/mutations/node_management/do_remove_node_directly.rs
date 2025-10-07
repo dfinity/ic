@@ -1,6 +1,6 @@
 use crate::mutations::node_management::common::{
     find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_node_provider_id_for_node_id, get_node_provider_id_for_operator_id, get_subnet_list_record,
+    get_node_provider_id_for_operator_id, get_subnet_list_record,
     make_remove_node_registry_mutations, make_update_node_operator_mutation,
 };
 use crate::{common::LOG_PREFIX, registry::Registry};
@@ -48,8 +48,9 @@ impl Registry {
         caller_id: PrincipalId,
         now: SystemTime,
     ) -> Result<(), String> {
-        let node_provider_id = get_node_provider_id_for_node_id(self, payload.node_id)?;
-        let reservation = self.try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
+        // Get the node operator ID for this node
+        let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)?;
+        let reservation = self.try_reserve_node_provider_op_capacity(now, node_operator_id, 1)?;
 
         let mutations = self.make_remove_or_replace_node_mutations(payload, caller_id, None);
         // Check invariants and apply mutations
@@ -690,9 +691,9 @@ mod tests {
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         // Exhaust the rate limit capacity
-        let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let available = registry.get_available_node_provider_op_capacity(node_operator_id, now);
         let reservation = registry
-            .try_reserve_node_provider_op_capacity(now, node_provider_id, available)
+            .try_reserve_node_provider_op_capacity(now, node_operator_id, available)
             .unwrap();
         registry
             .commit_node_provider_op_reservation(now, reservation)

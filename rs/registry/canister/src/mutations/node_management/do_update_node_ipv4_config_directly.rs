@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, get_node_provider_id_for_operator_id, node_exists_with_ipv4,
+    get_node_operator_id_for_node, node_exists_with_ipv4,
 };
 use crate::{common::LOG_PREFIX, mutations::common::node_exists_or_panic, registry::Registry};
 
@@ -45,9 +45,7 @@ impl Registry {
         self.check_caller_is_node_operator(caller_id, node_id);
         let node_operator_id = caller_id;
 
-        // Unwrap should be safe because node_provider_principal_id has to be valid bytes.
-        let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)?;
-        let reservation = self.try_reserve_node_provider_op_capacity(now, node_provider_id, 1)?;
+        let reservation = self.try_reserve_node_provider_op_capacity(now, node_operator_id, 1)?;
 
         // Ensure payload is valid
         self.validate_update_node_ipv4_config_directly_payload(&payload);
@@ -430,9 +428,9 @@ mod tests {
         let now = now_system_time();
 
         // Exhaust the rate limit capacity
-        let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let available = registry.get_available_node_provider_op_capacity(node_operator_id, now);
         let reservation = registry
-            .try_reserve_node_provider_op_capacity(now, node_provider_id, available)
+            .try_reserve_node_provider_op_capacity(now, node_operator_id, available)
             .unwrap();
         registry
             .commit_node_provider_op_reservation(now, reservation)

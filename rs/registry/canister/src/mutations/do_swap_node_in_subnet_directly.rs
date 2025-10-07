@@ -1,5 +1,5 @@
 use crate::common::LOG_PREFIX;
-use crate::mutations::node_management::common::get_node_provider_id_for_node_id;
+use crate::mutations::node_management::common::get_node_operator_id_for_node;
 use crate::{
     flags::{
         is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
@@ -51,10 +51,10 @@ impl Registry {
                 .old_node_id
                 .expect("Old Node Id should be validated as existing before this call."),
         );
-        let node_provider_id = get_node_provider_id_for_node_id(self, old_node_id).unwrap();
+        let node_operator_id = get_node_operator_id_for_node(self, old_node_id).unwrap();
 
         let reservation = self
-            .try_reserve_node_provider_op_capacity(now, node_provider_id, 1)
+            .try_reserve_node_provider_op_capacity(now, node_operator_id, 1)
             .map_err(SwapError::RateLimiterError)?;
 
         //TODO(DRE-547): Check if the feature is allowed on the target subnet and for the caller

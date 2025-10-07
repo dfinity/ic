@@ -1,3 +1,4 @@
+use crate::mutations::node_management::common::get_node_provider_id_for_operator_id;
 use crate::registry::Registry;
 use crate::storage::get_node_proivder_rate_limiter_memory;
 use ic_base_types::PrincipalId;
@@ -50,11 +51,15 @@ impl Registry {
     pub fn try_reserve_node_provider_op_capacity(
         &self,
         now: SystemTime,
-        node_provider: PrincipalId,
+        node_operator_id: PrincipalId,
         requested_capacity: u64,
     ) -> Result<Reservation<String>, RateLimiterError> {
+        // Find the associated node provider ID for this node operator
+        let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)
+            .map_err(|e| RateLimiterError::InvalidArguments(e))?;
+
         with_node_provider_rate_limiter(|rate_limiter| {
-            rate_limiter.try_reserve(now, node_provider_key(node_provider), requested_capacity)
+            rate_limiter.try_reserve(now, node_provider_key(node_provider_id), requested_capacity)
         })
     }
 
@@ -72,11 +77,15 @@ impl Registry {
     #[cfg(test)]
     pub fn get_available_node_provider_op_capacity(
         &self,
-        node_provider: PrincipalId,
+        node_operator_id: PrincipalId,
         now: SystemTime,
     ) -> u64 {
+        // Find the associated node provider ID for this node operator
+        let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)
+            .unwrap_or_else(|_| node_operator_id); // Fallback to node_operator_id if lookup fails in tests
+
         with_node_provider_rate_limiter(|rate_limiter| {
-            rate_limiter.get_available_capacity(node_provider_key(node_provider), now)
+            rate_limiter.get_available_capacity(node_provider_key(node_provider_id), now)
         })
     }
 }
