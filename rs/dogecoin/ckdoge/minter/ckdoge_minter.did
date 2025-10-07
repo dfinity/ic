@@ -89,6 +89,72 @@ type RetrieveDogeWithApprovalError = variant {
     GenericError : record { error_message : text; error_code : nat64 };
 };
 
+// The result of an [update_balance] call.
+type UtxoStatus = variant {
+    // The minter ignored this UTXO because UTXO's value is too small to pay
+    // the check fees.
+    ValueTooSmall : Utxo;
+    // The Bitcoin checker considered this UTXO to be tainted.
+    Tainted : Utxo;
+    // The UTXO passed the Bitcoin check, but the minter failed to mint ckBTC
+    // because the Ledger was unavailable. Retrying the [update_balance] call
+    // should eventually advance the UTXO to the [Minted] state.
+    Checked : Utxo;
+    // The UTXO passed the Bitcoin check, and ckBTC has been minted.
+    Minted : record {
+        block_index : nat64;
+        minted_amount : nat64;
+        utxo : Utxo;
+    };
+};
+
+type UpdateBalanceError = variant {
+    // There are no new UTXOs to process.
+    NoNewUtxos : record {
+        current_confirmations: opt nat32;
+        required_confirmations: nat32;
+        pending_utxos: opt vec PendingUtxo;
+        suspended_utxos: opt vec SuspendedUtxo;
+    };
+    // The minter is already processing another update balance request for the caller.
+    AlreadyProcessing;
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
+};
+
+// Utxos that don't have enough confirmations to be processed.
+type PendingUtxo = record {
+    outpoint : record { txid : vec nat8; vout : nat32 };
+    value : nat64;
+    confirmations: nat32;
+};
+
+type SuspendedUtxo = record {
+    utxo : Utxo;
+    reason : SuspendedReason;
+    earliest_retry: Timestamp;
+};
+
+type SuspendedReason = variant {
+    // The minter ignored this UTXO because UTXO's value is too small to pay
+    // the check fees.
+    ValueTooSmall;
+    // The Bitcoin checker considered this UTXO to be tainted.
+    Quarantined;
+};
+
+// Number of nanoseconds since the Unix Epoch
+type Timestamp = nat64;
+
+type Utxo = record {
+    outpoint : record { txid : vec nat8; vout : nat32 };
+    value : nat64;
+    height : nat32;
+};
+
 service : (minter_arg : MinterArg) -> {
     // Returns the Dogecoin address to which the owner should send DOGE
     // before converting the amount to ckDOGE using the [update_balance]
@@ -97,6 +163,16 @@ service : (minter_arg : MinterArg) -> {
     // If the owner is not set, it defaults to the caller's principal.
     // The resolved owner must be a non-anonymous principal.
     get_doge_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
+
+    // Mints ckDOGE for newly deposited UTXOs.
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    //
+    // # Preconditions
+    //
+    // * The owner deposited some DOGE to the address that the
+    //   [get_doge_address] endpoint returns.
+    update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : vec UtxoStatus; Err : UpdateBalanceError });
 
     // Submits a request to convert ckDOGE to DOGE.
     //
