@@ -429,7 +429,7 @@ impl CanisterHttpPoolManagerImpl {
                             //TODO: we should also check the response size when validating the payload.
 
                             // An honest replica enforces that response.content.count_bytes() does not exceed max_response_bytes
-                            // when the content is `Success`. However it doesn't enroce anything in the case of `Failure`.
+                            // when the content is `Success`. However it doesn't enforce anything in the case of `Failure`.
                             // As we still want to set a limit for failure, we enforce 1KB, which si reasonable for 
                             // an error message.
 
