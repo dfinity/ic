@@ -386,7 +386,6 @@ jobs:
           target_pattern_file=$(mktemp)
           trap "rm $target_pattern_file" INT TERM EXIT
           targets_args=(
-            --skip_icos
             --skip_system_tests
           )
           if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
