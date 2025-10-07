@@ -48,7 +48,7 @@ enum RejectionCode {
     Unknown,
 }
 
-// Create a counter canister and charge it with cycles.
+// Create a counter canister and charge it with initial cycles.
 fn deploy_counter_canister(pic: &PocketIc) -> Principal {
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -793,7 +793,7 @@ async fn test_create_and_drop_instances_async() {
 async fn test_counter_canister_async() {
     let pic = pocket_ic::nonblocking::PocketIc::new().await;
 
-    // Create a counter canister and charge it with cycles.
+    // Create a counter canister and charge it with initial cycles.
     let canister_id = pic.create_canister().await;
     pic.add_cycles(canister_id, INIT_CYCLES).await;
     pic.install_canister(canister_id, counter_wasm(), vec![], None)
@@ -1317,7 +1317,7 @@ fn test_vetkd() {
 fn test_canister_http() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1373,7 +1373,7 @@ fn test_canister_http() {
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1433,7 +1433,7 @@ fn test_canister_http_with_transform() {
 fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1496,7 +1496,7 @@ fn test_canister_http_with_diverging_responses() {
 fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1544,7 +1544,7 @@ fn test_canister_http_with_one_additional_response() {
 fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 

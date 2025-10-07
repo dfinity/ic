@@ -26,7 +26,7 @@ const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MAX_ALLOWED_LOG_RECORD_SIZE);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 
-/// Truncates the content of a log record to ensure the total size of the record.
+/// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(records_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
     let max_record_size = std::cmp::min(records_capacity, MAX_ALLOWED_LOG_RECORD_SIZE);
     let max_content_size = max_record_size - std::mem::size_of::<CanisterLogRecord>();
