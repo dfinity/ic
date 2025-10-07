@@ -200,7 +200,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             node.node_id,
             node.get_ip_addr()
         );
-        wait_until_authentication_is_granted(&node.get_ip_addr(), BACKUP_USERNAME, &backup_auth);
+        wait_until_authentication_is_granted(
+            &logger,
+            &node.get_ip_addr(),
+            BACKUP_USERNAME,
+            &backup_auth,
+        );
     }
 
     info!(logger, "Ensure NNS subnet is functional");
@@ -320,10 +325,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             node.get_ip_addr()
         );
 
-        let _ = disable_ssh_access_to_node(&node, SSH_USERNAME, &admin_auth).unwrap();
+        let _ = disable_ssh_access_to_node(&logger, &node, SSH_USERNAME, &admin_auth).unwrap();
     }
     // Ensure we can still SSH into the DFINITY-owned node with the admin key
     wait_until_authentication_is_granted(
+        &logger,
         &dfinity_owned_node.get_ip_addr(),
         SSH_USERNAME,
         &admin_auth,
