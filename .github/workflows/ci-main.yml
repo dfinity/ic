@@ -340,6 +340,7 @@ jobs:
     timeout-minutes: 150
     steps:
       - *checkout
+      - run: nsc auth exchange-github-token
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
