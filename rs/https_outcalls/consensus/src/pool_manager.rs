@@ -368,16 +368,9 @@ impl CanisterHttpPoolManagerImpl {
                     self.requested_id_cache.borrow_mut().remove(&response.id);
                     self.metrics.shares_signed.inc();
 
-                    let Some(context) = active_contexts.get(&response.id) else {
-                        warn!(
-                            self.log,
-                            "Received a response for request ID {}, but could not find a matching context.",
-                            response.id
-                        );
-                        continue;
-                    };
-
-                    if matches!(context.replication, Replication::NonReplicated(_)) {
+                    if let Some(context) = active_contexts.get(&response.id)
+                        && matches!(context.replication, Replication::NonReplicated(_))
+                    {
                         if let Err(err) =
                             validate_response_size(&response, context.max_response_bytes)
                         {
@@ -1157,7 +1150,7 @@ pub mod test {
                         Height::from(0),
                     );
 
-                    assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+                    assert_matches!(&changes[0], CanisterHttpChangeAction::HandleInvalid(_, _));
                 }
 
                 // TEST 2: Non-replicated request artifact has a mismatched content hash.
