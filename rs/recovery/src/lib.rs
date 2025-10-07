@@ -18,7 +18,7 @@ use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
-    cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
+    cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
     player::StateParams,
 };
 use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
@@ -391,13 +391,14 @@ impl Recovery {
     }
 
     /// Return a [ReplayStep] to replay the downloaded state of the given
-    /// subnet and execute [SubCommand::AddAndBlessReplicaVersion].
+    /// subnet and execute [SubCommand::UpgradeSubnetToReplicaVersion].
     pub fn get_replay_with_upgrade_step(
         &self,
         subnet_id: SubnetId,
         upgrade_version: ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        add_and_bless_replica_version: bool,
         replay_until_height: Option<u64>,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
@@ -407,13 +408,18 @@ impl Recovery {
         Ok(self.get_replay_step(
             subnet_id,
             Some(ReplaySubCmd {
-                cmd: SubCommand::AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd {
+                cmd: SubCommand::UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd {
                     replica_version_id: upgrade_version.to_string(),
                     replica_version_value: version_record.clone(),
-                    update_subnet_record: true,
+                    add_and_bless_replica_version,
                 }),
                 descr: format!(
-                    r#" add-and-bless-replica-version --update-subnet-record "{upgrade_version}" {version_record}"#
+                    r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
+                    if add_and_bless_replica_version {
+                        " --and-and-bless-replica-version"
+                    } else {
+                        ""
+                    },
                 ),
             }),
             None,

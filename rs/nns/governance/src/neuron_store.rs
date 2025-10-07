@@ -719,11 +719,8 @@ impl NeuronStore {
                     proposal_id,
                     vote,
                 )?;
-                let should_record_voting_history = if is_known_neuron_voting_history_enabled() {
-                    stable_neuron_store.is_known_neuron(neuron_id)
-                } else {
-                    false
-                };
+                let should_record_voting_history = is_known_neuron_voting_history_enabled()
+                    && stable_neuron_store.is_known_neuron(neuron_id);
                 Ok(should_record_voting_history)
             },
         )?;
@@ -808,12 +805,13 @@ impl NeuronStore {
             .collect()
     }
 
-    // Returns whether the known neuron name already exists.
-    pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
+    // Returns the neuron id for the given known neuron name if it exists. Returns None if the known
+    // neuron name does not exist.
+    pub fn known_neuron_id_by_name(&self, known_neuron_name: &str) -> Option<NeuronId> {
         with_stable_neuron_indexes(|indexes| {
             indexes
                 .known_neuron()
-                .contains_known_neuron_name(known_neuron_name)
+                .known_neuron_id_by_name(known_neuron_name)
         })
     }
 

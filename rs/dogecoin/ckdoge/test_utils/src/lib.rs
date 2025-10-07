@@ -6,7 +6,10 @@ use ic_ckdoge_minter::lifecycle::init::{InitArgs, MinterArg, Network};
 use ic_icrc1_ledger::ArchiveOptions;
 use ic_management_canister_types::{CanisterId, CanisterSettings};
 use icrc_ledger_types::icrc1::account::Account;
-use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic::ErrorCode;
+use pocket_ic::RejectCode;
+use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -101,7 +104,7 @@ impl Setup {
                     cycles_for_archive_creation: Some(100_000_000_000_000),
                     max_transactions_per_response: None,
                 },
-                max_memo_length: None,
+                max_memo_length: Some(80),
                 feature_flags: None,
                 index_principal: None,
             };
@@ -142,6 +145,16 @@ fn minter_wasm() -> Vec<u8> {
 fn ledger_wasm() -> Vec<u8> {
     let wasm_path = std::env::var("IC_ICRC1_LEDGER_WASM_PATH").unwrap();
     std::fs::read(wasm_path).unwrap()
+}
+
+pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
+    assert_matches::assert_matches!(
+        result,
+        Err(RejectResponse {reject_code, reject_message, error_code, ..}) if
+            reject_code == RejectCode::CanisterError &&
+            reject_message.contains(message) &&
+            error_code == ErrorCode::CanisterCalledTrap
+    );
 }
 
 #[cfg(test)]

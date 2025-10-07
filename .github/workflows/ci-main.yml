@@ -488,9 +488,7 @@ jobs:
 
   python-ci-tests:
     name: Python CI Tests
-    runs-on: &dind-small-setup
-      labels: dind-small
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - *checkout
@@ -683,7 +681,8 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    runs-on: *dind-small-setup
+    runs-on: &dind-small-setup
+      labels: dind-small
     container: *container-setup
     timeout-minutes: 30
     steps:
@@ -745,8 +744,7 @@ jobs:
 
   check-pull-request-bazel-targets:
     name: Check PULL_REQUEST_BAZEL_TARGETS
-    runs-on: *dind-small-setup
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout

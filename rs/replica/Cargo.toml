@@ -81,7 +81,7 @@ harness = false
 
 [[bin]]
 name = "replica"
-path = "src/main.rs"
+path = "bin/replica/main.rs"
 
 [features]
 profiler = ["pprof"]

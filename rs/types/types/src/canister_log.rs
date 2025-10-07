@@ -8,6 +8,10 @@ use std::collections::VecDeque;
 /// The maximum allowed size of a canister log buffer.
 pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
+/// Upper bound on how many delta log sizes is retained.
+/// Prevents unbounded growth of `delta_log_sizes`.
+const DELTA_LOG_SIZES_CAP: usize = 100;
+
 fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
     let max_content_size =
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - std::mem::size_of::<CanisterLogRecord>();
@@ -102,8 +106,15 @@ impl Records {
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize, ValidateEq)]
 pub struct CanisterLog {
     next_idx: u64,
+
     #[validate_eq(CompareWithValidateEq)]
     records: Records,
+
+    /// Tracks the size of each delta log appended during a round.
+    /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
+    /// The collected sizes are used to expose per-round memory usage metrics
+    /// and the record is cleared at the end of the round.
+    delta_log_sizes: VecDeque<usize>,
 }
 
 impl CanisterLog {
@@ -112,6 +123,7 @@ impl CanisterLog {
         Self {
             next_idx,
             records: Records::from(records),
+            delta_log_sizes: VecDeque::new(),
         }
     }
 
@@ -120,6 +132,7 @@ impl CanisterLog {
         Self {
             next_idx,
             records: Default::default(),
+            delta_log_sizes: VecDeque::new(),
         }
     }
 
@@ -165,14 +178,30 @@ impl CanisterLog {
         self.next_idx += 1;
     }
 
-    /// Moves all the logs from `other` to `self`.
-    pub fn append(&mut self, other: &mut Self) {
+    /// Moves all the logs from `delta_log` to `self`.
+    pub fn append_delta_log(&mut self, delta_log: &mut Self) {
+        // Record the size of the appended delta log for metrics.
+        self.push_delta_log_size(delta_log.records.used_space());
+
         // Assume records sorted cronologically (with increasing idx) and
         // update the system state's next index with the last record's index.
-        if let Some(last) = other.records.get().back() {
+        if let Some(last) = delta_log.records.get().back() {
             self.next_idx = last.idx + 1;
         }
-        self.records.append(&mut other.records);
+        self.records.append(&mut delta_log.records);
+    }
+
+    /// Records the size of the appended delta log.
+    fn push_delta_log_size(&mut self, size: usize) {
+        if self.delta_log_sizes.len() >= DELTA_LOG_SIZES_CAP {
+            self.delta_log_sizes.pop_front();
+        }
+        self.delta_log_sizes.push_back(size);
+    }
+
+    /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
+    pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
+        self.delta_log_sizes.drain(..).collect()
     }
 }
 
@@ -295,7 +324,7 @@ mod tests {
         delta.add_record(202, b"delta #2".to_vec());
 
         // Act.
-        main.append(&mut delta);
+        main.append_delta_log(&mut delta);
 
         // Assert.
         assert_eq!(
@@ -329,7 +358,7 @@ mod tests {
         delta.add_record(202, b"delta #2".to_vec());
 
         // Act.
-        main.append(&mut delta);
+        main.append_delta_log(&mut delta);
 
         // Assert main log had data loss.
         assert_eq!(
@@ -342,5 +371,57 @@ mod tests {
                 (5, 202, b"delta #2"),
             ]))
         );
+    }
+
+    #[test]
+    fn test_canister_log_record_used_space() {
+        let (size_a, size_b, size_c) = (3 * 48, 3 * 48, 4 * 48);
+        // Batch A.
+        let mut main = CanisterLog::new(
+            3,
+            canister_log_records(&[
+                (0, 100, b"main_ #0"),
+                (1, 101, b"main_ #1"),
+                (2, 102, b"main_ #2"),
+            ]),
+        );
+        assert_eq!(main.used_space(), size_a);
+
+        // Batch B.
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        delta.add_record(200, b"delta #0".to_vec());
+        delta.add_record(201, b"delta #1".to_vec());
+        delta.add_record(202, b"delta #2".to_vec());
+        assert_eq!(delta.used_space(), size_b);
+        main.append_delta_log(&mut delta);
+
+        // Batch C.
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        delta.add_record(300, b"delta #3".to_vec());
+        delta.add_record(301, b"delta #4".to_vec());
+        delta.add_record(302, b"delta #5".to_vec());
+        delta.add_record(303, b"delta #6".to_vec());
+        assert_eq!(delta.used_space(), size_c);
+        main.append_delta_log(&mut delta);
+
+        // Assert main log has all records and correct used space.
+        assert_eq!(
+            main.records(),
+            &VecDeque::from(canister_log_records(&[
+                (0, 100, b"main_ #0"),
+                (1, 101, b"main_ #1"),
+                (2, 102, b"main_ #2"),
+                (3, 200, b"delta #0"),
+                (4, 201, b"delta #1"),
+                (5, 202, b"delta #2"),
+                (6, 300, b"delta #3"),
+                (7, 301, b"delta #4"),
+                (8, 302, b"delta #5"),
+                (9, 303, b"delta #6"),
+            ]))
+        );
+        assert_eq!(main.take_delta_log_sizes(), vec![size_b, size_c]);
+        assert_eq!(main.take_delta_log_sizes(), Vec::<usize>::new()); // Second call returns empty.
+        assert_eq!(main.used_space(), size_a + size_b + size_c);
     }
 }
