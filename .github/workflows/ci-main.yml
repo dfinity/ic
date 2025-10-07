@@ -745,8 +745,7 @@ jobs:
 
   check-pull-request-bazel-targets:
     name: Check PULL_REQUEST_BAZEL_TARGETS
-    runs-on: *dind-small-setup
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout
