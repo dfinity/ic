@@ -3578,6 +3578,7 @@ dependencies = [
  "escargot",
  "ethers-core",
  "ethnum",
+ "evm_rpc_client",
  "evm_rpc_types",
  "exec",
  "eyre",
@@ -4473,10 +4474,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "evm_rpc_types"
-version = "2.0.0"
+name = "evm_rpc_client"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c9ed339a043ac9c0031bffdd89155d34b3d76f169a92eee16a3d5a5a8ca1bfc"
+checksum = "55e42acb572ad1167d4cdbd95fa23bea119a265b2df8588ca7214c11bddfde68"
+dependencies = [
+ "async-trait",
+ "candid",
+ "evm_rpc_types",
+ "ic-cdk",
+ "ic-error-types",
+ "serde",
+ "serde_json",
+ "strum 0.27.1",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "evm_rpc_types"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd456f71555aa2a0d99637037b30cd3d9d2899b8cf39d3dce21e248989d6f132"
 dependencies = [
  "candid",
  "canlog",
