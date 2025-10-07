@@ -3355,20 +3355,36 @@ impl Governance {
                 // 2. or if the followee neuron is a private neuron, they share a controller.
                 // If in the list of followees, there is any follow relationship
                 // the doesn't adhere to the aforementioned rules, return a GovernanceError.
-                let is_valid_followees = new_followees.followees.iter().all(|followee| {
-                    if let Ok(followee_neuron) = self.with_neuron(followee, |neuron| neuron.clone())
-                    {
-                        followee_neuron.visibility() == Visibility::Public
-                            || followee_neuron.controller() == controller
-                            || hotkeys.contains(&followee_neuron.controller())
+                let (mut invalid_followees, mut error_message) = (0_u32, String::new());
+
+                for follow in &new_followees.followees {
+                    if let Ok(follow_neuron) = self.with_neuron(follow, |neuron| neuron.clone()) {
+                        if follow_neuron.visibility() == Visibility::Public
+                            || follow_neuron.controller() == controller
+                            || hotkeys.contains(&follow_neuron.controller())
+                        {
+                            continue;
+                        } else {
+                            invalid_followees += 1;
+                            error_message.push_str(&format!(
+                                "{}: Not authorized to follow private neuron: {follow:?}\n\t\
+                                To follow a private neuron, you must be the controller or a hotkey of it.\n",
+                                invalid_followees
+                            ));
+                        }
                     } else {
-                        false
+                        invalid_followees += 1;
+                        error_message.push_str(&format!(
+                            "{}: Followee ({follow:?}) does not exist.\n",
+                            invalid_followees
+                        ));
                     }
-                });
-                if !is_valid_followees {
+                }
+
+                if invalid_followees > 0 {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
-                        "One or more follow relationships are not valid.",
+                        error_message,
                     ));
                 }
             }
