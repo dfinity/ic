@@ -127,7 +127,7 @@ use pocket_ic::common::rest::{
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
-use registry_canister::init::RegistryCanisterInitPayload;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::cmp::max;
@@ -1039,7 +1039,7 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, REGISTRY_CANISTER_ID);
 
             // Install the registry canister.
-            let registry_init_payload = RegistryCanisterInitPayload { mutations: vec![] };
+            let registry_init_payload = RegistryCanisterInitPayloadBuilder::new().build();
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(

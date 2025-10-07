@@ -1,10 +1,8 @@
-use assert_matches::assert_matches;
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError};
 use ic_ckdoge_minter_test_utils::{
-    DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+    DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
-use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 
 #[test]
 fn should_fail_withdrawal() {
@@ -16,15 +14,12 @@ fn should_fail_withdrawal() {
         from_subaccount: None,
     };
 
-    assert_matches!(
+    assert_trap(
         minter.update_call_retrieve_doge_with_approval(
             Principal::anonymous(),
-            &correct_withdrawal_args
+            &correct_withdrawal_args,
         ),
-        Err(RejectResponse {reject_code, reject_message, error_code, ..}) if
-            reject_code == RejectCode::CanisterError &&
-            reject_message.contains("anonymous caller not allowed") &&
-            error_code == ErrorCode::CanisterCalledTrap
+        "anonymous caller not allowed",
     );
 
     assert_eq!(
@@ -48,11 +43,84 @@ fn should_fail_withdrawal() {
                 ..correct_withdrawal_args.clone()
             },
         ),
-        // TODO XC-495 Fix me!
-        // The error should be RetrieveDogeWithApprovalError::InsufficientAllowance, since the user
-        // did not allow the minter to burn.
-        Err(RetrieveDogeWithApprovalError::MalformedAddress(
-            "ckBTC supports only P2WPKH and P2PKH addresses".to_string()
-        ))
+        Err(RetrieveDogeWithApprovalError::InsufficientAllowance { allowance: 0 })
     )
+
+    // TODO XC-495: create sufficient allowance (which requires funds to pay for the ledger fee)
+    // and test failure when insufficient funds
+}
+
+mod get_doge_address {
+    use candid::Principal;
+    use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
+    use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, assert_trap};
+
+    #[test]
+    fn should_fail_to_get_doge_address() {
+        let setup = Setup::default();
+        let minter = setup.minter();
+
+        assert_trap(
+            minter.update_call_get_doge_address(
+                USER_PRINCIPAL,
+                &GetDogeAddressArgs {
+                    owner: Some(Principal::anonymous()),
+                    subaccount: None,
+                },
+            ),
+            "owner must be non-anonymous",
+        );
+
+        assert_trap(
+            minter.update_call_get_doge_address(
+                Principal::anonymous(),
+                &GetDogeAddressArgs {
+                    owner: None,
+                    subaccount: None,
+                },
+            ),
+            "owner must be non-anonymous",
+        );
+    }
+
+    #[test]
+    fn should_get_doge_address() {
+        let setup = Setup::default();
+        let minter = setup.minter();
+
+        let address_from_caller = minter.get_doge_address(
+            USER_PRINCIPAL,
+            &GetDogeAddressArgs {
+                owner: None,
+                subaccount: None,
+            },
+        );
+
+        let address_with_owner = minter.get_doge_address(
+            Principal::anonymous(),
+            &GetDogeAddressArgs {
+                owner: Some(USER_PRINCIPAL),
+                subaccount: None,
+            },
+        );
+
+        assert_eq!(address_from_caller, address_with_owner);
+        assert_eq!(
+            address_from_caller, "D95u8BQWiN21ER5LqrNwSk4WDVe25WHWHT",
+            "BUG: result of public key derivation changed!"
+        );
+
+        let address_with_subaccount = minter.get_doge_address(
+            USER_PRINCIPAL,
+            &GetDogeAddressArgs {
+                owner: None,
+                subaccount: Some([42_u8; 32]),
+            },
+        );
+        assert_ne!(address_from_caller, address_with_subaccount);
+        assert_eq!(
+            address_with_subaccount, "DPZ2c7wS53i9nGrMh25iCZABdPs718NRA9",
+            "BUG: result of public key derivation changed!"
+        );
+    }
 }

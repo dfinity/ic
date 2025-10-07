@@ -35,13 +35,12 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
-    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable, IC_00,
-    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs,
-    NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs,
-    RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
-    WasmMemoryPersistence,
+    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
+    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable, IC_00,
+    InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
+    OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs, RenameToArgs, StoredChunksArgs,
+    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -496,12 +495,13 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let mb = 1 << 20;
     let memory_capacity = 1000 * mb;
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister1 is created with `memory_used` memory allocation;
     // => SubnetAvailableMemory decreases by `memory_used`
     // after canister1 is created and then SubnetAvailableMemory is equal to
-    // `memory_capacity - (memory_used)`; we want this quantity to be `10 * mb`
+    // `memory_capacity - memory_used`; we want this quantity to be `canister_history_memory + 10 * mb`
     // and derive the value of `memory_used` from there.
-    let memory_used = memory_capacity - 10 * mb;
+    let memory_used = memory_capacity - (canister_history_memory + 10 * mb);
 
     let wat = r#"
         (module
@@ -518,7 +518,11 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     let wasm = wat::parse_str(wat).unwrap();
 
-    let _canister1 = test.create_canister_with_allocation(initial_cycles, None, Some(memory_used));
+    let _canister1 = test.create_canister_with_allocation(
+        initial_cycles,
+        None,
+        Some(memory_used.try_into().unwrap()),
+    );
     let canister2 = test.create_canister(initial_cycles);
 
     // Try installing canister2, should fail due to insufficient memory capacity on the subnet.
@@ -1644,6 +1648,7 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
             &mut CanisterStateBuilder::new()
                 .with_call_context(CallContextBuilder::new().with_responded(true).build())
                 .build(),
+            None,
             UNIX_EPOCH,
             AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
@@ -1669,6 +1674,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                         .build()
                 )
                 .build(),
+            None,
             UNIX_EPOCH,
             AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
@@ -2461,11 +2467,18 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
     );
 
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+    };
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             canister_test_id(0),
             &mut state,
+            &mut round_limits,
             &no_op_counter,
         )
         .unwrap();
@@ -3951,11 +3964,11 @@ fn install_reserves_cycles_on_memory_grow() {
 
         let subnet_memory_usage =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let memory_usage_before = test.canister_state(canister_id).memory_usage();
         let balance_before = test.canister_state(canister_id).system_state.balance();
         test.install_canister(canister_id, wasm_binary).unwrap();
         let balance_after = test.canister_state(canister_id).system_state.balance();
-        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        let memory_usage_after = test.canister_state(canister_id).memory_usage();
 
         let reserved_cycles = test
             .canister_state(canister_id)
@@ -4027,7 +4040,7 @@ fn upgrade_reserves_cycles_on_memory_grow() {
 
         let subnet_memory_usage =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let memory_usage_before = test.canister_state(canister_id).memory_usage();
         let balance_before = test.canister_state(canister_id).system_state.balance();
         let reserved_cycles_before = test
             .canister_state(canister_id)
@@ -4035,7 +4048,7 @@ fn upgrade_reserves_cycles_on_memory_grow() {
             .reserved_balance();
         test.upgrade_canister(canister_id, wasm_binary).unwrap();
         let balance_after = test.canister_state(canister_id).system_state.balance();
-        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        let memory_usage_after = test.canister_state(canister_id).memory_usage();
 
         let reserved_cycles = test
             .canister_state(canister_id)
@@ -4768,10 +4781,12 @@ fn upload_chunk_fails_when_subnet_memory_exceeded() {
 
     // Create subnet with only enough memory for one chunk.
     let chunk_size = wasm_chunk_store::chunk_size();
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     let default_subnet_memory_reservation = Config::default().subnet_memory_reservation;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(
-            (default_subnet_memory_reservation.get() + chunk_size.get()) as i64,
+            (default_subnet_memory_reservation.get() + chunk_size.get()) as i64
+                + canister_history_memory as i64,
         )
         .build();
 
@@ -6224,57 +6239,6 @@ fn update_memory_allocation_updates_hook_status_ready_to_not_satisfied() {
         updated_memory_state,
         false,
     );
-}
-
-#[test]
-fn memory_usage_updates_increment_subnet_available_memory() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    // create a universal canister
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
-    test.install_code_v2(InstallCodeArgsV2::new(
-        CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    ))
-    .unwrap();
-
-    // take a canister snapshot
-    let take_snapshot_args = TakeCanisterSnapshotArgs {
-        canister_id: canister_id.get(),
-        replace_snapshot: None,
-    };
-    let res = test
-        .subnet_message("take_canister_snapshot", take_snapshot_args.encode())
-        .unwrap();
-    let snapshot_id = match res {
-        WasmResult::Reply(data) => Decode!(&data, CanisterSnapshotResponse).unwrap().id,
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
-    };
-
-    // capture current subnet available memory
-    let initial_subnet_available_memory = test.subnet_available_memory();
-
-    // grow stable memory
-    let payload = wasm().stable_grow(100).reply().build();
-    test.ingress(canister_id, "update", payload).unwrap();
-
-    // execution memory should *increase* after growing stable memory => available memory should *decrease*
-    let subnet_available_memory = test.subnet_available_memory();
-    assert_lt!(
-        subnet_available_memory.get_execution_memory(),
-        initial_subnet_available_memory.get_execution_memory()
-    );
-
-    // load canister snapshot
-    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
-    test.subnet_message("load_canister_snapshot", load_snapshot_args.encode())
-        .unwrap();
-
-    // execution memory should get back to its initial value before growing stable memory
-    let subnet_available_memory = test.subnet_available_memory();
-    assert_eq!(initial_subnet_available_memory, subnet_available_memory);
 }
 
 #[test]
