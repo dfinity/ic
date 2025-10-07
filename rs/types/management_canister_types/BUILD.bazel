@@ -101,6 +101,7 @@ rust_test(
 did_git_test(
     name = "management_canister_did_git_test",
     did = ":tests/ic.did",
+    tags = ["didc"],  # to be able to override this test using the GitHub PR label `CI_OVERRIDE_DIDC_CHECK`
 )
 
 rust_test(
