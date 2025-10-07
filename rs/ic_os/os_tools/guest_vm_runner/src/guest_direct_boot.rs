@@ -226,13 +226,21 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    /// Builder for creating test setups with fluent interface
-    struct TestSetupBuilder {
+    struct GrubConf {
         boot_alternative: Option<BootAlternative>,
         boot_cycle: Option<BootCycle>,
+    }
+
+    #[derive(Clone)]
+    struct ArgsConf {
         boot_args_a: String,
         boot_args_b: String,
-        create_boot_args_files: bool,
+    }
+
+    /// Builder for creating test setups with fluent interface
+    struct TestSetupBuilder {
+        grub_conf: Option<GrubConf>,
+        args_conf: Option<ArgsConf>,
         create_kernel_files: bool,
         create_ovmf_sev_file: bool,
     }
@@ -240,11 +248,14 @@ mod tests {
     impl TestSetupBuilder {
         fn new() -> Self {
             Self {
-                boot_alternative: None,
-                boot_cycle: None,
-                boot_args_a: "args_a".to_string(),
-                boot_args_b: "args_b".to_string(),
-                create_boot_args_files: true,
+                grub_conf: Some(GrubConf {
+                    boot_alternative: None,
+                    boot_cycle: None,
+                }),
+                args_conf: Some(ArgsConf {
+                    boot_args_a: "args_a".to_string(),
+                    boot_args_b: "args_b".to_string(),
+                }),
                 create_kernel_files: true,
                 create_ovmf_sev_file: true,
             }
@@ -252,22 +263,31 @@ mod tests {
 
         fn with_grubenv(
             mut self,
-            boot_alternative: BootAlternative,
-            boot_cycle: BootCycle,
+            boot_alternative: Option<BootAlternative>,
+            boot_cycle: Option<BootCycle>,
         ) -> Self {
-            self.boot_alternative = Some(boot_alternative);
-            self.boot_cycle = Some(boot_cycle);
+            self.grub_conf = Some(GrubConf {
+                boot_alternative,
+                boot_cycle,
+            });
+            self
+        }
+
+        fn without_grubenv(mut self) -> Self {
+            self.grub_conf = None;
             self
         }
 
         fn with_boot_args(mut self, args_a: &str, args_b: &str) -> Self {
-            self.boot_args_a = args_a.to_string();
-            self.boot_args_b = args_b.to_string();
+            self.args_conf = Some(ArgsConf {
+                boot_args_a: args_a.to_string(),
+                boot_args_b: args_b.to_string(),
+            });
             self
         }
 
         fn without_boot_args_files(mut self) -> Self {
-            self.create_boot_args_files = false;
+            self.args_conf = None;
             self
         }
 
@@ -282,19 +302,21 @@ mod tests {
         }
 
         fn build(self) -> TestSetup {
-            let grub_partition = create_grub_partition(self.boot_alternative, self.boot_cycle);
+            let grub_partition = create_grub_partition(self.grub_conf);
 
             let a_boot_partition = create_boot_partition(
-                &self.boot_args_a,
-                "SHOULD NOT BE USED",
-                self.create_boot_args_files,
+                self.args_conf.as_ref().map(|v| ArgsConf {
+                    boot_args_b: "SHOULD NOT BE USED".to_string(),
+                    ..v.clone()
+                }),
                 self.create_kernel_files,
                 self.create_ovmf_sev_file,
             );
             let b_boot_partition = create_boot_partition(
-                "SHOULD NOT BE USED",
-                &self.boot_args_b,
-                self.create_boot_args_files,
+                self.args_conf.map(|v| ArgsConf {
+                    boot_args_a: "SHOULD NOT BE USED".to_string(),
+                    ..v
+                }),
                 self.create_kernel_files,
                 self.create_ovmf_sev_file,
             );
@@ -341,35 +363,40 @@ mod tests {
         }
     }
 
-    fn create_grub_partition(
-        boot_alternative: Option<BootAlternative>,
-        boot_cycle: Option<BootCycle>,
-    ) -> Arc<TempDir> {
+    fn create_grub_partition(grub_conf: Option<GrubConf>) -> Arc<TempDir> {
         let grub_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
         let grubenv_path = grub_dir.path().join("grubenv");
 
-        let grubenv = GrubEnv {
-            boot_alternative: boot_alternative.ok_or(GrubEnvVariableError::Undefined),
-            boot_cycle: boot_cycle.ok_or(GrubEnvVariableError::Undefined),
-            ..GrubEnv::default()
-        };
-        grubenv
-            .write_to_file(&grubenv_path)
-            .expect("Failed to write grubenv");
+        if let Some(GrubConf {
+            boot_alternative,
+            boot_cycle,
+        }) = grub_conf
+        {
+            let grubenv = GrubEnv {
+                boot_alternative: boot_alternative.ok_or(GrubEnvVariableError::Undefined),
+                boot_cycle: boot_cycle.ok_or(GrubEnvVariableError::Undefined),
+                ..GrubEnv::default()
+            };
+            grubenv
+                .write_to_file(&grubenv_path)
+                .expect("Failed to write grubenv");
+        }
 
         grub_dir
     }
 
     fn create_boot_partition(
-        boot_args_a: &str,
-        boot_args_b: &str,
-        create_boot_args: bool,
+        args_conf: Option<ArgsConf>,
         create_kernel_files: bool,
         create_ovmf_sev_file: bool,
     ) -> Arc<TempDir> {
         let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
 
-        if create_boot_args {
+        if let Some(ArgsConf {
+            boot_args_a,
+            boot_args_b,
+        }) = args_conf
+        {
             let mut boot_args_file = File::create(boot_dir.path().join("boot_args")).unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_A=\"{boot_args_a}\"").unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_B=\"{boot_args_b}\"").unwrap();
@@ -390,7 +417,7 @@ mod tests {
     #[tokio::test]
     async fn test_boot_alternative_a() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
             .build();
 
         let direct_boot = setup
@@ -407,7 +434,7 @@ mod tests {
     #[tokio::test]
     async fn test_boot_alternative_b() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
             .with_boot_args("args_a", "args_b extra")
             .build();
 
@@ -438,7 +465,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_stable_no_change() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
             .build();
 
         setup
@@ -453,7 +480,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_install_to_stable() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Install)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Install))
             .build();
 
         setup
@@ -468,7 +495,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_firstboot_to_failsafecheck() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::FirstBoot)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::FirstBoot))
             .build();
 
         setup
@@ -483,7 +510,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_failsafecheck_to_stable_opposite() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::FailsafeCheck)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::FailsafeCheck))
             .build();
 
         setup
@@ -498,7 +525,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_failsafecheck_b_to_stable_a() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::FailsafeCheck)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::FailsafeCheck))
             .build();
 
         setup
@@ -513,7 +540,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_grubenv_refresh_if_upgrade() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::FirstBoot)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::FirstBoot))
             .build();
 
         setup
@@ -544,8 +571,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_boot_partition() {
-        let grub_partition =
-            create_grub_partition(Some(BootAlternative::A), Some(BootCycle::Stable));
+        let grub_partition = create_grub_partition(Some(GrubConf {
+            boot_alternative: Some(BootAlternative::A),
+            boot_cycle: Some(BootCycle::Stable),
+        }));
         let mut partitions = HashMap::new();
         partitions.insert(GRUB_PARTITION_UUID, grub_partition);
         let provider = MockPartitionProvider::new(partitions);
@@ -563,7 +592,7 @@ mod tests {
     #[tokio::test]
     async fn test_missing_boot_args_file() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::FailsafeCheck)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::FailsafeCheck))
             .without_boot_args_files()
             .build();
 
@@ -582,7 +611,7 @@ mod tests {
     #[tokio::test]
     async fn test_missing_kernel_file() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
             .without_kernel_files()
             .build();
 
@@ -599,7 +628,7 @@ mod tests {
     #[tokio::test]
     async fn test_missing_ovmf_file() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
             .without_ovmf_sev()
             .build();
 
@@ -613,7 +642,7 @@ mod tests {
     #[tokio::test]
     async fn test_opposite_boot_alternative_in_upgrade_vm() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
             .with_boot_args("args_a", "args_b")
             .build();
 
