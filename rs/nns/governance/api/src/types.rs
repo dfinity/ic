@@ -4390,3 +4390,18 @@ pub struct MaturityDisbursement {
     /// The account identifier to disburse the maturity to.
     pub account_identifier_to_disburse_to: Option<AccountIdentifier>,
 }
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+)]
+pub struct GetNeuronIndexRequest {
+    exclusive_start_neuron_id: Option<NeuronId>,
+    page_size: Option<u32>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+)]
+pub struct GetNeuronIndexResponse {
+    neurons: Vec<Neuron>,
+}

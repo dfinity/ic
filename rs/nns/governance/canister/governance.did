@@ -791,6 +791,15 @@ type NeuronInFlightCommand = record {
   timestamp : nat64;
 };
 
+type GetNeuronIndexRequest = record {
+  exclusive_start_neuron_id: opt NeuronId;
+  page_size: opt nat32;
+};
+
+type GetNeuronIndexResponse = record {
+  neurons: vec Neuron;
+};
+
 // A limit view of Neuron that allows some aspects of all neurons to be read by
 // anyone (i.e. without having to be the neuron's controller nor one of its
 // hotkeys).
@@ -1351,6 +1360,7 @@ service : (Governance) -> {
     ) query;
   get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;
+  get_neuron_index: (GetNeuronIndexRequest) -> (GetNeuronIndexResponse) query;
   get_neuron_info : (nat64) -> (Result_5) query;
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_5,
