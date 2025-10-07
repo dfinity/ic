@@ -563,8 +563,7 @@ mod tests {
                 )
                 .unwrap(),
             )
-            .err()
-            .expect("Expected reservation2 to error out");
+            .expect_err("Expected reservation2 to error out");
 
         assert_eq!(
             maybe_reservation2,
@@ -691,7 +690,7 @@ mod tests {
             maybe_reservation,
             SwapError::ProviderRateLimitedOnSubnet {
                 subnet_id: subnet_2,
-                caller: caller
+                caller
             }
         );
 

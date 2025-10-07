@@ -301,9 +301,7 @@ async fn subnet_rate_limited() {
     )
     .await;
 
-    let expected_err = SwapError::SubnetRateLimited {
-        subnet_id: subnet_id,
-    };
+    let expected_err = SwapError::SubnetRateLimited { subnet_id };
 
     assert!(
         response
@@ -389,9 +387,7 @@ async fn subnet_rate_limit_passed() {
     )
     .await;
 
-    let expected_err = SwapError::SubnetRateLimited {
-        subnet_id: subnet_id,
-    };
+    let expected_err = SwapError::SubnetRateLimited { subnet_id };
 
     assert!(
         response
