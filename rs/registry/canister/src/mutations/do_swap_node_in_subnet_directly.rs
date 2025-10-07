@@ -1,7 +1,5 @@
 use crate::common::LOG_PREFIX;
-use crate::mutations::node_management::common::{
-    get_node_provider_id_for_node_id, get_node_provider_id_for_operator_id,
-};
+use crate::mutations::node_management::common::get_node_provider_id_for_node_id;
 use crate::rate_limits::{
     commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
 };
@@ -59,7 +57,7 @@ impl Registry {
         let node_provider_id = get_node_provider_id_for_node_id(self, old_node_id).unwrap();
 
         let reservation = try_reserve_node_provider_op_capacity(now, node_provider_id, 1)
-            .map_err(|e| SwapError::RateLimiterError(e))?;
+            .map_err(SwapError::RateLimiterError)?;
 
         //TODO(DRE-547): Check if the feature is allowed on the target subnet and for the caller
 
@@ -168,6 +166,7 @@ impl SwapNodeInSubnetDirectlyPayload {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::{
@@ -186,14 +185,12 @@ mod tests {
         },
         registry::Registry,
     };
-    use ic_base_types::NodeId;
     use ic_nervous_system_time_helpers::now_system_time;
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
     use ic_registry_keys::{
         make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
     };
     use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
-    use ic_types::PrincipalId;
     use ic_types::{NodeId, PrincipalId, SubnetId};
     use maplit::btreemap;
     use std::collections::BTreeMap;
@@ -401,7 +398,7 @@ mod tests {
 
         // First make a call and expect to fail because
         // the feature is not enabled for this caller.
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id);
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledForCaller {
             caller: operator_id,
         };
@@ -412,7 +409,7 @@ mod tests {
 
         // Enable the feature for the caller
         test_set_swapping_whitelisted_callers(vec![operator_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id);
+        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
         // Expect the first next error which is the missing
         // subnet in the registry.
         assert!(response.is_ok(), "Expected OK but got {response:?}");
@@ -450,7 +447,7 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id);
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id };
 
         // First call when the feature isn't enabled on the subnet.
@@ -461,7 +458,7 @@ mod tests {
 
         // Now enable the feature and call again.
         test_set_swapping_enabled_subnets(vec![subnet_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id);
+        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected the result to be OK but got {response:?}"
@@ -500,7 +497,7 @@ mod tests {
         test_set_swapping_whitelisted_callers(vec![operator_id]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
-        let response = registry.swap_nodes_inner(payload, operator_id);
+        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
