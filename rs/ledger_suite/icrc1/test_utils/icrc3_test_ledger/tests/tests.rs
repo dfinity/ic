@@ -120,9 +120,10 @@ fn archive_blocks(
         &env.execute_ingress(ledger_id, "archive_blocks", Encode!(&archive_args).unwrap())
             .expect("failed to archive blocks")
             .bytes(),
-        u64
+        Result<u64, String>
     )
     .expect("failed to decode archive_blocks response")
+    .expect("archiving blocks operation failed")
 }
 
 fn check_legacy_get_blocks(

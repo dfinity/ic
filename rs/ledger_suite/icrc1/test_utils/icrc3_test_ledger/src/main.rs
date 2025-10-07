@@ -81,7 +81,7 @@ pub fn add_block_with_id(block_with_id: BlockWithId) -> AddBlockResult {
 /// Archive the oldest `args.num_blocks` to the archive at given `args.archive_id`.
 #[candid_method(update)]
 #[update]
-pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
+pub async fn archive_blocks(args: ArchiveBlocksArgs) -> Result<u64, String> {
     let mut blocks_to_archive = vec![];
 
     BLOCKS.with(|blocks| {
@@ -92,7 +92,7 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
     });
 
     if blocks_to_archive.is_empty() {
-        return 0;
+        return Ok(0);
     }
 
     let start_index = blocks_to_archive.first().unwrap().0;
@@ -128,14 +128,13 @@ pub async fn archive_blocks(args: ArchiveBlocksArgs) -> u64 {
                 block: block.1,
             })
             .await
-            .expect("failed to add block to archive")
+            .map_err(|e| e.to_string())?
             .candid::<AddBlockResult>()
-            .expect("Could not decode AddBlockResult")
-            .expect("adding block failed");
+            .map_err(|e| e.to_string())??;
         assert_eq!(result, Nat::from(block_id));
     }
 
-    archive_blocks_len
+    Ok(archive_blocks_len)
 }
 
 #[query]
