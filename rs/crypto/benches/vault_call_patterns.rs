@@ -60,7 +60,7 @@ fn benchmark_signature_scenario<M: Measurement, R: Rng + CryptoRng>(
     group.bench_function(&scenario.name, |bench| {
         bench.iter_batched_ref(
             || {
-                let input = fixed_input_of_size(scenario.request_bytes);
+                let input = random_input_of_size(scenario.request_bytes, rng);
                 (input, scenario.response_bytes)
             },
             |(input, response_bytes)| {
@@ -139,6 +139,6 @@ fn random_input_of_size<R: Rng + CryptoRng>(bytes_size: usize, rng: &mut R) -> V
     buffer
 }
 
-fn fixed_input_of_size(bytes_size: usize) -> Vec<u8> {
-    vec![107; bytes_size]
-}
+// fn fixed_input_of_size(bytes_size: usize) -> Vec<u8> {
+//     vec![107; bytes_size]
+// }
