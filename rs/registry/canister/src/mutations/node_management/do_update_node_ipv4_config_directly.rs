@@ -1,6 +1,5 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, get_node_operator_record, get_node_provider_id_for_operator_id,
-    node_exists_with_ipv4,
+    get_node_operator_id_for_node, get_node_provider_id_for_operator_id, node_exists_with_ipv4,
 };
 use crate::{common::LOG_PREFIX, mutations::common::node_exists_or_panic, registry::Registry};
 
@@ -356,7 +355,7 @@ mod tests {
         expected = "There is already at least one other node with the same IPv4 address"
     )]
     fn should_panic_if_other_node_has_same_ipv4() {
-        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
+        let (mut registry, node_ids, _, _) = setup_registry_for_test();
 
         let node_id_1 = node_ids[0];
         let node_id_2 = node_ids[1];

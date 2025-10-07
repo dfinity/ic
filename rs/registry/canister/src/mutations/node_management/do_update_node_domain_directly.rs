@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, get_node_operator_record, get_node_provider_id_for_operator_id,
+    get_node_operator_id_for_node, get_node_provider_id_for_operator_id,
 };
 use crate::rate_limits::{
     commit_node_provider_op_reservation, try_reserve_node_provider_op_capacity,
@@ -137,8 +137,6 @@ mod tests {
 
         registry.do_add_node_operator(payload);
         let (node_id, _dkg_pks) = node_ids_and_dkg_pks.into_iter().next().unwrap();
-
-        let node = registry.get_node_or_panic(node_id);
 
         (registry, node_id, node_operator_id, node_provider_id)
     }
