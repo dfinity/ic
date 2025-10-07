@@ -200,7 +200,7 @@ fn test_known_neurons() {
         KnownNeuron {
             id: Some(NeuronId { id: neuron_id_3.id }),
             known_neuron_data: Some(KnownNeuronData {
-                name: "NeuronThree (changed)".to_string(),
+                name: "NeuronThree".to_string(),
                 description: Some("Third test neuron".to_string()),
                 links: Some(vec!["https://example.com".to_string()]),
             }),
@@ -214,7 +214,7 @@ fn test_known_neurons() {
             known_neurons: vec![KnownNeuron {
                 id: Some(NeuronId { id: neuron_id_3.id }),
                 known_neuron_data: Some(KnownNeuronData {
-                    name: "NeuronThree (changed)".to_string(),
+                    name: "NeuronThree".to_string(),
                     description: Some("Third test neuron".to_string()),
                     links: Some(vec!["https://example.com".to_string()]),
                 }),
@@ -227,7 +227,7 @@ fn test_known_neurons() {
             .known_neuron_data
             .unwrap(),
         KnownNeuronData {
-            name: "NeuronThree (changed)".to_string(),
+            name: "NeuronThree".to_string(),
             description: Some("Third test neuron".to_string()),
             links: Some(vec!["https://example.com".to_string()]),
         }

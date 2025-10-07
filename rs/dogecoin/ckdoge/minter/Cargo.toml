@@ -12,17 +12,21 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+bs58 = "0.5.0"
 candid = { workspace = true }
 candid_parser = { workspace = true }
+hex = { workspace = true }
 ic-cdk = { workspace = true }
 ic-ckbtc-minter = { path = "../../../bitcoin/ckbtc/minter" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 serde = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
 pocket-ic = {path = "../../../../packages/pocket-ic"}
+serde_json = { workspace = true }
 
 [features]
 self_check = []
