@@ -459,6 +459,28 @@ impl SubnetAvailableMemory {
         Ok(())
     }
 
+    /// Updates (increments/decrements) the available execution memory
+    /// by the given number of bytes.
+    /// This function should only be used to account for canister history
+    /// in the available execution memory.
+    /// This is because we do not want an operation tracked in canister history
+    /// to fail due to insufficient available execution memory
+    /// to update canister history.
+    /// Note that the available memory can become negative after this change.
+    pub fn update_execution_memory_unchecked(
+        &mut self,
+        execution_memory_change: SubnetAvailableExecutionMemoryChange,
+    ) {
+        match execution_memory_change {
+            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
+                self.execution_memory -= allocated_bytes.get() as i64;
+            }
+            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
+                self.execution_memory += deallocated_bytes.get() as i64;
+            }
+        }
+    }
+
     pub fn increment(
         &mut self,
         execution_amount: NumBytes,
@@ -495,6 +517,19 @@ impl SubnetAvailableMemory {
         self.guaranteed_response_message_memory -= guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_amount.get() as i64;
     }
+}
+
+/// Represents an update (allocation/deallocation)
+/// of the subnet available execution memory
+/// by the given number of bytes.
+/// This enum should only be used to account for canister history
+/// in the subnet available execution memory.
+/// This is because we do not want an operation tracked in canister history
+/// to fail due to insufficient available execution memory
+/// to update canister history.
+pub enum SubnetAvailableExecutionMemoryChange {
+    Allocated(NumBytes),
+    Deallocated(NumBytes),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

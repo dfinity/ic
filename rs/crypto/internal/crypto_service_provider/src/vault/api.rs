@@ -6,7 +6,9 @@ use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CanisterThresholdSerializationError, CommitmentOpening, IDkgComplaintInternal,
+    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -752,7 +754,7 @@ pub trait IDkgProtocolCspVault {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     /// See [`CspIDkgProtocol::idkg_verify_dealing_private`].
@@ -850,7 +852,7 @@ pub trait ThresholdEcdsaSignerCspVault {
 }
 
 /// Type-safe serialization of [`IDkgTranscriptInternal`].
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IDkgTranscriptInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl From<Vec<u8>> for IDkgTranscriptInternalBytes {
@@ -890,6 +892,91 @@ impl AsRef<[u8]> for IDkgDealingInternalBytes {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+
+// An enum used to efficiently send an [`IDkgTranscriptOperationInternal`] to the vault.
+// It acts as intermediate type between the high-level
+// [`IDkgTranscriptOperation`] and the low-level
+// [`IDkgTranscriptOperationInternal`] in that it (1) is significantly
+// smaller than an `IDkgTranscriptOperation` and (2) contains all the raw data
+// necessary to construct an `IDkgTranscriptOperationInternal` from it.
+// Using this enum rather than [`IDkgTranscriptOperationInternal`] in the vault
+// API has the benefit that the expensive point deserialization that happens
+// upon deserialization of [`IDkgTranscriptOperationInternal`] is only done
+// once (i.e., in the vault) rather than twice (i.e., once in the crypto
+// component to construct the [`IDkgTranscriptOperationInternal`], and once in
+// the vault via the deserialization with serde::Deserialize that the tarpc
+// RPC framework automatically does behind the scenes upon receiving the RPC
+// call).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum IDkgTranscriptOperationInternalBytes {
+    Random,
+    RandomUnmasked,
+    ReshareOfMasked(IDkgTranscriptInternalBytes),
+    ReshareOfUnmasked(IDkgTranscriptInternalBytes),
+    UnmaskedTimesMasked(IDkgTranscriptInternalBytes, IDkgTranscriptInternalBytes),
+}
+
+impl From<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternalBytes {
+    fn from(idkm_transcript_op: &IDkgTranscriptOperation) -> Self {
+        match idkm_transcript_op {
+            IDkgTranscriptOperation::Random => Self::Random,
+            IDkgTranscriptOperation::RandomUnmasked => Self::RandomUnmasked,
+            IDkgTranscriptOperation::ReshareOfMasked(idkm_transcript) => Self::ReshareOfMasked(
+                IDkgTranscriptInternalBytes::from(idkm_transcript.internal_transcript_raw.clone()),
+            ),
+            IDkgTranscriptOperation::ReshareOfUnmasked(idkm_transcript) => Self::ReshareOfUnmasked(
+                IDkgTranscriptInternalBytes::from(idkm_transcript.internal_transcript_raw.clone()),
+            ),
+            IDkgTranscriptOperation::UnmaskedTimesMasked(idkm_transcript_1, idkm_transcript_2) => {
+                Self::UnmaskedTimesMasked(
+                    IDkgTranscriptInternalBytes::from(
+                        idkm_transcript_1.internal_transcript_raw.clone(),
+                    ),
+                    IDkgTranscriptInternalBytes::from(
+                        idkm_transcript_2.internal_transcript_raw.clone(),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+impl TryFrom<&IDkgTranscriptOperationInternalBytes> for IDkgTranscriptOperationInternal {
+    type Error = CanisterThresholdSerializationError;
+
+    fn try_from(
+        transcript_operation_internal_bytes: &IDkgTranscriptOperationInternalBytes,
+    ) -> Result<Self, Self::Error> {
+        match transcript_operation_internal_bytes {
+            IDkgTranscriptOperationInternalBytes::Random => {
+                Ok(IDkgTranscriptOperationInternal::Random)
+            }
+            IDkgTranscriptOperationInternalBytes::RandomUnmasked => {
+                Ok(IDkgTranscriptOperationInternal::RandomUnmasked)
+            }
+            IDkgTranscriptOperationInternalBytes::ReshareOfMasked(bytes) => {
+                let t = IDkgTranscriptInternal::deserialize(bytes.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::ReshareOfMasked(
+                    t.combined_commitment.into_commitment(),
+                ))
+            }
+            IDkgTranscriptOperationInternalBytes::ReshareOfUnmasked(bytes) => {
+                let t = IDkgTranscriptInternal::deserialize(bytes.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::ReshareOfUnmasked(
+                    t.combined_commitment.into_commitment(),
+                ))
+            }
+            IDkgTranscriptOperationInternalBytes::UnmaskedTimesMasked(bytes_1, bytes_2) => {
+                let t1 = IDkgTranscriptInternal::deserialize(bytes_1.as_ref())?;
+                let t2 = IDkgTranscriptInternal::deserialize(bytes_2.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::UnmaskedTimesMasked(
+                    t1.combined_commitment.into_commitment(),
+                    t2.combined_commitment.into_commitment(),
+                ))
+            }
+        }
     }
 }
 
