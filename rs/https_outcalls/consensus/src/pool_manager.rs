@@ -327,9 +327,9 @@ impl CanisterHttpPoolManagerImpl {
                         .subnet_call_context_manager
                         .canister_http_request_contexts;
 
-                    if let Some(context) = active_contexts.get(&response.id)
-                        && let Replication::NonReplicated(_) = context.replication
-                    {
+                    if active_contexts.get(&response.id).is_some_and(|context| {
+                        matches!(context.replication, Replication::NonReplicated(_))
+                    }) {
                         change_set.push(CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
                             share, response,
                         ));
@@ -397,75 +397,72 @@ impl CanisterHttpPoolManagerImpl {
                     };
                 }
 
-                match active_contexts.get(&share.content.id) {
-                    Some(context) => {
-                        if let Replication::NonReplicated(node_id) = context.replication {
-                            if node_id != share.signature.signer {
-                                return Some(CanisterHttpChangeAction::HandleInvalid(
-                                    share.clone(),
-                                    "Share signed by node that is not the delegated node for the request".to_string(),
-                                ));
-                            }
-                            let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
-                                // This should never happen
-                                return Some(CanisterHttpChangeAction::HandleInvalid(
-                                    share.clone(),
-                                    "Share exists without artifact".to_string(),
-                                ));
-                            };
+                let Some(context) = active_contexts.get(&share.content.id) else {
+                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                };
 
-                            let Some(response) = &artifact.response else {
-                                // The request is not fully replicated, but the response is missing.
-                                return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
-                            };
-
-                            if share.content.content_hash != ic_types::crypto::crypto_hash(response) {
-                                return Some(CanisterHttpChangeAction::HandleInvalid(
-                                    share.clone(),
-                                    "Content hash does not match the response".to_string(),
-                                ));
-                            }
-
-                            //TODO: we should also check the response size when validating the payload.
-
-                            // An honest replica enforces that response.content.count_bytes() does not exceed max_response_bytes
-                            // when the content is `Success`. However it doesn't enforce anything in the case of `Failure`.
-                            // As we still want to set a limit for failure, we enforce 1KB, which si reasonable for 
-                            // an error message.
-
-                            let response_size = response.content.count_bytes() as u64;
-
-                            let max_response_size = match context.max_response_bytes {
-                                Some(max_response_size) => max(MINIMUM_ALLOWED_RESPONSE_BYTES, max_response_size.get()),
-                                None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
-                            };
-
-                            if response_size > max_response_size {
-                                return Some(CanisterHttpChangeAction::HandleInvalid(
-                                    share.clone(),
-                                    format!("Response size {response_size} exceeds the maximum allowed size of {max_response_size}"),
-                                ));
-                            }
-                        } else {
-                            // Fully replicated requests must not have a response attached. 
-                            let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
-                                // This should never happen
-                                return Some(CanisterHttpChangeAction::HandleInvalid(
-                                    share.clone(),
-                                    "Share exists without artifact".to_string(),
-                                ));
-                            };
-
-                            if artifact.response.is_some() {
-                                return Some(CanisterHttpChangeAction::HandleInvalid(
-                                    share.clone(),
-                                    "Artifact should not contain response".to_string(),
-                                ));
-                            }
-                        }
+                if let Replication::NonReplicated(node_id) = context.replication {
+                    if node_id != share.signature.signer {
+                        return Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            "Share signed by node that is not the delegated node for the request".to_string(),
+                        ));
                     }
-                    None => {
+                    let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
+                        // This should never happen
+                        return Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            "Share exists without artifact".to_string(),
+                        ));
+                    };
+
+                    let Some(response) = &artifact.response else {
+                        // The request is not fully replicated, but the response is missing.
                         return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                    };
+
+                    if share.content.content_hash != ic_types::crypto::crypto_hash(response) {
+                        return Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            "Content hash does not match the response".to_string(),
+                        ));
+                    }
+
+                    //TODO: we should also check the response size when validating the payload.
+
+                    // An honest replica enforces that response.content.count_bytes() does not exceed max_response_bytes
+                    // when the content is `Success`. However it doesn't enroce anything in the case of `Failure`.
+                    // As we still want to set a limit for failure, we enforce 1KB, which si reasonable for
+                    // an error message.
+
+                    let response_size = response.content.count_bytes() as u64;
+
+                    let max_response_size = match context.max_response_bytes {
+                        Some(response_size) => max(MINIMUM_ALLOWED_RESPONSE_BYTES, response_size.get()),
+                        None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                    };
+
+                    if response_size > max_response_size {
+                        return Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            format!("Response size {response_size} exceeds the maximum allowed size of {max_response_size}"),
+                        ));
+                    }
+                } else {
+                    // Fully replicated requests must not have a response attached.
+                    let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
+                        // This should never happen
+                        return Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            "Share exists without artifact".to_string(),
+                        ));
+                    };
+
+                    if artifact.response.is_some() {
+                        return Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            "Artifact should not contain response".to_string(),
+                        ));
                     }
                 }
 
