@@ -436,7 +436,7 @@ impl CanisterHttpPoolManagerImpl {
                             let response_size = response.content.count_bytes() as u64;
 
                             let max_response_size = match context.max_response_bytes {
-                                Some(response_size) => max(MINIMUM_ALLOWED_RESPONSE_BYTES, response_size.get()),
+                                Some(max_response_size) => max(MINIMUM_ALLOWED_RESPONSE_BYTES, max_response_size.get()),
                                 None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
                             };
 
