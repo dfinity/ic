@@ -515,6 +515,12 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         section_name: String,
     },
+    CanisterLogMemoryLimitIsTooLow {
+        bytes: NumBytes,
+    },
+    CanisterLogMemoryLimitIsTooHigh {
+        bytes: NumBytes,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -758,6 +764,14 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
                 suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
                 doc_link: "canister-metadata-section-not-found".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: format!("Set the canister log memory limit to at least {MIN_ALLOWED_LOG_MEMORY_LIMIT}."),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: format!("Set the canister log memory limit to at most {MAX_ALLOWED_LOG_MEMORY_LIMIT}."),
+                doc_link: "".to_string(),
             },
         }
     }
@@ -1146,6 +1160,18 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister {canister_id} has no metadata section with the name {section_name}."
+                ),
+            ),
+            CanisterLogMemoryLimitIsTooLow { bytes } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too low. It must be at least {MIN_ALLOWED_LOG_MEMORY_LIMIT}."
+                ),
+            ),
+            CanisterLogMemoryLimitIsTooHigh { bytes } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too high. It must be at most {MAX_ALLOWED_LOG_MEMORY_LIMIT}."
                 ),
             ),
         }

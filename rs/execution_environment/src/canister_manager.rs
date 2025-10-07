@@ -54,7 +54,8 @@ use ic_replicated_state::{
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, DEFAULT_LOG_MEMORY_LIMIT,
+    MAX_ALLOWED_LOG_MEMORY_LIMIT, MIN_ALLOWED_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -287,6 +288,9 @@ impl CanisterManager {
     /// - environment variables:
     ///     - the number of environment variables cannot exceed the given maximum.
     ///     - the key and value of each environment variable cannot exceed the given maximum length.
+    /// - log memory limit:
+    ///     - must be at least the specified minimum.
+    ///     - must not exceed the specified maximum.
     ///
     /// Keep this function in sync with `do_update_settings()`.
     #[allow(clippy::too_many_arguments)]
@@ -462,6 +466,16 @@ impl CanisterManager {
             });
         }
 
+        let log_memory_limit = settings
+            .log_memory_limit
+            .unwrap_or_else(|| NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64));
+        if log_memory_limit {
+            return Err(CanisterManagerError::LogMemoryLimitTooSmall {
+                min: NumBytes::new(MAX_ALLOWED_LOG_MEMORY_LIMIT as u64),
+                given: log_memory_limit,
+            });
+        }
+
         Ok(ValidatedCanisterSettings::new(
             settings.controllers(),
             settings.compute_allocation(),
@@ -471,7 +485,7 @@ impl CanisterManager {
             settings.reserved_cycles_limit(),
             reservation_cycles,
             settings.log_visibility().cloned(),
-            settings.log_memory_limit(),
+            log_memory_limit,
             settings.wasm_memory_limit(),
             settings.environment_variables().cloned(),
         ))

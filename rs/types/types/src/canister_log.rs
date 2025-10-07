@@ -5,13 +5,20 @@ use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
 use std::collections::VecDeque;
 
-// TODO(EXC-2118): replace with default canister log capacity.
+#[allow(non_upper_case_globals)]
+const KiB: usize = 1024;
+
+/// The minimum allowed size of a canister log buffer.
+pub const MIN_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+
 /// The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+pub const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+
+/// The default size of a canister log buffer.
+pub const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_content_size =
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - std::mem::size_of::<CanisterLogRecord>();
+    let max_content_size = MAX_ALLOWED_LOG_MEMORY_LIMIT - std::mem::size_of::<CanisterLogRecord>();
     record.content.truncate(max_content_size);
     record
 }
@@ -83,7 +90,7 @@ impl Records {
     }
 
     fn capacity(&self) -> usize {
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
+        MAX_ALLOWED_LOG_MEMORY_LIMIT
     }
 
     fn make_free_space_within_limit(&mut self, new_data_size: usize) {

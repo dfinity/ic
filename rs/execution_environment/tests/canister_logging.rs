@@ -16,7 +16,7 @@ use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, 
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{
-    CanisterId, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, NumInstructions, ingress::WasmResult,
+    CanisterId, Cycles, MAX_ALLOWED_LOG_MEMORY_LIMIT, NumInstructions, ingress::WasmResult,
 };
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
@@ -927,7 +927,7 @@ fn test_canister_log_stays_within_limit() {
         wat_canister()
             .update(
                 "test",
-                wat_fn().debug_print(&[42; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE]),
+                wat_fn().debug_print(&[42; MAX_ALLOWED_LOG_MEMORY_LIMIT]),
             )
             .build_wasm(),
     );
@@ -944,7 +944,7 @@ fn test_canister_log_stays_within_limit() {
             .iter()
             .map(|r| r.data_size())
             .sum::<usize>(),
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
+        MAX_ALLOWED_LOG_MEMORY_LIMIT
     );
 }
 
@@ -960,8 +960,8 @@ fn test_canister_log_in_state_stays_within_limit() {
             .update(
                 "test",
                 wat_fn()
-                    .debug_print(&[b'd'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
-                    .trap_with_blob(&[b't'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE]),
+                    .debug_print(&[b'd'; MAX_ALLOWED_LOG_MEMORY_LIMIT])
+                    .trap_with_blob(&[b't'; MAX_ALLOWED_LOG_MEMORY_LIMIT]),
             )
             .build_wasm(),
     );
@@ -971,7 +971,7 @@ fn test_canister_log_in_state_stays_within_limit() {
     // Expect that the total size of the log in canister state is not zero and less than the limit.
     let log_size = env.canister_log(canister_id).used_space();
     assert_lt!(0, log_size);
-    assert_le!(log_size, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    assert_le!(log_size, MAX_ALLOWED_LOG_MEMORY_LIMIT);
 }
 
 #[test]

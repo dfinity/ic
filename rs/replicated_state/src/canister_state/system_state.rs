@@ -35,8 +35,8 @@ use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
-    MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time,
+    CanisterId, CanisterLog, CanisterTimer, Cycles, MAX_ALLOWED_LOG_MEMORY_LIMIT, MemoryAllocation,
+    NumBytes, NumInstructions, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -515,7 +515,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::new(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64), // TODO(EXC-2118): replace with default canister log capacity.
+            log_memory_limit: NumBytes::new(MAX_ALLOWED_LOG_MEMORY_LIMIT as u64), // TODO(EXC-2118): replace with default canister log capacity.
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -2094,7 +2094,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::from(MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE as u64), // TODO(EXC-2118): replace with default canister log capacity.
+            log_memory_limit: NumBytes::from(MAX_ALLOWED_LOG_MEMORY_LIMIT as u64), // TODO(EXC-2118): replace with default canister log capacity.
             canister_log: Default::default(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

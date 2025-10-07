@@ -2698,9 +2698,9 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
 // This function copies the behavior of the actual logging cost computation in
 // rs/embedders/src/wasmtime_embedder/linker.rs.
 fn logging_charge_bytes(message_num_bytes: usize) -> usize {
-    const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+    const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * 1024;
     const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
-    let capacity = MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    let capacity = MAX_ALLOWED_LOG_MEMORY_LIMIT;
     let remaining_space = capacity;
     let allocated_num_bytes = message_num_bytes.min(capacity);
     let transmitted_num_bytes = message_num_bytes.min(remaining_space);
