@@ -1702,7 +1702,7 @@ fn debug_print_cost(bytes: usize) -> u64 {
 }
 
 // The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * 1024;
+pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024;
 
 /// Calculate logging instruction cost from the allocated and transmitted bytes.
 fn canister_logging_cost(allocated_bytes: usize, transmitted_bytes: usize) -> u64 {
@@ -1847,7 +1847,7 @@ fn wasm_canister_logging_instructions_charging() {
         (1_000, canister_logging_cost(1_000, 1_000)),
         (
             10_000,
-            canister_logging_cost(MAX_ALLOWED_LOG_MEMORY_LIMIT, MAX_ALLOWED_LOG_MEMORY_LIMIT),
+            canister_logging_cost(TEST_DEFAULT_LOG_MEMORY_LIMIT, TEST_DEFAULT_LOG_MEMORY_LIMIT),
         ),
     ];
     for (message_len, expected_instructions) in test_cases.clone() {
@@ -1894,7 +1894,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     // Set the message length to a value exceeding the maximum allowed log buffer size.
     let message_len = 10_000;
-    assert!(MAX_ALLOWED_LOG_MEMORY_LIMIT < message_len);
+    assert!(TEST_DEFAULT_LOG_MEMORY_LIMIT < message_len);
 
     fn run_test(mut instance: ic_embedders::wasmtime_embedder::WasmtimeInstance) {
         // Call the WASM method multiple times.
@@ -1914,14 +1914,14 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
                 0 => assert_eq!(
                     instructions_used,
                     canister_logging_cost(
-                        MAX_ALLOWED_LOG_MEMORY_LIMIT,
-                        MAX_ALLOWED_LOG_MEMORY_LIMIT
+                        TEST_DEFAULT_LOG_MEMORY_LIMIT,
+                        TEST_DEFAULT_LOG_MEMORY_LIMIT
                     ) as i64
                 ),
                 // Expect allocation charge only, no transmission charge for subsequent calls.
                 _ => assert_eq!(
                     instructions_used,
-                    canister_logging_cost(MAX_ALLOWED_LOG_MEMORY_LIMIT, 0) as i64
+                    canister_logging_cost(TEST_DEFAULT_LOG_MEMORY_LIMIT, 0) as i64
                 ),
             }
         }

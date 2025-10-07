@@ -467,13 +467,26 @@ impl CanisterManager {
         }
 
         let log_memory_limit = settings
-            .log_memory_limit
-            .unwrap_or_else(|| NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64));
-        if log_memory_limit {
-            return Err(CanisterManagerError::LogMemoryLimitTooSmall {
-                min: NumBytes::new(MAX_ALLOWED_LOG_MEMORY_LIMIT as u64),
-                given: log_memory_limit,
-            });
+            .log_memory_limit()
+            .or(Some(NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64)));
+        let (min_limit, max_limit) = (
+            NumBytes::new(MIN_ALLOWED_LOG_MEMORY_LIMIT as u64),
+            NumBytes::new(MAX_ALLOWED_LOG_MEMORY_LIMIT as u64),
+        );
+        match log_memory_limit {
+            Some(bytes) if bytes < min_limit => {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooLow {
+                    bytes,
+                    limit: min_limit,
+                });
+            }
+            Some(bytes) if bytes > max_limit => {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
+                    bytes,
+                    limit: max_limit,
+                });
+            }
+            _ => {}
         }
 
         Ok(ValidatedCanisterSettings::new(

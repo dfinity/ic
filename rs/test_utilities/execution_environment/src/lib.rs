@@ -2698,13 +2698,13 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
 // This function copies the behavior of the actual logging cost computation in
 // rs/embedders/src/wasmtime_embedder/linker.rs.
 fn logging_charge_bytes(message_num_bytes: usize) -> usize {
-    const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * 1024;
-    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
-    let capacity = MAX_ALLOWED_LOG_MEMORY_LIMIT;
+    const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024;
+    const TEST_BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let capacity = TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let remaining_space = capacity;
     let allocated_num_bytes = message_num_bytes.min(capacity);
     let transmitted_num_bytes = message_num_bytes.min(remaining_space);
-    2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
+    2 * allocated_num_bytes + TEST_BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
 }
 
 /// Helper function to compute the cost of logging during `debug_print` and `trap`.

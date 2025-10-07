@@ -89,7 +89,10 @@ pub mod xnet;
 #[cfg(test)]
 pub mod exhaustive;
 
-pub use crate::canister_log::{CanisterLog, MAX_ALLOWED_LOG_MEMORY_LIMIT};
+pub use crate::canister_log::{
+    CanisterLog, DEFAULT_LOG_MEMORY_LIMIT, MAX_ALLOWED_LOG_MEMORY_LIMIT,
+    MIN_ALLOWED_LOG_MEMORY_LIMIT,
+};
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;

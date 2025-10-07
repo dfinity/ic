@@ -24,8 +24,8 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CanisterTimer, CountBytes, Cycles, MAX_ALLOWED_LOG_MEMORY_LIMIT, MAX_STABLE_MEMORY_IN_BYTES,
-    NumInstructions, PrincipalId, SubnetId, Time,
+    CanisterTimer, CountBytes, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId,
+    SubnetId, Time,
     batch::CanisterCyclesCostSchedule,
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
@@ -46,6 +46,8 @@ mod common;
 use common::*;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
+
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 fn get_system_state_with_cycles(cycles_amount: Cycles) -> SystemState {
     SystemState::new_running_for_testing(
@@ -2106,7 +2108,7 @@ fn test_save_log_message_invalid_message_offset() {
 
 #[test]
 fn test_save_log_message_trims_long_message() {
-    let long_message_size = 2 * MAX_ALLOWED_LOG_MEMORY_LIMIT;
+    let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
@@ -2119,13 +2121,13 @@ fn test_save_log_message_trims_long_message() {
     // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
-    assert!(records.back().unwrap().content.len() <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
+    assert!(records.back().unwrap().content.len() <= TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
 
 #[test]
 fn test_save_log_message_keeps_total_log_size_limited() {
     let messages_number = 10;
-    let long_message_size = 2 * MAX_ALLOWED_LOG_MEMORY_LIMIT;
+    let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
@@ -2140,7 +2142,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Expect only one log record to be kept, staying within the size limit.
     let log = api.canister_log();
     assert_eq!(log.records().len(), initial_records_number + 1);
-    assert_le!(log.used_space(), MAX_ALLOWED_LOG_MEMORY_LIMIT);
+    assert_le!(log.used_space(), TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
 
 #[test]

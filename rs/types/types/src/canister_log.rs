@@ -17,30 +17,51 @@ pub const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The default size of a canister log buffer.
 pub const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
-fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_content_size = MAX_ALLOWED_LOG_MEMORY_LIMIT - std::mem::size_of::<CanisterLogRecord>();
+/// The maximum allowed size of a canister log record.
+const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
+
+// Compile-time assertions to ensure the constants are within valid ranges.
+const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT >= MIN_ALLOWED_LOG_MEMORY_LIMIT);
+const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
+const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MAX_ALLOWED_LOG_RECORD_SIZE);
+const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_ALLOWED_LOG_MEMORY_LIMIT);
+
+/// Truncates the content of a log record to ensure the total size of the record.
+fn truncate_content(records_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
+    let max_record_size = std::cmp::min(records_capacity, MAX_ALLOWED_LOG_RECORD_SIZE);
+    let max_content_size = max_record_size - std::mem::size_of::<CanisterLogRecord>();
     record.content.truncate(max_content_size);
     record
 }
 
 // Helper struct to hold canister log records and keep track of the used space.
 // This is needed to avoid iterating over all records to calculate the used space.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, ValidateEq)]
 struct Records {
     #[validate_eq(Ignore)]
     records: VecDeque<CanisterLogRecord>,
+    capacity: usize,
     used_space: usize,
 }
 
 impl Records {
-    fn from(records: Vec<CanisterLogRecord>) -> Self {
+    fn new_with_capacity(capacity: usize) -> Self {
+        Self {
+            records: VecDeque::new(),
+            capacity,
+            used_space: 0,
+        }
+    }
+
+    fn from(capacity: usize, records: Vec<CanisterLogRecord>) -> Self {
         let records: Vec<_> = records
             .into_iter()
-            .map(truncate_content) // Apply size limit to each record's content.
+            .map(|r| truncate_content(capacity, r)) // Apply size limit to each record's content.
             .collect();
         let used_space = records.iter().map(|r| r.data_size()).sum();
         let mut result = Self {
             records: records.into(),
+            capacity,
             used_space,
         };
         // Make sure the buffer is within limit.
@@ -90,7 +111,7 @@ impl Records {
     }
 
     fn capacity(&self) -> usize {
-        MAX_ALLOWED_LOG_MEMORY_LIMIT
+        self.capacity
     }
 
     fn make_free_space_within_limit(&mut self, new_data_size: usize) {
@@ -103,6 +124,12 @@ impl Records {
                 break; // No more records to pop, limit reached.
             }
         }
+    }
+}
+
+impl Default for Records {
+    fn default() -> Self {
+        Self::new_with_capacity(DEFAULT_LOG_MEMORY_LIMIT)
     }
 }
 
@@ -119,7 +146,7 @@ impl CanisterLog {
     pub fn new(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
         Self {
             next_idx,
-            records: Records::from(records),
+            records: Records::from(DEFAULT_LOG_MEMORY_LIMIT, records),
         }
     }
 
@@ -127,7 +154,7 @@ impl CanisterLog {
     pub fn new_with_next_index(next_idx: u64) -> Self {
         Self {
             next_idx,
-            records: Default::default(),
+            records: Records::new_with_capacity(DEFAULT_LOG_MEMORY_LIMIT),
         }
     }
 
@@ -165,11 +192,14 @@ impl CanisterLog {
     /// Adds a new log record.
     pub fn add_record(&mut self, timestamp_nanos: u64, content: Vec<u8>) {
         // Add record and update the next index.
-        self.records.push_back(truncate_content(CanisterLogRecord {
-            idx: self.next_idx,
-            timestamp_nanos,
-            content,
-        }));
+        self.records.push_back(truncate_content(
+            self.capacity(),
+            CanisterLogRecord {
+                idx: self.next_idx,
+                timestamp_nanos,
+                content,
+            },
+        ));
         self.next_idx += 1;
     }
 
