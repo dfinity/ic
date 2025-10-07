@@ -384,7 +384,7 @@ jobs:
       - name: Build the entire codebase on darwin
         if: ${{ matrix.os == 'darwin' }}
         run: |
-          # We do not use `/...` here to exclude `//publish/...` which is not required for local development.
+          # We do not use `//...` here to exclude `//publish/...` which is not required for local development.
           bazel_build_targets=(
             //rs/...
             //packages/...
