@@ -31,7 +31,7 @@ use std::{
 // this call succeeds at the first trial. If we are unlucky, it starts
 // succeeding after 10 secs.
 const SSH_ACCESS_TIMEOUT: Duration = Duration::from_secs(30);
-const SSH_ACCESS_BACKOFF: Duration = Duration::from_secs(10);
+const SSH_ACCESS_BACKOFF: Duration = Duration::from_secs(5);
 
 pub fn generate_key_strings() -> (String, String) {
     // Our keys are Ed25519, and not RSA. Once we figure out a direct way to encode
