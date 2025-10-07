@@ -290,6 +290,13 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
         let mut change_set = Vec::new();
+
+        let active_contexts = &self
+            .latest_state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
@@ -320,12 +327,6 @@ impl CanisterHttpPoolManagerImpl {
                     };
                     self.requested_id_cache.borrow_mut().remove(&response.id);
                     self.metrics.shares_signed.inc();
-
-                    let active_contexts = &self
-                        .latest_state()
-                        .metadata
-                        .subnet_call_context_manager
-                        .canister_http_request_contexts;
 
                     if active_contexts.get(&response.id).is_some_and(|context| {
                         matches!(context.replication, Replication::NonReplicated(_))

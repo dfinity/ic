@@ -125,9 +125,4 @@ pub trait CanisterHttpPool: Send + Sync {
         &self,
         msg_id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare>;
-
-    fn lookup_unvalidated(
-        &self,
-        msg_id: &CanisterHttpResponseId,
-    ) -> Option<CanisterHttpResponseArtifact>;
 }

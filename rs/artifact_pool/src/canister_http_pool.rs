@@ -101,13 +101,6 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     ) -> Option<CanisterHttpResponseShare> {
         self.validated.get(msg_id).map(|()| msg_id.clone())
     }
-
-    fn lookup_unvalidated(
-        &self,
-        msg_id: &CanisterHttpResponseId,
-    ) -> Option<CanisterHttpResponseArtifact> {
-        self.unvalidated.get(msg_id).cloned()
-    }
 }
 
 impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
@@ -286,10 +279,10 @@ mod tests {
         pool.insert(to_unvalidated(share.clone()));
         assert!(pool.get(&id).is_none());
 
-        assert_eq!(share, pool.lookup_unvalidated(&id).unwrap().share);
+        assert_eq!(share, pool.get_unvalidated_artifact(&id).unwrap().share);
 
         pool.remove(&id);
-        assert!(pool.lookup_unvalidated(&id).is_none());
+        assert!(pool.get_unvalidated_artifact(&id).is_none());
     }
 
     #[test]
@@ -398,13 +391,13 @@ mod tests {
         let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
-        assert_eq!(share, pool.lookup_unvalidated(&id).unwrap().share);
+        assert_eq!(share, pool.get_unvalidated_artifact(&id).unwrap().share);
 
         let result = pool.apply(vec![CanisterHttpChangeAction::RemoveUnvalidated(
             id.clone(),
         )]);
 
-        assert!(pool.lookup_unvalidated(&id).is_none());
+        assert!(pool.get_unvalidated_artifact(&id).is_none());
         assert!(result.poll_immediately);
         assert!(result.transmits.is_empty());
     }
@@ -416,14 +409,14 @@ mod tests {
         let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
-        assert_eq!(share, pool.lookup_unvalidated(&id).unwrap().share);
+        assert_eq!(share, pool.get_unvalidated_artifact(&id).unwrap().share);
 
         let result = pool.apply(vec![CanisterHttpChangeAction::HandleInvalid(
             id.clone(),
             "TEST REASON".to_string(),
         )]);
 
-        assert!(pool.lookup_unvalidated(&id).is_none());
+        assert!(pool.get_unvalidated_artifact(&id).is_none());
         assert!(result.poll_immediately);
         assert!(result.transmits.is_empty());
     }
