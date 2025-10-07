@@ -546,7 +546,6 @@ impl NeuronStore {
         with_stable_neuron_indexes(|indexes| indexes.known_neuron().list_known_neuron_ids())
     }
 
-    // @todo Shah
     pub fn list_all_neurons_paginated(
         &self,
         exclusive_start_id: Option<NeuronId>,
@@ -564,25 +563,6 @@ impl NeuronStore {
             stable_store
                 .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
                 .take(page_size)
-                .collect()
-        })
-    }
-
-    pub fn list_all_neuron_ids_paginated(
-        &self,
-        exclusive_start_id: Option<NeuronId>,
-        page_size: Option<usize>,
-    ) -> Vec<NeuronId> {
-        with_stable_neuron_store(|stable_store| {
-            let exclusive_start_id = exclusive_start_id.unwrap_or(NeuronId { id: 0 });
-            let page_size = page_size
-                .unwrap_or(MAX_NEURON_ID_PAGE_SIZE)
-                .min(MAX_NEURON_ID_PAGE_SIZE);
-
-            stable_store
-                .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
-                .take(page_size)
-                .map(|neuron| neuron.id())
                 .collect()
         })
     }
