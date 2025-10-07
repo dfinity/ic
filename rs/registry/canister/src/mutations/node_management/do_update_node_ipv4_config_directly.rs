@@ -177,7 +177,11 @@ mod tests {
             ipv4_config: Some(init_ipv4_config()),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
     }
 
     #[test]
@@ -193,7 +197,7 @@ mod tests {
 
         let wrong_node_operator_id = PrincipalId::new_user_test_id(101);
 
-        registry.do_update_node_ipv4_config_directly_(
+        let _ = registry.do_update_node_ipv4_config_directly_(
             payload,
             wrong_node_operator_id,
             now_system_time(),
@@ -215,7 +219,11 @@ mod tests {
             ipv4_config: Some(ipv4_config),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
     }
 
     #[test]
@@ -233,7 +241,11 @@ mod tests {
             ipv4_config: Some(ipv4_config),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
     }
 
     #[test]
@@ -251,7 +263,11 @@ mod tests {
             ipv4_config: Some(ipv4_config),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
     }
 
     #[test]
@@ -269,7 +285,11 @@ mod tests {
             ipv4_config: Some(ipv4_config),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
     }
 
     #[test]
@@ -287,7 +307,11 @@ mod tests {
             ipv4_config: Some(ipv4_config),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
     }
 
     #[test]
@@ -301,7 +325,11 @@ mod tests {
             ipv4_config: Some(ipv4_config.clone()),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
 
         let node_record = registry.get_node_or_panic(node_ids[0]);
         let expected_intf_config = Some(IPv4InterfaceConfig {
@@ -323,7 +351,11 @@ mod tests {
             ipv4_config: Some(ipv4_config.clone()),
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
 
         let node_record = registry.get_node_or_panic(node_id);
         let expected_intf_config = Some(IPv4InterfaceConfig {
@@ -338,7 +370,11 @@ mod tests {
             ipv4_config: None,
         };
 
-        registry.do_update_node_ipv4_config_directly_(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_ipv4_config_directly_(
+            payload,
+            node_operator_id,
+            now_system_time(),
+        );
         let node_record = registry.get_node_or_panic(node_id);
         assert_eq!(node_record.public_ipv4_config, None);
     }

@@ -149,7 +149,7 @@ mod tests {
             domain: None,
         };
 
-        registry.do_update_node_domain(payload, node_operator_id, now_system_time());
+        let _ = registry.do_update_node_domain(payload, node_operator_id, now_system_time());
     }
 
     #[test]
@@ -203,7 +203,7 @@ mod tests {
 
         // Assert setting domain name to Some() works
         let new_domain = Some("example.com".to_string());
-        registry.do_update_node_domain(
+        let _ = registry.do_update_node_domain(
             UpdateNodeDomainDirectlyPayload {
                 node_id,
                 domain: new_domain.clone(),

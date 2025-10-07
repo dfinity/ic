@@ -180,10 +180,8 @@ mod tests {
         registry::Registry,
     };
     use ic_nervous_system_time_helpers::now_system_time;
-    use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
-    use ic_registry_keys::{
-        make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    };
+    use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+    use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
     use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
     use ic_types::{NodeId, PrincipalId, SubnetId};
     use maplit::btreemap;
@@ -233,7 +231,7 @@ mod tests {
 
     // Get the test data needed for most tests.
     // Registry, node id that exists, and the node provider id
-    fn setup_registry_for_test() -> (Registry, NodeId, PrincipalId) {
+    fn setup_registry_for_test() -> (Registry, Vec<NodeId>, PrincipalId, PrincipalId) {
         let node_operator_id = PrincipalId::new_user_test_id(10_001);
         let node_provider_id = PrincipalId::new_user_test_id(20_002);
 
@@ -254,14 +252,15 @@ mod tests {
         };
 
         registry.do_add_node_operator(payload);
-        let (node_id, _dkg_pks) = node_ids_and_dkg_pks.into_iter().next().unwrap();
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
 
-        (registry, node_id, node_provider_id)
+        (registry, node_ids, node_operator_id, node_provider_id)
     }
 
     #[test]
     fn feature_flag_check_works() {
-        let (mut registry, node_id, _) = setup_registry_for_test();
+        let (mut registry, node_ids, _, _) = setup_registry_for_test();
+        let node_id = node_ids[0];
         let _temp = temporarily_disable_node_swapping();
 
         let payload = valid_payload(node_id);
@@ -275,7 +274,8 @@ mod tests {
 
     #[test]
     fn valid_payload_test() {
-        let (mut registry, node_id, _) = setup_registry_for_test();
+        let (mut registry, node_ids, _, _) = setup_registry_for_test();
+        let node_id = node_ids[0];
 
         let _temp = temporarily_enable_node_swapping();
         // Create a registry with nodes and node operators
@@ -294,7 +294,8 @@ mod tests {
 
     #[test]
     fn invalid_payloads() {
-        let (mut registry, node_id, _) = setup_registry_for_test();
+        let (mut registry, node_ids, _, _) = setup_registry_for_test();
+        let node_id = node_ids[0];
 
         let _temp = temporarily_enable_node_swapping();
 
@@ -330,15 +331,6 @@ mod tests {
             if let Some(subnet) = node.subnet_id {
                 subnets.entry(subnet).or_insert(vec![]).push(node.node_id);
             }
-
-            mutations.push(upsert(
-                make_node_record_key(node.node_id),
-                NodeRecord {
-                    node_operator_id: node.operator.to_vec(),
-                    ..Default::default()
-                }
-                .encode_to_vec(),
-            ));
         }
 
         for (subnet, nodes) in &subnets {
@@ -362,23 +354,23 @@ mod tests {
     #[test]
     fn feature_enabled_for_caller() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut registry = Registry::new();
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
-        let operator_id = PrincipalId::new_user_test_id(1);
+        let old_node_id = node_ids[0];
+        let new_node_id = node_ids[1];
 
         let mutations = get_mutations_from_node_information(&[
             NodeInformation {
                 node_id: old_node_id,
                 subnet_id: Some(subnet_id),
-                operator: operator_id,
+                operator: node_operator_id,
             },
             NodeInformation {
                 node_id: new_node_id,
                 subnet_id: None,
-                operator: operator_id,
+                operator: node_operator_id,
             },
         ]);
         registry.apply_mutations_for_test(mutations);
@@ -392,9 +384,10 @@ mod tests {
 
         // First make a call and expect to fail because
         // the feature is not enabled for this caller.
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
+        let response =
+            registry.swap_nodes_inner(payload.clone(), node_operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledForCaller {
-            caller: operator_id,
+            caller: node_operator_id,
         };
         assert!(
             response.as_ref().is_err_and(|err| err == &expected_err),
@@ -402,8 +395,8 @@ mod tests {
         );
 
         // Enable the feature for the caller
-        test_set_swapping_whitelisted_callers(vec![operator_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
         // Expect the first next error which is the missing
         // subnet in the registry.
         assert!(response.is_ok(), "Expected OK but got {response:?}");
@@ -413,35 +406,36 @@ mod tests {
     fn feature_enabled_for_subnet() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
 
-        let mut registry = Registry::new();
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
-        let operator_id = PrincipalId::new_user_test_id(1);
+        let old_node_id = node_ids[0];
+        let new_node_id = node_ids[1];
 
         let mutations = get_mutations_from_node_information(&[
             NodeInformation {
                 node_id: old_node_id,
                 subnet_id: Some(subnet_id),
-                operator: operator_id,
+                operator: node_operator_id,
             },
             NodeInformation {
                 node_id: new_node_id,
                 subnet_id: None,
-                operator: operator_id,
+                operator: node_operator_id,
             },
         ]);
         registry.apply_mutations_for_test(mutations);
 
-        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
             new_node_id: Some(new_node_id.get()),
         };
 
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
+        let response =
+            registry.swap_nodes_inner(payload.clone(), node_operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id };
 
         // First call when the feature isn't enabled on the subnet.
@@ -452,7 +446,7 @@ mod tests {
 
         // Now enable the feature and call again.
         test_set_swapping_enabled_subnets(vec![subnet_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected the result to be OK but got {response:?}"
@@ -462,23 +456,22 @@ mod tests {
     #[test]
     fn e2e_valid_swap() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut registry = Registry::new();
+        let (mut registry, node_ids, node_operator_id, _) = setup_registry_for_test();
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
-        let operator_id = PrincipalId::new_user_test_id(1);
+        let old_node_id = node_ids[0];
+        let new_node_id = node_ids[1];
 
         let mutations = get_mutations_from_node_information(&[
             NodeInformation {
                 node_id: old_node_id,
                 subnet_id: Some(subnet_id),
-                operator: operator_id,
+                operator: node_operator_id,
             },
             NodeInformation {
                 node_id: new_node_id,
                 subnet_id: None,
-                operator: operator_id,
+                operator: node_operator_id,
             },
         ]);
         registry.apply_mutations_for_test(mutations);
@@ -488,10 +481,10 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
-        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
@@ -502,7 +495,8 @@ mod tests {
 
     #[test]
     fn test_do_swap_node_in_subnet_directly_fails_when_rate_limits_exceeded() {
-        let (mut registry, node_id, valid_np) = setup_registry_for_test();
+        let (mut registry, node_ids, _, valid_np) = setup_registry_for_test();
+        let node_id = node_ids[0];
 
         let _temp = temporarily_enable_node_swapping();
 
