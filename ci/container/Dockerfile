@@ -177,11 +177,6 @@ RUN rm -rf /tmp/rust-version
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.21.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
-
-# Install nsc
-RUN curl -fsSL https://get.namespace.so/cloud/install.sh | sh
-ENV PATH=/home/ubuntu/.ns/bin:$PATH
-
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
