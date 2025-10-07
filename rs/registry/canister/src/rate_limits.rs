@@ -1,6 +1,8 @@
 use crate::mutations::node_management::common::get_node_provider_id_for_operator_id;
 use crate::registry::Registry;
-use crate::storage::get_node_proivder_rate_limiter_memory;
+use crate::storage::{
+    get_node_operator_rate_limiter_memory, get_node_proivder_rate_limiter_memory,
+};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_rate_limits::{
@@ -19,6 +21,12 @@ const NODE_PROVIDER_MAX_SPIKE: u64 = NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY * 
 pub const NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY;
 
+// Node Operator rate limiting constants
+const NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY: u64 = 25;
+const NODE_OPERATOR_MAX_SPIKE: u64 = NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY * 7;
+pub const NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
+    ONE_DAY_SECONDS / NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
+
 thread_local! {
     static NODE_PROVIDER_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
@@ -34,16 +42,38 @@ thread_local! {
         },
         get_node_proivder_rate_limiter_memory(),
     ));
+
+    static NODE_OPERATOR_RATE_LIMITER: RefCell<
+        RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
+    > = RefCell::new(RateLimiter::new_stable(
+        RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS),
+            max_capacity: NODE_OPERATOR_MAX_SPIKE,
+            max_reservations: NODE_OPERATOR_MAX_SPIKE * 2,
+        },
+        get_node_operator_rate_limiter_memory(),
+    ));
 }
 
 fn node_provider_key(node_provider: PrincipalId) -> String {
     format!("node_provider_{node_provider}")
 }
 
+fn node_operator_key(node_operator: PrincipalId) -> String {
+    format!("node_operator_{node_operator}")
+}
+
 fn with_node_provider_rate_limiter<R>(
     f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
 ) -> R {
     NODE_PROVIDER_RATE_LIMITER.with_borrow_mut(f)
+}
+
+fn with_node_operator_rate_limiter<R>(
+    f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
+) -> R {
+    NODE_OPERATOR_RATE_LIMITER.with_borrow_mut(f)
 }
 
 impl Registry {

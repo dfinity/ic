@@ -13,7 +13,8 @@ use std::cell::RefCell;
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
-const NODE_OPERATOR_RATE_LIMITER_MEMORY_ID: MemoryId = MemoryId::new(2);
+const NODE_PROVIDER_RATE_LIMITER_MEMORY_ID: MemoryId = MemoryId::new(2);
+const NODE_OPERATOR_RATE_LIMITER_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 /// A RegistryAtomicMutateRequest that has an encoded size greater than this
 /// will cause a panic when it is passed to changelog_insert (or maybe_chunkify,
@@ -70,6 +71,11 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
 
 // Used to create the rate limiter
 pub(crate) fn get_node_proivder_rate_limiter_memory() -> VM {
+    MEMORY_MANAGER.with(|mm| mm.borrow().get(NODE_PROVIDER_RATE_LIMITER_MEMORY_ID))
+}
+
+// Used to create the node operator rate limiter
+pub fn get_node_operator_rate_limiter_memory() -> VM {
     MEMORY_MANAGER.with(|mm| mm.borrow().get(NODE_OPERATOR_RATE_LIMITER_MEMORY_ID))
 }
 
