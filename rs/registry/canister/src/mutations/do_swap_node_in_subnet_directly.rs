@@ -6,6 +6,7 @@ use std::{
 
 use candid::CandidType;
 use ic_nervous_system_rate_limits::{InMemoryRateLimiter, RateLimiterConfig, Reservation};
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -46,7 +47,7 @@ impl SwappingRateLimiter {
         &mut self,
         subnet_id: SubnetId,
     ) -> Result<Reservation<SubnetId>, SwapError> {
-        self.reserve_subnet(subnet_id, SystemTime::now())
+        self.reserve_subnet(subnet_id, now_system_time())
     }
 
     fn reserve_subnet(
@@ -65,7 +66,7 @@ impl SwappingRateLimiter {
     }
 
     fn commit_subnet_now(&mut self, reservation: Reservation<SubnetId>) {
-        self.commit_subnet(reservation, SystemTime::now())
+        self.commit_subnet(reservation, now_system_time())
     }
 
     fn commit_subnet(&mut self, reservation: Reservation<SubnetId>, now: SystemTime) {
@@ -79,7 +80,7 @@ impl SwappingRateLimiter {
         subnet_id: SubnetId,
         provider: PrincipalId,
     ) -> Result<Reservation<String>, SwapError> {
-        self.reserve_provider_on_subnet(subnet_id, provider, SystemTime::now())
+        self.reserve_provider_on_subnet(subnet_id, provider, now_system_time())
     }
 
     fn reserve_provider_on_subnet(
@@ -102,7 +103,7 @@ impl SwappingRateLimiter {
     }
 
     fn commit_provider_on_subnet_now(&mut self, reservation: Reservation<String>) {
-        self.commit_provider_on_subnet(reservation, SystemTime::now());
+        self.commit_provider_on_subnet(reservation, now_system_time());
     }
 
     fn commit_provider_on_subnet(&mut self, reservation: Reservation<String>, now: SystemTime) {
