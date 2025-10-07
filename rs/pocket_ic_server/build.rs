@@ -54,6 +54,7 @@ struct Dashboard<'a> {{
         "SNS_AGGREGATOR_TEST",
         "INTERNET_IDENTITY_TEST",
         "NNS_DAPP_TEST",
+        "BITCOIN_TESTNET",
     ] {
         let env_var_name = format!("{canister_name}_CANISTER_WASM_PATH");
         if std::env::var(&env_var_name).is_err() {

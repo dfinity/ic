@@ -31,6 +31,7 @@ icp-ledger = { path = "../ledger_suite/icp" }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
+ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../config" }
@@ -108,7 +109,6 @@ wat = { workspace = true }
 candid_parser = { workspace = true }
 flate2 = { workspace = true }
 ic-btc-adapter-test-utils = { path = "../bitcoin/adapter/test_utils" }
-ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
 nix = { version = "0.29.0" }
