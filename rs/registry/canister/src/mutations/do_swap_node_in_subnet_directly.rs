@@ -251,7 +251,7 @@ impl Display for SwapError {
                     "Subnet {subnet_id} had a swap performed within last two hours. Try again later."
                 ),
                 SwapError::ProviderRateLimitedOnSubnet { subnet_id, caller } => format!(
-                    "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hourse. Try again later."
+                    "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hours. Try again later."
                 ),
             }
         )
