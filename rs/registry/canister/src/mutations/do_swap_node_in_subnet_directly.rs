@@ -20,6 +20,9 @@ use crate::{
     registry::Registry,
 };
 
+const SUBNET_CAPACITY_INTERVAL: Duration = Duration::from_secs(2 * 60 * 60);
+const PROVIDER_CAPACITY_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
+
 struct SwappingRateLimiter {
     subnet_limiter: InMemoryRateLimiter<SubnetId>,
     provider_subnet_limiter: InMemoryRateLimiter<String>,
@@ -30,13 +33,13 @@ impl SwappingRateLimiter {
         Self {
             subnet_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
                 add_capacity_amount: 1,
-                add_capacity_interval: Duration::from_secs(2 * 60 * 60),
+                add_capacity_interval: SUBNET_CAPACITY_INTERVAL,
                 max_capacity: 1,
                 max_reservations: 1,
             }),
             provider_subnet_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
                 add_capacity_amount: 1,
-                add_capacity_interval: Duration::from_secs(12 * 60 * 60),
+                add_capacity_interval: PROVIDER_CAPACITY_INTERVAL,
                 max_capacity: 1,
                 max_reservations: 1,
             }),
@@ -58,7 +61,7 @@ impl SwappingRateLimiter {
         self.subnet_limiter
             .try_reserve(now, subnet_id, 1)
             .map_err(|e| match e {
-                ic_nervous_system_rate_limits::RateLimiterError::MaxReservationsReached => {
+                ic_nervous_system_rate_limits::RateLimiterError::NotEnoughCapacity => {
                     SwapError::SubnetRateLimited { subnet_id }
                 }
                 re => panic!("Unexpected subnet rate limiter error: {re:?}"),
@@ -92,7 +95,7 @@ impl SwappingRateLimiter {
         self.provider_subnet_limiter
             .try_reserve(now, format!("{provider}-{subnet_id}"), 1)
             .map_err(|e| match e {
-                ic_nervous_system_rate_limits::RateLimiterError::MaxReservationsReached => {
+                ic_nervous_system_rate_limits::RateLimiterError::NotEnoughCapacity => {
                     SwapError::ProviderRateLimitedOnSubnet {
                         subnet_id,
                         caller: provider,
@@ -273,7 +276,10 @@ impl SwapNodeInSubnetDirectlyPayload {
 #[cfg(test)]
 mod tests {
 
-    use std::collections::BTreeMap;
+    use std::{
+        collections::BTreeMap,
+        time::{Duration, SystemTime},
+    };
 
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
     use ic_registry_keys::{
@@ -290,7 +296,10 @@ mod tests {
                 test_set_swapping_enabled_subnets, test_set_swapping_whitelisted_callers,
             },
         },
-        mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
+        mutations::do_swap_node_in_subnet_directly::{
+            PROVIDER_CAPACITY_INTERVAL, SUBNET_CAPACITY_INTERVAL, SwapError,
+            SwapNodeInSubnetDirectlyPayload, SwappingRateLimiter,
+        },
         registry::Registry,
     };
     use prost::Message;
@@ -528,6 +537,186 @@ mod tests {
         assert!(
             response.is_ok(),
             "Expected the result to be OK but got {response:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limiter_subnet() {
+        let mut rate_limiter = SwappingRateLimiter::new();
+        let subnet = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let now = SystemTime::now();
+
+        // Make first reservation which will succeed
+        let reservation1 = rate_limiter
+            .reserve_subnet(subnet, now)
+            .expect("Should be able to make a first reservation");
+        rate_limiter.commit_subnet(reservation1, now);
+
+        // Try and make another reservation before the duration passes
+        let maybe_reservation2 = rate_limiter
+            .reserve_subnet(
+                subnet,
+                now.checked_add(
+                    SUBNET_CAPACITY_INTERVAL
+                        .checked_sub(Duration::from_secs(5 * 60))
+                        .unwrap(),
+                )
+                .unwrap(),
+            )
+            .err()
+            .expect("Expected reservation2 to error out");
+
+        assert_eq!(
+            maybe_reservation2,
+            SwapError::SubnetRateLimited { subnet_id: subnet }
+        );
+
+        // Make another reservation once the duration passes
+        let _maybe_reservation3 = rate_limiter
+            .reserve_subnet(
+                subnet,
+                now.checked_add(
+                    SUBNET_CAPACITY_INTERVAL
+                        .checked_add(Duration::from_secs(5 * 60))
+                        .unwrap(),
+                )
+                .unwrap(),
+            )
+            .expect("Should succeed");
+    }
+
+    #[test]
+    fn rate_limiter_subnet_multiple_different_subnets() {
+        let mut rate_limiter = SwappingRateLimiter::new();
+        let subnet_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let subnet_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
+
+        let now = SystemTime::now();
+
+        // First reserve subnet 1
+        let reservation_subnet_1 = rate_limiter
+            .reserve_subnet(subnet_1, now)
+            .expect("Should be able to reserve subnet 1");
+        rate_limiter.commit_subnet(reservation_subnet_1, now);
+
+        // Then reserve subnet 2
+        let reservation_subnet_2 = rate_limiter
+            .reserve_subnet(subnet_2, now)
+            .expect("Should be able to reserve subnet 2");
+        rate_limiter.commit_subnet(reservation_subnet_2, now);
+
+        // Try to reserve on both subnets again
+
+        for subnet in [subnet_1, subnet_2] {
+            let maybe_reserve_subnet = rate_limiter
+                .reserve_subnet(
+                    subnet,
+                    now.checked_add(
+                        SUBNET_CAPACITY_INTERVAL
+                            .checked_sub(Duration::from_secs(5 * 60))
+                            .unwrap(),
+                    )
+                    .unwrap(),
+                )
+                .err()
+                .unwrap();
+
+            assert_eq!(
+                maybe_reserve_subnet,
+                SwapError::SubnetRateLimited { subnet_id: subnet }
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limiter_provider_on_subnet() {
+        let mut rate_limiter = SwappingRateLimiter::new();
+        let subnet_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let subnet_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
+        let caller = PrincipalId::new_user_test_id(1);
+        let now = SystemTime::now();
+
+        // First reserve a subnet for caller
+        let reservation = rate_limiter
+            .reserve_provider_on_subnet(subnet_1, caller, now)
+            .expect("Should be able to reserve for provider on subnet 1");
+
+        rate_limiter.commit_provider_on_subnet(reservation, now);
+
+        // Try and reserve again before the end period
+        let maybe_reservation = rate_limiter
+            .reserve_provider_on_subnet(
+                subnet_1,
+                caller,
+                now.checked_add(
+                    PROVIDER_CAPACITY_INTERVAL
+                        .checked_sub(Duration::from_secs(5 * 60))
+                        .unwrap(),
+                )
+                .unwrap(),
+            )
+            .err()
+            .unwrap();
+
+        assert_eq!(
+            maybe_reservation,
+            SwapError::ProviderRateLimitedOnSubnet {
+                subnet_id: subnet_1,
+                caller
+            }
+        );
+
+        // Make a reservation for a provider on a different subnet
+        let reservation = rate_limiter
+            .reserve_provider_on_subnet(subnet_2, caller, now)
+            .expect("Should be able to reserve for provider on subnet 2");
+
+        rate_limiter.commit_provider_on_subnet(reservation, now);
+
+        let maybe_reservation = rate_limiter
+            .reserve_provider_on_subnet(
+                subnet_2,
+                caller,
+                now.checked_add(
+                    PROVIDER_CAPACITY_INTERVAL
+                        .checked_sub(Duration::from_secs(5 * 60 * 60))
+                        .unwrap(),
+                )
+                .unwrap(),
+            )
+            .err()
+            .unwrap();
+
+        assert_eq!(
+            maybe_reservation,
+            SwapError::ProviderRateLimitedOnSubnet {
+                subnet_id: subnet_2,
+                caller: caller
+            }
+        );
+
+        // Make a reservation on subnet 1 when the duration passes
+        let reservation = rate_limiter
+            .reserve_provider_on_subnet(
+                subnet_1,
+                caller,
+                now.checked_add(
+                    PROVIDER_CAPACITY_INTERVAL
+                        .checked_add(Duration::from_secs(5 * 60 * 60))
+                        .unwrap(),
+                )
+                .unwrap(),
+            )
+            .expect("Should be able to make a new reservation on subnet 1");
+
+        rate_limiter.commit_provider_on_subnet(
+            reservation,
+            now.checked_add(
+                PROVIDER_CAPACITY_INTERVAL
+                    .checked_add(Duration::from_secs(5 * 60 * 60))
+                    .unwrap(),
+            )
+            .unwrap(),
         );
     }
 
