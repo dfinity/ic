@@ -768,11 +768,11 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "canister-metadata-section-not-found".to_string(),
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
-                suggestion: format!("Set a higher canister log memory limit.".to_string()),
+                suggestion: "Set a higher canister log memory limit.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
-                suggestion: format!("Set a lower canister log memory limit.".to_string()),
+                suggestion: "Set a lower canister log memory limit.".to_string(),
                 doc_link: "".to_string(),
             },
         }
