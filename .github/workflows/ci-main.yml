@@ -694,6 +694,7 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         if: |
           steps.filter.outputs.cargo == 'true' ||
+          contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
           startsWith(env.BRANCH_NAME, 'hotfix-')
