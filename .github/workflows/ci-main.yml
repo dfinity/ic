@@ -666,7 +666,7 @@ jobs:
           run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  cargo-clippy-linux:
+  cargo-linux:
     strategy:
       matrix:
         include:
