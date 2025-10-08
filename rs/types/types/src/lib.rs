@@ -90,8 +90,8 @@ pub mod xnet;
 pub mod exhaustive;
 
 pub use crate::canister_log::{
-    CanisterLog, DEFAULT_LOG_MEMORY_LIMIT, MAX_ALLOWED_LOG_MEMORY_LIMIT,
-    MIN_ALLOWED_LOG_MEMORY_LIMIT,
+    CanisterLog, default_log_memory_limit, max_allowed_log_memory_limit,
+    min_allowed_log_memory_limit,
 };
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;

@@ -35,8 +35,8 @@ use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, Cycles, DEFAULT_LOG_MEMORY_LIMIT, MemoryAllocation,
-    NumBytes, NumInstructions, PrincipalId, Time,
+    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, Time, default_log_memory_limit,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -515,7 +515,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64),
+            log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -2094,7 +2094,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::from(DEFAULT_LOG_MEMORY_LIMIT as u64),
+            log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

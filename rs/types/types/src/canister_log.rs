@@ -1,4 +1,5 @@
 use candid::Deserialize;
+use ic_base_types::NumBytes;
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -9,13 +10,13 @@ use std::collections::VecDeque;
 const KiB: usize = 1024;
 
 /// The minimum allowed size of a canister log buffer.
-pub const MIN_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+const MIN_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// The default size of a canister log buffer.
-pub const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// The maximum allowed size of a canister log record.
 const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
@@ -29,6 +30,21 @@ const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT >= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MAX_ALLOWED_LOG_RECORD_SIZE);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_ALLOWED_LOG_MEMORY_LIMIT);
+
+/// Returns the minimum allowed size of a canister log buffer.
+pub fn min_allowed_log_memory_limit() -> NumBytes {
+    NumBytes::new(MIN_ALLOWED_LOG_MEMORY_LIMIT as u64)
+}
+
+/// Returns the maximum allowed size of a canister log buffer.
+pub fn max_allowed_log_memory_limit() -> NumBytes {
+    NumBytes::new(MAX_ALLOWED_LOG_MEMORY_LIMIT as u64)
+}
+
+/// Returns the default size of a canister log buffer.
+pub fn default_log_memory_limit() -> NumBytes {
+    NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64)
+}
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(records_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {

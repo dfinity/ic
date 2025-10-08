@@ -54,14 +54,15 @@ use ic_replicated_state::{
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, DEFAULT_LOG_MEMORY_LIMIT,
-    MAX_ALLOWED_LOG_MEMORY_LIMIT, MIN_ALLOWED_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time, default_log_memory_limit,
     ingress::{IngressState, IngressStatus},
+    max_allowed_log_memory_limit,
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
         StopCanisterContext,
     },
+    min_allowed_log_memory_limit,
     nominal_cycles::NominalCycles,
 };
 use ic_wasm_types::WasmHash;
@@ -468,10 +469,10 @@ impl CanisterManager {
 
         let log_memory_limit = settings
             .log_memory_limit()
-            .or(Some(NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64)));
+            .or(Some(default_log_memory_limit()));
         let (min_limit, max_limit) = (
-            NumBytes::new(MIN_ALLOWED_LOG_MEMORY_LIMIT as u64),
-            NumBytes::new(MAX_ALLOWED_LOG_MEMORY_LIMIT as u64),
+            min_allowed_log_memory_limit(),
+            max_allowed_log_memory_limit(),
         );
         match log_memory_limit {
             Some(bytes) if bytes < min_limit => {
