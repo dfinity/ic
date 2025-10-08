@@ -87,8 +87,7 @@ jobs:
 
   lock-generate:
     name: Lock Generate
-    runs-on: *dind-small-setup
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     if: ${{ github.event_name != 'merge_group' }}
     env:
