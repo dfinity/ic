@@ -214,10 +214,10 @@ jobs:
               targets_args+=("--skip_long_tests")
             fi
             if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
-              targets_args+=("--skip_didc_checks")
+              targets_args+=("--exclude_tags=didc")
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-              targets_args+=("--skip_buf_checks")
+              targets_args+=("--exclude_tags=buf")
             fi
             if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
               targets_args+=(
@@ -380,16 +380,16 @@ jobs:
           target_pattern_file=$(mktemp)
           trap "rm $target_pattern_file" INT TERM EXIT
           targets_args=(
-            "--skip_system_tests"
+            "--exclude_tags=system_test"
           )
           if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
             targets_args+=("--skip_long_tests")
           fi
           if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
-            targets_args+=("--skip_didc_checks")
+            targets_args+=("--exclude_tags=didc")
           fi
           if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-            targets_args+=("--skip_buf_checks")
+            targets_args+=("--exclude_tags=buf")
           fi
           if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
             targets_args+=(
@@ -769,9 +769,14 @@ jobs:
           run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  cargo-clippy-linux:
-    name: Cargo Clippy Linux
-    runs-on: &dind-small-setup
+  cargo-linux:
+    strategy:
+      matrix:
+        include:
+          - name: Lint
+          - name: Build
+    name: Cargo  ${{ matrix.name }} Linux
+    runs-on:
       labels: dind-small
     container: *container-setup
     timeout-minutes: 30
@@ -786,12 +791,12 @@ jobs:
               - "**/*.rs"
               - "**/*.toml"
               - "**/*.lock"
-      - name: Run Cargo Clippy Linux
-        id: cargo-clippy-linux
+      - name: Run Cargo ${{ matrix.name }} Linux
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         if: |
           steps.filter.outputs.cargo == 'true' ||
+          contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
           startsWith(env.BRANCH_NAME, 'hotfix-')
@@ -799,38 +804,12 @@ jobs:
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
-          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
 
-  cargo-build-release-linux:
-    name: Cargo Build Release Linux
-    runs-on: *dind-small-setup
-    container: *container-setup
-    timeout-minutes: 30
-    steps:
-      - *checkout
-      - name: Filter Rust Files [*.{rs,toml,lock}]
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          filters: |
-            cargo:
-              - "**/*.rs"
-              - "**/*.toml"
-              - "**/*.lock"
-      - name: Run Cargo Build Release Linux
-        id: cargo-build-release-linux
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-        if: |
-          steps.filter.outputs.cargo == 'true' ||
-          env.BRANCH_NAME == 'master' ||
-          startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
-        shell: bash
-        run: |
-          set -eExuo pipefail
-          export CARGO_TERM_COLOR=always # ensure output has colors
-          cargo build --release --locked
+          if [[ "${{ matrix.name }}" == "Lint" ]]; then
+            "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+          else
+            cargo build --release --locked
+          fi
 
   check-pull-request-bazel-targets:
     name: Check PULL_REQUEST_BAZEL_TARGETS
