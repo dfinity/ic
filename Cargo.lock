@@ -19373,6 +19373,8 @@ dependencies = [
  "ic-nns-handler-root",
  "ic-protobuf",
  "ic-registry-canister-api",
+ "ic-registry-client",
+ "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-proto-data-provider",
