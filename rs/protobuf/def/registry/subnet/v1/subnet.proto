@@ -40,8 +40,10 @@ message SubnetRecord {
 
   // Max number of ingress messages per block.
   uint64 max_ingress_messages_per_block = 18;
+  uint64 max_ingress_bytes_per_block = 31;
 
-  // The maximum combined size of the ingress and xnet messages that fit into a block.
+  // The maximum combined size of xnet messages that fit into a block.
+  // Doesn't take ingress messages into account!
   uint64 max_block_payload_size = 19;
 
   // Information on whether a feature is supported by this subnet.
