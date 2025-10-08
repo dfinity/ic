@@ -179,6 +179,7 @@ pub(crate) enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
     WasmChunkStore(CanisterId),
+    LogMemory(CanisterId),
     SnapshotWasmMemory(SnapshotId),
     SnapshotStableMemory(SnapshotId),
     SnapshotWasmChunkStore(SnapshotId),
