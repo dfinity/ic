@@ -903,6 +903,7 @@ impl From<&[u8]> for PageMap {
 }
 
 /// Buffer provides a file-like interface to a PageMap.
+#[derive(Clone, ValidateEq)]
 pub struct Buffer {
     page_map: PageMap,
     /// The map containing pages modified by the caller since this buffer was
