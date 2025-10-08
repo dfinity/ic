@@ -70,16 +70,27 @@ pub fn test(env: TestEnv) {
             .expect("there is no node in this application subnet");
 
         let runtime = get_runtime_from_node(&node);
+        let webserver_ipv6 = get_universal_vm_address(&env);
+        let mut proxy_canisters = Vec::new();
         // Each requests costs ~6-7 billion cycles, and we make many thousands of requests.
         // The default 100T cycles may not be enough.
-        let proxy_canister =
-            create_proxy_canister_with_cycles(&env, &runtime, &node, Cycles::new(u128::MAX));
-
-        let webserver_ipv6 = get_universal_vm_address(&env);
+        for i in 0..6 {
+            let canister_name = format!("canister_name_{}", i);
+            let proxy_canister = create_proxy_canister_with_name_and_cycles(
+                &env,
+                &runtime,
+                &node,
+                &canister_name,
+                Cycles::new(u128::MAX),
+            );
+            proxy_canisters.push(proxy_canister);
+        }
 
         block_on(async {
             let url = format!("https://[{webserver_ipv6}]:20443");
-            leave_proxy_canister_running(&proxy_canister, url.clone(), logger.clone()).await;
+            for canister in &proxy_canisters {
+                leave_proxy_canister_running(canister, url.clone(), logger.clone()).await;
+            }
         });
     }
 }
