@@ -9833,6 +9833,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-utils 0.9.0",
  "mockall",
  "prometheus 0.13.4",
  "proptest",

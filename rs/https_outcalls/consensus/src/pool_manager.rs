@@ -24,6 +24,7 @@ use ic_types::{
     Height, NumBytes, ReplicaVersion, canister_http::*, consensus::HasHeight, crypto::Signed,
     messages::CallbackId, replica_config::ReplicaConfig,
 };
+use ic_utils::str::StrEllipsize;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -354,21 +355,14 @@ impl CanisterHttpPoolManagerImpl {
                         let max_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES as usize;
                         if reject.message.len() > max_len {
                             let original_len = reject.message.len();
-                            let mut safe_len = max_len;
-
-                            while !reject.message.is_char_boundary(safe_len) {
-                                safe_len -= 1;
-                            }
-
                             warn!(
                                 self.log,
                                 "Pruning oversized reject message for request ID {}. Original size: {}, New size: {}",
                                 response.id,
                                 original_len,
-                                safe_len
+                                max_len
                             );
-                            // This would panic if not on a char boundary.
-                            reject.message.truncate(safe_len);
+                            reject.message = reject.message.ellipsize(max_len, 90);
                         }
                     }
 
