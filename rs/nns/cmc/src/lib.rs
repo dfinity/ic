@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_management_canister_types_private::{
-    // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+    // TODO(NNS1-3249): remove temporary alias `Ic00CanisterSettingsArgs`.
     BoundedControllers,
     CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     LogVisibilityV2,
@@ -168,7 +168,7 @@ impl From<LogVisibilityV2> for LogVisibility {
     }
 }
 
-// TODO(EXC-1687): remove temporary copy of management canister types.
+// TODO(NNS1-3249): remove temporary copy of management canister types.
 // It was added to overcome dependency on `LogVisibility` while
 // management canister already migrated to `LogVisibilityV2`.
 /// Struct used for encoding/decoding
