@@ -140,7 +140,7 @@ fn nonexistent_neuron_cannot_follow_neuron() {
 
 #[test]
 #[should_panic]
-fn neuron_follow_nonexistent_neuron() {
+fn neuron_follow_nonexistent_neuron_fails() {
     let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
@@ -170,7 +170,7 @@ fn unfollow_all_in_a_topic() {
 
 #[test]
 #[should_panic]
-fn follow_existing_and_nonexistent_neurons() {
+fn follow_existing_and_nonexistent_neurons_fails() {
     let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();

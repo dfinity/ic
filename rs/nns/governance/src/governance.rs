@@ -3371,7 +3371,6 @@ impl Governance {
         // Commit new_followees to the neuron.
         let now_seconds = self.env.now();
         self.with_neuron_mut(id, |neuron| {
-            // TODO use the function
             neuron.followees = topic_to_followees;
             neuron.refresh_voting_power(now_seconds);
         })?;
