@@ -13,7 +13,13 @@ thread_local! {
     static INCOMING_CALL_INDICES: RefCell<BTreeMap<CanisterId, u32>> = RefCell::default();
 }
 
-#[ic_cdk::update(decode_with = "decode_message")]
+/// No-op encoder used to prevent encoding with candid by default
+/// (The canister manually encodes the reply with extra arguments himself).
+fn noop_encode(bytes: Vec<u8>) -> Vec<u8> {
+    bytes
+}
+
+#[ic_cdk::update(decode_with = "decode_message", encode_with = "noop_encode")]
 async fn pulse((msg, bytes_received): (Message, u32)) -> Vec<u8> {
     // Check for sequence errors if this is an inter canister call.
     if let Ok(caller) = CanisterId::try_from_principal_id(PrincipalId(ic_cdk::api::msg_caller())) {

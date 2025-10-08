@@ -2,6 +2,12 @@ use candid::{CandidType, Decode, Encode};
 use ic_base_types::CanisterId;
 use serde::{Deserialize, Serialize};
 
+/// The additional overhead from the 2nd encoding when the payload is extended with a padding.
+const PADDED_PAYLOAD_CANDID_HEADER_SIZE: usize = 26;
+
+/// The minimal payload size attached to a call, including the extra bytes due to the padding.
+const MINIMUM_MESSAGE_PAYLOAD_SIZE: usize = 95;
+
 /// Includes all the information for a call to this canister.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
 pub struct Call {
@@ -18,7 +24,7 @@ pub struct Call {
 }
 
 /// The message sent to this canister by an ingress or an inter canister message.
-#[derive(Serialize, Deserialize, CandidType)]
+#[derive(Serialize, Deserialize, CandidType, Debug)]
 pub struct Message {
     /// The call index for this call, i.e. a strictly increasing integer (with each call).
     pub call_index: u32,
@@ -72,10 +78,16 @@ struct ReplyWithPadding {
 /// Encodes a `Message` such that the resulting blob has a target size.
 pub fn encode_message(msg: &Message, target_bytes_count: usize) -> Vec<u8> {
     let message = candid::Encode!(msg).expect("encoding message failed");
-    let padding = vec![13_u8; target_bytes_count.saturating_sub(message.len())];
+    let padding = vec![
+        13_u8;
+        target_bytes_count
+            .saturating_sub(message.len() + PADDED_PAYLOAD_CANDID_HEADER_SIZE)
+    ];
     let result = candid::Encode!(&MessageWithPadding { message, padding })
         .expect("encoding with padding failed");
-    assert_eq!(result.len(), target_bytes_count);
+    if target_bytes_count >= MINIMUM_MESSAGE_PAYLOAD_SIZE {
+        assert_eq!(result.len(), target_bytes_count);
+    }
     result
 }
 
@@ -99,7 +111,11 @@ pub fn encode_reply(
         downstream_responses
     })
     .expect("encoding reply with padding failed");
-    let padding = vec![17_u8; target_bytes_count.saturating_sub(reply.len())];
+    let padding = vec![
+        17_u8;
+        target_bytes_count
+            .saturating_sub(reply.len() + PADDED_PAYLOAD_CANDID_HEADER_SIZE)
+    ];
 
     candid::Encode!(&ReplyWithPadding { reply, padding }).expect("failed to encode reply")
 }

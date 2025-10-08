@@ -2,12 +2,17 @@ use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_state_machine_tests::{StateMachine, SubmitIngressError, UserError};
 use ic_types::{
+    Cycles,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
 };
 use messaging_test::{Call, Message, Reply, Response, decode_reply, encode_message};
 use std::sync::Arc;
 
+pub const KB: u32 = 1024;
+pub const MB: u32 = KB * KB;
+
+#[derive(Debug)]
 pub enum PulseStatus {
     // The pulse has been submitted; the outcome is not known yet.
     Submitted(CanisterId, Message, MessageId),
@@ -47,19 +52,36 @@ impl PulseStatus {
     }
 }
 
-struct TestSubnet {
+pub struct TestSubnet {
     env: Arc<StateMachine>,
     pulses: Vec<PulseStatus>,
 }
 
 impl TestSubnet {
+    pub fn new(env: Arc<StateMachine>, canisters_count: usize) -> Self {
+        let wasm = Project::cargo_bin_maybe_from_env("messaging-test-canister", &[]).bytes();
+        for _ in 0..canisters_count {
+            env.install_canister_with_cycles(
+                wasm.clone(),
+                Vec::new(),
+                None,
+                Cycles::new(u128::MAX / 2),
+            )
+            .expect("Installing messaging-test-canister failed");
+        }
+        Self {
+            env,
+            pulses: Vec::new(),
+        }
+    }
+
     /// Executes a round on this state machine and advances time by one second.
     pub fn execute_round(&self) {
         self.env.execute_round();
         self.env.advance_time(std::time::Duration::from_secs(1));
     }
 
-    /// Attempts to submit a new pulse; executes a round on the state machine if successful.
+    /// Attempts to submit a new pulse.
     pub fn pulse(
         &mut self,
         receiver: CanisterId,
@@ -78,19 +100,20 @@ impl TestSubnet {
             }
         };
         self.pulses.push(pulse);
-
-        // Make progress on the subnet and return.
-        self.execute_round();
         Ok(())
     }
 
     /// Iterates through all the pulses and attempts to update their status.
-    pub fn update_results(&mut self) {
-        let pulses = std::mem::take(&mut self.pulses)
+    pub fn update_submitted_pulses(&mut self) {
+        self.pulses = std::mem::take(&mut self.pulses)
             .into_iter()
             .map(|status| status.update(&self.env))
             .collect::<Vec<_>>();
-        self.pulses = pulses;
+    }
+
+    /// Returns a reference to the pulses made on this test subnet.
+    pub fn pulses(&self) -> &Vec<PulseStatus> {
+        &self.pulses
     }
 
     /// Returns the number of pulses whose outcome is not known yet.
@@ -99,6 +122,16 @@ impl TestSubnet {
             .iter()
             .map(|status| matches!(status, PulseStatus::Submitted(..)) as u64)
             .sum()
+    }
+
+    /// Returns the IDs of the canisters installed at the latest state height.
+    pub fn canisters(&self) -> Vec<CanisterId> {
+        self.env
+            .get_latest_state()
+            .canister_states
+            .keys()
+            .cloned()
+            .collect()
     }
 }
 
