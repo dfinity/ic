@@ -8,7 +8,7 @@ EXIT_STATUS=0
 cargo update --workspace
 
 # Repin the bazel crates, if necessary
-./bin/bazel-pin.sh --force
+./bin/bazel-pin.sh
 
 # Stage files and check if anything changed
 git add Cargo.lock Cargo.Bazel.*.lock
