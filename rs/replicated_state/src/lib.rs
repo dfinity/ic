@@ -63,7 +63,7 @@ pub mod page_map;
 pub mod replicated_state;
 pub use canister_state::{
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
-    SchedulerState,
+    RefundPool, SchedulerState,
     execution_state::Memory,
     num_bytes_try_from,
     system_state::{

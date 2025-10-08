@@ -110,6 +110,11 @@ message RequestOrResponse {
 message Refund {
   types.v1.CanisterId recipient = 1;
   Cycles amount = 2;
+  optional uint64 refund_id = 3;
+}
+
+message Refunds {
+  repeated Refund refunds = 1;
 }
 
 message StreamMessage {
