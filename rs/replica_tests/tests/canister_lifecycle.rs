@@ -22,6 +22,7 @@ use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 const BALANCE_EPSILON: u64 = 1_000_000;
 const NUM_CYCLES: u128 = 1_000_000_000;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4_096;
 
 #[test]
 fn can_create_canister_from_another_canister() {
@@ -723,7 +724,7 @@ fn can_get_canister_information() {
                 2592000,
                 Some(5_000_000_000_000u128),
                 LogVisibilityV2::default(),
-                4_096_u64,           // Default log capacity 4 KiB.
+                TEST_DEFAULT_LOG_MEMORY_LIMIT,
                 0u128,
                 0u128,
                 0u128,
@@ -792,7 +793,7 @@ fn can_get_canister_information() {
                     259200,
                     None,
                     LogVisibilityV2::default(),
-                    4_096_u64,           // Default log capacity 4 KiB.
+                    TEST_DEFAULT_LOG_MEMORY_LIMIT,
                     0u128,
                     0u128,
                     0u128,
