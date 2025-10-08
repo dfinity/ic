@@ -71,8 +71,8 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     }
 
     fn get_unvalidated_artifacts(
-            &self,
-        ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_> {
+        &self,
+    ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_> {
         Box::new(self.unvalidated.values())
     }
 
