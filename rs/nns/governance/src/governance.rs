@@ -3411,21 +3411,30 @@ impl Governance {
                         } else {
                             invalid_followees += 1;
                             error_message.push_str(&format!(
-                                "{}: Not authorized to follow private neuron: {follow:?}\n\t\
-                                To follow a private neuron, you must be the controller or a hotkey of it.\n",
-                                invalid_followees
+                                "{}: Neuron {} is a private neuron.\n\
+                                If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
+                                invalid_followees,
+                                follow.id,
+                                follow.id,
+                                controller
                             ));
                         }
                     } else {
                         invalid_followees += 1;
                         error_message.push_str(&format!(
-                            "{}: Followee ({follow:?}) does not exist.\n",
-                            invalid_followees
+                            "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
+                            invalid_followees,
+                            follow.id
                         ));
                     }
                 }
 
                 if invalid_followees > 0 {
+                    error_message = format!(
+                        "The {} followee(s) listed below is(are) invalid:\n{}",
+                        invalid_followees, error_message
+                    );
+
                     return Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
                         error_message,
