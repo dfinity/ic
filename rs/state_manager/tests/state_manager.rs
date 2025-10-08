@@ -4254,7 +4254,12 @@ fn can_recover_from_corruption_on_state_sync() {
             // Force validation during state sync for testing corruption recovery.
             // Normally validation only occurs when base checkpoint height <= started_height
             // (i.e., after state manager restart), but we override this for testing purposes.
-            // Force validation to test corruption detection.
+            //
+            // This test is to verify that the validation logic can dectect various types of corruption
+            // listed above. Note that we cannot simply trigger validation by restarting the state manager because
+            // those types of corruption are not loadable and state manager would crash upon restart.
+            //
+            // For testing normal validation behavior after restart, see `state_sync_can_handle_corrupted_base_checkpoint_after_restart`
             use ic_state_manager::testing::StateSyncTesting;
             dst_state_sync.set_test_force_validate();
 
@@ -4276,19 +4281,185 @@ fn can_recover_from_corruption_on_state_sync() {
 
             assert_no_remaining_chunks(dst_metrics);
 
-            // NOTE: Critical errors are expected in this test due to forced validation.
-            //
-            // This test artificially forces validation via environment variable, whereas normally
-            // validation only occurs when the state manager restarts (started_height comparison).
-            // Since we're forcing validation on a non-restarted state manager, we expect critical
-            // errors when corrupted chunks are detected that wouldn't normally be validated.
-            //
-            // This test verifies that the validation logic can dectect various types of corruption.
-            // For testing normal validation behavior after restart, see:
-            // `state_sync_can_handle_corrupted_base_checkpoint_after_restart`
-            // assert_ne!(0, count_critical_errors());
+            // NOTE: since we are forcing validation on a non-restarted state manager,
+            // we expect critical errors when corrupted chunks are detected
+            // that wouldn't normally be validated.
+            assert_ne!(0, count_critical_errors(dst_metrics));
         })
     });
+}
+
+#[test]
+fn state_sync_can_handle_corrupted_base_checkpoint_after_restart() {
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    use std::panic::{self, AssertUnwindSafe};
+
+    let populate_original_state = |state: &mut ReplicatedState| {
+        insert_dummy_canister(state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        for i in 0..10000 {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+        }
+    };
+
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        use std::os::unix::fs::FileExt;
+        let (_height, mut state) = src_state_manager.take_tip();
+
+        populate_original_state(&mut state);
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
+
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
+
+        let id = StateSyncArtifactId {
+            height: height(2),
+            hash: hash_2.get(),
+        };
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync message");
+
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+        let hash_3 = wait_for_checkpoint(&*src_state_manager, height(3));
+
+        assert_error_counters(src_metrics);
+
+        state_manager_restart_test_with_state_sync(
+            |dst_metrics, dst_state_manager, dst_state_sync, restart_fn| {
+                let (_height, mut state) = dst_state_manager.take_tip();
+                populate_original_state(&mut state);
+                dst_state_manager.commit_and_certify(
+                    state,
+                    height(1),
+                    CertificationScope::Full,
+                    None,
+                );
+
+                let dst_hash_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
+                assert_eq!(hash_1, dst_hash_1);
+
+                // Corrupt some data
+                let state_layout = dst_state_manager.state_layout();
+                let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+                    state_layout
+                        .checkpoint_verified(height(1))
+                        .unwrap()
+                        .raw_path()
+                        .to_path_buf(),
+                    height(1),
+                )
+                .unwrap();
+
+                let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+                let canister_memory = canister_layout
+                    .vmemory_0()
+                    .existing_overlays()
+                    .unwrap()
+                    .remove(0);
+                make_mutable(&canister_memory).unwrap();
+                for i in 0..10000 {
+                    std::fs::OpenOptions::new()
+                        .write(true)
+                        .create(false)
+                        .truncate(false)
+                        .open(&canister_memory)
+                        .unwrap()
+                        .write_all_at(b"Garbage", i * 4096)
+                        .unwrap();
+                }
+                make_readonly(&canister_memory).unwrap();
+
+                assert_eq!(0, count_critical_errors(dst_metrics));
+                // After the first manifest, we expect to detect a divergence and raise critical errors counter.
+                let (_height, state) = dst_state_manager.take_tip();
+                dst_state_manager.commit_and_certify(
+                    state,
+                    height(2),
+                    CertificationScope::Full,
+                    None,
+                );
+                dst_state_manager.flush_tip_channel();
+                assert_ne!(0, count_critical_errors(dst_metrics));
+
+                // Emulate a state manager crash when encountering a diverged checkpoint.
+                let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                    dst_state_manager.report_diverged_checkpoint(height(2));
+                }));
+                assert!(result.is_err());
+
+                drop(dst_state_sync);
+                // Restart the dst state manager.
+                // restart_fn() needs to take the ownership of state manager to drop it.
+                // We need to manually ensure all other `Arc<StateManagerImpl>` have been dropped.
+                let dst_state_manager = match Arc::try_unwrap(dst_state_manager) {
+                    Ok(sm) => sm,
+                    Err(_) => panic!(
+                        "Please make sure other strong references of dst_state_manager have been dropped"
+                    ),
+                };
+                // State manager restarts and archives the diverged checkpoint.
+                let (dst_metrics, dst_state_manager, dst_state_sync) =
+                    restart_fn(dst_state_manager, None);
+
+                // Only checkpoint @1 remains in the checkpoints folder and the state manager should recover from this checkpoint.
+                assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(1)]);
+                assert_eq!(dst_state_manager.latest_state_height(), height(1));
+
+                // Main testing scenario:
+                // State manager restarts on a broken but loadable checkpoint and start state sync based on it.
+                // State sync should valiate the base checkpoint, detect corruption and fetch the chunks instead.
+                // State sync should finish successfully and state manager should continue execution and create the checkpoint @3.
+                let chunkable =
+                    set_fetch_state_and_start_state_sync(&dst_state_manager, &dst_state_sync, &id);
+                pipe_state_sync(msg, chunkable);
+
+                // Verify the metrics: state sync should detect corruption during the `hardlink_files` phase.
+                let source_key =
+                    maplit::btreemap! {"source".to_string() => "hardlink_files".to_string()};
+                let corrupted_chunks =
+                    fetch_int_counter_vec(&dst_metrics, "state_sync_corrupted_chunks")[&source_key];
+                assert!(corrupted_chunks > 0);
+                assert_no_remaining_chunks(&dst_metrics);
+
+                let (_height, state) = dst_state_manager.take_tip();
+                dst_state_manager.commit_and_certify(
+                    state,
+                    height(3),
+                    CertificationScope::Full,
+                    None,
+                );
+                let dst_hash_3 = wait_for_checkpoint(&*dst_state_manager, height(3));
+                assert_eq!(hash_3, dst_hash_3);
+
+                let expected_state = src_state_manager.get_latest_state();
+
+                assert_eq!(dst_state_manager.get_latest_state(), expected_state);
+
+                let mut tip = dst_state_manager.take_tip().1;
+                let state = expected_state.take();
+                // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
+                tip.metadata
+                    .prev_state_hash
+                    .clone_from(&state.metadata.prev_state_hash);
+                assert_eq!(tip, *state.as_ref());
+            },
+        )
+    });
+}
+
+fn count_critical_errors(metrics: &MetricsRegistry) -> u64 {
+    fetch_int_counter_vec(metrics, "critical_errors")
+        .values()
+        .sum::<u64>()
 }
 
 #[test]
@@ -4344,18 +4515,12 @@ fn can_detect_divergence_with_rehash() {
         }
         make_readonly(&canister_memory).unwrap();
 
-        let count_critical_errors = || {
-            fetch_int_counter_vec(metrics, "critical_errors")
-                .values()
-                .sum::<u64>()
-        };
-
-        assert_eq!(0, count_critical_errors());
+        assert_eq!(0, count_critical_errors(metrics));
         // After the first manifest, we expect to detect a divergence and raise critical errors counter.
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
-        assert_ne!(0, count_critical_errors());
+        assert_ne!(0, count_critical_errors(metrics));
 
         // For the second manifest we expect a full recomputation of the manifest, no new critical errors.
         let (_height, state) = state_manager.take_tip();
@@ -4479,7 +4644,8 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                     ),
                 };
                 // State manager restarts and won't crash again due to the corrupted checkpoint because it will be archived.
-                let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, None);
+                let (_metrics, dst_state_manager, _dst_state_sync) =
+                    restart_fn(dst_state_manager, None);
 
                 // Unverified checkpoint @2 should be archived and moved to the backups folder.
                 let backup_heights = dst_state_manager
