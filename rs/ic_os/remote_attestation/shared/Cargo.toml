@@ -1,0 +1,12 @@
+[package]
+name = "remote_attestation_shared"
+edition.workspace = true
+
+[dependencies]
+prost = { workspace = true }
+tonic = { workspace = true }
+attestation = { path = "../../attestation" }
+
+[build-dependencies]
+prost-build = { workspace = true }
+tonic-build = { workspace = true }

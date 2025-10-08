@@ -10,23 +10,23 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    error::{UpgradeError, UpgradeResult},
     ImageUpgrader, Rebooting,
+    error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
     },
-    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -173,8 +173,7 @@ impl Upgrade {
                     let subnet_id =
                         get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
-                                "Couldn't determine the subnet id: {:?}",
-                                err
+                                "Couldn't determine the subnet id: {err:?}"
                             ))
                         })?;
                     (subnet_id, maybe_proto, maybe_cup)
@@ -192,8 +191,7 @@ impl Upgrade {
                     let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
                         .map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
-                                "Couldn't deserialize NiDkgId to determine the subnet id: {:?}",
-                                err
+                                "Couldn't deserialize NiDkgId to determine the subnet id: {err:?}"
                             ))
                         })?;
 
@@ -246,16 +244,16 @@ impl Upgrade {
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with
         // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
-        if let Some(old_cup) = local_cup {
-            if old_cup.height() < latest_cup.height() {
-                compare_master_public_keys(
-                    &old_cup,
-                    &latest_cup,
-                    self.metrics.as_ref(),
-                    self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
-                    &self.logger,
-                );
-            }
+        if let Some(old_cup) = local_cup
+            && old_cup.height() < latest_cup.height()
+        {
+            compare_master_public_keys(
+                &old_cup,
+                &latest_cup,
+                self.metrics.as_ref(),
+                self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
+                &self.logger,
+            );
         }
 
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
@@ -362,36 +360,35 @@ impl Upgrade {
             .get_cup_contents(subnet_id, registry_version)
             .ok()
             .and_then(|record| record.value)
+            && let Some(registry_store_uri) = registry_contents.registry_store_uri
         {
-            if let Some(registry_store_uri) = registry_contents.registry_store_uri {
-                warn!(
-                    self.logger,
-                    "Downloading registry data from {} with hash {} for subnet recovery",
-                    registry_store_uri.uri,
-                    registry_store_uri.hash,
-                );
-                let downloader = FileDownloader::new(Some(self.logger.clone()));
-                let local_store_location = tempfile::tempdir()
-                    .expect("temporary location for local store download could not be created")
-                    .keep();
-                downloader
-                    .download_and_extract_tar(
-                        &registry_store_uri.uri,
-                        &local_store_location,
-                        Some(registry_store_uri.hash),
-                    )
-                    .await
-                    .map_err(OrchestratorError::FileDownloadError)?;
-                if let Err(e) = self.stop_replica() {
-                    // Even though we fail to stop the replica, we should still
-                    // replace the registry local store, so we simply issue a warning.
-                    warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                }
-                let new_local_store = LocalStoreImpl::new(local_store_location);
-                self.registry_replicator
-                    .stop_polling_and_set_local_registry_data(&new_local_store);
-                reexec_current_process(&self.logger);
+            warn!(
+                self.logger,
+                "Downloading registry data from {} with hash {} for subnet recovery",
+                registry_store_uri.uri,
+                registry_store_uri.hash,
+            );
+            let downloader = FileDownloader::new(Some(self.logger.clone()));
+            let local_store_location = tempfile::tempdir()
+                .expect("temporary location for local store download could not be created")
+                .keep();
+            downloader
+                .download_and_extract_tar(
+                    &registry_store_uri.uri,
+                    &local_store_location,
+                    Some(registry_store_uri.hash),
+                )
+                .await
+                .map_err(OrchestratorError::FileDownloadError)?;
+            if let Err(e) = self.stop_replica() {
+                // Even though we fail to stop the replica, we should still
+                // replace the registry local store, so we simply issue a warning.
+                warn!(self.logger, "Failed to stop replica with error {:?}", e);
             }
+            let new_local_store = LocalStoreImpl::new(local_store_location);
+            self.registry_replicator
+                .stop_polling_and_set_local_registry_data(&new_local_store);
+            reexec_current_process(&self.logger);
         }
         Ok(())
     }
@@ -728,14 +725,12 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
                 Ok(())
             } else {
                 Err(format!(
-                    "Failed to run command '{:?}', return value: {}",
-                    fstrim_script, status
+                    "Failed to run command '{fstrim_script:?}', return value: {status}"
                 ))
             }
         }
         Err(err) => Err(format!(
-            "Failed to run command '{:?}', error: {}",
-            fstrim_script, err
+            "Failed to run command '{fstrim_script:?}', error: {err}"
         )),
     }
 }
@@ -752,7 +747,7 @@ fn remove_node_state(
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")
         .tempdir()
-        .map_err(|err| format!("Couldn't create a temporary directory: {:?}", err))?;
+        .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
     let config = Config::load_with_tmpdir(
         ConfigSource::File(replica_config_file),
         tmpdir.path().to_path_buf(),
@@ -760,10 +755,7 @@ fn remove_node_state(
 
     let consensus_pool_path = config.artifact_pool.consensus_pool_path;
     remove_dir_all(&consensus_pool_path).map_err(|err| {
-        format!(
-            "Couldn't delete the consensus pool at {:?}: {:?}",
-            consensus_pool_path, err
-        )
+        format!("Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}")
     })?;
 
     let state_path = config.state_manager.state_root();
@@ -835,20 +827,14 @@ fn remove_node_state(
     }
 
     remove_file(&cup_path)
-        .map_err(|err| format!("Couldn't delete the CUP at {:?}: {:?}", cup_path, err))?;
+        .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
 
     let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
     if key_changed_metric.try_exists().map_err(|err| {
-        format!(
-            "Failed to check if {:?} exists, because {:?}",
-            key_changed_metric, err
-        )
+        format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
     })? {
         remove_file(&key_changed_metric).map_err(|err| {
-            format!(
-                "Couldn't delete the key changes metric at {:?}: {:?}",
-                key_changed_metric, err
-            )
+            format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
         })?;
     }
 
@@ -1007,12 +993,12 @@ mod tests {
 
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
     };
     use ic_crypto_test_utils_ni_dkg::{
-        run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment, RandomNiDkgConfig,
+        NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_interfaces_registry::{RegistryClientVersionedResult, RegistryVersionedRecord};
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
@@ -1023,25 +1009,25 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        PrincipalId, Time,
         batch::ValidationContext,
         consensus::{
-            dkg::DkgSummary,
-            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+            dkg::DkgSummary,
+            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
         },
         crypto::{
+            AlgorithmId, CryptoHash, CryptoHashOf,
             canister_threshold_sig::idkg::IDkgTranscript,
             threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript},
-            AlgorithmId, CryptoHash, CryptoHashOf,
         },
         registry::RegistryClientError,
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
-        PrincipalId, Time,
     };
     use mockall::mock;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     fn make_ecdsa_key_id() -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -1229,7 +1215,7 @@ mod tests {
 
         fn generate_nidkg_key_transcript(&mut self, key_id: &MasterPublicKeyId) -> KeyTranscript {
             let MasterPublicKeyId::VetKd(vetkd_key_id) = key_id.clone() else {
-                panic!("Can't generate nidkg transcript for {}", key_id);
+                panic!("Can't generate nidkg transcript for {key_id}");
             };
             let mut config = RandomNiDkgConfig::builder()
                 .dkg_tag(NiDkgTag::HighThresholdForKey(
@@ -1359,10 +1345,8 @@ mod tests {
             let c1 = make_cup(Height::from(10), Some(key.clone()));
 
             let key_id2 = clone_key_id_with_name(&key_id1, "other_key");
-            let c2 = if let (
-                MasterPublicKeyId::VetKd(ref key_id),
-                KeyTranscript::NiDkg(ref transcript),
-            ) = (&key_id2, &key.1)
+            let c2 = if let (MasterPublicKeyId::VetKd(key_id), KeyTranscript::NiDkg(transcript)) =
+                (&key_id2, &key.1)
             {
                 let mut transcript2 = transcript.clone();
                 transcript2.dkg_id.dkg_tag =

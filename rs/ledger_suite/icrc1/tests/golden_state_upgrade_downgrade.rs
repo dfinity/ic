@@ -3,16 +3,15 @@ use crate::index::verify_ledger_archive_and_index_block_parity;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1::Block;
+use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
+use ic_ledger_suite_in_memory_ledger::{
     AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
-use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
-    TransactionGenerationParameters,
+use ic_ledger_suite_state_machine_helpers::{
+    TransactionGenerationParameters, generate_transactions, get_all_ledger_and_archive_blocks,
+    get_blocks, list_archives, retrieve_metrics,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::{StateMachine, UserError};
@@ -235,8 +234,7 @@ impl LedgerSuiteConfig {
                 self.check_index_principal(state_machine, ledger_canister_id, index_canister_id);
             assert!(
                 index_principal_check.is_ok(),
-                "ICRC-106 index principal was set before upgrading the ledger to master, but now it is no longer set: {:?}",
-                index_principal_check
+                "ICRC-106 index principal was set before upgrading the ledger to master, but now it is no longer set: {index_principal_check:?}"
             );
         }
         // Downgrade back to the mainnet canister versions
@@ -299,10 +297,7 @@ impl LedgerSuiteConfig {
                 Ok(())
             }
             Err(err) => {
-                println!(
-                    "Failed to get index principal for ledger {}: {:?}",
-                    ledger_canister_id, err
-                );
+                println!("Failed to get index principal for ledger {ledger_canister_id}: {err:?}");
                 Err(Icrc106CheckError::IndexPrincipalNotSet)
             }
         }
@@ -314,7 +309,7 @@ impl LedgerSuiteConfig {
         let metrics = retrieve_metrics(state_machine, ledger_id);
         println!("Ledger metrics:");
         for metric in metrics {
-            println!("  {}", metric);
+            println!("  {metric}");
         }
     }
 
@@ -329,13 +324,10 @@ impl LedgerSuiteConfig {
             state_machine
                 .upgrade_canister(archive_canister_id, wasm.clone().bytes(), vec![])
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "should successfully upgrade archive '{}': {}",
-                        archive_canister_id, e
-                    )
+                    panic!("should successfully upgrade archive '{archive_canister_id}': {e}")
                 });
         }
-        println!("Upgraded {} archive(s)", num_archives);
+        println!("Upgraded {num_archives} archive(s)");
     }
 
     fn upgrade_index_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
@@ -391,10 +383,7 @@ impl LedgerSuiteConfig {
                     .expect("should downgrade to mainnet ledger version");
             }
             (true, Err(e)) => {
-                panic!(
-                    "should successfully downgrade to mainnet ledger version: {}",
-                    e
-                );
+                panic!("should successfully downgrade to mainnet ledger version: {e}");
             }
             (false, Ok(_)) => {
                 panic!("should not successfully downgrade to mainnet ledger version");
@@ -607,13 +596,12 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             .0,
         subaccount: None,
     };
-    let burns_without_spender =
-        ic_ledger_suite_state_machine_tests::in_memory_ledger::BurnsWithoutSpender {
-            minter: ck_btc_minter,
-            burn_indexes: vec![
-                100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
-            ],
-        };
+    let burns_without_spender = BurnsWithoutSpender {
+        minter: ck_btc_minter,
+        burn_indexes: vec![
+            100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
+        ],
+    };
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
@@ -1127,7 +1115,9 @@ mod index {
                 return;
             }
         }
-        panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+        panic!(
+            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
+        );
     }
 
     fn get_index_blocks<I>(

@@ -12,15 +12,15 @@ use ic_system_test_driver::{
         resource::AllocatedVm,
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            IcNodeSnapshot, SshSession, SubnetSnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
+            SubnetSnapshot, get_dependency_path,
         },
-        universal_vm::{insert_file_to_config, UniversalVm, UniversalVms},
+        universal_vm::{UniversalVm, UniversalVms, insert_file_to_config},
     },
     util::{block_on, runtime_from_url},
 };
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
-use slog::{debug, error, info, Logger};
+use slog::{Logger, debug, error, info};
 use std::{
     collections::{BTreeMap, HashMap},
     fs::File,
@@ -212,13 +212,7 @@ fn create_ledger_canister(
             canister.canister_id().get()
         );
         let encoded = Encode!(&ledger_init_args).unwrap();
-        install_rust_canister(
-            &mut canister,
-            "ledger-canister",
-            &["notify-method"],
-            Some(encoded),
-        )
-        .await;
+        install_rust_canister(&mut canister, "ledger-canister", &[], Some(encoded)).await;
 
         canister.canister_id()
     })

@@ -12,16 +12,15 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use candid::{CandidType, Principal};
-use ic_bn_lib::http::{proxy, Client as HttpClient};
-pub use ic_bn_lib::types::RequestType;
-use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
+use ic_bn_lib::http::{Client as HttpClient, proxy};
+use ic_types::{CanisterId, SubnetId, messages::ReplicaHealthStatus};
 use serde::Deserialize;
 use url::Url;
 
 use crate::{
     core::ANONYMOUS_PRINCIPAL,
     errors::{ApiError, ErrorCause},
-    http::error_infer,
+    http::{RequestType, error_infer},
     persist::Routes,
     snapshot::{RegistrySnapshot, Subnet},
 };
@@ -257,10 +256,10 @@ pub(crate) mod test {
     use std::sync::Arc;
 
     use anyhow::Error;
-    use axum::{body::Body, http::Request, routing::method_routing::get, Router};
+    use axum::{Router, body::Body, http::Request, routing::method_routing::get};
     use http::{
-        header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
         StatusCode,
+        header::{CONTENT_TYPE, HeaderName, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
     };
     use ic_bn_lib::{
         http::headers::{
@@ -270,22 +269,22 @@ pub(crate) mod test {
         principal,
     };
     use ic_types::{
+        PrincipalId,
         messages::{
             Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
             HttpReadStateContent, HttpRequestEnvelope, HttpStatusResponse, HttpUserQuery,
         },
-        PrincipalId,
     };
     use tower::Service;
 
     use crate::{
         http::{
-            handlers::{health, status},
             PATH_HEALTH, PATH_STATUS,
+            handlers::{health, status},
         },
         persist::{Persist, Persister},
         snapshot::test::test_registry_snapshot,
-        test_utils::{setup_test_router, TestHttpClient},
+        test_utils::{TestHttpClient, setup_test_router},
     };
 
     fn assert_header(headers: &http::HeaderMap, name: HeaderName, expected_value: &str) {
@@ -602,7 +601,7 @@ pub(crate) mod test {
         assert_header(&headers, X_IC_SENDER, &sender.to_string());
         assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
         assert_header(&headers, X_IC_METHOD_NAME, "foobar");
-        assert_header(&headers, X_IC_REQUEST_TYPE, "query");
+        assert_header(&headers, X_IC_REQUEST_TYPE, "query_v2");
         assert_header(&headers, CONTENT_TYPE, "application/cbor");
         assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
         assert_header(&headers, X_FRAME_OPTIONS, "DENY");

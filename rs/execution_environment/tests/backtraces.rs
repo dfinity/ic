@@ -35,7 +35,6 @@ core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-_wasm_backtrace_canister::ic0_trap
 ic_cdk_executor::in_executor_context
 canister_update ic0_trap
 "#;
@@ -99,14 +98,12 @@ fn assert_error(
     let result = env
         .execute_ingress_as(CONTROLLER, canister_id, method, Encode!(&()).unwrap())
         .unwrap_err();
-    result.assert_contains(code, &format!("{}{}", message, backtrace));
+    result.assert_contains(code, &format!("{message}{backtrace}"));
     let logs = env.canister_log(canister_id);
     let last_error = std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
     assert!(
         last_error.contains(backtrace),
-        "Last log: {} doesn't contain backtrace: {}",
-        last_error,
-        backtrace
+        "Last log: {last_error} doesn't contain backtrace: {backtrace}"
     );
 }
 
@@ -148,8 +145,7 @@ fn no_backtrace_without_feature() {
         let log = std::str::from_utf8(&log.content).unwrap();
         assert!(
             !log.contains("Backtrace"),
-            "Canister log: {} cointains unexpected 'Backtrace'",
-            log,
+            "Canister log: {log} cointains unexpected 'Backtrace'",
         );
     }
 }
@@ -183,8 +179,7 @@ fn no_backtrace_without_name_section() {
         let log = std::str::from_utf8(&log.content).unwrap();
         assert!(
             !log.contains("Backtrace"),
-            "Canister log: {} cointains unexpected 'Backtrace'",
-            log,
+            "Canister log: {log} cointains unexpected 'Backtrace'",
         );
     }
 }
@@ -215,7 +210,9 @@ fn backtrace_test_ic0_trap() {
         canister_id,
         "ic0_trap",
         ErrorCode::CanisterCalledTrap,
-        &format!("Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: '{}'", IC0_TRAP_ERROR),
+        &format!(
+            "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: '{IC0_TRAP_ERROR}'"
+        ),
         IC0_TRAP_BACKTRACE,
     );
 }
@@ -288,9 +285,7 @@ mod visibility {
             std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
         assert!(
             last_error.contains(backtrace),
-            "Last log: {} doesn't contain backtrace: {}",
-            last_error,
-            backtrace
+            "Last log: {last_error} doesn't contain backtrace: {backtrace}"
         );
     }
 

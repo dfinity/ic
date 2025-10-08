@@ -1,14 +1,14 @@
 use bitcoin::{
+    Amount, Block as BtcBlock, BlockHash, Network as BtcNetwork, Transaction, Txid,
     address::{Address as BtcAddress, NetworkUnchecked, ParseError as BtcAddressParseError},
     amount::ParseAmountError,
     block::Header,
-    consensus::{encode, Decodable},
+    consensus::{Decodable, encode},
     dogecoin::{
-        address::ParseError as DogeAddressParseError, Address as DogeAddress, Block as DogeBlock,
-        Network as DogeNetwork,
+        Address as DogeAddress, Block as DogeBlock, Network as DogeNetwork,
+        address::ParseError as DogeAddressParseError,
     },
     hex::DisplayHex,
-    Amount, Block as BtcBlock, BlockHash, Network as BtcNetwork, Transaction, Txid,
 };
 use ic_config::adapters::AdaptersConfig;
 use std::collections::HashMap;
@@ -85,6 +85,16 @@ pub enum RpcError {
     InvalidBtcAddress(BtcAddressParseError),
     InvalidCookieFile,
     AddressNotAvailable,
+}
+
+impl RpcError {
+    pub fn is_resource_temporarily_unavailable(&self) -> bool {
+        if let RpcError::JsonRpc(jsonrpc::error::Error::Transport(err)) = self {
+            err.to_string().contains("Resource temporarily unavailable")
+        } else {
+            false
+        }
+    }
 }
 
 impl From<BtcAddressParseError> for RpcError {
@@ -275,7 +285,16 @@ impl<T: RpcClientType> RpcClient<T> {
                     .create_wallet("default", None, None, None, None)
                     .is_err()
                 {
-                    self.load_wallet("default")?;
+                    match self.load_wallet("default") {
+                        // Wait a second if it says "Wallet already loading."
+                        Err(RpcError::JsonRpc(jsonrpc::error::Error::Rpc(
+                            jsonrpc::error::RpcError { code, message, .. },
+                        ))) if code == -4 && message == "Wallet already loading." => {
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                        }
+                        Err(err) => return Err(err),
+                        Ok(_) => {}
+                    }
                 }
                 break;
             }

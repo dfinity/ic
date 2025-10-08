@@ -11,7 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_test_utils::common::build_registry_wasm;
+use ic_nns_test_utils::common::{build_registry_wasm, build_test_registry_wasm};
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };
@@ -25,11 +25,11 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use pocket_ic::nonblocking::PocketIc;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
@@ -272,11 +272,11 @@ async fn wait_for_ecdsa_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -306,11 +306,11 @@ async fn wait_for_schnorr_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -340,11 +340,11 @@ async fn wait_for_vetkd_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -374,14 +374,11 @@ pub fn check_error_message<T: std::fmt::Debug>(
 ) {
     match result {
         Ok(value) => panic!(
-            "expected the call to fail with message '{}', got Ok({:?})",
-            expected_substring, value
+            "expected the call to fail with message '{expected_substring}', got Ok({value:?})"
         ),
         Err(e) => assert!(
             e.contains(expected_substring),
-            "expected the call to fail with message '{}', got:  {}",
-            expected_substring,
-            e
+            "expected the call to fail with message '{expected_substring}', got:  {e}"
         ),
     }
 }
@@ -414,25 +411,38 @@ pub async fn check_subnet_for_canisters(
 }
 
 pub async fn install_registry_canister(pocket_ic: &PocketIc) {
-    install_registry_canister_with_mutations(pocket_ic, vec![]).await;
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new().build(),
+        false,
+    )
+    .await;
 }
 
-pub async fn install_registry_canister_with_mutations(
-    pocket_ic: &PocketIc,
-    requests: Vec<RegistryAtomicMutateRequest>,
-) {
-    let mut payload = RegistryCanisterInitPayloadBuilder::new();
-    for request in requests {
-        payload.push_init_mutate_request(request);
-    }
+pub async fn install_test_registry_canister(pocket_ic: &PocketIc) {
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new().build(),
+        true,
+    )
+    .await;
+}
 
-    let payload = payload.build();
+pub async fn install_registry_canister_with_payload_builder(
+    pocket_ic: &PocketIc,
+    payload: RegistryCanisterInitPayload,
+    test_configuration: bool,
+) {
     install_canister(
         pocket_ic,
         "Registry",
         REGISTRY_CANISTER_ID,
         Encode!(&payload).unwrap(),
-        build_registry_wasm(),
+        if test_configuration {
+            build_test_registry_wasm()
+        } else {
+            build_registry_wasm()
+        },
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;

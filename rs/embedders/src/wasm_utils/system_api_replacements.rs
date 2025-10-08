@@ -12,14 +12,14 @@
 //!
 
 use crate::{
+    InternalErrorCode,
     wasm_utils::instrumentation::{InjectedCounters, InjectedFunctions, WasmMemoryType},
     wasmtime_embedder::system_api_complexity::overhead_native,
-    InternalErrorCode,
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
-use wirm::{ir::types::Instructions, wasmparser::BlockType, DataType};
+use wirm::{DataType, ir::types::Instructions, wasmparser::BlockType};
 
 use ic_types::NumBytes;
 

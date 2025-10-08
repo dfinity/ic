@@ -1,14 +1,15 @@
-use ic_system_test_driver::driver::test_env_api::{secs, IcNodeContainer, SubnetSnapshot};
+use ic_system_test_driver::driver::test_env_api::{IcNodeContainer, SubnetSnapshot, secs};
 use ic_system_test_driver::{
     driver::test_env_api::{
-        HasPublicApiUrl, IcNodeSnapshot, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        HasPublicApiUrl, IcNodeSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession,
     },
-    util::{block_on, MetricsFetcher},
+    util::{MetricsFetcher, block_on},
 };
 use ic_types::{Height, RegistryVersion};
 
-use anyhow::{anyhow, bail};
-use slog::{info, Logger};
+use anyhow::{anyhow, bail, ensure};
+use slog::{Logger, info};
+use ssh2::Session;
 
 use crate::ssh_access::execute_bash_command;
 
@@ -93,6 +94,16 @@ pub fn assert_node_is_assigned(node: &IcNodeSnapshot, logger: &Logger) {
 
 /// Assert that the given node has deleted its state within the next 5 minutes.
 pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
+    assert_node_is_unassigned_with_ssh_session(node, None, logger)
+}
+
+/// Assert that the given node has deleted its state within the next 5 minutes.
+/// Reuses the provided SSH session if given, otherwise creates a new one.
+pub fn assert_node_is_unassigned_with_ssh_session(
+    node: &IcNodeSnapshot,
+    existing_session: Option<&Session>,
+    logger: &Logger,
+) {
     info!(
         logger,
         "Asserting that node {} has deleted its state and local CUP.",
@@ -107,9 +118,10 @@ pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
         [ -f /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb ]) && \
         echo "assigned" || echo "unassigned"
     "#;
-    let s = node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
+    let s = existing_session.cloned().unwrap_or_else(|| {
+        node.block_on_ssh_session()
+            .expect("Failed to establish SSH session")
+    });
 
     ic_system_test_driver::retry_with_msg!(
         format!("check if node {} is unassigned", node.node_id),
@@ -174,22 +186,25 @@ pub fn await_subnet_earliest_topology_version(
         || match block_on(metrics.fetch::<u64>()) {
             Ok(val) => {
                 let earliest_registry_versions = &val[EARLIEST_TOPOLOGY_VERSION];
-                assert_eq!(earliest_registry_versions.len(), subnet.nodes().count());
+                ensure!(
+                    earliest_registry_versions.len() == subnet.nodes().count(),
+                    "Metrics not available for all nodes yet. {} metrics, {} nodes",
+                    earliest_registry_versions.len(),
+                    subnet.nodes().count()
+                );
                 let min_earliest_registry_version =
                     earliest_registry_versions.iter().min().unwrap();
                 assert!(
                     *min_earliest_registry_version <= target_version.get(),
                     "Target version already surpassed"
                 );
-                if *min_earliest_registry_version == target_version.get() {
-                    Ok(())
-                } else {
-                    bail!(
-                        "Target registry version not yet reached, current: {:?}, target: {}",
-                        earliest_registry_versions,
-                        target_version,
-                    )
-                }
+                ensure!(
+                    *min_earliest_registry_version == target_version.get(),
+                    "Target registry version not yet reached, current: {:?}, target: {}",
+                    earliest_registry_versions,
+                    target_version
+                );
+                Ok(())
             }
             Err(err) => {
                 bail!("Could not connect to metrics yet {:?}", err);

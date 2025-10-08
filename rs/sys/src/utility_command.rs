@@ -14,9 +14,9 @@ pub enum UtilityCommandError {
 impl std::fmt::Display for UtilityCommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            UtilityCommandError::IoError(err) => write!(f, "{}", err),
+            UtilityCommandError::IoError(err) => write!(f, "{err}"),
             UtilityCommandError::Failed(err, status) => {
-                write!(f, "Utility command failed with status {}: {}", status, err)
+                write!(f, "Utility command failed with status {status}: {err}")
             }
         }
     }
@@ -61,7 +61,7 @@ impl UtilityCommand {
         cmd.stdout(Stdio::piped());
 
         let map_to_err = |e: std::io::Error| {
-            UtilityCommandError::IoError(format!("Error while running '{}': {}", self, e))
+            UtilityCommandError::IoError(format!("Error while running '{self}': {e}"))
         };
         let mut child = cmd.spawn().map_err(map_to_err)?;
 
@@ -70,7 +70,7 @@ impl UtilityCommand {
             None => {
                 return Err(UtilityCommandError::IoError(
                     "Could not fetch stdin of child process.".to_string(),
-                ))
+                ));
             }
         };
 
@@ -244,7 +244,7 @@ impl UtilityCommand {
 
                 if !output.status.success() {
                     if let Ok(error) = std::str::from_utf8(output.stderr.as_slice()) {
-                        return Err(format!("Unable to get HostOS version: '{}'", error));
+                        return Err(format!("Unable to get HostOS version: '{error}'"));
                     } else {
                         return Err("Unable to get HostOS version".to_string());
                     }
@@ -263,7 +263,7 @@ impl UtilityCommand {
 impl std::fmt::Display for UtilityCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "`{}", self.program)?;
-        self.args.iter().try_for_each(|a| write!(f, " {}", a))?;
+        self.args.iter().try_for_each(|a| write!(f, " {a}"))?;
         write!(f, "` input: {}", hex::encode(self.input.clone()))
     }
 }

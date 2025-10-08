@@ -4,70 +4,82 @@ Title:: Read State Request Tests
 Goal:: Test the behavior of the read_state endpoint according to its specification.
 
 Runbook::
-. Set up two subnets with one fast node each
+. Set up two subnets with one fast node each and an api boundary node
 
 Success::
-. read_state of the empty path returns the time
-. The /time path returns the time
-. The /subnet path returns
+. /api/{v2,v3}/{subnet,canister}/.../read_state of the empty path returns the time
+. The /time path returns the time at /api/{v2,v3}/{subnet,canister}/.../read_state
+. /api/{v2,v3}/{subnet,canister}/.../read_state of the /subnet path returns
     . public key and canister ranges for all subnets
     . public keys of nodes on the subnet
     . no public keys of nodes on other subnets
-. Malformed status requests are rejected
-. Status requests for non-existent requests contain an absence proof
-. read_state requests of invalid paths are rejected
+. Malformed status requests are rejected by /api/{v2,v3}/canister/.../read_state
+. Status requests for non-existent requests contain an absence proof by /api/{v2,v3}/canister/.../read_state
+. /api/{v2,v3}/canister/.../read_state requests of invalid paths are rejected
 . A canister's public metadata sections can be read by
     . The canister controller
     . The anonymous identity
     . An Identity that isn't the canister controller
+  at /api/{v2,v3}/canister/.../read_state endpoints.
 . A canister's private metadata sections can only be read by the canister controller.
-. Requests for the paths /canister/C/module_hash and /canister/C/controllers succeed for
+. /api/{v2,v3}/canister/.../read_state requests for the paths /canister/C/module_hash and /canister/C/controllers succeed for
   both empty and non-empty canisters (with zero, one, and two controllers) and return correct values:
     . module_hash is absent for empty canisters;
     . module_hash is a blob for non-empty canisters;
     . controllers are always present for existing canisters and consist of a list of principals
-. Read state requests for the full paths /request_status/R/status and /request_status/R/reply succeed
-. Read state requests for the path /request_status/R are rejected with 403 if signed by a different
+. /api/{v2,v3}/canister/.../read_state requests for the full paths /request_status/R/status and /request_status/R/reply succeed
+. /api/{v2,v3}/canister/.../read_state requests for the path /request_status/R are rejected with 403 if signed by a different
   principal than who made the original request with request ID R;
-. Read state requests for two paths /request_status/R and /request_status/S with two different request
+. /api/{v2,v3}/canister/.../read_state requests for two paths /request_status/R and /request_status/S with two different request
   IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
-. Read state requests at `/api/v2/subnet/{subnet_id}/read_state` for the path `/canister_ranges/{subnet_id}`
+. Read state requests at `/api/{v2,v3}/subnet/{subnet_id}/read_state` for the path `/canister_ranges/{subnet_id}`
   succeed and return a correct list of canister ranges assigned to the subnet.
-. Read state requests at `/api/v2/canister/{canister_id}/read_state` for the path `/canister_ranges/{subnet_id}`
+. Read state requests at `/api/{v2,v3}/canister/{canister_id}/read_state` for the path `/canister_ranges/{subnet_id}`
   should fail because the path is disallowed.
 end::catalog[] */
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::panic;
+use std::time::Duration;
 
 use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{Encode, Principal};
 use canister_test::{Canister, CanisterInstallMode, Wasm};
-use ic_agent::agent::CallResponse;
+use ic_agent::agent::{CallResponse, Envelope, EnvelopeContent};
+use ic_agent::agent_error::HttpErrorPayload;
 use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
-use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
+use ic_agent::{Agent, AgentError, Certificate, Identity, RequestId, lookup_value};
+use ic_certification::{verify_certificate, verify_certificate_for_subnet_read_state};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_http_endpoints_public::read_state;
 use ic_message::ForwardParams;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env::HasIcPrepDir;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::util::{
-    agent_with_identity, block_on, get_identity, random_ed25519_identity, runtime_from_url,
-    MessageCanister,
+    MessageCanister, block_on, get_identity, random_ed25519_identity, runtime_from_url,
 };
 use ic_system_test_driver::{
     driver::{
-        group::SystemTestGroup,
+        group::{SystemTestGroup, SystemTestSubGroup},
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot},
     },
     systest,
 };
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types::messages::{Blob, HttpReadStateResponse};
+use ic_types::{CanisterId, PrincipalId};
+use reqwest::StatusCode;
+use serde::Serialize;
 use slog::info;
+use time::OffsetDateTime;
+use url::Url;
 
 /// Encodes an unsigned integer into its binary representation using `leb128`.
 fn enc_leb128(x: usize) -> Vec<u8> {
@@ -118,6 +130,7 @@ fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
+        .add_fast_single_node_subnet(SubnetType::Application)
         .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -139,130 +152,144 @@ fn get_first_app_node(env: &TestEnv) -> IcNodeSnapshot {
 }
 
 fn get_first_app_subnet(env: &TestEnv) -> SubnetSnapshot {
-    env.topology_snapshot()
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("There should be at least one subnet for every subnet type")
+    get_both_app_subnets(env).0
 }
 
-async fn build_agent_with_identity(env: &TestEnv, identity: impl Identity + 'static) -> Agent {
-    // get an agent for the API boundary node
-    let api_bn = env
+fn get_both_app_subnets(env: &TestEnv) -> (SubnetSnapshot, SubnetSnapshot) {
+    let app_subnets: Vec<_> = env
+        .topology_snapshot()
+        .subnets()
+        .filter(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .collect();
+
+    assert_eq!(
+        app_subnets.len(),
+        2,
+        "There should be exactly two Application subnets"
+    );
+
+    (app_subnets[0].clone(), app_subnets[1].clone())
+}
+
+/// Call "read_state" with the given paths and the basic identity on the first Application subnet
+fn read_state(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    endpoint: Endpoint,
+) -> Result<Certificate, AgentError> {
+    read_state_with_identity(env, paths, endpoint, get_identity())
+}
+
+/// Call "read_state" with the given paths and the identity on the first Application subnet
+fn read_state_with_identity(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    endpoint: Endpoint,
+    identity: impl Identity,
+) -> Result<Certificate, AgentError> {
+    let principal_id = match &endpoint {
+        Endpoint::CanisterReadState(_version) => get_first_app_node(env).effective_canister_id(),
+        Endpoint::SubnetReadState(_version) => get_first_app_subnet(env).subnet_id.get(),
+    };
+
+    read_state_with_identity_and_principal_id(env, paths, endpoint, identity, principal_id)
+}
+
+fn read_state_with_identity_and_principal_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    endpoint: Endpoint,
+    identity: impl Identity,
+    principal_id: PrincipalId,
+) -> Result<Certificate, AgentError> {
+    let subnet = get_first_app_subnet(env);
+    let node = get_first_app_node(env);
+    let api_boundary_node = env
         .topology_snapshot()
         .api_boundary_nodes()
         .next()
         .expect("There should be at least one API boundary node");
-    let url = api_bn.get_public_url();
 
-    agent_with_identity(url.as_ref(), identity).await.unwrap()
+    let node_url = match endpoint {
+        Endpoint::CanisterReadState(read_state::canister::Version::V2)
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
+            api_boundary_node.get_public_url()
+        }
+        // TODO(CON-1586): switch to api_boundary_node once the endpoints are
+        // allowlisted by the boundary nodes.
+        Endpoint::CanisterReadState(read_state::canister::Version::V3)
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => node.get_public_url(),
+    };
+
+    let certificate = endpoint.read_state(node_url, paths, principal_id, identity)?;
+
+    let nns_public_key =
+        parse_threshold_sig_key_from_der(&env.prep_dir("").unwrap().root_public_key().unwrap())
+            .unwrap();
+
+    match endpoint {
+        Endpoint::CanisterReadState(_version) => {
+            verify_certificate(
+                &certificate,
+                &CanisterId::unchecked_from_principal(principal_id),
+                &nns_public_key,
+            )
+            .unwrap();
+        }
+        Endpoint::SubnetReadState(_version) => {
+            verify_certificate_for_subnet_read_state(
+                &certificate,
+                &subnet.subnet_id,
+                &nns_public_key,
+            )
+            .unwrap();
+        }
+    };
+
+    let certificate: Certificate = serde_cbor::from_slice(&certificate).unwrap();
+
+    Ok(certificate)
 }
 
-/// Call "read_state" with the given paths and the basic identity on the first Application subnet
-fn read_state(env: &TestEnv, paths: Vec<Vec<Label<Vec<u8>>>>) -> Result<Certificate, AgentError> {
-    read_state_with_identity(env, paths, get_identity())
-}
-
-/// Call "read_state" with the given paths and identity on the first Application subnet
-fn read_state_with_identity(
-    env: &TestEnv,
-    paths: Vec<Vec<Label<Vec<u8>>>>,
-    identity: impl Identity + 'static,
-) -> Result<Certificate, AgentError> {
-    let node = get_first_app_node(env);
-    read_state_with_identity_and_canister_id(env, paths, identity, node.effective_canister_id())
-}
-
-/// Call "read_state" with the given paths and canister ID for the default identity
-fn read_state_with_canister_id(
-    env: &TestEnv,
-    paths: Vec<Vec<Label<Vec<u8>>>>,
-    effective_canister_id: CanisterId,
-) -> Result<Certificate, AgentError> {
-    read_state_with_identity_and_canister_id(
-        env,
-        paths,
-        get_identity(),
-        effective_canister_id.get(),
-    )
-}
-
-/// Call "read_state" with the given paths, identity and canister ID
-fn read_state_with_identity_and_canister_id(
-    env: &TestEnv,
-    paths: Vec<Vec<Label<Vec<u8>>>>,
-    identity: impl Identity + 'static,
-    effective_canister_id: PrincipalId,
-) -> Result<Certificate, AgentError> {
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(async move {
-            let agent = build_agent_with_identity(env, identity).await;
-            agent
-                .read_state_raw(paths, effective_canister_id.into())
-                .await
-        })
-}
-
-/// Call the `api/v2/subnet/{}/read_state` endpoint with the given paths, identity and subnet ID
-fn read_subnet_state_with_identity_and_subnet_id(
-    env: &TestEnv,
-    paths: Vec<Vec<Label<Vec<u8>>>>,
-    identity: impl Identity + 'static,
-    subnet_id: SubnetId,
-) -> Result<Certificate, AgentError> {
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(async move {
-            let agent = build_agent_with_identity(env, identity).await;
-            agent
-                .read_subnet_state_raw(paths, subnet_id.get().into())
-                .await
-        })
-}
-
-fn test_empty_paths_return_time(env: TestEnv) {
-    let cert = read_state(&env, vec![]).unwrap();
+fn test_empty_paths_return_time(env: TestEnv, endpoint: Endpoint) {
+    let cert = read_state(&env, vec![], endpoint).expect("Valid request");
     let mut value = lookup_value(&cert, vec!["time".as_bytes()]).unwrap();
     let time = leb128::read::unsigned(&mut value).unwrap();
     assert!(time > 0);
 }
 
-fn test_time_path_returns_time(env: TestEnv) {
+fn test_time_path_returns_time(env: TestEnv, endpoint: Endpoint) {
     let path = vec!["time".into()];
     let paths = vec![path.clone()];
-    let cert = read_state(&env, paths).unwrap();
+    let cert = read_state(&env, paths, endpoint).expect("Valid request");
     let mut value = lookup_value(&cert, path).unwrap();
     let time = leb128::read::unsigned(&mut value).unwrap();
     assert!(time > 0);
 }
 
-fn test_subnet_path(env: TestEnv) {
+fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
     let nns_subnet = env.topology_snapshot().root_subnet();
     let nns_subnet_id = nns_subnet.subnet_id;
-    let app_subnet = env
-        .topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_id != nns_subnet_id)
-        .unwrap();
+    let (app_subnet, other_app_subnet) = get_both_app_subnets(&env);
     let app_subnet_id = app_subnet.subnet_id;
 
     // Query the `/subnet` enpoint of the app subnet
     let path = vec!["subnet".into()];
-    let cert = read_state(&env, vec![path]).unwrap();
+    let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
 
-    // Should contain public key and canister ranges for all subnets
     for subnet_id in [nns_subnet_id, app_subnet_id] {
-        for path in ["public_key".as_bytes(), "canister_ranges".as_bytes()] {
-            let value = lookup_value(
-                &cert,
-                vec!["subnet".as_bytes(), subnet_id.get_ref().as_slice(), path],
-            )
-            .unwrap();
-            assert!(!value.is_empty());
-        }
+        let value = lookup_value(
+            &cert,
+            vec![
+                "subnet".as_bytes(),
+                subnet_id.get_ref().as_slice(),
+                "public_key".as_bytes(),
+            ],
+        )
+        .expect("Should contain public key for all subnets");
+        assert!(!value.is_empty());
     }
 
-    // Should not contain public keys of nodes on other subnets (the NNS)
     for node in nns_subnet.nodes() {
         let node_id = node.node_id;
         let value = lookup_value(
@@ -275,10 +302,32 @@ fn test_subnet_path(env: TestEnv) {
                 "public_key".as_bytes(),
             ],
         );
-        assert_matches!(value, Err(AgentError::LookupPathAbsent(_)));
+        assert_matches!(
+            value,
+            Err(AgentError::LookupPathAbsent(_)),
+            "Should not contain public keys of nodes on other subnets (the NNS)"
+        );
     }
 
-    // Should contain public keys of nodes on the current subnet (the App subnet)
+    for node in other_app_subnet.nodes() {
+        let node_id = node.node_id;
+        let value = lookup_value(
+            &cert,
+            vec![
+                "subnet".as_bytes(),
+                other_app_subnet.subnet_id.get_ref().as_slice(),
+                "node".as_bytes(),
+                node_id.get_ref().as_slice(),
+                "public_key".as_bytes(),
+            ],
+        );
+        assert_matches!(
+            value,
+            Err(AgentError::LookupPathAbsent(_) | AgentError::LookupPathUnknown(_)),
+            "Should not contain public keys of nodes on other subnets (the App subnet)"
+        );
+    }
+
     for node in app_subnet.nodes() {
         let node_id = node.node_id;
         let value = lookup_value(
@@ -291,26 +340,39 @@ fn test_subnet_path(env: TestEnv) {
                 "public_key".as_bytes(),
             ],
         )
-        .unwrap();
+        .expect("Should contain public keys of nodes on the current subnet (the App subnet)");
         assert!(!value.is_empty());
     }
 }
 
-fn test_invalid_request_rejected(env: TestEnv) {
+fn test_invalid_request_rejected(env: TestEnv, endpoint: Endpoint) {
     for invalid_request_id in ["", "foo"] {
         let path = vec!["request_status".into(), invalid_request_id.into()];
-        let cert = read_state(&env, vec![path]);
-        assert_matches!(
-            cert, Err(AgentError::HttpError(payload))
-            if payload.status == 400
-        );
+        let error = read_state(&env, vec![path], endpoint).expect_err("Invalid request");
+        match endpoint {
+            Endpoint::CanisterReadState(_version) => {
+                assert_matches!(
+                    error,
+                    AgentError::HttpError(error) if error.status == StatusCode::BAD_REQUEST.as_u16(),
+                    "Invalid request id"
+                )
+            }
+            Endpoint::SubnetReadState(_version) => {
+                assert_matches!(
+                    error,
+                    AgentError::HttpError(error) if error.status == StatusCode::NOT_FOUND.as_u16(),
+                    "request_status is not allowed on subnet read_state endpoint"
+                )
+            }
+        }
     }
 }
 
-fn test_absent_request(env: TestEnv) {
+fn test_absent_request(env: TestEnv, version: read_state::canister::Version) {
+    let endpoint = Endpoint::CanisterReadState(version);
     for absent_request_id in [&[0; 32], &[8; 32], &[255; 32]] {
         let path = vec!["request_status".into(), absent_request_id.into()];
-        let cert = read_state(&env, vec![path]).unwrap();
+        let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
         let value = lookup_value(
             &cert,
             vec![
@@ -324,10 +386,15 @@ fn test_absent_request(env: TestEnv) {
 }
 
 // The paths `/` (root), `/<>` (empty label), and `/<foo>` are invalid.
-fn test_invalid_path_rejected(env: TestEnv) {
+fn test_invalid_path_rejected(env: TestEnv, endpoint: Endpoint) {
     for invalid_path in [vec![], vec!["".into()], vec!["foo".into()]] {
-        let cert = read_state(&env, vec![invalid_path]);
-        assert_matches!(cert, Err(AgentError::HttpError(payload)) if payload.status == 404);
+        let error =
+            read_state(&env, vec![invalid_path.clone()], endpoint).expect_err("Invalid request");
+        assert_matches!(
+            error,
+            AgentError::HttpError(error) if error.status == StatusCode::NOT_FOUND.as_u16(),
+            "{invalid_path:?} is not allowed"
+        )
     }
 }
 
@@ -337,6 +404,7 @@ fn lookup_metadata(
     canister_id: &CanisterId,
     metadata_section: &[u8],
     identity: impl Identity + 'static,
+    endpoint: Endpoint,
 ) -> Result<Vec<u8>, AgentError> {
     info!(
         env.logger(),
@@ -350,9 +418,10 @@ fn lookup_metadata(
         "metadata".into(),
         metadata_section.into(),
     ];
-    let cert = read_state_with_identity_and_canister_id(
+    let cert = read_state_with_identity_and_principal_id(
         env,
         vec![path.clone()],
+        endpoint,
         identity,
         canister_id.get(),
     )?;
@@ -389,7 +458,8 @@ fn test_non_utf8_metadata(env: TestEnv) {
     assert!(err.contains("Canister's Wasm module is not valid"));
 }
 
-fn test_metadata_path(env: TestEnv) {
+fn test_metadata_path(env: TestEnv, version: read_state::canister::Version) {
+    let endpoint = Endpoint::CanisterReadState(version);
     let node = get_first_app_node(&env);
     let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
     let mut canister: Canister<'_> =
@@ -444,26 +514,46 @@ fn test_metadata_path(env: TestEnv) {
     // Invalid utf-8 bytes in metadata request
     let non_utf8 = [0xff, 0xfe, 0xfd];
     assert!(String::from_utf8(non_utf8.to_vec()).is_err());
-    let cert = lookup_metadata(&env, &canister_id, &non_utf8, get_identity());
+    let cert = lookup_metadata(&env, &canister_id, &non_utf8, get_identity(), endpoint);
     assert_matches!(cert, Err(AgentError::HttpError(payload)) if payload.status == 400);
 
     // Non-existing metadata section
-    let value = lookup_metadata(&env, &canister_id, "foo".as_bytes(), get_identity());
+    let value = lookup_metadata(
+        &env,
+        &canister_id,
+        "foo".as_bytes(),
+        get_identity(),
+        endpoint,
+    );
     assert_matches!(value, Err(AgentError::LookupPathAbsent(_)));
 
     // Existing sections
     for (section_name, expected_content) in &metadata_sections {
         // Controller identity
-        let value = lookup_metadata(&env, &canister_id, section_name, get_identity()).unwrap();
+        let value =
+            lookup_metadata(&env, &canister_id, section_name, get_identity(), endpoint).unwrap();
         assert_eq!(&value, expected_content);
 
         // Anonymous identity
-        let value = lookup_metadata(&env, &canister_id, section_name, AnonymousIdentity).unwrap();
+        let value = lookup_metadata(
+            &env,
+            &canister_id,
+            section_name,
+            AnonymousIdentity,
+            endpoint,
+        )
+        .unwrap();
         assert_eq!(&value, expected_content);
 
         // Non-controller identity
-        let value =
-            lookup_metadata(&env, &canister_id, section_name, random_ed25519_identity()).unwrap();
+        let value = lookup_metadata(
+            &env,
+            &canister_id,
+            section_name,
+            random_ed25519_identity(),
+            endpoint,
+        )
+        .unwrap();
         assert_eq!(&value, expected_content);
     }
 
@@ -473,20 +563,34 @@ fn test_metadata_path(env: TestEnv) {
     // Existing private sections should only be readable by canister controller
     for (section_name, expected_content) in &metadata_sections {
         // Controller identity
-        let value = lookup_metadata(&env, &canister_id, section_name, get_identity()).unwrap();
+        let value =
+            lookup_metadata(&env, &canister_id, section_name, get_identity(), endpoint).unwrap();
         assert_eq!(&value, expected_content);
 
         // Anonymous identity
-        let res = lookup_metadata(&env, &canister_id, section_name, AnonymousIdentity);
+        let res = lookup_metadata(
+            &env,
+            &canister_id,
+            section_name,
+            AnonymousIdentity,
+            endpoint,
+        );
         assert_matches!(res, Err(AgentError::HttpError(payload)) if payload.status == 403);
 
         // Non-controller identity
-        let res = lookup_metadata(&env, &canister_id, section_name, random_ed25519_identity());
+        let res = lookup_metadata(
+            &env,
+            &canister_id,
+            section_name,
+            random_ed25519_identity(),
+            endpoint,
+        );
         assert_matches!(res, Err(AgentError::HttpError(payload)) if payload.status == 403);
     }
 }
 
-fn test_canister_path(env: TestEnv) {
+fn test_canister_path(env: TestEnv, version: read_state::canister::Version) {
+    let endpoint = Endpoint::CanisterReadState(version);
     let identities = [
         PrincipalId::from(get_identity().sender().unwrap()),
         PrincipalId::from(random_ed25519_identity().sender().unwrap()),
@@ -516,11 +620,17 @@ fn test_canister_path(env: TestEnv) {
         let controllers = identities[..i].to_vec();
 
         // Test `module_hash` and `controllers` endpoints for both canisters
-        test_module_hash_and_controllers(&env, &empty_canister, controllers.clone(), |res| {
-            // Empty canister should not have a module hash
-            matches!(res, Err(AgentError::LookupPathAbsent(_)))
-        });
-        test_module_hash_and_controllers(&env, &installed_canister, controllers, |res| {
+        test_module_hash_and_controllers(
+            &env,
+            endpoint,
+            &empty_canister,
+            controllers.clone(),
+            |res| {
+                // Empty canister should not have a module hash
+                matches!(res, Err(AgentError::LookupPathAbsent(_)))
+            },
+        );
+        test_module_hash_and_controllers(&env, endpoint, &installed_canister, controllers, |res| {
             // Installed canister should have a module hash
             res.unwrap() == expected_module_hash
         });
@@ -529,6 +639,7 @@ fn test_canister_path(env: TestEnv) {
 
 fn test_module_hash_and_controllers<F>(
     env: &TestEnv,
+    endpoint: Endpoint,
     canister: &Canister<'_>,
     controllers: Vec<PrincipalId>,
     assert_module_hash: F,
@@ -547,8 +658,14 @@ fn test_module_hash_and_controllers<F>(
         canister_id.get_ref().as_slice().into(),
         "module_hash".into(),
     ];
-    let cert =
-        read_state_with_canister_id(env, vec![module_hash_path.clone()], canister_id).unwrap();
+    let cert = read_state_with_identity_and_principal_id(
+        env,
+        vec![module_hash_path.clone()],
+        endpoint,
+        get_identity(),
+        canister_id.get(),
+    )
+    .unwrap();
     let value = lookup_value(&cert, module_hash_path);
     assert!(assert_module_hash(value));
 
@@ -557,8 +674,14 @@ fn test_module_hash_and_controllers<F>(
         canister_id.get_ref().as_slice().into(),
         "controllers".into(),
     ];
-    let cert =
-        read_state_with_canister_id(env, vec![controllers_path.clone()], canister_id).unwrap();
+    let cert = read_state_with_identity_and_principal_id(
+        env,
+        vec![controllers_path.clone()],
+        endpoint,
+        get_identity(),
+        canister_id.get(),
+    )
+    .unwrap();
     let value = lookup_value(&cert, controllers_path).unwrap();
     let controllers_read_state: Vec<PrincipalId> =
         serde_cbor::from_slice(value).expect("Failed to decode CBOR");
@@ -597,7 +720,8 @@ fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u
     (request_id, result)
 }
 
-fn test_request_path(env: TestEnv) {
+fn test_request_path(env: TestEnv, version: read_state::canister::Version) {
+    let endpoint = Endpoint::CanisterReadState(version);
     let node = get_first_app_node(&env);
     let effective_canister_id = node.effective_canister_id();
     let agent = node.build_default_agent();
@@ -615,7 +739,7 @@ fn test_request_path(env: TestEnv) {
         (*request_id).into(),
         "status".into(),
     ];
-    let cert = read_state(&env, vec![status_path.clone()]).unwrap();
+    let cert = read_state(&env, vec![status_path.clone()], endpoint).unwrap();
     let value = lookup_value(&cert, status_path).unwrap();
     assert_eq!(
         String::from("replied"),
@@ -627,14 +751,15 @@ fn test_request_path(env: TestEnv) {
         (*request_id).into(),
         "reply".into(),
     ];
-    let cert = read_state(&env, vec![reply_path.clone()]).unwrap();
+    let cert = read_state(&env, vec![reply_path.clone()], endpoint).unwrap();
     let value = lookup_value(&cert, reply_path).unwrap();
     // Sanity check that at least 32 bytes were returned
     assert!(value.len() > 32);
     assert_eq!(value.to_vec(), result);
 }
 
-fn test_request_path_access(env: TestEnv) {
+fn test_request_path_access(env: TestEnv, version: read_state::canister::Version) {
+    let endpoint = Endpoint::CanisterReadState(version);
     let node = get_first_app_node(&env);
     let effective_canister_id = node.effective_canister_id();
     let agent = node.build_default_agent();
@@ -651,11 +776,11 @@ fn test_request_path_access(env: TestEnv) {
         let paths = vec![vec!["request_status".into(), (*request_id).into()]];
 
         // Lookup should succeed for default identity
-        let result = read_state_with_identity(&env, paths.clone(), get_identity());
+        let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
         assert!(result.is_ok());
 
         // Lookup should fail for identity that didn't make the request
-        let result = read_state_with_identity(&env, paths, random_ed25519_identity());
+        let result = read_state_with_identity(&env, paths, endpoint, random_ed25519_identity());
         assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 403);
     }
 
@@ -664,7 +789,7 @@ fn test_request_path_access(env: TestEnv) {
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
     ];
-    let result = read_state_with_identity(&env, paths.clone(), get_identity());
+    let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 
     // Reading both requests (to different canisters) at the same time should fail
@@ -677,29 +802,22 @@ fn test_request_path_access(env: TestEnv) {
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
     ];
-    let result = read_state_with_identity(&env, paths.clone(), get_identity());
+    let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
-/// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges,
+/// Queries the `api/{v2,v3}/canister/{canister_id}/read_state` endpoint for the canister ranges,
 /// and makes sure the requests fails.
-fn test_canister_canister_ranges_paths(env: TestEnv) {
+fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::canister::Version) {
+    let endpoint = Endpoint::CanisterReadState(version);
     let subnet = get_first_app_subnet(&env);
-    let node = subnet.nodes().next().unwrap();
-    let effective_canister_id = node.effective_canister_id();
 
     let path: Vec<Label<Vec<u8>>> = vec![
         "canister_ranges".into(),
         subnet.subnet_id.get_ref().as_slice().into(),
     ];
 
-    let err = read_state_with_identity_and_canister_id(
-        &env,
-        vec![path.clone()],
-        get_identity(),
-        effective_canister_id,
-    )
-    .expect_err(
+    let err = read_state(&env, vec![path.clone()], endpoint).expect_err(
         "/canister_ranges path should not be fetchable from \
         the /api/v2/canister/<canister_id>/read_state endpoint",
     );
@@ -707,9 +825,10 @@ fn test_canister_canister_ranges_paths(env: TestEnv) {
     assert_matches!(err, AgentError::HttpError(payload) if payload.status == 404);
 }
 
-/// Queries the `api/v2/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
+/// Queries the `api/{v2,v3}/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
 /// and compares the result with the canister ranges obtained from the registry.
-fn test_subnet_canister_ranges_paths(env: TestEnv) {
+fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::Version) {
+    let endpoint = Endpoint::SubnetReadState(version);
     let subnet = get_first_app_subnet(&env);
 
     let path: Vec<Label<Vec<u8>>> = vec![
@@ -717,15 +836,121 @@ fn test_subnet_canister_ranges_paths(env: TestEnv) {
         subnet.subnet_id.get_ref().as_slice().into(),
     ];
 
-    let cert = read_subnet_state_with_identity_and_subnet_id(
-        &env,
-        vec![path.clone()],
-        get_identity(),
-        subnet.subnet_id,
-    )
-    .expect("Failed to read state");
+    let cert = read_state(&env, vec![path.clone()], endpoint).expect("Failed to read state");
 
     validate_canister_ranges(&subnet, &path, &cert);
+}
+
+/// Checks that requesting the deprecated canister ranges path (/subnet/{subnet_id}/canister_ranges)
+/// doesn't work on the v3 endpoints, except when subnet_id == nns_subnet_id.
+fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint) {
+    let should_accept_deprecated_canister_ranges_path = match endpoint {
+        Endpoint::CanisterReadState(read_state::canister::Version::V2)
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => true,
+        Endpoint::CanisterReadState(read_state::canister::Version::V3)
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => false,
+    };
+
+    let app_subnet = get_first_app_subnet(&env);
+    let app_subnet_id_label = Label::<Vec<u8>>::from(app_subnet.subnet_id.get_ref().as_slice());
+    let deprecated_canister_ranges_for_app_subnet_path: Vec<Label<Vec<u8>>> = vec![
+        "subnet".into(),
+        app_subnet_id_label.clone(),
+        "canister_ranges".into(),
+    ];
+
+    let nns_subnet = env.topology_snapshot().root_subnet();
+    let nns_subnet_id_label = Label::<Vec<u8>>::from(nns_subnet.subnet_id.get_ref().as_slice());
+    let deprecated_canister_ranges_for_nns_path: Vec<Label<Vec<u8>>> = vec![
+        "subnet".into(),
+        nns_subnet_id_label.clone(),
+        "canister_ranges".into(),
+    ];
+
+    let response = read_state(
+        &env,
+        vec![deprecated_canister_ranges_for_app_subnet_path.clone()],
+        endpoint,
+    );
+
+    if should_accept_deprecated_canister_ranges_path {
+        let certificate = response.expect(
+            "The old endpoints should correctly handle the request with the deprecated paths",
+        );
+        assert!(
+            lookup_value(
+                &certificate,
+                deprecated_canister_ranges_for_app_subnet_path.clone()
+            )
+            .is_ok(),
+            "The certificate should contain the deprecated canister ranges"
+        );
+    } else {
+        let err = response.expect_err("The new endpoints should not accept the deprecated paths");
+        assert_matches!(err, AgentError::HttpError(payload) if payload.status == StatusCode::NOT_FOUND.as_u16());
+    }
+
+    let certificate = read_state(
+        &env,
+        vec![deprecated_canister_ranges_for_nns_path.clone()],
+        endpoint,
+    )
+    .expect("Requesting the deprecated canister ranges for the nns subnet is always allowed");
+    assert!(
+        lookup_value(
+            &certificate,
+            deprecated_canister_ranges_for_nns_path.clone()
+        )
+        .is_ok(),
+        "The certificate should contain the deprecated canister \
+        ranges because we are requesting the nns subnet"
+    );
+
+    for (path, check_app, check_nns) in [
+        (vec!["subnet".into()], true, true),
+        (vec!["subnet".into(), app_subnet_id_label], true, false),
+        (vec!["subnet".into(), nns_subnet_id_label], false, true),
+    ] {
+        let certificate = read_state(&env, vec![path.clone()], endpoint)
+            .expect("Requesting the {path:?} subtree is valid");
+
+        if check_app {
+            let deprecated_app_subnet_ranges = lookup_value(
+                &certificate,
+                deprecated_canister_ranges_for_app_subnet_path.clone(),
+            );
+            if should_accept_deprecated_canister_ranges_path {
+                assert!(
+                    deprecated_app_subnet_ranges.is_ok(),
+                    "The certificate should contain the deprecated canister ranges \
+                    for the app subnet"
+                );
+            } else {
+                let err = deprecated_app_subnet_ranges.expect_err(
+                    "The new endpoints should purge the deprecated paths \
+                    for the app subnet",
+                );
+                assert_matches!(
+                    err,
+                    AgentError::LookupPathUnknown(_),
+                    "The path {deprecated_canister_ranges_for_app_subnet_path:?} should have \
+                    been purged from the certificate"
+                );
+            }
+        }
+
+        if check_nns {
+            assert!(
+                lookup_value(
+                    &certificate,
+                    deprecated_canister_ranges_for_nns_path.clone()
+                )
+                .is_ok(),
+                "The certificate should contain the deprecated canister \
+                ranges because we are requesting the nns subnet"
+            );
+        }
+    }
 }
 
 fn validate_canister_ranges(
@@ -763,23 +988,152 @@ fn validate_canister_ranges(
     );
 }
 
+#[derive(Copy, Clone, Debug)]
+enum Endpoint {
+    CanisterReadState(read_state::canister::Version),
+    SubnetReadState(read_state::subnet::Version),
+}
+
+impl Endpoint {
+    fn url(&self, base: Url, principal_id: PrincipalId) -> Url {
+        match self {
+            Endpoint::CanisterReadState(read_state::canister::Version::V2) => {
+                base.join(&format!("/api/v2/canister/{principal_id}/read_state"))
+            }
+            Endpoint::CanisterReadState(read_state::canister::Version::V3) => {
+                base.join(&format!("/api/v3/canister/{principal_id}/read_state"))
+            }
+            Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
+                base.join(&format!("/api/v2/subnet/{principal_id}/read_state"))
+            }
+            Endpoint::SubnetReadState(read_state::subnet::Version::V3) => {
+                base.join(&format!("/api/v3/subnet/{principal_id}/read_state"))
+            }
+        }
+        .unwrap()
+    }
+
+    fn read_state(
+        &self,
+        base: Url,
+        paths: Vec<Vec<Label<Vec<u8>>>>,
+        principal_id: PrincipalId,
+        identity: impl Identity,
+    ) -> Result<Blob, AgentError> {
+        let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
+        let content = EnvelopeContent::ReadState {
+            ingress_expiry: expiration.unix_timestamp_nanos() as u64,
+            sender: identity.sender().unwrap(),
+            paths,
+        };
+
+        let signature = identity.sign(&content).unwrap();
+
+        let envelope = Envelope {
+            content: Cow::Borrowed(&content),
+            sender_pubkey: signature.public_key,
+            sender_sig: signature.signature,
+            sender_delegation: signature.delegations,
+        };
+
+        let mut serialized_bytes = Vec::new();
+        let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+        serializer.self_describe().unwrap();
+        envelope.serialize(&mut serializer).unwrap();
+
+        let response: HttpReadStateResponse =
+            block_on(try_send(self.url(base, principal_id), serialized_bytes))?;
+
+        Ok(response.certificate)
+    }
+}
+
+async fn try_send<A>(url: Url, body: Vec<u8>) -> Result<A, AgentError>
+where
+    A: serde::de::DeserializeOwned,
+{
+    let client = reqwest::Client::builder()
+        .http2_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
+    let response = client
+        .post(url)
+        .header("Content-Type", "application/cbor")
+        .body(body)
+        .send()
+        .await
+        .map_err(|err| format!("Request failed: {err:?}"))
+        .unwrap();
+
+    let status = response.status();
+    let response = response
+        .bytes()
+        .await
+        .map_err(|err| format!("Request failed: {err:?}"))
+        .unwrap();
+
+    if status != StatusCode::OK {
+        return Err(AgentError::HttpError(HttpErrorPayload {
+            status: status.as_u16(),
+            content_type: None,
+            content: response.to_vec(),
+        }));
+    }
+
+    Ok(serde_cbor::from_slice(&response)
+        .map_err(|err| format!("Failed to deserialize response: {err:?}. Response: {response:?}"))
+        .unwrap())
+}
+
+macro_rules! systest_all_variants {
+    ($group: expr, $function_name:path) => {
+        $group = $group.add_test(systest!($function_name; Endpoint::CanisterReadState(read_state::canister::Version::V2)));
+        $group = $group.add_test(systest!($function_name; Endpoint::CanisterReadState(read_state::canister::Version::V3)));
+        $group = $group.add_test(systest!($function_name; Endpoint::SubnetReadState(read_state::subnet::Version::V2)));
+        $group = $group.add_test(systest!($function_name; Endpoint::SubnetReadState(read_state::subnet::Version::V3)));
+    };
+}
+
 fn main() -> Result<()> {
-    // TODO(CON-1487): test the `/api/v3` endpoints as well
+    let mut parallel_group = SystemTestSubGroup::new()
+        .add_test(systest!(test_non_utf8_metadata))
+        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V2))
+        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
+        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V2))
+        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_request_path; read_state::canister::Version::V2))
+        .add_test(systest!(test_request_path; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_request_path_access; read_state::canister::Version::V2))
+        .add_test(systest!(test_request_path_access; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_absent_request; read_state::canister::Version::V2))
+        .add_test(systest!(test_absent_request; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /canister prefix are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_canister_path; read_state::canister::Version::V2))
+        .add_test(systest!(test_canister_path; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /canister prefix are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
+        .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
+
+    systest_all_variants!(parallel_group, test_empty_paths_return_time);
+    systest_all_variants!(parallel_group, test_time_path_returns_time);
+    systest_all_variants!(parallel_group, test_subnet_path);
+    systest_all_variants!(parallel_group, test_invalid_request_rejected);
+    systest_all_variants!(parallel_group, test_invalid_path_rejected);
+    systest_all_variants!(parallel_group, test_deprecated_subnet_canister_ranges_paths);
+
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test_empty_paths_return_time))
-        .add_test(systest!(test_time_path_returns_time))
-        .add_test(systest!(test_subnet_path))
-        .add_test(systest!(test_invalid_request_rejected))
-        .add_test(systest!(test_absent_request))
-        .add_test(systest!(test_invalid_path_rejected))
-        .add_test(systest!(test_non_utf8_metadata))
-        .add_test(systest!(test_metadata_path))
-        .add_test(systest!(test_canister_path))
-        .add_test(systest!(test_request_path))
-        .add_test(systest!(test_request_path_access))
-        .add_test(systest!(test_canister_canister_ranges_paths))
-        .add_test(systest!(test_subnet_canister_ranges_paths))
+        .add_parallel(parallel_group)
         .execute_from_args()?;
     Ok(())
 }

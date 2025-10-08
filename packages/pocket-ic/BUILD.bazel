@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,6 +22,7 @@ rust_library(
         "@crate_index//:ic-transport-types",
         "@crate_index//:reqwest",
         "@crate_index//:schemars",
+        "@crate_index//:semver",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
@@ -50,12 +51,15 @@ rust_test(
     deps = ["//packages/ic-error-types"],
 )
 
-rust_test_suite(
-    name = "test",
+rust_test(
+    name = "tests",
     # the test sometimes times out on CI with default timeout
     # of "moderate" (5 minutes) - 2025-07-03
     timeout = "long",
-    srcs = ["tests/tests.rs"],
+    srcs = [
+        "tests/common.rs",
+        "tests/tests.rs",
+    ],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
@@ -73,7 +77,7 @@ rust_test_suite(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [
         # Keep sorted.
@@ -102,13 +106,65 @@ rust_test_suite(
     ],
 )
 
+rust_test(
+    name = "unix",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
+    timeout = "long",
+    srcs = [
+        "tests/common.rs",
+        "tests/unix.rs",
+    ],
+    data = [
+        "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "@mozilla_root_ca_store//file",
+    ],
+    env = {
+        "RUST_TEST_THREADS": "4",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
+        "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
+    },
+    flaky = True,
+    tags = [
+        "cpu:16",
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
+        "test_all_platforms",
+    ],
+    deps = [
+        # Keep sorted.
+        ":pocket-ic",
+        "//rs/registry/canister",
+        "//rs/registry/client",
+        "//rs/registry/helpers",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/transport",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:prost",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)
+
 [
-    rust_test_suite(
+    rust_test(
         name = "icp_features" + name_suffix,
         # the test sometimes times out on CI with default timeout
         # of "moderate" (5 minutes) - 2025-07-03
         timeout = "long",
-        srcs = ["tests/icp_features.rs"],
+        srcs = [
+            "tests/common.rs",
+            "tests/icp_features.rs",
+        ],
+        crate_root = "tests/icp_features.rs",
         data = [
             "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
             "//rs/pocket_ic_server:pocket-ic-server" + name_suffix,
@@ -123,13 +179,17 @@ rust_test_suite(
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
             # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
             "requires-network",
-            "test_macos",
             "long_test",  # The P90 of this test is over 8m for the week starting on 2025-08-20
-        ],
+        ] + (["test_all_platforms"] if name_suffix == "" else []),  # do not build NNS canisters on all platforms
         deps = [
             # Keep sorted.
             ":pocket-ic",
             "//packages/icrc-ledger-types",
+            "//rs/nns/cmc",
+            "//rs/nns/governance/api",
+            "//rs/nns/sns-wasm",
+            "//rs/registry/canister",
+            "//rs/types/base_types",
             "@crate_index//:candid",
             "@crate_index//:flate2",
             "@crate_index//:reqwest",
@@ -145,7 +205,7 @@ rust_test_suite(
     ]
 ]
 
-rust_test_suite(
+rust_test(
     name = "restart",
     size = "medium",
     srcs = ["tests/restart.rs"],
@@ -161,7 +221,7 @@ rust_test_suite(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [
         ":pocket-ic",
@@ -169,7 +229,7 @@ rust_test_suite(
     ],
 )
 
-rust_test_suite(
+rust_test(
     name = "slow",
     size = "medium",
     srcs = ["tests/slow.rs"],
@@ -188,7 +248,7 @@ rust_test_suite(
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = [
         ":pocket-ic",

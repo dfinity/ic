@@ -1,10 +1,10 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
 
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
-};
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    CspNiDkgDealing, CspNiDkgTranscript, ni_dkg_groth20_bls12_381,
+};
 use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{KeyManager, NiDkgAlgorithm, ThresholdSigner};
@@ -33,9 +33,9 @@ use std::sync::Arc;
 mod initial_config;
 
 pub use initial_config::{
-    dummy_initial_dkg_transcript, dummy_initial_dkg_transcript_with_master_key,
-    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message,
-    InitialNiDkgConfig, SecretKeyBytes,
+    InitialNiDkgConfig, SecretKeyBytes, dummy_initial_dkg_transcript,
+    dummy_initial_dkg_transcript_with_master_key, initial_dkg_transcript,
+    initial_dkg_transcript_and_master_key, sign_message,
 };
 
 pub fn create_transcript<R: CryptoComponentRng>(
@@ -46,9 +46,7 @@ pub fn create_transcript<R: CryptoComponentRng>(
 ) -> NiDkgTranscript {
     crypto_for(node_id, crypto_components)
         .create_transcript(ni_dkg_config, dealings)
-        .unwrap_or_else(|error| {
-            panic!("failed to create transcript for {:?}: {:?}", node_id, error)
-        })
+        .unwrap_or_else(|error| panic!("failed to create transcript for {node_id:?}: {error:?}"))
 }
 
 pub fn load_transcript<R: CryptoComponentRng>(
@@ -58,7 +56,7 @@ pub fn load_transcript<R: CryptoComponentRng>(
 ) {
     crypto_for(node_id, crypto_components)
         .load_transcript(transcript)
-        .unwrap_or_else(|error| panic!("failed to load transcript for {:?}: {:?}", node_id, error));
+        .unwrap_or_else(|error| panic!("failed to load transcript for {node_id:?}: {error:?}"));
 }
 
 /// Load transcript on each node (if resharing), create all dealings, and build
@@ -120,10 +118,7 @@ pub fn create_dealing<R: CryptoComponentRng>(
     crypto_for(node_id, crypto_components)
         .create_dealing(ni_dkg_config)
         .unwrap_or_else(|error| {
-            panic!(
-                "failed to create NI-DKG dealing for {:?}: {:?}",
-                node_id, error
-            )
+            panic!("failed to create NI-DKG dealing for {node_id:?}: {error:?}")
         })
 }
 
@@ -150,8 +145,7 @@ pub fn verify_dealing<R: CryptoComponentRng>(
         .verify_dealing(ni_dkg_config, dealer_node_id, dealing)
         .unwrap_or_else(|error| {
             panic!(
-                "failed to verify NI-DKG dealing by {:?} for {:?}: {:?}",
-                dealer_node_id, verifier_node_id, error
+                "failed to verify NI-DKG dealing by {dealer_node_id:?} for {verifier_node_id:?}: {error:?}"
             )
         });
 }
@@ -163,12 +157,7 @@ pub fn retain_only_active_keys<R: CryptoComponentRng>(
 ) {
     crypto_for(node_id, crypto_components)
         .retain_only_active_keys(retained_transcripts)
-        .unwrap_or_else(|error| {
-            panic!(
-                "failed to retain active keys for {:?}: {:?}",
-                node_id, error
-            )
-        });
+        .unwrap_or_else(|error| panic!("failed to retain active keys for {node_id:?}: {error:?}"));
 }
 
 pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
@@ -182,7 +171,7 @@ pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
                 .sign_threshold(msg, dkg_id)
-                .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
+                .unwrap_or_else(|_| panic!("signing by node {signer:?} failed"));
             (*signer, sig_share)
         })
         .collect()
@@ -353,7 +342,7 @@ impl RandomNiDkgConfigBuilder {
     pub fn build<R: Rng + CryptoRng>(self, rng: &mut R) -> RandomNiDkgConfig {
         let subnet_size = self.subnet_size.expect("must specify a subnet size");
 
-        let dkg_tag = self.dkg_tag.unwrap_or_else(|| match rng.gen::<bool>() {
+        let dkg_tag = self.dkg_tag.unwrap_or_else(|| match rng.r#gen::<bool>() {
             true => NiDkgTag::LowThreshold,
             false => NiDkgTag::HighThreshold,
         });
@@ -437,11 +426,11 @@ impl RandomNiDkgConfig {
 
         let config_data = NiDkgConfigData {
             dkg_id: NiDkgId {
-                start_block_height: Height::new(rng.gen()),
-                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen())),
+                start_block_height: Height::new(rng.r#gen()),
+                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen())),
                 dkg_tag,
                 // The first DKG is always done by NNS for another (remote) subnet
-                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(rng.gen())),
+                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(rng.r#gen())),
             },
             max_corrupt_dealers: Self::number_of_nodes_from_usize(max_corrupt_dealers),
             dealers,
@@ -661,7 +650,7 @@ impl RandomNiDkgConfig {
     fn random_node_ids<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
-            node_ids.insert(Self::node_id(rng.gen()));
+            node_ids.insert(Self::node_id(rng.r#gen()));
         }
         node_ids
     }
@@ -673,7 +662,7 @@ impl RandomNiDkgConfig {
     ) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
-            let candidate = Self::node_id(rng.gen());
+            let candidate = Self::node_id(rng.r#gen());
             if !exclusions.contains(&candidate) {
                 node_ids.insert(candidate);
             }
@@ -843,7 +832,7 @@ impl NiDkgTestEnvironment {
                 .with_temp_dir_source(crypto_root)
                 .with_registry(Arc::clone(&ret.registry) as Arc<_>)
                 .with_node_id(node_id)
-                .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+                .with_rng(ChaCha20Rng::from_seed(rng.r#gen()));
             let crypto_component_builder = if use_remote_vault {
                 crypto_component_builder.with_remote_vault()
             } else {
@@ -883,7 +872,7 @@ impl NiDkgTestEnvironment {
                 generate_dkg_dealing_encryption_keys: true,
                 ..NodeKeysToGenerate::none()
             })
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()));
         let temp_crypto_builder = if use_remote_vault {
             temp_crypto_builder.with_remote_vault()
         } else {
@@ -950,5 +939,5 @@ impl Default for NiDkgTestEnvironment {
 fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T {
     crypto_components
         .get(&node_id)
-        .unwrap_or_else(|| panic!("missing crypto component for {:?}", node_id))
+        .unwrap_or_else(|| panic!("missing crypto component for {node_id:?}"))
 }

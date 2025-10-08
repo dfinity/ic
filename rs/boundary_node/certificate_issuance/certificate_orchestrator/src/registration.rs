@@ -20,10 +20,10 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
+    LocalRef, REGISTRATION_EXPIRATION_TTL, StableMap, StorableId, WithMetrics,
     acl::{Authorize, AuthorizeError, WithAuthorize},
     ic_certification::{add_cert, remove_cert},
     id::Generate,
-    LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -485,7 +485,7 @@ impl Remove for Remover {
         self.names.with(|names| names.borrow_mut().remove(&name));
 
         // remove task/retry/expiry if present
-        [self.tasks, self.retries, self.expirations]
+        let _ = [self.tasks, self.retries, self.expirations]
             .map(|pq| pq.with(|pq| pq.borrow_mut().remove(id)));
 
         // remove certificate
@@ -772,7 +772,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Err(RemoveError::NotFound) => {}
-            other => panic!("expected RemoveError::NotFound but got {:?}", other),
+            other => panic!("expected RemoveError::NotFound but got {other:?}"),
         };
 
         Ok(())
@@ -835,7 +835,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
@@ -895,7 +895,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
@@ -908,7 +908,7 @@ mod tests {
 
     #[test]
     fn expire_ok() -> Result<(), Error> {
-        [("id-1", 0), ("id-2", 1)].map(|(id, p)| {
+        let _ = [("id-1", 0), ("id-2", 1)].map(|(id, p)| {
             EXPIRATIONS.with(|exps| {
                 exps.borrow_mut().push(
                     id.into(),  // item

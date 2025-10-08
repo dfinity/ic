@@ -14,9 +14,9 @@ use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
+    Time,
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamIndex},
-    Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -81,14 +81,16 @@ impl RejectSignals {
     }
 }
 
-/// Canonical representation of `ic_types::messages::RequestOrResponse`.
+/// Canonical representation of `ic_types::messages::StreamMessage`.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct RequestOrResponse {
+pub struct StreamMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request: Option<Request>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<Response>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund: Option<Refund>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -139,6 +141,15 @@ pub struct Response {
     pub cycles_refund: Option<Cycles>,
     #[serde(skip_serializing_if = "is_zero", default)]
     pub deadline: u32,
+}
+
+/// Canonical representation of `ic_types::messages::Refund`.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Refund {
+    #[serde(with = "serde_bytes")]
+    pub recipient: Bytes,
+    pub amount: Cycles,
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
@@ -352,18 +363,13 @@ pub(crate) fn try_from_deltas(
                 // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
                 // lead to duplicates or a stream_index of `signals_end`.
                 return Err(ProxyDecodeError::Other(format!(
-                    "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
-                    reason,
-                    deltas,
+                    "StreamHeader: {reason:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {deltas:?}",
                 )));
             }
             if stream_index < StreamIndex::new(*delta) {
                 // Reject signal deltas are invalid.
                 return Err(ProxyDecodeError::Other(format!(
-                    "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
-                    reason,
-                    signals_end,
-                    deltas,
+                    "StreamHeader: {reason:?} reject signals are invalid, got `signals_end` {signals_end:?}, `reject_signal_deltas` {deltas:?}",
                 )));
             }
             stream_index -= StreamIndex::new(*delta);
@@ -382,44 +388,57 @@ pub(crate) fn try_from_deltas(
         .collect())
 }
 
-impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponse {
+impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for StreamMessage {
     fn from(
         (message, certification_version): (
-            &ic_types::messages::RequestOrResponse,
+            &ic_types::messages::StreamMessage,
             CertificationVersion,
         ),
     ) -> Self {
-        use ic_types::messages::RequestOrResponse::*;
+        use ic_types::messages::StreamMessage::*;
         match message {
             Request(request) => Self {
                 request: Some((request.as_ref(), certification_version).into()),
                 response: None,
+                refund: None,
             },
             Response(response) => Self {
                 request: None,
                 response: Some((response.as_ref(), certification_version).into()),
+                refund: None,
+            },
+            Refund(refund) => Self {
+                request: None,
+                response: None,
+                refund: Some((refund.as_ref(), certification_version).into()),
             },
         }
     }
 }
 
-impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
+impl TryFrom<StreamMessage> for ic_types::messages::StreamMessage {
     type Error = ProxyDecodeError;
 
-    fn try_from(message: RequestOrResponse) -> Result<Self, Self::Error> {
+    fn try_from(message: StreamMessage) -> Result<Self, Self::Error> {
         match message {
-            RequestOrResponse {
+            StreamMessage {
                 request: Some(request),
                 response: None,
+                refund: None,
             } => Ok(Self::Request(Arc::new(request.try_into()?))),
-            RequestOrResponse {
+            StreamMessage {
                 request: None,
                 response: Some(response),
+                refund: None,
             } => Ok(Self::Response(Arc::new(response.try_into()?))),
+            StreamMessage {
+                request: None,
+                response: None,
+                refund: Some(refund),
+            } => Ok(Self::Refund(Arc::new(refund.try_into()?))),
             other => Err(ProxyDecodeError::Other(format!(
-                "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
-                other
-            )))
+                "StreamMessage: expected exactly one of `request`, `response` or `refund` to be `Some(_)`, got `{other:?}`"
+            ))),
         }
     }
 }
@@ -539,6 +558,29 @@ impl TryFrom<Response> for ic_types::messages::Response {
     }
 }
 
+impl From<(&ic_types::messages::Refund, CertificationVersion)> for Refund {
+    fn from(
+        (refund, certification_version): (&ic_types::messages::Refund, CertificationVersion),
+    ) -> Self {
+        assert!(certification_version >= CertificationVersion::V22);
+        Self {
+            recipient: refund.recipient().get().to_vec(),
+            amount: (&refund.amount(), certification_version).into(),
+        }
+    }
+}
+
+impl TryFrom<Refund> for ic_types::messages::Refund {
+    type Error = ProxyDecodeError;
+
+    fn try_from(refund: Refund) -> Result<Self, Self::Error> {
+        Ok(Self::anonymous(
+            ic_types::CanisterId::unchecked_from_principal(refund.recipient.as_slice().try_into()?),
+            refund.amount.try_into()?,
+        ))
+    }
+}
+
 impl From<(&ic_types::funds::Cycles, CertificationVersion)> for Cycles {
     fn from(
         (cycles, _certification_version): (&ic_types::funds::Cycles, CertificationVersion),
@@ -617,8 +659,7 @@ impl TryFrom<Payload> for ic_types::messages::Payload {
                 reject: Some(reject),
             } => Ok(Self::Reject(reject.try_into()?)),
             other => Err(ProxyDecodeError::Other(format!(
-                "Payload: expected exactly one of `data` or `reject` to be `Some(_)`, got `{:?}`",
-                other
+                "Payload: expected exactly one of `data` or `reject` to be `Some(_)`, got `{other:?}`"
             ))),
         }
     }

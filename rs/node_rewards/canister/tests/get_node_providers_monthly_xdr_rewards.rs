@@ -1,21 +1,22 @@
 use candid::{Encode, Principal};
-use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
 use ic_nervous_system_agent::AgentFor;
+use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_nns_test_utils::common::build_node_rewards_test_wasm;
+use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
     GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
 use ic_types::PrincipalId;
-use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
-use pocket_ic::nonblocking::{query_candid, update_candid, PocketIc};
 use pocket_ic::PocketIcBuilder;
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
+use pocket_ic::nonblocking::{PocketIc, query_candid, update_candid};
 use std::time::Duration;
 
 async fn setup_env() -> PocketIc {
     let icp_features = IcpFeatures {
-        registry: Some(EmptyConfig {}),
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let pocket_ic = PocketIcBuilder::new()
@@ -57,8 +58,7 @@ async fn get_node_providers_monthly_xdr_rewards_is_only_callable_by_governance()
 
     assert!(
         error.contains("Only the governance canister can call this method"),
-        "Expected error message not found, was {}",
-        error
+        "Expected error message not found, was {error}"
     );
 
     let governance_agent = pocket_ic.agent_for(ic_nns_constants::GOVERNANCE_CANISTER_ID.get());
@@ -75,10 +75,11 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     let past_time_nanos = pocket_ic.get_time().await.as_nanos_since_unix_epoch();
     pocket_ic.advance_time(Duration::from_secs(86_400)).await;
     pocket_ic.tick().await;
+    let day = DateUtc::from_unix_timestamp_nanoseconds(past_time_nanos);
 
     let request = GetNodeProviderRewardsCalculationRequest {
-        from_nanos: past_time_nanos,
-        to_nanos: past_time_nanos,
+        from_day: day,
+        to_day: day,
         provider_id: Principal::anonymous(),
     };
 
@@ -93,7 +94,10 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     .unwrap()
     .0
     .unwrap_err();
-    assert_eq!(err, "No rewards found for node provider 2vxsx-fae");
+    assert_eq!(
+        err,
+        "Could not calculate rewards: \"No metrics found for day 2021-05-06\""
+    );
 
     // Replicated update call is not allowed.
     let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(

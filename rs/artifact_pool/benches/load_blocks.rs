@@ -1,7 +1,7 @@
 //! This tests the speed of loading blocks from persistence with varying payload
 //! sizes.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_interfaces::consensus_pool::{
     ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact,
@@ -17,10 +17,10 @@ use ic_test_utilities_types::{
 use ic_types::consensus::dkg::{DkgDataPayload, DkgSummary};
 use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
+    Height,
     batch::{BatchPayload, IngressPayload},
     consensus::{Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
     time::UNIX_EPOCH,
-    Height,
 };
 
 // Helper to run the persistence tests below.
@@ -56,9 +56,11 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
     for i in 0..num {
         let mut block = Block::from_parent(parent);
         block.rank = Rank(i as u64);
-        let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
-            .method_payload(vec![0; 128 * 1024])
-            .build()]);
+        let ingress = IngressPayload::from(vec![
+            SignedIngressBuilder::new()
+                .method_payload(vec![0; 128 * 1024])
+                .build(),
+        ]);
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {

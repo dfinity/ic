@@ -8,21 +8,21 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
+    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         system_state::{CyclesUseCase, TaskQueue},
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
+        Stream, SubnetMetrics,
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
-        Stream, SubnetMetrics,
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
-    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
@@ -31,22 +31,21 @@ use ic_test_utilities_types::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    methods::{Callback, WasmClosure},
-};
-use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
+    SubnetId, Time,
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
+};
+use ic_types::{
+    batch::CanisterCyclesCostSchedule,
+    methods::{Callback, WasmClosure},
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
-use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     ops::RangeInclusive,
@@ -260,7 +259,7 @@ impl CanisterStateBuilder {
     }
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
-        self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self.memory_allocation = MemoryAllocation::from(num_bytes.into());
         self
     }
 
@@ -456,8 +455,7 @@ impl SystemStateBuilder {
     }
 
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
-        self.system_state.memory_allocation =
-            MemoryAllocation::try_from(memory_allocation).unwrap();
+        self.system_state.memory_allocation = MemoryAllocation::from(memory_allocation);
         self
     }
 
@@ -924,7 +922,7 @@ prop_compose! {
     )(
         msg_start in msg_start_range,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response_with_config(true),
+            arbitrary::stream_message_with_config(false),
             size_range,
         ),
         (signals_end, reject_signals) in arb_stream_signals(

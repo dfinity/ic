@@ -8,7 +8,7 @@ use serde::Serialize;
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 
 use prost::Message;
 use std::collections::BTreeMap;
@@ -16,10 +16,7 @@ use std::collections::BTreeMap;
 impl Registry {
     /// Update an existing Node Operator's config
     pub fn do_update_node_operator_config(&mut self, payload: UpdateNodeOperatorConfigPayload) {
-        println!(
-            "{}do_update_node_operator_config: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_update_node_operator_config: {payload:?}");
 
         let node_operator_id = payload.node_operator_id.unwrap();
         let node_operator_record_key = make_node_operator_record_key(node_operator_id).into_bytes();
@@ -32,8 +29,7 @@ impl Registry {
             .get(&node_operator_record_key, self.latest_version())
             .unwrap_or_else(|| {
                 panic!(
-                    "{}Node Operator record with ID {} not found in the registry.",
-                    LOG_PREFIX, node_operator_id
+                    "{LOG_PREFIX}Node Operator record with ID {node_operator_id} not found in the registry."
                 )
             });
 
@@ -55,8 +51,7 @@ impl Registry {
         if let Some(node_provider_id) = payload.node_provider_id {
             assert_ne!(
                 node_provider_id, node_operator_id,
-                "The Node Operator ID cannot be the same as the Node Provider ID: {}",
-                node_operator_id
+                "The Node Operator ID cannot be the same as the Node Provider ID: {node_operator_id}"
             );
             node_operator_record.node_provider_principal_id = node_provider_id.to_vec();
         }
@@ -64,18 +59,17 @@ impl Registry {
         if let Some(node_operator_ipv6) = payload.ipv6 {
             if !check_ipv6_format(&node_operator_ipv6) {
                 panic!(
-                    "{}New Ipv6 field {} does not conform to the required format",
-                    LOG_PREFIX, node_operator_ipv6
+                    "{LOG_PREFIX}New Ipv6 field {node_operator_ipv6} does not conform to the required format"
                 );
             }
 
             node_operator_record.ipv6 = Some(node_operator_ipv6);
         }
 
-        if let Some(set_ipv6_none) = payload.set_ipv6_to_none {
-            if set_ipv6_none {
-                node_operator_record.ipv6 = None;
-            }
+        if let Some(set_ipv6_none) = payload.set_ipv6_to_none
+            && set_ipv6_none
+        {
+            node_operator_record.ipv6 = None;
         }
 
         if let Some(max_rewardable_nodes) = payload.max_rewardable_nodes {

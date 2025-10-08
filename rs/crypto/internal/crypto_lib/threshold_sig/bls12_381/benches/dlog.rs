@@ -9,7 +9,7 @@ fn honest_dlog_instance<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> (Vec<Scala
     let mut powers = Vec::with_capacity(n);
 
     for _ in 0..n {
-        let s = rng.gen::<u16>();
+        let s = rng.r#gen::<u16>();
         scalars.push(Scalar::from_u64(s as u64));
         powers.push(Gt::g_mul_u16(s));
     }

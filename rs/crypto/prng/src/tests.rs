@@ -6,8 +6,8 @@ use ic_types::crypto::{
 };
 use ic_types::signature::ThresholdSignature;
 use ic_types::{
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     Height,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use std::collections::BTreeSet;

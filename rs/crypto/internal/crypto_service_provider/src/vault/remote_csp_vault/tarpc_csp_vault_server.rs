@@ -1,11 +1,12 @@
+use crate::ExternalPublicKeys;
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
-    CspTlsSignError, IDkgCreateDealingVaultError, PublicRandomSeedGeneratorError,
-    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    CspTlsSignError, IDkgCreateDealingVaultError, IDkgTranscriptOperationInternalBytes,
+    PublicRandomSeedGeneratorError, ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
     VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::api::{
@@ -13,9 +14,8 @@ use crate::vault::api::{
 };
 use crate::vault::local_csp_vault::{LocalCspVault, ProdLocalCspVault};
 use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
-use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVault};
-use crate::vault::remote_csp_vault::{PksAndSksContainsErrors, FOUR_GIGA_BYTES};
-use crate::ExternalPublicKeys;
+use crate::vault::remote_csp_vault::{FOUR_GIGA_BYTES, PksAndSksContainsErrors};
+use crate::vault::remote_csp_vault::{TarpcCspVault, remote_vault_codec_builder};
 use futures::StreamExt;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
@@ -26,27 +26,25 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
+use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
-use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::replica_logger::no_op_logger;
-use ic_logger::{info, new_logger, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, new_logger, warn};
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
-use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -98,9 +96,10 @@ where
             return;
         }
         let result = job();
-        let _ = tx.send(result); // Errors occur if the associated receiver
-                                 // handle was dropped and are considered
-                                 // legitimate and are thus ignored.
+
+        // Errors occur if the associated receiver handle was dropped and are considered
+        // legitimate and are thus ignored.
+        let _ = tx.send(result);
     });
     rx.await.expect("the sender was dropped")
 }
@@ -338,7 +337,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -382,7 +381,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,

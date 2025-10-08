@@ -12,7 +12,7 @@ use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info, warn, Logger};
+use slog::{Logger, debug, info, warn};
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -24,7 +24,7 @@ use crate::driver::{
     test_env::TestEnv,
     test_env_api::{
         HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
-        TopologySnapshot,
+        TopologySnapshot, scp_recv_from, scp_send_to,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -36,7 +36,6 @@ use crate::driver::{
 };
 use crate::k8s::config::TNET_DNS_SUFFIX;
 use crate::k8s::tnet::TNet;
-use crate::retry_with_msg;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -47,7 +46,9 @@ const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
     "3af874174d48f5c9a59c9bc54dd73cbfc65b17b952fbacd7611ee07d19de369b";
 
 fn get_default_prometheus_vm_img_url() -> String {
-    format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
+    format!(
+        "http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
+    )
 }
 
 const PROMETHEUS_DATA_DIR_TARBALL: &str = "prometheus-data-dir.tar.zst";
@@ -65,8 +66,6 @@ const IC_GATEWAY_METRICS_PORT: u16 = 9325;
 const PROMETHEUS_DOMAIN_NAME: &str = "prometheus";
 const GRAFANA_DOMAIN_NAME: &str = "grafana";
 
-pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
-pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const PROMETHEUS_VM_CREATED_EVENT_NAME: &str = "prometheus_vm_created_event";
 const GRAFANA_INSTANCE_CREATED_EVENT_NAME: &str = "grafana_instance_created_event";
@@ -82,6 +81,8 @@ const BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_mainnet_canister.json";
 const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_testnet_canister.json";
+const DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_mainnet_canister.json";
+const DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_testnet_canister.json";
 const IC_GATEWAY_PROMETHEUS_TARGET: &str = "ic_gateways.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
 const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
@@ -278,14 +279,21 @@ fi
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
         std::fs::create_dir_all(&grafana_dashboards_dst).unwrap();
         let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
-        if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
-            warn!(
-                log,
-                "Failed to sync k8s dashboards to grafana. Error: {e:#}"
-            )
-        } else {
-            debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
-            TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        match Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
+            Err(e) => {
+                warn!(
+                    log,
+                    "Failed to sync k8s dashboards to grafana. Error: {e:#}"
+                )
+            }
+            _ => {
+                debug!(
+                    log,
+                    "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ..."
+                );
+                TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst)
+                    .unwrap();
+            }
         }
 
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();
@@ -435,26 +443,13 @@ impl HasPrometheus for TestEnv {
             target_json_files.push(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
         }
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
-            let size = fs::metadata(&from).unwrap().len();
-            retry_with_msg!(
-                format!("scp {from:?} to {vm_name}:{to:?}"),
-                self.logger(),
-                SCP_RETRY_TIMEOUT,
-                SCP_RETRY_BACKOFF,
-                || {
-                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-                    let mut from_file = File::open(&from)?;
-                    std::io::copy(&mut from_file, &mut remote_file)?;
-                    Ok(())
-                }
-            )
-            .unwrap_or_else(|e| {
-                panic!("Failed to scp {from:?} to {vm_name}:{to:?} because: {e:?}!")
-            });
+            scp_send_to(self.logger(), &session, &from, &to, 0o644);
         }
     }
 
@@ -504,15 +499,7 @@ sudo systemctl start prometheus.service
             .expect("Failed to create tarball of prometheus data directory");
 
         // scp the tarball to the local test environment.
-        let (mut remote_tarball, _) = session
-            .scp_recv(&tarball_full_path)
-            .expect("Failed to scp the tarball of the prometheus data directory {vm_name}:{tarball_full_path:?}");
-        let mut destination_file = File::create(&destination).unwrap_or_else(|e| {
-            panic!("Failed to open destination {destination:?} because: {e:?}")
-        });
-        std::io::copy(&mut remote_tarball, &mut destination_file).expect(
-            "Failed to write the tarball of prometheus data directory {vm_name}:{tarball_full_path:?} to {destination:?}",
-        );
+        scp_recv_from(log, &session, &tarball_full_path, &destination);
     }
 }
 
@@ -548,6 +535,10 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let bitcoin_watchdog_testnet_canister_scraping_target_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
             .join(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
+    let dogecoin_mainnet_canister_scraping_target_path = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+        .join(DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
+    let dogecoin_testnet_canister_scraping_target_path = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+        .join(DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
     let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
@@ -628,6 +619,26 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "follow_redirects": true,
                 "enable_http2": true,
                 "file_sd_configs": [{"files": [bitcoin_watchdog_testnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "dogecoin-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [dogecoin_mainnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "dogecoin-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [dogecoin_testnet_canister_scraping_target_path]}],
             },
         ],
     });
@@ -759,7 +770,7 @@ fn sync_prometheus_config_dir(
                 labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
             }],
         )?;
-        // Bitcoin canisters
+        // Bitcoin and Dogecoin canisters
         for (prometheus_target, canister_id) in [
             (
                 BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET,
@@ -776,6 +787,14 @@ fn sync_prometheus_config_dir(
             (
                 BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET,
                 "gjqfs-iaaaa-aaaan-aaada-cai",
+            ),
+            (
+                DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET,
+                "gordg-fyaaa-aaaan-aaadq-cai",
+            ),
+            (
+                DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET,
+                "hd7hi-kqaaa-aaaan-aaaea-cai",
             ),
         ] {
             serde_json::to_writer(

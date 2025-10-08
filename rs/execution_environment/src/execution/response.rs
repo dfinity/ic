@@ -9,23 +9,23 @@ use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
 use ic_embedders::{
     wasm_executor::{
-        wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
+        CanisterStateChanges, PausedWasmExecution, WasmExecutionResult, wasm_execution_error,
     },
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
+use ic_types::Cycles;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
     Response,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
-use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
@@ -392,11 +392,11 @@ impl ResponseHelper {
                 reveal_top_up,
             };
             info!(
-                    round.log,
-                    "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
-                    self.canister.canister_id(),
-                    err,
-                );
+                round.log,
+                "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
+                self.canister.canister_id(),
+                err,
+            );
             // Return total instructions: wasm executor leftovers + cleanup reservation.
             return Err((
                 self,
@@ -418,6 +418,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            is_composite_query(&original.call_origin),
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -491,6 +492,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            is_composite_query(&original.call_origin),
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -690,6 +692,16 @@ struct OriginalContext {
     subnet_memory_reservation: NumBytes,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
+}
+
+fn is_composite_query(origin: &CallOrigin) -> bool {
+    match origin {
+        CallOrigin::CanisterQuery { .. } => true,
+        CallOrigin::CanisterUpdate { .. }
+        | CallOrigin::Ingress { .. }
+        | CallOrigin::Query { .. }
+        | CallOrigin::SystemTask => false,
+    }
 }
 
 /// Struct used to hold necessary information for the

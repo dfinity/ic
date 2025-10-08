@@ -2,13 +2,13 @@ use std::io::Write;
 
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{
-    page_map::{test_utils::base_only_storage_layout, TestPageAllocatorFileDescriptorImpl},
     PageIndex, PageMap,
+    page_map::{TestPageAllocatorFileDescriptorImpl, test_utils::base_only_storage_layout},
 };
-use ic_sys::{PageBytes, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes};
 use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::{
-    new_signal_handler_available, AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker,
+    AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker, new_signal_handler_available,
 };
 
 /// Sets up the SigsegvMemoryTracker to track accesses to a region of memory. Returns:
@@ -896,31 +896,33 @@ mod random_ops {
 
     impl RegisteredHandler {
         unsafe fn new(tracker: SigsegvMemoryTracker) -> Self {
-            TRACKER.with(|cell| {
-                let previous = cell.replace(Some(tracker));
-                assert!(previous.is_none());
-            });
+            unsafe {
+                TRACKER.with(|cell| {
+                    let previous = cell.replace(Some(tracker));
+                    assert!(previous.is_none());
+                });
 
-            let mut handler: libc::sigaction = mem::zeroed();
+                let mut handler: libc::sigaction = mem::zeroed();
 
-            // Flags copied from wasmtime:
-            // https://github.com/bytecodealliance/wasmtime/blob/0e9ce4c231b4b88ce79a1639fbbb5e8bd672d3c3/crates/runtime/src/traphandlers/unix.rs#LL35C1-L35C1
-            handler.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_ONSTACK;
-            handler.sa_sigaction = sigsegv_handler as usize;
-            libc::sigemptyset(&mut handler.sa_mask);
-            if libc::sigaction(
-                libc::SIGSEGV,
-                &handler,
-                PREV_SIGSEGV.lock().unwrap().deref_mut(),
-            ) != 0
-            {
-                panic!(
-                    "unable to install signal handler: {}",
-                    io::Error::last_os_error(),
-                );
+                // Flags copied from wasmtime:
+                // https://github.com/bytecodealliance/wasmtime/blob/0e9ce4c231b4b88ce79a1639fbbb5e8bd672d3c3/crates/runtime/src/traphandlers/unix.rs#LL35C1-L35C1
+                handler.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_ONSTACK;
+                handler.sa_sigaction = sigsegv_handler as usize;
+                libc::sigemptyset(&mut handler.sa_mask);
+                if libc::sigaction(
+                    libc::SIGSEGV,
+                    &handler,
+                    PREV_SIGSEGV.lock().unwrap().deref_mut(),
+                ) != 0
+                {
+                    panic!(
+                        "unable to install signal handler: {}",
+                        io::Error::last_os_error(),
+                    );
+                }
+
+                RegisteredHandler()
             }
-
-            RegisteredHandler()
         }
 
         fn take_tracker(&mut self) -> Option<SigsegvMemoryTracker> {
@@ -950,7 +952,7 @@ mod random_ops {
         }
     }
 
-    extern "C" fn sigsegv_handler(
+    unsafe extern "C" fn sigsegv_handler(
         signum: libc::c_int,
         siginfo_ptr: *mut libc::siginfo_t,
         ucontext_ptr: *mut libc::c_void,

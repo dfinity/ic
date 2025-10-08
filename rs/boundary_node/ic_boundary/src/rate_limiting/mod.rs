@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
 use tower::ServiceBuilder;
 use tower_governor::{
-    errors::GovernorError, governor::GovernorConfigBuilder, key_extractor::KeyExtractor,
-    GovernorLayer,
+    GovernorLayer, errors::GovernorError, governor::GovernorConfigBuilder,
+    key_extractor::KeyExtractor,
 };
 
 use crate::snapshot::Subnet;
@@ -110,19 +110,19 @@ mod test {
 
     use anyhow::Error;
     use axum::{
+        Router,
         body::Body,
         extract::Request,
         middleware::Next,
         middleware::{self},
         response::IntoResponse,
         routing::method_routing::post,
-        Router,
     };
     use http::StatusCode;
     use ic_bn_lib::{http::ConnInfo, principal};
     use ic_types::{
-        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
         CanisterId,
+        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
     };
     use tower::Service;
 

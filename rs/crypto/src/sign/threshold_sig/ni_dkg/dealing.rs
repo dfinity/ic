@@ -5,11 +5,11 @@ use ic_crypto_internal_csp::api::NiDkgCspClient;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing,
 };
-use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use utils::{
-    csp_encryption_pubkey, dealer_index_in_dealers_or_panic, epoch,
-    index_in_resharing_committee_or_panic, DkgEncPubkeyRegistryQueryError,
+    DkgEncPubkeyRegistryQueryError, csp_encryption_pubkey, dealer_index_in_dealers_or_panic, epoch,
+    index_in_resharing_committee_or_panic,
 };
 pub use verification::verify_dealing;
 

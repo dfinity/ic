@@ -5,7 +5,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 };
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
-use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgTargetId, Height, RegistryVersion};
+use ic_types::{Height, RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgTargetId};
 use std::sync::Arc;
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(

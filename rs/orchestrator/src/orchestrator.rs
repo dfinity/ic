@@ -16,18 +16,18 @@ use crate::{
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
 use ic_config::{
-    metrics::{Config as MetricsConfig, Exporter},
     Config,
+    metrics::{Config as MetricsConfig, Exporter},
 };
 use ic_crypto::CryptoComponent;
-use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
+use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
+use ic_types::{ReplicaVersion, SubnetId, hostos_version::HostosVersion};
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -114,33 +114,34 @@ impl Orchestrator {
             "Orchestrator started: version={}, config={:?}", replica_version, config
         );
         UtilityCommand::notify_host(
-            format!(
-                "node-id {}: starting with version {}",
-                node_id, replica_version
-            )
-            .as_str(),
+            format!("node-id {node_id}: starting with version {replica_version}").as_str(),
             1,
         );
 
-        UtilityCommand::notify_host("\nONBOARDING MAY NOT YET BE COMPLETE:\nIf a 'Join request successful!' message has NOT yet been logged, please wait for up to 10 minutes...\n", 3);
+        UtilityCommand::notify_host(
+            "\nONBOARDING MAY NOT YET BE COMPLETE:\nIf a 'Join request successful!' message has NOT yet been logged, please wait for up to 10 minutes...\n",
+            3,
+        );
 
         let version = replica_version.clone();
-        thread::spawn(move || loop {
-            // Sleep early because IPv4 takes several minutes to configure
-            thread::sleep(Duration::from_secs(10 * 60));
-            let (ipv4, ipv6) = Self::get_ip_addresses();
+        thread::spawn(move || {
+            loop {
+                // Sleep early because IPv4 takes several minutes to configure
+                thread::sleep(Duration::from_secs(10 * 60));
+                let (ipv4, ipv6) = Self::get_ip_addresses();
 
-            let message = indoc::formatdoc!(
-                r#"
+                let message = indoc::formatdoc!(
+                    r#"
                     Node-id: {node_id}
                     Replica version: {version}
                     IPv6: {ipv6}
                     IPv4: {ipv4}
 
                 "#
-            );
+                );
 
-            UtilityCommand::notify_host(&message, 1);
+                UtilityCommand::notify_host(&message, 1);
+            }
         });
 
         let slog_logger = logger.inner_logger.root.clone();
@@ -260,7 +261,7 @@ impl Orchestrator {
             .await
             .and_then(|v| {
                 HostosVersion::try_from(v)
-                    .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
+                    .map_err(|e| format!("Unable to parse HostOS version: {e:?}"))
             });
 
         let hostos_upgrade = match hostos_version.clone() {
@@ -409,16 +410,26 @@ impl Orchestrator {
                                 OrchestratorControlFlow::Assigned(subnet_id),
                                 OrchestratorControlFlow::Leaving(_),
                             ) => {
-                                UtilityCommand::notify_host(&format!("The node {node_id} has been unassigned from the subnet {subnet_id}\
+                                UtilityCommand::notify_host(
+                                    &format!(
+                                        "The node {node_id} has been unassigned from the subnet {subnet_id}\
                                      in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet.\
                                       This process can take up to 15 minutes. A new message will be displayed here when the node has been \
-                                      successfully removed."), 1);
+                                      successfully removed."
+                                    ),
+                                    1,
+                                );
                             }
                             (
                                 OrchestratorControlFlow::Leaving(subnet_id),
                                 OrchestratorControlFlow::Unassigned,
                             ) => {
-                                UtilityCommand::notify_host(&format!("The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."), 1);
+                                UtilityCommand::notify_host(
+                                    &format!(
+                                        "The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."
+                                    ),
+                                    1,
+                                );
                             }
                             // Other transitions are not important at the moment.
                             _ => {}
@@ -454,7 +465,10 @@ impl Orchestrator {
         ) {
             // Wait for a minute before starting the first loop, to allow the
             // registry some time to catch up, after starting.
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
+                _ = cancellation_token.cancelled() => return
+            }
 
             // Run the HostOS upgrade loop with an exponential backoff. A 15
             // minute liveness timeout will restart the loop if no progress is

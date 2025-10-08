@@ -11,15 +11,14 @@ use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelect
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_management_canister_types_private::BoundedVec;
 use ic_nervous_system_agent::{
-    management_canister,
-    sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
-    CallCanisters, Request,
+    CallCanisters, Request, management_canister,
+    sns::{self, Sns, governance::SubmittedProposal, root::SnsCanisters},
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
 use ic_sns_governance_api::{
     pb::v1::{
-        proposal::Action, ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId,
-        RegisterExtension,
+        ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId, RegisterExtension,
+        proposal::Action,
     },
     precise_value::parse_precise_value,
 };
@@ -51,6 +50,7 @@ pub struct RegisterExtensionArgs {
     pub sns_neuron_id: Option<ParsedSnsNeuron>,
 
     /// The Root canister ID of the SNS to which the extension is being registered.
+    #[clap(long)]
     pub sns_root_canister_id: CanisterId,
 
     /// The ID of the subnet on which the extension canister will be created.
@@ -58,6 +58,7 @@ pub struct RegisterExtensionArgs {
     /// Some extensions may require a specific subnet to operate correctly.
     ///
     /// The default is the fiduciary subnet.
+    #[clap(long)]
     pub subnet_id: Option<PrincipalId>,
 
     /// Path to a ICP WASM module file (may be gzipped).
@@ -75,6 +76,13 @@ pub struct RegisterExtensionArgs {
     /// JSON-encoded initialization arguments for the extension.
     #[clap(long, value_parser = parse_precise_value)]
     pub extension_init: Option<PreciseValue>,
+
+    /// The name of the dfx network to use.
+    /// TODO[NNS1-4150]: This is currently used because of bad handling
+    /// of the input arguments in the dfx. Once that is fixed,
+    /// this should be removed.
+    #[clap(long)]
+    pub network: Option<String>,
 }
 
 pub struct Wasm {
@@ -235,10 +243,9 @@ pub async fn create_extension_canister<C: CallCanisters>(
     .map_err(|err| {
         if let CreateCanisterError::InsufficientFunds { balance } = err {
             let err = format!(
-                "Requested creating the {} canister with {} cycles, but the caller identity has \
-                 only {} cycles on the cycles ledger. Please buy more cycles using \
+                "Requested creating the {name} canister with {cycles_amount} cycles, but the caller identity has \
+                 only {balance} cycles on the cycles ledger. Please buy more cycles using \
                  `dfx cycles convert --amount AMOUNT --network NETWORK` and try again.",
-                name, cycles_amount, balance,
             );
             anyhow::anyhow!(err)
         } else {
@@ -300,6 +307,7 @@ pub async fn exec<C: CallCanisters>(
         proposal_url,
         summary,
         extension_init,
+        network: _,
     } = args;
 
     let caller_principal = PrincipalId(agent.caller()?);
@@ -506,7 +514,7 @@ pub async fn cycles_ledger_create_canister<C: CallCanisters>(
 
 fn format_full_hash(hash: &[u8]) -> String {
     hash.iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("")
 }

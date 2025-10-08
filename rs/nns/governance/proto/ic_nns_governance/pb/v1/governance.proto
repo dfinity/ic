@@ -87,7 +87,7 @@ enum Topic {
   TOPIC_SUBNET_MANAGEMENT = 7;
   // All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
   // Management or Service Nervous System Management).
-  TOPIC_NETWORK_CANISTER_MANAGEMENT = 8;
+  TOPIC_APPLICATION_CANISTER_MANAGEMENT = 8;
   // Proposals that update KYC information for regulatory purposes,
   // for example during the initial Genesis distribution of ICP in the
   // form of neurons.
@@ -677,6 +677,8 @@ message Proposal {
     RewardNodeProviders reward_node_providers = 19;
     // Register Known Neuron
     KnownNeuron register_known_neuron = 21;
+    // Deregister Known Neuron
+    DeregisterKnownNeuron deregister_known_neuron = 29;
     // Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
     SetSnsTokenSwapOpenTimeWindow set_sns_token_swap_open_time_window = 22 [deprecated = true];
     // Call the open method on an SNS swap canister.
@@ -1666,6 +1668,12 @@ message KnownNeuron {
 message KnownNeuronData {
   string name = 1;
   optional string description = 2;
+  repeated string links = 3;
+}
+
+// Proposal action to deregister a known neuron by removing its name and description.
+message DeregisterKnownNeuron {
+  ic_nns_common.pb.v1.NeuronId id = 1;
 }
 
 // Proposal action to call the "open" method of an SNS token swap canister.
@@ -2132,6 +2140,9 @@ message Governance {
   // Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
   // source of randomness (from the platform)
   optional bytes rng_seed = 28;
+
+  // Map of proposal IDs to their topics for those garbage collected.
+  map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
 
   reserved 6;
   reserved "authz";

@@ -2,24 +2,23 @@
 #![allow(dead_code)]
 use crate::{payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder};
 use ic_interfaces_state_manager::Labeled;
-use ic_logger::{debug, error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext, ReplicatedState,
+    ReplicatedState, metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext,
 };
 use ic_types::{
+    Height, NodeId, RegistryVersion,
     consensus::idkg::{
-        self,
+        self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgUIDGenerator,
+        PreSigId, TranscriptAttributes, UnmaskedTranscriptWithAttributes,
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgUIDGenerator,
-        PreSigId, TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
-    crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
+    crypto::{AlgorithmId, canister_threshold_sig::idkg::IDkgTranscript},
     messages::CallbackId,
-    Height, NodeId, RegistryVersion,
 };
 use std::{
     cmp::Ordering,
@@ -143,67 +142,58 @@ fn update_ecdsa_quadruple_in_creation(
     let registry_version = key_transcript.registry_version();
     let receivers = key_transcript.receivers().clone();
     // Update quadruple with completed transcripts
-    if quadruple.lambda_masked.is_none() {
-        if let Some(transcript) = transcript_cache
+    if quadruple.lambda_masked.is_none()
+        && let Some(transcript) = transcript_cache
             .get_completed_transcript(quadruple.lambda_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_ecdsa_quadruple_in_creation: {:?} lamdba_masked transcript is made",
-                pre_signature_id
-            );
-            quadruple.lambda_masked =
-                Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} lamdba_masked transcript is made",
+            pre_signature_id
+        );
+        quadruple.lambda_masked = Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.kappa_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
+    if quadruple.kappa_unmasked.is_none()
+        && let Some(transcript) = transcript_cache
             .get_completed_transcript(quadruple.kappa_unmasked_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_ecdsa_quadruple_in_creation: {:?} kappa_unmasked transcript {:?} is \
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} kappa_unmasked transcript {:?} is \
                         made from unmasked config",
-                pre_signature_id,
-                transcript.get_type()
-            );
-            quadruple.kappa_unmasked =
-                Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+            pre_signature_id,
+            transcript.get_type()
+        );
+        quadruple.kappa_unmasked = Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.key_times_lambda.is_none() {
-        if let Some(config) = &quadruple.key_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
-                debug!(
-                    log,
-                    "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
-                    pre_signature_id
-                );
-                quadruple.key_times_lambda =
-                    Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-                new_transcripts.push(transcript);
-            }
-        }
+    if quadruple.key_times_lambda.is_none()
+        && let Some(config) = &quadruple.key_times_lambda_config
+        && let Some(transcript) =
+            transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
+            pre_signature_id
+        );
+        quadruple.key_times_lambda = Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.kappa_times_lambda.is_none() {
-        if let Some(config) = &quadruple.kappa_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
-                debug!(
-                    log,
-                    "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
-                    pre_signature_id
-                );
-                quadruple.kappa_times_lambda =
-                    Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-                new_transcripts.push(transcript);
-            }
-        }
+    if quadruple.kappa_times_lambda.is_none()
+        && let Some(config) = &quadruple.kappa_times_lambda_config
+        && let Some(transcript) =
+            transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
+            pre_signature_id
+        );
+        quadruple.kappa_times_lambda =
+            Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
     // Check what to do in the next step
     if let (Some(lambda_masked), None) =
@@ -271,19 +261,18 @@ fn update_schnorr_transcript_in_creation(
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     // Update pre_signature with completed transcripts
-    if pre_signature.blinder_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
+    if pre_signature.blinder_unmasked.is_none()
+        && let Some(transcript) = transcript_cache
             .get_completed_transcript(pre_signature.blinder_unmasked_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
-                pre_signature_id
-            );
-            pre_signature.blinder_unmasked =
-                Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+    {
+        debug!(
+            log,
+            "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
+            pre_signature_id
+        );
+        pre_signature.blinder_unmasked =
+            Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
     Ok((pre_signature.blinder_unmasked.is_some(), new_transcripts))
 }
@@ -670,8 +659,8 @@ pub(super) mod test_utils {
     use super::*;
     use crate::test_utils::IDkgPayloadTestHelper;
     use ic_types::{
-        consensus::idkg::{self, IDkgMasterPublicKeyId, IDkgTranscriptParamsRef},
         NodeId, RegistryVersion,
+        consensus::idkg::{self, IDkgMasterPublicKeyId, IDkgTranscriptParamsRef},
     };
     use std::collections::BTreeMap;
 
@@ -750,37 +739,37 @@ pub(super) mod tests {
     use super::{test_utils::*, *};
     use crate::{
         test_utils::{
+            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
             create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-            into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
-            TestIDkgTranscriptBuilder,
+            into_idkg_contexts, set_up_idkg_payload,
         },
         utils::block_chain_reader,
     };
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, mock_transcript, mock_unmasked_transcript_type,
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
+        mock_transcript, mock_unmasked_transcript_type,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::SchnorrAlgorithm;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        SubnetId,
         batch::BatchPayload,
         consensus::{
+            BlockPayload, DataPayload, HasHeight, HashedBlock, Payload,
             dkg::DkgDataPayload,
             idkg::{
-                common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload,
-                IDkgTranscriptAttributes, UnmaskedTranscript,
+                IDkgMasterPublicKeyId, IDkgPayload, IDkgTranscriptAttributes, UnmaskedTranscript,
+                common::PreSignatureRef,
             },
-            BlockPayload, DataPayload, HasHeight, HashedBlock, Payload,
         },
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-        SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
     use rand::prelude::SliceRandom;

@@ -21,19 +21,19 @@
 //! The aggregated statistics are then added to the [`TotalQueryStats`], from where they can
 //! be accessed by canisters.
 
-use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
+use crate::{QueryStatsEpoch, node_id_into_protobuf, node_id_try_from_option};
 use ic_base_types::{CanisterId, NodeId, NumBytes};
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::registry::subnet::v1 as proto;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::{
         canister_state_bits::v1::{TotalQueryStats as TotalQueryStatsProto, Unsigned128},
         stats::v1::{QueryStats as QueryStatsProto, QueryStatsInner},
     },
     types::v1::{self as pb},
 };
-use prost::{bytes::BufMut, Message};
+use prost::{Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
 
@@ -84,7 +84,7 @@ fn get_u128_from_protobuf(proto: Option<Unsigned128>) -> Result<u128, ProxyDecod
         .raw
         .try_into()
         .map_err(|e| {
-            ProxyDecodeError::Other(format!("Failed to decode total_query_stats: {:?}", e))
+            ProxyDecodeError::Other(format!("Failed to decode total_query_stats: {e:?}"))
         })?;
     Ok(u128::from_le_bytes(array))
 }
@@ -382,9 +382,11 @@ mod tests {
         let original_stats = test_message(1000);
         let serialized_stats = original_stats.serialize_with_limit(NumBytes::new(4));
         assert!(serialized_stats.is_empty());
-        assert!(QueryStatsPayload::deserialize(&serialized_stats)
-            .unwrap()
-            .is_none());
+        assert!(
+            QueryStatsPayload::deserialize(&serialized_stats)
+                .unwrap()
+                .is_none()
+        );
     }
 
     /// Serialization and deserialization test
@@ -453,10 +455,10 @@ mod tests {
         R: RngCore,
     {
         QueryStats {
-            num_calls: rng.gen(),
-            num_instructions: rng.gen(),
-            ingress_payload_size: rng.gen(),
-            egress_payload_size: rng.gen(),
+            num_calls: rng.r#gen(),
+            num_instructions: rng.r#gen(),
+            ingress_payload_size: rng.r#gen(),
+            egress_payload_size: rng.r#gen(),
         }
     }
 }

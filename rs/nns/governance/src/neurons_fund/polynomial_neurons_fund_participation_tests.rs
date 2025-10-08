@@ -352,9 +352,7 @@ fn run_test(neurons_fund_participation_limits: NeuronsFundParticipationLimits) {
                         assert_eq!(
                             refunded_neuron_portions.num_neurons(),
                             initial_neuron_portions.num_neurons(),
-                            "\ninitial_neuron_portions = {:#?}\nrefunded_neuron_portions = {:#?}",
-                            initial_neuron_portions,
-                            refunded_neuron_portions
+                            "\ninitial_neuron_portions = {initial_neuron_portions:#?}\nrefunded_neuron_portions = {refunded_neuron_portions:#?}"
                         );
                     } else {
                         assert!(

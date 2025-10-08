@@ -1,8 +1,8 @@
 use bitcoin::{
-    consensus::encode::deserialize, dogecoin::Network as DogeNetwork, Amount, BlockHash,
-    Network as BtcNetwork,
+    Amount, BlockHash, Network as BtcNetwork, consensus::encode::deserialize,
+    dogecoin::Network as DogeNetwork,
 };
-use ic_btc_adapter::{start_server, AdapterNetwork, Config, IncomingSource};
+use ic_btc_adapter::{AdapterNetwork, Config, IncomingSource, start_server};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::{
     bitcoind::{Conf, Daemon},
@@ -13,8 +13,9 @@ use ic_btc_replica_types::{
     Network, SendTransactionRequest,
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
+use ic_config::logger::{Config as LoggerConfig, Level as LoggerLevel};
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use std::{
     collections::{HashMap, HashSet},
@@ -58,7 +59,7 @@ fn make_get_successors_request(
     adapter_client: &AdapterClient,
     anchor: Vec<u8>,
     headers: Vec<Vec<u8>>,
-) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
+) -> Result<BitcoinAdapterResponseWrapper, RpcError> {
     let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
         network: Network::BitcoinRegtest,
         anchor,
@@ -76,7 +77,7 @@ fn make_get_successors_request(
 fn make_send_tx_request(
     adapter_client: &AdapterClient,
     raw_tx: &[u8],
-) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
+) -> Result<BitcoinAdapterResponseWrapper, RpcError> {
     let request = BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
         network: Network::BitcoinRegtest,
         transaction: raw_tx.to_vec(),
@@ -91,8 +92,8 @@ fn make_send_tx_request(
 }
 
 fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
-    logger: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
+    logger: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
@@ -106,8 +107,8 @@ fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
         idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
         ..Config::default_with(network.into())
     };
-
-    start_server(logger, metrics_registry, rt_handle, config);
+    let _enter = rt_handle.enter();
+    rt_handle.spawn(start_server(logger, metrics_registry, config));
 }
 
 fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
@@ -168,8 +169,8 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     let res = Builder::new()
         .make(|uds_path| {
             start_adapter(
-                &logger,
-                &metrics_registry,
+                logger.clone(),
+                metrics_registry.clone(),
                 rt.handle(),
                 urls.clone(),
                 uds_path,
@@ -189,8 +190,17 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
         .parse()
         .unwrap();
     if let AdapterState::Active = adapter_state {
-        // We send this request to make sure the adapter is not idle.
-        let _ = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
+        // Send this request to make sure the adapter is not idle.
+        // Retry until the request goes through, because the adapter may not be fully
+        // started yet.
+        for _ in 0..10 {
+            let res = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
+            if res.is_err() {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            } else {
+                break;
+            }
+        }
     }
 
     res
@@ -295,7 +305,7 @@ fn sync_until_end_block<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -340,7 +350,7 @@ fn sync_blocks<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -375,7 +385,7 @@ fn sync_blocks_at_once<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -393,6 +403,28 @@ fn create_alice_and_bob_wallets<T: RpcClientType>(
     (alice_client, bob_client)
 }
 
+fn generate_to_address_with_retries<T: RpcClientType>(
+    client: &RpcClient<T>,
+    num_blocks: u64,
+    address: &T::Address,
+) -> Result<Vec<BlockHash>, ic_btc_adapter_test_utils::rpc_client::RpcError> {
+    let mut result;
+    let mut n = 0;
+    loop {
+        result = client.generate_to_address(num_blocks, address);
+        if n < 5
+            && let Err(err) = &result
+            && err.is_resource_temporarily_unavailable()
+        {
+            n += 1;
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        } else {
+            break;
+        }
+    }
+    result
+}
+
 fn fund<T: RpcClientType>(to_fund_client: &RpcClient<T>) {
     let blackhole_address = to_fund_client.get_new_address().unwrap();
     let to_fund_address = to_fund_client.get_address().unwrap();
@@ -400,14 +432,15 @@ fn fund<T: RpcClientType>(to_fund_client: &RpcClient<T>) {
         .get_balance_of(None, to_fund_address)
         .unwrap();
 
-    to_fund_client
-        .generate_to_address(1, to_fund_address)
-        .unwrap();
+    generate_to_address_with_retries(to_fund_client, 1, to_fund_address).unwrap();
 
     // Generate enough blocks for coinbase maturity
-    to_fund_client
-        .generate_to_address(T::REGTEST_COINBASE_MATURITY, &blackhole_address)
-        .unwrap();
+    generate_to_address_with_retries(
+        to_fund_client,
+        T::REGTEST_COINBASE_MATURITY,
+        &blackhole_address,
+    )
+    .unwrap();
 
     // The check below uses `listunspent` internally, which is more reliable than `receivedbyaddress`.
     assert_eq!(
@@ -494,7 +527,7 @@ fn sync_headers_until_checkpoint(adapter_client: &AdapterClient, anchor: Vec<u8>
                 // Checkpoint has not been surpassed, adapter still syncing headers
                 std::thread::sleep(std::time::Duration::from_secs(10));
             }
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
             _ => return,
         }
     }
@@ -511,7 +544,7 @@ fn test_receives_blocks<T: RpcClientType + Into<AdapterNetwork>>() {
 
     let address = client.get_address().unwrap();
 
-    client.generate_to_address(150, address).unwrap();
+    generate_to_address_with_retries(client, 150, address).unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -686,9 +719,7 @@ fn test_receives_new_3rd_party_txs<T: RpcClientType + Into<AdapterNetwork>>() {
         T::REGTEST_COINBASE_MATURITY + 1,
         alice_client.get_blockchain_info().unwrap().blocks
     );
-    alice_client
-        .generate_to_address(1, &blackhole_address)
-        .unwrap();
+    generate_to_address_with_retries(&alice_client, 1, &blackhole_address).unwrap();
     assert_eq!(
         T::REGTEST_COINBASE_MATURITY + 2,
         alice_client.get_blockchain_info().unwrap().blocks
@@ -805,7 +836,8 @@ fn doge_test_send_tx() {
 
 /// Checks that the client (replica) receives blocks from both created forks.
 fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
-    let logger = no_op_logger();
+    use ic_logger::new_replica_logger_from_config;
+
     let network = T::REGTEST;
     let bitcoind1 = start_bitcoind(network);
     let client1 = &bitcoind1.rpc_client;
@@ -817,6 +849,12 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     let url2 = bitcoind2.p2p_socket().unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
+
+    let logger_config = LoggerConfig {
+        level: LoggerLevel::Trace,
+        ..LoggerConfig::default()
+    };
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&logger_config);
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
@@ -833,13 +871,13 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     wait_for_connection(client2, 2);
 
     let address1 = client1.get_address().unwrap();
-    client1.generate_to_address(10, address1).unwrap();
+    generate_to_address_with_retries(client1, 10, address1).unwrap();
 
     wait_for_blocks(client1, 10);
     wait_for_blocks(client2, 10);
 
     let address2 = client2.get_address().unwrap();
-    client2.generate_to_address(10, address2).unwrap();
+    generate_to_address_with_retries(client2, 10, address2).unwrap();
 
     wait_for_blocks(client1, 20);
     wait_for_blocks(client2, 20);
@@ -852,8 +890,8 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     wait_for_connection(client1, 1);
     wait_for_connection(client2, 1);
 
-    client1.generate_to_address(3, address1).unwrap();
-    client2.generate_to_address(6, address2).unwrap();
+    generate_to_address_with_retries(client1, 3, address1).unwrap();
+    generate_to_address_with_retries(client2, 6, address2).unwrap();
 
     wait_for_blocks(client1, 23);
     wait_for_blocks(client2, 26);
@@ -908,9 +946,8 @@ fn test_bfs_order<T: RpcClientType + Into<AdapterNetwork>>() {
     // alligning with the round robin of the adapter's peers. Currently all blocks are tried and retried in a single round.
     let shared_blocks_count = 2;
     let branch_length = 6;
-    let shared_blocks = client1
-        .generate_to_address(shared_blocks_count, address1)
-        .unwrap();
+    let shared_blocks =
+        generate_to_address_with_retries(client1, shared_blocks_count, address1).unwrap();
 
     wait_for_blocks(client1, 2);
     wait_for_blocks(client2, 2);
@@ -923,14 +960,10 @@ fn test_bfs_order<T: RpcClientType + Into<AdapterNetwork>>() {
     wait_for_connection(client1, 1);
     wait_for_connection(client2, 1);
 
-    let fork1 = client1
-        .generate_to_address(branch_length, address1)
-        .unwrap();
+    let fork1 = generate_to_address_with_retries(client1, branch_length, address1).unwrap();
 
     let address2 = client2.get_address().unwrap();
-    let fork2 = client2
-        .generate_to_address(branch_length, address2)
-        .unwrap();
+    let fork2 = generate_to_address_with_retries(client2, branch_length, address2).unwrap();
 
     wait_for_blocks(client1, shared_blocks_count + branch_length);
     wait_for_blocks(client2, shared_blocks_count + branch_length);

@@ -1,5 +1,11 @@
 {
+<<<<<<< HEAD
   "checksum": "5f4cefcb9acb6067994c0d3ab0702b0be1d6e86257fb77e19778998db0bf7204",
+||||||| db65a720ff
+  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
+=======
+  "checksum": "7feedba152e1ec92d5d680933db408d452d7d1132fdb66b04cbc9539b3a7bd3a",
+>>>>>>> master
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21551,6 +21557,10 @@
               "target": "scraper"
             },
             {
+              "id": "scrypt 0.11.0",
+              "target": "scrypt"
+            },
+            {
               "id": "secp256k1 0.22.2",
               "target": "secp256k1"
             },
@@ -32373,15 +32383,6 @@
           "selects": {}
         },
         "edition": "2018",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "x86_64-apple-darwin": [
-              "-C",
-              "opt-level=0"
-            ]
-          }
-        },
         "version": "0.14.27"
       },
       "license": "MIT",
@@ -32488,15 +32489,6 @@
           "selects": {}
         },
         "edition": "2021",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "x86_64-apple-darwin": [
-              "-C",
-              "opt-level=0"
-            ]
-          }
-        },
         "version": "1.6.0"
       },
       "license": "MIT",
@@ -80991,6 +80983,7 @@
         ],
         "crate_features": {
           "common": [
+            "add-extension",
             "async-compression",
             "compression-br",
             "compression-deflate",
@@ -95374,6 +95367,7 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
+    "scrypt 0.11.0",
     "secp256k1 0.22.2",
     "semver 1.0.26",
     "serde 1.0.219",

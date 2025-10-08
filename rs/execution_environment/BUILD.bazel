@@ -79,7 +79,7 @@ rust_ic_test(
     # TODO(IDX-3164): enable on PR when flakiness issue is resolved
     #                 or we have new darwin runners in use
     tags = [
-        "test_macos_slow",
+        "test_all_platforms_slow",
     ],
     deps = [
         # Keep sorted.
@@ -140,7 +140,7 @@ rust_ic_test_suite(
         "@crate_index//:test-strategy",
     ],
     tags = [
-        "test_macos_slow",
+        "test_all_platforms_slow",
     ],
     deps = [
         # Keep sorted.
@@ -207,7 +207,7 @@ rust_ic_test(
     },
     tags = [
         "cpu:4",
-        "test_macos_slow",
+        "test_all_platforms_slow",
     ],
     deps = [
         # Keep sorted.
@@ -233,7 +233,7 @@ rust_doc_test(
     name = "execution_environment_doc_test",
     crate = ":execution_environment",
     tags = [
-        "test_macos",
+        "test_all_platforms",
     ],
 )
 

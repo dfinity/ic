@@ -116,18 +116,18 @@ use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::embedders::MeteringType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
-use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
+use ic_types::methods::WasmMethod;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 use wirm::{
+    DataType, InitInstr,
     ir::{
         function::FunctionBuilder,
         id::ImportsID,
-        module::{module_functions::FuncKind, module_globals::GlobalKind, LocalOrImport},
+        module::{LocalOrImport, module_functions::FuncKind, module_globals::GlobalKind},
         types::{Body, InitExpr, Instructions, Value},
     },
-    DataType, InitInstr,
 };
 
 use crate::wasmtime_embedder::{
@@ -147,10 +147,10 @@ pub enum WasmMemoryType {
 
 pub(crate) fn main_memory_type(module: &wirm::Module<'_>) -> WasmMemoryType {
     let mut mem_type = WasmMemoryType::Wasm32;
-    if let Some(memory) = module.memories.iter().next() {
-        if memory.ty.memory64 {
-            mem_type = WasmMemoryType::Wasm64;
-        }
+    if let Some(memory) = module.memories.iter().next()
+        && memory.ty.memory64
+    {
+        mem_type = WasmMemoryType::Wasm64;
     }
     mem_type
 }
@@ -1113,7 +1113,9 @@ fn export_additional_symbols<'a>(
         dirty_pages_counter,
     );
 
-    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&ACCESSED_PAGES_COUNTER_GLOBAL_NAME));
+    debug_assert!(
+        super::validation::RESERVED_SYMBOLS.contains(&ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
+    );
     module.exports.add_export_global(
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME.to_string(),
         accessed_pages_counter,

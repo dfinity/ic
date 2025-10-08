@@ -3,11 +3,11 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_types::PrincipalId;
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, Memo, Operation, Tokens, Transaction,
-    DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, Operation, Tokens,
+    Transaction,
 };
 
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 use rand_distr::Distribution;
 use std::collections::{BTreeMap, VecDeque};
 use std::time::SystemTime;
@@ -60,8 +60,8 @@ impl Scribe {
     }
 
     fn rand_val(&mut self, val: u64, dev: f64) -> u64 {
-        let gen = rand_distr::Normal::new(val as f64, val as f64 * dev).unwrap();
-        let ret = gen.sample(&mut self.rng).max(0.0);
+        let r#gen = rand_distr::Normal::new(val as f64, val as f64 * dev).unwrap();
+        let ret = r#gen.sample(&mut self.rng).max(0.0);
         ret as u64
     }
 

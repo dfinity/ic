@@ -2,21 +2,12 @@
 Common dependencies for system-tests.
 """
 
-load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
+load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_NNS")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
-MAINNET_NNS_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["version"]
-
-# TODO(NODE-1682): Switch mainnet_nns_setupos_disk_image to use dev image once published release is available.
-MAINNET_NNS_SUBNET_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash"]
-MAINNET_APPLICATION_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["version"]
-MAINNET_APPLICATION_SUBNET_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash_dev"]
-MAINNET_LATEST_HOSTOS_REVISION = mainnet_icos_versions["hostos"]["latest_release"]["version"]
-MAINNET_LATEST_HOSTOS_HASH = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash_dev"]
-
 MAINNET_ENV = {
-    "MAINNET_NNS_SUBNET_REVISION_ENV": MAINNET_NNS_SUBNET_REVISION,
-    "MAINNET_APPLICATION_SUBNET_REVISION_ENV": MAINNET_APPLICATION_SUBNET_REVISION,
+    "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS["version"],
+    "MAINNET_APP_GUESTOS_REVISION_ENV": MAINNET_APP["version"],
 }
 
 NNS_CANISTER_WASM_PROVIDERS = {
@@ -28,8 +19,8 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "tip-of-branch": "//rs/nns/governance:governance-canister-test",
         "mainnet": "@mainnet_nns_governance_canister//file",
     },
-    "ledger-canister_notify-method": {
-        "tip-of-branch": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "ledger-canister": {
+        "tip-of-branch": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "mainnet": "@mainnet_icp_ledger_canister//file",
     },
     "root-canister": {
@@ -55,6 +46,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
     "node-rewards": {
         "tip-of-branch": "//rs/node_rewards/canister:node-rewards-canister",
         "mainnet": "@mainnet_node-rewards-canister//file",
+    },
+    "migration-canister": {
+        "tip-of-branch": "//rs/migration_canister:migration-canister",
+        "mainnet": "//rs/test_utilities:empty-wasm",
     },
 }
 

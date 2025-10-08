@@ -9,18 +9,20 @@ on the process that this file is part of, see
 
 ## Added
 
-* The neuron `Split` command accepts an optional `memo` field that can be used to derive the neuron
-  subaccount, rather than generating a random one.
+* Record votes by known neurons before clearing ballots.
+* Allow updating known neuron through RegisterKnownNeuron without having to change its name.
 
 ## Changed
 
-* The protobuf-encoded `Storable` implementations are changed to `Unbounded`.
+* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
+  limit.
 
 ## Deprecated
 
-## Removed
+* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
+  instead).
 
-* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
+## Removed
 
 ## Fixed
 

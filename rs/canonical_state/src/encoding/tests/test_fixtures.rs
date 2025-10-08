@@ -2,12 +2,13 @@ use crate::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
+    Cycles, Time,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        CallbackId, Payload, Refund, RejectContext, Request, RequestMetadata, Response,
+        StreamMessage,
     },
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamHeader},
-    Cycles, Time,
 };
 
 pub fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
@@ -28,7 +29,7 @@ pub fn stream_header(_certification_version: CertificationVersion) -> StreamHead
     StreamHeader::new(23.into(), 25.into(), 256.into(), reject_signals, flags)
 }
 
-pub fn request(_certification_version: CertificationVersion) -> RequestOrResponse {
+pub fn request(_certification_version: CertificationVersion) -> StreamMessage {
     let metadata = RequestMetadata::new(1, Time::from_nanos_since_unix_epoch(100_000));
     let deadline = CoarseTime::from_secs_since_unix_epoch(8);
     Request {
@@ -44,7 +45,7 @@ pub fn request(_certification_version: CertificationVersion) -> RequestOrRespons
     .into()
 }
 
-pub fn response(_certification_version: CertificationVersion) -> RequestOrResponse {
+pub fn response(_certification_version: CertificationVersion) -> StreamMessage {
     let deadline = CoarseTime::from_secs_since_unix_epoch(7);
     Response {
         originator: canister_test_id(6),
@@ -57,7 +58,7 @@ pub fn response(_certification_version: CertificationVersion) -> RequestOrRespon
     .into()
 }
 
-pub fn reject_response(_certification_version: CertificationVersion) -> RequestOrResponse {
+pub fn reject_response(_certification_version: CertificationVersion) -> StreamMessage {
     let deadline = CoarseTime::from_secs_since_unix_epoch(7);
     Response {
         originator: canister_test_id(6),
@@ -68,4 +69,9 @@ pub fn reject_response(_certification_version: CertificationVersion) -> RequestO
         deadline,
     }
     .into()
+}
+
+pub fn anonymous_refund(certification_version: CertificationVersion) -> StreamMessage {
+    assert!(certification_version >= CertificationVersion::V22);
+    Refund::anonymous(canister_test_id(7), Cycles::new(8)).into()
 }
