@@ -2134,16 +2134,16 @@ impl PocketIcSubnets {
             }
             if synced_registry_version_before != self.synced_registry_version {
                 self.persist_registry_changes();
+                // update routing table
+                let registry_client =
+                    RegistryClientImpl::new(self.registry_data_provider.clone(), None);
+                registry_client.poll_once().unwrap();
+                let routing_table = registry_client
+                    .get_routing_table(self.registry_data_provider.latest_version())
+                    .expect("Failed to get routing table")
+                    .expect("Failed to get routing table");
+                self.routing_table = routing_table;
             }
-
-            let registry_client =
-                RegistryClientImpl::new(self.registry_data_provider.clone(), None);
-            registry_client.poll_once().unwrap();
-            let routing_table = registry_client
-                .get_routing_table(self.registry_data_provider.latest_version())
-                .expect("Failed to get routing table")
-                .expect("Failed to get routing table");
-            self.routing_table = routing_table;
         }
     }
 
