@@ -492,60 +492,44 @@ fn test_ledger_growing() {
     );
 }
 
-fn verify_unknown_block_handling(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
-    const TA1: Account = Account {
+const NUM_BLOCKS: u64 = 6;
+
+fn verify_unknown_block_handling(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+    bad_block_index: u64,
+) {
+    const TEST_ACCOUNT: Account = Account {
         owner: PrincipalId::new_user_test_id(44).0,
         subaccount: None,
     };
 
-    const TA2: Account = Account {
-        owner: PrincipalId::new_user_test_id(66).0,
-        subaccount: None,
-    };
+    let mut prev_hash = None;
 
-    let mut blocks = vec![];
-
-    blocks.push(
-        BlockBuilder::new(0, 0)
-            .mint(TA1, Tokens::from(1_000u64))
-            .build(),
-    );
-    let block1 = BlockBuilder::new(1, 1)
-        .with_parent_hash(blocks[0].clone().hash().to_vec())
-        .transfer(TA1, TA2, Tokens::from(50u64))
-        .build();
-    let mut block1_map = match block1 {
-        ICRC3Value::Map(btree_map) => btree_map,
-        _ => panic!("block should be a map"),
-    };
-    block1_map.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
-    blocks.push(ICRC3Value::Map(block1_map));
-
-    const NUM_BLOCKS: u64 = 10;
-
-    for i in 2..NUM_BLOCKS {
-        blocks.push(
+    for i in 0..NUM_BLOCKS {
+        let block = if let Some(prev_hash) = prev_hash {
             BlockBuilder::new(i, i)
-                .with_parent_hash(blocks[i as usize - 1].clone().hash().to_vec())
-                .mint(TA1, Tokens::from(1_000u64))
-                .build(),
-        );
-    }
-
-    add_block(env, ledger_id, &blocks[0]);
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
-
-    let status = sync_status(env, index_id);
-    assert!(status.sync_active);
-    assert!(status.sync_error.is_none());
-
-    assert_eq!(icrc1_balance_of(env, index_id, TA1), 1_000u64);
-    assert_eq!(icrc1_balance_of(env, index_id, TA2), 0u64);
-
-    for i in 1..NUM_BLOCKS {
-        add_block(env, ledger_id, &blocks[i as usize]);
+                .with_parent_hash(prev_hash)
+                .mint(TEST_ACCOUNT, Tokens::from(1u64))
+                .build()
+        } else {
+            BlockBuilder::new(i, i)
+                .mint(TEST_ACCOUNT, Tokens::from(1u64))
+                .build()
+        };
+        let block = if i == bad_block_index {
+            let mut bad_block = match block {
+                ICRC3Value::Map(btree_map) => btree_map,
+                _ => panic!("block should be a map"),
+            };
+            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+            ICRC3Value::Map(bad_block)
+        } else {
+            block
+        };
+        prev_hash = Some(block.clone().hash().to_vec());
+        add_block(env, ledger_id, &block);
     }
 
     env.advance_time(Duration::from_secs(60));
@@ -554,37 +538,48 @@ fn verify_unknown_block_handling(env: &StateMachine, ledger_id: CanisterId, inde
     let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
     let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
     assert_eq!(ledger_blocks.chain_length, NUM_BLOCKS);
-    assert_eq!(index_blocks.chain_length, 1);
+    assert_eq!(index_blocks.chain_length, bad_block_index);
 
-    assert_eq!(icrc1_balance_of(env, index_id, TA1), 1_000u64);
-    assert_eq!(icrc1_balance_of(env, index_id, TA2), 0u64);
+    assert_eq!(
+        icrc1_balance_of(env, index_id, TEST_ACCOUNT),
+        bad_block_index
+    );
 
     let status = sync_status(env, index_id);
-    assert!(!status.sync_active);
-    assert_eq!(
-        status.sync_error,
-        Some("Unknown block at index 1.".to_string())
-    );
+    if bad_block_index < NUM_BLOCKS {
+        assert!(!status.sync_active);
+        assert_eq!(
+            status.sync_error,
+            Some(format!("Unknown block at index {}.", bad_block_index))
+        );
+    } else {
+        assert!(status.sync_active);
+        assert_eq!(status.sync_error, None);
+    }
 }
 
 #[test]
 fn test_ledger_unknown_block_icrc3() {
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    for bad_block_index in 0..NUM_BLOCKS {
+        let env = &StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(env);
+        let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    verify_unknown_block_handling(env, ledger_id, index_id);
+        verify_unknown_block_handling(env, ledger_id, index_id, bad_block_index);
+    }
 }
 
 #[test]
 fn test_ledger_unknown_block_legacy() {
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    for bad_block_index in 0..NUM_BLOCKS {
+        let env = &StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(env);
+        let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    set_icrc3_enabled(env, ledger_id, false);
+        set_icrc3_enabled(env, ledger_id, false);
 
-    verify_unknown_block_handling(env, ledger_id, index_id);
+        verify_unknown_block_handling(env, ledger_id, index_id, bad_block_index);
+    }
 }
 
 #[test]
