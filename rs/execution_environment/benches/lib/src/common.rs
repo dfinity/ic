@@ -38,7 +38,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::{convert::TryFrom, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles128()`
@@ -112,8 +112,7 @@ where
         .1
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
-    canister_state.system_state.memory_allocation =
-        MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(0));
     canister_state.system_state.freeze_threshold = 0.into();
 
     // Create call context and callback
