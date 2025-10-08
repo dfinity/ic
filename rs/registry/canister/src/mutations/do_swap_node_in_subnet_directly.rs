@@ -603,6 +603,81 @@ mod tests {
     }
 
     #[test]
+    fn rate_limits_e2e_respected() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let mut registry = Registry::new();
+
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let operator_id = PrincipalId::new_user_test_id(1);
+
+        let now = now_system_time();
+
+        let mutations = get_mutations_from_node_information(&[
+            NodeInformation {
+                node_id: old_node_id,
+                subnet_id: Some(subnet_id),
+                operator: operator_id,
+            },
+            NodeInformation {
+                node_id: new_node_id,
+                subnet_id: None,
+                operator: operator_id,
+            },
+        ]);
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
+
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now);
+        assert!(
+            response.is_ok(),
+            "Expected OK response but got: {response:?}"
+        );
+
+        // Make an additional call which should fail because of the subnet limit
+        let before_duration_elapsed = now
+            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let response = registry
+            .swap_nodes_inner(payload.clone(), operator_id, before_duration_elapsed)
+            .expect_err("Should error out");
+
+        let expected_err = SwapError::SubnetRateLimited { subnet_id };
+        assert_eq!(response, expected_err);
+
+        // Make an additional call which should fail because of the provider limit
+        let after_subnet_duration_elapsed = now
+            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let response = registry
+            .swap_nodes_inner(payload.clone(), operator_id, after_subnet_duration_elapsed)
+            .expect_err("Should error out");
+
+        let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+            subnet_id,
+            caller: operator_id,
+        };
+        assert_eq!(response, expected_err);
+
+        // Make an additional call after all the rate limits have elapsed
+        let after_provider_duration_elapsed = now
+            .checked_add(PROVIDER_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let response =
+            registry.swap_nodes_inner(payload, operator_id, after_provider_duration_elapsed);
+
+        assert!(response.is_ok());
+    }
+
+    #[test]
     fn e2e_valid_swap() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
         let mut registry = Registry::new();
