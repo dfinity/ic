@@ -1587,8 +1587,16 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
     ) -> Result<ValidatedCyclesAndMemoryUsage, CanisterManagerError> {
         // Check that there is enough subnet available memory for the new memory usage.
-        let allocated_bytes = new_memory_usage.saturating_sub(&old_memory_usage);
-        let deallocated_bytes = old_memory_usage.saturating_sub(&new_memory_usage);
+        let old_memory_allocated_bytes = canister
+            .memory_allocation()
+            .allocated_bytes(old_memory_usage);
+        let new_memory_allocated_bytes = canister
+            .memory_allocation()
+            .allocated_bytes(new_memory_usage);
+        let allocated_bytes =
+            new_memory_allocated_bytes.saturating_sub(&old_memory_allocated_bytes);
+        let deallocated_bytes =
+            old_memory_allocated_bytes.saturating_sub(&new_memory_allocated_bytes);
         round_limits
             .subnet_available_memory
             .check_available_memory(allocated_bytes, NumBytes::from(0), NumBytes::from(0))

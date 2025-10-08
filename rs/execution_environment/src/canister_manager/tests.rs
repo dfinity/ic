@@ -4627,9 +4627,14 @@ fn upload_chunk_succeeds_when_allocation_exceeded() {
     let canister_id = test.create_canister(CYCLES);
 
     let chunk_size = wasm_chunk_store::chunk_size();
-    // Allocate enough memory for just one chunk.
-    test.canister_update_allocations_settings(canister_id, None, Some(chunk_size.get()))
-        .unwrap();
+    // Allocate enough memory for just one chunk and canister history memory.
+    let canister_history_memory = size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    test.canister_update_allocations_settings(
+        canister_id,
+        None,
+        Some(chunk_size.get() + canister_history_memory as u64),
+    )
+    .unwrap();
 
     let initial_subnet_available_memory = test.subnet_available_memory();
     let assert_subnet_available_memory = |test: &ExecutionTest, chunks: u64| {
@@ -4649,12 +4654,12 @@ fn upload_chunk_succeeds_when_allocation_exceeded() {
     };
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
-    assert_subnet_available_memory(&test, 1);
+    assert_subnet_available_memory(&test, 0);
 
     // Uploading the same chunk again succeeds.
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
-    assert_subnet_available_memory(&test, 1);
+    assert_subnet_available_memory(&test, 0);
 
     // Second chunk upload succeeds as well since
     // memory allocation is not a bound on canister memory usage.
@@ -4665,7 +4670,7 @@ fn upload_chunk_succeeds_when_allocation_exceeded() {
     };
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
-    assert_subnet_available_memory(&test, 2);
+    assert_subnet_available_memory(&test, 1);
 }
 
 #[test]
