@@ -367,7 +367,7 @@ impl CanisterHttpPoolManagerImpl {
                                 original_len,
                                 safe_len
                             );
-                            // This would panic if not on a char boundary. 
+                            // This would panic if not on a char boundary.
                             reject.message.truncate(safe_len);
                         }
                     }
