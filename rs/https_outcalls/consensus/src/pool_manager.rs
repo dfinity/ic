@@ -78,9 +78,11 @@ fn validate_response_size(
                 Some(response_size) => response_size.get(),
                 None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
             };
-            if response_size > max_response_size + CANDID_OVERHEAD_RESERVE_BYTES {
+            let max_response_size_including_candid_overhead =
+                max_response_size + CANDID_OVERHEAD_RESERVE_BYTES;
+            if response_size > max_response_size_including_candid_overhead {
                 Err(format!(
-                    "Response size {response_size} exceeds the maximum allowed size of {max_response_size}"
+                    "Response size {response_size} exceeds the maximum allowed size of {max_response_size_including_candid_overhead}"
                 ))
             } else {
                 Ok(())
@@ -1529,7 +1531,7 @@ pub mod test {
                     let validation_err = format!(
                         "Response size {} exceeds the maximum allowed size of {}",
                         oversized_len,
-                        max_response_bytes.get()
+                        max_response_bytes.get() + CANDID_OVERHEAD_RESERVE_BYTES
                     );
                     // The full error message produced by the `validate_shares` function.
                     let expected_err = format!(
