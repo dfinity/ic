@@ -16,13 +16,13 @@ type VM = VirtualMemory<DefaultMemoryImpl>;
 
 // Note, operations are weighted, so that some operations, such as adding a node, cost 20, while others
 // such as updating a single record, cost 1.
-const NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY: u64 = 100;
+const NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY: u64 = 20;
 const NODE_PROVIDER_MAX_SPIKE: u64 = NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY * 7;
 pub const NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY;
 
 // Node Operator rate limiting constants
-const NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY: u64 = 25;
+const NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY: u64 = 20;
 const NODE_OPERATOR_MAX_SPIKE: u64 = NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY * 7;
 pub const NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
@@ -187,41 +187,93 @@ mod tests {
     use maplit::btreemap;
 
     #[test]
-    fn test_drop_behavior_in_thread_local() {
+    fn test_combined_rate_limiting() {
         let now = SystemTime::now();
-        let key = PrincipalId::new_user_test_id(1);
+        let shared_node_provider = PrincipalId::new_user_test_id(1000);
+        let node_operator_1 = PrincipalId::new_user_test_id(1);
+        let node_operator_2 = PrincipalId::new_user_test_id(2);
         let mut registry = invariant_compliant_registry(0);
 
-        // Add a node operator record to the registry
-        let payload = AddNodeOperatorPayload {
-            node_operator_principal_id: Some(key),
-            node_provider_principal_id: Some(key), // Use same ID for simplicity
+        // Add first node operator that shares the node provider
+        let payload_1 = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_1),
+            node_provider_principal_id: Some(shared_node_provider),
             node_allowance: 10,
-            dc_id: "test_dc".to_string(),
+            dc_id: "test_dc_1".to_string(),
             rewardable_nodes: btreemap! { "type1".to_string() => 1 },
             ipv6: None,
             max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 1 }),
         };
-        registry.do_add_node_operator(payload);
+        registry.do_add_node_operator(payload_1);
 
-        let first_available_operator = registry.get_available_node_operator_op_capacity(key, now);
-        let first_available_provider = registry.get_available_node_provider_op_capacity(key, now);
+        // Add second node operator that shares the same node provider
+        let payload_2 = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_2),
+            node_provider_principal_id: Some(shared_node_provider),
+            node_allowance: 10,
+            dc_id: "test_dc_2".to_string(),
+            rewardable_nodes: btreemap! { "type1".to_string() => 1 },
+            ipv6: None,
+            max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 1 }),
+        };
+        registry.do_add_node_operator(payload_2);
 
-        let reservation = registry
-            .try_reserve_capacity_for_node_operator_operation(now, key, 5)
+        // Get initial capacities
+        let initial_operator_1_capacity =
+            registry.get_available_node_operator_op_capacity(node_operator_1, now);
+        let initial_operator_2_capacity =
+            registry.get_available_node_operator_op_capacity(node_operator_2, now);
+        let initial_provider_capacity =
+            registry.get_available_node_provider_op_capacity(shared_node_provider, now);
+
+        // Reserve capacity for first node operator
+        let reservation_1 = registry
+            .try_reserve_capacity_for_node_operator_operation(now, node_operator_1, 5)
             .unwrap();
 
-        let second_available_operator = registry.get_available_node_operator_op_capacity(key, now);
-        let second_available_provider = registry.get_available_node_provider_op_capacity(key, now);
-        assert_eq!(first_available_operator - 5, second_available_operator);
-        assert_eq!(first_available_provider - 5, second_available_provider);
+        // Check that both operator and provider capacities decreased
+        let after_operator_1_capacity =
+            registry.get_available_node_operator_op_capacity(node_operator_1, now);
+        let after_provider_capacity =
+            registry.get_available_node_provider_op_capacity(shared_node_provider, now);
+        assert_eq!(initial_operator_1_capacity - 5, after_operator_1_capacity);
+        assert_eq!(initial_provider_capacity - 5, after_provider_capacity);
 
-        drop(reservation);
+        // Reserve capacity for second node operator
+        let reservation_2 = registry
+            .try_reserve_capacity_for_node_operator_operation(now, node_operator_2, 3)
+            .unwrap();
 
-        let third_available_operator = registry.get_available_node_operator_op_capacity(key, now);
-        let third_available_provider = registry.get_available_node_provider_op_capacity(key, now);
+        // Check that second operator capacity decreased, but provider capacity decreased further
+        let after_operator_2_capacity =
+            registry.get_available_node_operator_op_capacity(node_operator_2, now);
+        let final_provider_capacity =
+            registry.get_available_node_provider_op_capacity(shared_node_provider, now);
+        assert_eq!(initial_operator_2_capacity - 3, after_operator_2_capacity);
+        assert_eq!(initial_provider_capacity - 5 - 3, final_provider_capacity);
 
-        assert_eq!(first_available_operator, third_available_operator);
-        assert_eq!(first_available_provider, third_available_provider);
+        // Drop first reservation - should restore operator 1 capacity and provider capacity
+        drop(reservation_1);
+
+        let restored_operator_1_capacity =
+            registry.get_available_node_operator_op_capacity(node_operator_1, now);
+        let restored_provider_capacity =
+            registry.get_available_node_provider_op_capacity(shared_node_provider, now);
+        assert_eq!(initial_operator_1_capacity, restored_operator_1_capacity);
+        assert_eq!(initial_provider_capacity - 3, restored_provider_capacity); // Only operator 2's reservation remains
+
+        // Drop second reservation - should restore everything
+        drop(reservation_2);
+
+        let final_operator_1_capacity =
+            registry.get_available_node_operator_op_capacity(node_operator_1, now);
+        let final_operator_2_capacity =
+            registry.get_available_node_operator_op_capacity(node_operator_2, now);
+        let final_provider_capacity =
+            registry.get_available_node_provider_op_capacity(shared_node_provider, now);
+
+        assert_eq!(initial_operator_1_capacity, final_operator_1_capacity);
+        assert_eq!(initial_operator_2_capacity, final_operator_2_capacity);
+        assert_eq!(initial_provider_capacity, final_provider_capacity);
     }
 }

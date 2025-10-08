@@ -47,7 +47,7 @@ impl Registry {
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
 
         let reservation =
-            self.try_reserve_capacity_for_node_operator_operation(now, caller_id, 20)?;
+            self.try_reserve_capacity_for_node_operator_operation(now, caller_id, 1)?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
