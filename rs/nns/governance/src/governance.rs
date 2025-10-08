@@ -3430,6 +3430,7 @@ impl Governance {
                 }
 
                 if invalid_followees > 0 {
+                    // Note: These error messages are matched in the nns-dapp. In case of changes, please sync with the nns dev team.
                     error_message = format!(
                         "The {} followee(s) listed below is(are) invalid:\n{}",
                         invalid_followees, error_message
