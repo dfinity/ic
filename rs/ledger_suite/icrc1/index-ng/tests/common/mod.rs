@@ -98,7 +98,7 @@ pub fn install_ledger(
 }
 
 fn icrc3_test_ledger() -> Vec<u8> {
-    std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
+    std::fs::read(std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").unwrap()).unwrap()
 }
 
 #[allow(dead_code)]
