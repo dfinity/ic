@@ -1,6 +1,7 @@
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{
-    CanisterStatusResultV2, Method, Payload, TakeCanisterSnapshotArgs,
+    CanisterSnapshotResponse, CanisterStatusResultV2, LoadCanisterSnapshotArgs, Method, Payload,
+    TakeCanisterSnapshotArgs,
 };
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
@@ -11,6 +12,7 @@ const T: u128 = 1_000_000_000_000;
 struct Runbook<F> {
     memory_allocation: u64,
     op: Option<F>,
+    // TODO: memory_allocation_exceeded: bool,
 }
 
 struct Checklist {
@@ -192,6 +194,35 @@ fn test_memory_allocation_suite_take_snapshot() {
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
+        )
+        .unwrap();
+    };
+    test_memory_allocation_suite(op);
+}
+
+#[test]
+fn test_memory_allocation_suite_load_snapshot() {
+    let op = |test: &mut ExecutionTest, canister_id| {
+        test.ingress(
+            canister_id,
+            "update",
+            wasm().stable64_grow((60 << 20) >> 16).reply().build(),
+        )
+        .unwrap();
+        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id;
+        test.uninstall_code(canister_id).unwrap();
+        let load_canister_snapshot_args =
+            LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+        test.subnet_message(
+            Method::LoadCanisterSnapshot,
+            load_canister_snapshot_args.encode(),
         )
         .unwrap();
     };
