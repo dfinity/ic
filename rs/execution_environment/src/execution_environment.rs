@@ -806,6 +806,7 @@ impl ExecutionEnvironment {
                             msg.canister_change_origin(args.get_sender_canister_version()),
                             args.get_canister_id(),
                             &mut state,
+                            round_limits,
                             &self.metrics.canister_not_found_error,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
@@ -1805,7 +1806,7 @@ impl ExecutionEnvironment {
                 let res = RenameCanisterArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
-                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                    self.rename_canister(*msg.sender(), &mut state, round_limits, args, origin)
                         .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
@@ -2661,6 +2662,7 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
         args: RenameCanisterArgs,
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
@@ -2691,6 +2693,7 @@ impl ExecutionEnvironment {
                 to_version,
                 to_total_num_changes,
                 state,
+                round_limits,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());

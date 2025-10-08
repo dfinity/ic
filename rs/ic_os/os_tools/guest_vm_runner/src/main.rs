@@ -26,7 +26,6 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
-use virt::error::{ErrorDomain, ErrorNumber};
 use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
 
 mod boot_args;
@@ -147,16 +146,13 @@ impl VirtualMachine {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
             match domain_result {
                 Ok(domain) => break domain,
-                Err(e)
-                    if retries > 0
-                        && e.code() == ErrorNumber::OperationInvalid
-                        && e.domain() == ErrorDomain::Domain =>
-                {
+                Err(e) if retries > 0 => {
+                    eprintln!("Domain creation failed, retrying: {e}");
                     Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     retries -= 1;
                     continue;
                 }
-                err => err.context("Failed to create domain")?,
+                err => err.context("Failed to create domain after retries")?,
             };
         };
         Ok(Self {
@@ -170,10 +166,14 @@ impl VirtualMachine {
 
     fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
         println!("Attempting to destroy existing '{vm_domain_name}' domain");
-        if let Err(e) = Domain::lookup_by_name(libvirt_connect, vm_domain_name)
-            .and_then(|existing| existing.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL))
-        {
-            eprintln!("Failed to destroy existing domain: {e}");
+        if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
+            if let Err(e) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
+                eprintln!("Failed to destroy existing domain: {e}");
+            } else {
+                println!("Successfully destroyed existing domain");
+            }
+        } else {
+            println!("No existing domain found to destroy");
         }
     }
 
@@ -552,14 +552,14 @@ impl GuestVmService {
             self.write_to_console_and_stdout("#################################################");
 
             let tail_output = Command::new("tail")
-                .args(["-n", "30", serial_log_path.to_str().unwrap()])
+                .args(["-n", "100", serial_log_path.to_str().unwrap()])
                 .output()
                 .await
                 .context("Failed to tail serial log")?;
 
             let logs = String::from_utf8_lossy(&tail_output.stdout);
             for line in logs.lines() {
-                self.write_to_console_and_stdout(line);
+                self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
             }
         } else {
             self.write_to_console_and_stdout("No console log file found.");

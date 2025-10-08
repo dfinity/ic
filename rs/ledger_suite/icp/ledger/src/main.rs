@@ -772,7 +772,9 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 
 #[unsafe(export_name = "canister_update notify_pb")]
 fn notify_() {
-    trap_since_notify_is_no_longer_supported();
+    in_executor_context(|| {
+        trap_since_notify_is_no_longer_supported();
+    })
 }
 
 #[update]
@@ -871,7 +873,9 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 /// See caveats of use on send_dfx
 #[unsafe(export_name = "canister_update notify_dfx")]
 fn notify_dfx_() {
-    trap_since_notify_is_no_longer_supported();
+    in_executor_context(|| {
+        trap_since_notify_is_no_longer_supported();
+    })
 }
 
 #[unsafe(export_name = "canister_query block_pb")]
