@@ -5,11 +5,11 @@
 use std::{cell::RefCell, collections::BTreeSet};
 
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     BTreeMap, Cell, DefaultMemoryImpl,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 
-use crate::{Event, RequestState, DEFAULT_MAX_ACTIVE_REQUESTS};
+use crate::{DEFAULT_MAX_ACTIVE_REQUESTS, Event, RequestState};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -32,6 +32,10 @@ thread_local! {
     static HISTORY: RefCell<BTreeMap<Event, (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))));
 
+    // TODO: consider a fail counter for active requests.
+    // This way we see if a request never makes progress which would
+    // indicate a bug in this canister or a problem with a subnet.
+    // BTreeMap<(Request, Reqstate: String), (Counter: u64, FirstTs: Time, LastTs: Time)>
 }
 
 pub fn migrations_disabled() -> bool {
@@ -67,7 +71,9 @@ pub mod privileged {
 
 // ============================== Request API ============================== //
 pub mod requests {
-    use crate::{canister_state::REQUESTS, RequestState};
+    use candid::Principal;
+
+    use crate::{RequestState, canister_state::REQUESTS};
 
     pub fn insert_request(request: RequestState) {
         REQUESTS.with_borrow_mut(|r| r.insert(request, ()));
@@ -82,6 +88,44 @@ pub mod requests {
     /// borrow REQUESTS mutably while iterating over the result.
     pub fn list_by(predicate: impl FnMut(&RequestState) -> bool) -> Vec<RequestState> {
         REQUESTS.with_borrow(|req| req.keys().filter(predicate).collect())
+    }
+
+    pub fn find_request(source: Principal, target: Principal) -> Vec<RequestState> {
+        // TODO: should do a range scan for efficiency.
+        REQUESTS.with_borrow(|r| {
+            r.keys()
+                .filter(|x| x.request().source == source && x.request().target == target)
+                .collect()
+        })
+    }
+}
+
+// ============================== Events API ============================== //
+pub mod events {
+    use crate::{Event, EventType, canister_state::HISTORY};
+    use candid::Principal;
+    use ic_cdk::api::time;
+
+    pub fn insert_event(event: EventType) {
+        let time = time();
+        let event = Event { time, event };
+        HISTORY.with_borrow_mut(|h| h.insert(event, ()));
+    }
+
+    pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<Event> {
+        // TODO: implement pagination
+        HISTORY.with_borrow(|h| h.keys().collect())
+    }
+
+    pub fn find_event(source: Principal, target: Principal) -> Vec<Event> {
+        // TODO: should do a range scan for efficiency.
+        HISTORY.with_borrow(|r| {
+            r.keys()
+                .filter(|x| {
+                    x.event.request().source == source && x.event.request().target == target
+                })
+                .collect()
+        })
     }
 }
 

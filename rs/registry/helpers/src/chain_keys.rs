@@ -4,10 +4,10 @@ use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
 use ic_registry_keys::{
-    get_master_public_key_id_from_signing_subnet_list_key, CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
+    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, get_master_public_key_id_from_signing_subnet_list_key,
 };
 use ic_types::{
-    registry::RegistryClientError, subnet_id_try_from_protobuf, RegistryVersion, SubnetId,
+    RegistryVersion, SubnetId, registry::RegistryClientError, subnet_id_try_from_protobuf,
 };
 
 use crate::deserialize_registry_value;

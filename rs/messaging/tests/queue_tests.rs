@@ -3,16 +3,16 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_interfaces_certified_stream_store::EncodeStreamError;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, testing::CanisterQueuesTesting};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
-    messages::{CallbackId, Payload, RequestOrResponse},
-    xnet::{StreamHeader, StreamIndexedQueue},
     Cycles,
+    messages::{CallbackId, Payload, RequestOrResponse, StreamMessage},
+    xnet::{StreamHeader, StreamIndexedQueue},
 };
 use maplit::btreemap;
 use std::sync::Arc;
@@ -181,6 +181,18 @@ impl SubnetPairProxy {
             .query(self.remote_canister_id, method, method_payload)
     }
 
+    /// Queries the metrics on the local canister.
+    fn query_local_metrics(&self) -> Result<Metrics, UserError> {
+        self.query_local_canister("metrics", Encode!().unwrap())
+            .map(|reply| Decode!(&reply.bytes(), Metrics).unwrap())
+    }
+
+    /// Queries the metrics on the remote canister.
+    fn query_remote_metrics(&self) -> Result<Metrics, UserError> {
+        self.query_remote_canister("metrics", Encode!().unwrap())
+            .map(|reply| Decode!(&reply.bytes(), Metrics).unwrap())
+    }
+
     /// Generates a snapshot of the output queue on the local canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
     fn local_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
@@ -284,7 +296,7 @@ fn get_output_queue_iter<'a>(
     state: &'a ReplicatedState,
     local_canister_id: &CanisterId,
     remote_canister_id: &'a CanisterId,
-) -> Option<impl Iterator<Item = &'a RequestOrResponse>> {
+) -> Option<impl Iterator<Item = &'a RequestOrResponse> + use<'a>> {
     state
         .canister_states
         .get(local_canister_id)
@@ -300,7 +312,7 @@ fn get_output_queue_iter<'a>(
 fn stream_snapshot(
     from_subnet: &StateMachine,
     to_subnet: &StateMachine,
-) -> Option<(StreamHeader, StreamIndexedQueue<RequestOrResponse>)> {
+) -> Option<(StreamHeader, StreamIndexedQueue<StreamMessage>)> {
     from_subnet
         .get_latest_state()
         .get_stream(&to_subnet.get_subnet_id())
@@ -386,8 +398,7 @@ where
         }
     }
     Err(format!(
-        "Exit condition not met after {} iterations.",
-        max_iterations
+        "Exit condition not met after {max_iterations} iterations."
     ))
 }
 
@@ -470,10 +481,7 @@ fn test_response_in_output_queue_causes_backpressure() {
     // reporting call errors, indicating back pressure.
     do_until_or_panic(MAX_TICKS, |_| {
         execute_round_with_timeout(&subnets.local_env);
-        let reply = subnets
-            .query_local_canister("metrics", Encode!().unwrap())
-            .unwrap();
-        Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
+        Ok(subnets.query_local_metrics().unwrap().call_errors > 0)
     })
     .unwrap();
 
@@ -515,10 +523,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         .unwrap();
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.local_env.tick();
-        let reply = subnets
-            .query_local_canister("metrics", Encode!().unwrap())
-            .unwrap();
-        Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
+        Ok(subnets.query_local_metrics().unwrap().call_errors > 0)
     })
     .unwrap();
 
@@ -527,19 +532,13 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         .unwrap();
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.remote_env.tick();
-        let reply = subnets
-            .query_remote_canister("metrics", Encode!().unwrap())
-            .unwrap();
-        Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
+        Ok(subnets.query_remote_metrics().unwrap().call_errors > 0)
     })
     .unwrap();
 
     // Try inducting all the requests successfully sent by the remote canister into
     // the local canister.
-    let reply = subnets
-        .query_remote_canister("metrics", Encode!().unwrap())
-        .unwrap();
-    let metrics = Decode!(&reply.bytes(), Metrics).unwrap();
+    let metrics = subnets.query_remote_metrics().unwrap();
     induct_from_head_of_stream(
         &subnets.remote_env,
         &subnets.local_env,
@@ -569,6 +568,7 @@ enum MessageSnapshot {
     Response(CallbackId),       // Response
     RejectResponse(CallbackId), // RejectResponse
     TimedOutRequest,            // TimedOutRequest
+    Refund,                     // Refund
 }
 
 /// Provides snappy debug prints.
@@ -579,6 +579,7 @@ impl std::fmt::Debug for MessageSnapshot {
             MessageSnapshot::Response(id) => f.debug_tuple("P").field(id).finish(),
             MessageSnapshot::RejectResponse(id) => f.debug_tuple("J").field(id).finish(),
             MessageSnapshot::TimedOutRequest => f.debug_tuple("T").finish(),
+            MessageSnapshot::Refund => f.debug_tuple("F").finish(),
         }
     }
 }
@@ -592,6 +593,20 @@ impl From<&RequestOrResponse> for MessageSnapshot {
                 Self::Response(response.originator_reply_callback)
             }
             Response(response) => Self::RejectResponse(response.originator_reply_callback),
+        }
+    }
+}
+
+impl From<&StreamMessage> for MessageSnapshot {
+    fn from(msg: &StreamMessage) -> Self {
+        use StreamMessage::*;
+        match msg {
+            Request(request) => Self::Request(request.sender_reply_callback),
+            Response(response) if matches!(response.response_payload, Payload::Data(_)) => {
+                Self::Response(response.originator_reply_callback)
+            }
+            Response(response) => Self::RejectResponse(response.originator_reply_callback),
+            Refund(_) => Self::Refund,
         }
     }
 }
@@ -663,27 +678,27 @@ impl std::fmt::Debug for SubnetSplittingTestState {
         writeln!(f, "[")?;
         if let Some((header, messages)) = &self.stream {
             writeln!(f, "   stream:")?;
-            writeln!(f, "      {:?}", header)?;
+            writeln!(f, "      {header:?}")?;
             if !messages.is_empty() {
-                writeln!(f, "      {:?}", messages)?;
+                writeln!(f, "      {messages:?}")?;
             }
         }
-        if let Some(messages) = &self.local_queue {
-            if !messages.is_empty() {
-                writeln!(f, "   local queue: {:?}", messages)?;
-            }
+        if let Some(messages) = &self.local_queue
+            && !messages.is_empty()
+        {
+            writeln!(f, "   local queue: {messages:?}")?;
         }
         if let Some((header, messages)) = &self.reverse_stream {
             writeln!(f, "   reverse stream:")?;
-            writeln!(f, "      {:?}", header)?;
+            writeln!(f, "      {header:?}")?;
             if !messages.is_empty() {
-                writeln!(f, "      {:?}", messages)?;
+                writeln!(f, "      {messages:?}")?;
             }
         }
-        if let Some(messages) = &self.remote_queue {
-            if !messages.is_empty() {
-                writeln!(f, "   remote queue: {:?}", messages)?;
-            }
+        if let Some(messages) = &self.remote_queue
+            && !messages.is_empty()
+        {
+            writeln!(f, "   remote queue: {messages:?}")?;
         }
         writeln!(
             f,
@@ -703,11 +718,11 @@ impl std::fmt::Debug for SubnetSplittingTestState {
 /// - msg is a request: The callback id is added to `add_callback_id_tracker`.
 /// - msg is a response: The callback id is removed from `remove_callback_id_tracker`.
 fn update_callback_id_trackers(
-    msg: &RequestOrResponse,
+    msg: &StreamMessage,
     add_callback_id_tracker: &mut BTreeSet<CallbackId>,
     remove_callback_id_tracker: &mut BTreeSet<CallbackId>,
 ) -> Result<(), String> {
-    use RequestOrResponse::{Request, Response};
+    use StreamMessage::*;
     match msg {
         Request(request) => {
             if !add_callback_id_tracker.insert(request.sender_reply_callback) {
@@ -725,6 +740,7 @@ fn update_callback_id_trackers(
                 ));
             }
         }
+        Refund(_) => { /* Ignore refunds. */ }
     }
     Ok(())
 }
@@ -902,6 +918,8 @@ fn induct_and_observe_until_stale(
 /// The sequence of events is therefore as follows:
 /// - After the initial situation as depicted above, the XNet canisters stop generating requests.
 /// - Bidirectional inductions are done on `old_subnets_proxy` until they stop triggering changes.
+/// - Reject responses generated for reject signals to requests still in the stream after the remote
+///   canister migrated are inducted once from the 'old remote env' to the 'new remote env'.
 /// - Bidirectional inductions are done on `new_subnets_proxy` until they stop triggering changes.
 ///
 /// If everything went in order, at this point:
@@ -929,7 +947,6 @@ fn induct_and_observe_until_stale(
 /// include all the relevant subnet splitting scenarios.
 #[test]
 fn state_machine_subnet_splitting_test() {
-    use RequestOrResponse::{Request, Response};
     let old_subnets_proxy = SubnetPairProxy::with_new_subnets();
     old_subnets_proxy.mark_remote_canister_as_being_migrated();
 
@@ -953,6 +970,8 @@ fn state_machine_subnet_splitting_test() {
         .unwrap();
     old_subnets_proxy.remote_env.tick();
     do_until_or_panic(MAX_TICKS, |_| {
+        use RequestOrResponse::{Request, Response};
+
         induct_messages_and_track_callback_ids(
             &old_subnets_proxy.local_env,    // from_subnet
             &old_subnets_proxy.remote_env,   // into_subnet
@@ -1003,6 +1022,8 @@ fn state_machine_subnet_splitting_test() {
         (&new_subnets_proxy.local_env, &new_subnets_proxy.remote_env),
         (&new_subnets_proxy.remote_env, &new_subnets_proxy.local_env),
     ] {
+        use StreamMessage::{Request, Response};
+
         if let Some((_, stream)) = stream_snapshot(from_env, into_env) {
             assert!(stream.iter().any(|(_, msg)| matches!(msg, Request(_))));
             assert!(stream.iter().any(|(_, msg)| matches!(msg, Response(_))));
@@ -1020,6 +1041,15 @@ fn state_machine_subnet_splitting_test() {
     )
     .expect("old_subnet_proxy induction stage");
 
+    // Induct once from the remote subnet on the `old_subnets_proxy` to the remote subnet
+    // on the `new_subnets_proxy` to induct rerouted reject responses.
+    induct_from_head_of_stream(
+        &old_subnets_proxy.remote_env,
+        &new_subnets_proxy.remote_env,
+        None,
+    )
+    .unwrap();
+
     // Do bidirectional inductions until no more changes in the state of `new_subnet_proxy`
     // are observed.
     let new_test_states = induct_and_observe_until_stale(
@@ -1031,8 +1061,7 @@ fn state_machine_subnet_splitting_test() {
 
     let print_test_states = || {
         format!(
-            "old_subnet_proxy inductions:\n{:#?}\nnew_subnet_proxy inductions:\n{:#?}",
-            old_test_states, new_test_states,
+            "old_subnet_proxy inductions:\n{old_test_states:#?}\nnew_subnet_proxy inductions:\n{new_test_states:#?}",
         )
     };
 
@@ -1060,6 +1089,16 @@ fn state_machine_subnet_splitting_test() {
         remote_callback_id_tracker.is_empty(),
         "{}",
         print_test_states()
+    );
+
+    // Check for sequence errors.
+    assert_eq!(
+        0,
+        new_subnets_proxy.query_local_metrics().unwrap().seq_errors
+    );
+    assert_eq!(
+        0,
+        new_subnets_proxy.query_remote_metrics().unwrap().seq_errors
     );
 
     // Attempt to stop canisters; This will panic if there are any lingering call contexts.

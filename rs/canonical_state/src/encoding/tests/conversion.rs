@@ -1,10 +1,11 @@
 use super::test_fixtures::*;
-use crate::encoding::types::{self, StreamFlagBits, STREAM_DEFAULT_FLAGS, STREAM_SUPPORTED_FLAGS};
-use crate::{all_supported_versions, CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION};
+use crate::encoding::types::{self, STREAM_DEFAULT_FLAGS, STREAM_SUPPORTED_FLAGS, StreamFlagBits};
+use crate::{MAX_SUPPORTED_CERTIFICATION_VERSION, all_supported_versions};
 use assert_matches::assert_matches;
+use ic_certification_version::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::messages::{Payload, RejectContext, RequestOrResponse};
+use ic_types::messages::{Payload, RejectContext, StreamMessage};
 use ic_types::xnet::RejectReason;
 use std::convert::{TryFrom, TryInto};
 use strum::{EnumCount, IntoEnumIterator};
@@ -56,42 +57,14 @@ fn roundtrip_conversion_stream_header() {
 #[test]
 fn try_from_stream_header_with_unsupported_flags() {
     let mut header = types::StreamHeader::from((
-        &stream_header(CertificationVersion::V18),
-        CertificationVersion::V18,
+        &stream_header(MAX_SUPPORTED_CERTIFICATION_VERSION),
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
     ));
     header.flags = 4;
 
     assert_matches!(
         ic_types::xnet::StreamHeader::try_from(header),
         Err(ProxyDecodeError::Other(message)) if message.contains("unsupported flags")
-    );
-}
-
-#[test]
-fn try_from_stream_header_with_deprecated_reject_signal_deltas_containing_zero() {
-    let mut header = types::StreamHeader::from((
-        &stream_header(CertificationVersion::V18),
-        CertificationVersion::V18,
-    ));
-    header.deprecated_reject_signal_deltas = vec![0, 1, 13];
-
-    assert_matches!(
-        ic_types::xnet::StreamHeader::try_from(header),
-        Err(ProxyDecodeError::Other(message)) if message.contains("found bad delta: `0` is not allowed")
-    );
-}
-
-#[test]
-fn try_from_stream_header_with_out_of_range_deprecated_reject_signal_deltas() {
-    let mut header = types::StreamHeader::from((
-        &stream_header(CertificationVersion::V18),
-        CertificationVersion::V18,
-    ));
-    header.deprecated_reject_signal_deltas = vec![header.signals_end + 100, 1, 13];
-
-    assert_matches!(
-        ic_types::xnet::StreamHeader::try_from(header),
-        Err(ProxyDecodeError::Other(message)) if message.contains("reject signals are invalid, got `signals_end`")
     );
 }
 
@@ -171,19 +144,18 @@ fn try_from_stream_header_with_invalid_signals_duplicates() {
     );
 }
 
-/// Tests that converting a canonical stream header with both deprecated and contemporary reject signals
-/// should return an error but not panic.
+/// Decoding a slice with field index 3 filler populated should return an error but not panic.
 #[test]
-fn try_from_stream_header_with_deprecated_and_contemporary_reject_signals_populated() {
+fn try_from_stream_header_with_field_index_3_populated() {
     let mut header = types::StreamHeader::from((
         &stream_header(MAX_SUPPORTED_CERTIFICATION_VERSION),
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     ));
-    header.deprecated_reject_signal_deltas = vec![1, 13, 17];
+    header.reserved_3 = 1;
 
     assert_matches!(
         ic_types::xnet::StreamHeader::try_from(header),
-        Err(ProxyDecodeError::Other(message)) if message.contains("both deprecated and contemporary reject signals are populated")
+        Err(ProxyDecodeError::Other(message)) if message.contains("field index 3 is populated")
     );
 }
 
@@ -194,7 +166,7 @@ fn roundtrip_conversion_request() {
 
         assert_eq!(
             request,
-            types::RequestOrResponse::from((&request, certification_version))
+            types::StreamMessage::from((&request, certification_version))
                 .try_into()
                 .unwrap()
         );
@@ -208,7 +180,7 @@ fn roundtrip_conversion_response() {
 
         assert_eq!(
             response,
-            types::RequestOrResponse::from((&response, certification_version))
+            types::StreamMessage::from((&response, certification_version))
                 .try_into()
                 .unwrap()
         );
@@ -222,7 +194,7 @@ fn roundtrip_conversion_reject_response() {
 
         assert_eq!(
             response,
-            types::RequestOrResponse::from((&response, certification_version))
+            types::StreamMessage::from((&response, certification_version))
                 .try_into()
                 .unwrap()
         );
@@ -230,15 +202,32 @@ fn roundtrip_conversion_reject_response() {
 }
 
 #[test]
-fn try_from_empty_request_or_response() {
-    let message = types::RequestOrResponse {
+fn roundtrip_conversion_anonymous_refund() {
+    for certification_version in
+        all_supported_versions().filter(|v| v >= &CertificationVersion::V22)
+    {
+        let refund = anonymous_refund(certification_version);
+
+        assert_eq!(
+            refund,
+            types::StreamMessage::from((&refund, certification_version))
+                .try_into()
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn try_from_empty_stream_message() {
+    let message = types::StreamMessage {
         request: None,
         response: None,
+        refund: None,
     };
 
     assert_matches!(
-        RequestOrResponse::try_from(message),
-        Err(ProxyDecodeError::Other(message)) if message == "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `RequestOrResponse { request: None, response: None }`"
+        StreamMessage::try_from(message),
+        Err(ProxyDecodeError::Other(message)) if message == "StreamMessage: expected exactly one of `request`, `response` or `refund` to be `Some(_)`, got `StreamMessage { request: None, response: None, refund: None }`"
     );
 }
 

@@ -13,7 +13,7 @@
 use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
-use ic_types::{messages::RequestOrResponse, xnet::StreamHeader, PrincipalId};
+use ic_types::{PrincipalId, messages::StreamMessage, xnet::StreamHeader};
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::convert::TryInto;
@@ -58,17 +58,14 @@ where
     }
 }
 
-/// Encodes a `RequestOrResponse` into canonical CBOR representation.
-pub fn encode_message(
-    msg: &RequestOrResponse,
-    certification_version: CertificationVersion,
-) -> Vec<u8> {
-    types::RequestOrResponse::proxy_encode((msg, certification_version)).unwrap()
+/// Encodes a `StreamMessage` into canonical CBOR representation.
+pub fn encode_message(msg: &StreamMessage, certification_version: CertificationVersion) -> Vec<u8> {
+    types::StreamMessage::proxy_encode((msg, certification_version)).unwrap()
 }
 
-/// Decodes a `RequestOrResponse` from canonical CBOR representation.
-pub fn decode_message(bytes: &[u8]) -> Result<RequestOrResponse, ProxyDecodeError> {
-    types::RequestOrResponse::proxy_decode(bytes)
+/// Decodes a `StreamMessage` from canonical CBOR representation.
+pub fn decode_message(bytes: &[u8]) -> Result<StreamMessage, ProxyDecodeError> {
+    types::StreamMessage::proxy_decode(bytes)
 }
 
 /// Encodes a `StreamHeader` into canonical CBOR representation.

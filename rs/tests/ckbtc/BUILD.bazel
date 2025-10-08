@@ -222,19 +222,29 @@ system_test_nns(
     deps = DEPENDENCIES + [":ckbtc"],
 )
 
-system_test(
-    name = "adapter_basics_test",
-    env = MESSAGE_CANISTER_ENV | {
-        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    },
-    tags = [],
-    runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            # Keep sorted.
-            "//rs/tests:ckbtc_uvm_config_image",
-            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+[
+    system_test(
+        name = "adapter_basics_test",
+        env = MESSAGE_CANISTER_ENV | {
+            "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+            "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+            "ADAPTER_TO_TEST": adapter,
+        },
+        tags = [
+            "long_test",  # this test has a P90 duration of over 6 minutes for the week starting on 2025-08-21.
         ],
-    deps = DEPENDENCIES + [":ckbtc"],
-)
+        test_name = adapter + "_adapter_basics_test",
+        runtime_deps =
+            MESSAGE_CANISTER_RUNTIME_DEPS +
+            UNIVERSAL_VM_RUNTIME_DEPS + [
+                # Keep sorted.
+                "//rs/tests:ckbtc_uvm_config_image",
+                "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            ],
+        deps = DEPENDENCIES + [":ckbtc"],
+    )
+    for adapter in [
+        "btc",
+        "doge",
+    ]
+]

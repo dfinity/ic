@@ -17,13 +17,13 @@ use ic_replicated_state::metadata_state::Stream;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec,
-    HistogramStats, MetricVec,
+    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count,
+    fetch_int_counter_vec, metric_vec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, arb_stream_with_config};
 use ic_test_utilities_types::ids::{
-    NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
+    NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
     SUBNET_5,
 };
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -36,14 +36,14 @@ use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
 use ic_xnet_payload_builder::testing::*;
 use ic_xnet_payload_builder::{
-    ExpectedIndices, XNetPayloadBuilderImpl, XNetSlicePoolImpl, LABEL_STATUS, MAX_SIGNALS,
-    METRIC_PULL_ATTEMPT_COUNT,
+    ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, METRIC_PULL_ATTEMPT_COUNT, XNetPayloadBuilderImpl,
+    XNetSlicePoolImpl,
 };
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
@@ -286,9 +286,7 @@ fn out_stream(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
 /// with one message enqueued.
 fn out_stream_with_message(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
     let mut stream = out_stream(messages_begin, signals_end);
-    stream.push(ic_types::messages::RequestOrResponse::Request(
-        RequestBuilder::new().build().into(),
-    ));
+    stream.push(RequestBuilder::new().build().into());
     stream
 }
 
@@ -616,10 +614,7 @@ fn get_xnet_payload_byte_limit_exceeded(
             .sum();
         assert!(
             msg_count < msg_count1 + msg_count2,
-            "Expected fewer than {} + {} messages, got {}",
-            msg_count1,
-            msg_count2,
-            msg_count
+            "Expected fewer than {msg_count1} + {msg_count2} messages, got {msg_count}"
         );
 
         assert_eq!(
@@ -835,8 +830,7 @@ fn system_subnet_stream_throttling(
                 );
             } else {
                 panic!(
-                    "Expecting a slice of length min({}, {}), got an empty slice",
-                    msg_count, max_slice_len
+                    "Expecting a slice of length min({msg_count}, {max_slice_len}), got an empty slice"
                 );
             }
 
@@ -853,10 +847,7 @@ fn system_subnet_stream_throttling(
             );
             assert_eq!(1, xnet_payload_builder.slice_payload_size_stats().count);
         } else {
-            panic!(
-                "Expecting payload with a single slice, from {}",
-                REMOTE_SUBNET
-            );
+            panic!("Expecting payload with a single slice, from {REMOTE_SUBNET}");
         }
     });
 }
@@ -1284,12 +1275,13 @@ fn refill_pool_put_invalid_slice(
             }
         });
 
-        assert!(pool
-            .lock()
-            .unwrap()
-            .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)
-            .unwrap()
-            .is_none(),);
+        assert!(
+            pool.lock()
+                .unwrap()
+                .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)
+                .unwrap()
+                .is_none(),
+        );
     });
 }
 

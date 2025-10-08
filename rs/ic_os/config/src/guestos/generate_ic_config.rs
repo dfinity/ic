@@ -1,22 +1,22 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
+use askama::Template;
 use config_types::{GuestOSConfig, Ipv6Config};
+use get_if_addrs::get_if_addrs;
 use serde_json;
-use std::fs::{read_to_string, write};
+use std::fs::write;
+use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
+use std::time::Duration;
+
+// See build.rs
+include!(concat!(env!("OUT_DIR"), "/ic_config_template.rs"));
 
 /// Generate IC configuration from template and guestos config
-pub fn generate_ic_config(
-    guestos_config: &GuestOSConfig,
-    template_path: &Path,
-    output_path: &Path,
-) -> Result<()> {
-    let template_content = read_to_string(template_path)
-        .with_context(|| format!("Failed to read template file: {}", template_path.display()))?;
+pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) -> Result<()> {
+    let template = get_config_vars(guestos_config)?;
 
-    let config_vars = get_config_vars(guestos_config)?;
-
-    let output_content = substitute_template(&template_content, &config_vars);
+    let output_content = render_ic_config(template)?;
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
@@ -34,29 +34,19 @@ pub fn generate_ic_config(
         .guestos_settings
         .guestos_dev_settings
         .generate_ic_boundary_tls_cert
+        && !domain_name.is_empty()
     {
-        if !domain_name.is_empty() {
-            generate_tls_certificate(domain_name)?;
-        }
+        generate_tls_certificate(domain_name)?;
     }
 
     Ok(())
 }
 
-#[derive(Debug)]
-struct ConfigVariables {
-    ipv6_address: String,
-    ipv6_prefix: String,
-    ipv4_address: String,
-    ipv4_gateway: String,
-    nns_urls: String,
-    backup_retention_time_secs: String,
-    backup_purging_interval_secs: String,
-    query_stats_epoch_length: String,
-    jaeger_addr: String,
-    domain_name: String,
-    node_reward_type: String,
-    malicious_behavior: String,
+/// Render IC configuration from template.
+pub fn render_ic_config(template: IcConfigTemplate) -> Result<String> {
+    template
+        .render()
+        .context("Failed to render config template")
 }
 
 fn generate_ipv6_prefix(ipv6_address: &str) -> String {
@@ -89,8 +79,7 @@ fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
             Ok((ipv6_address, ipv6_prefix))
         }
         Ipv6Config::RouterAdvertisement => {
-            let interface = get_network_interface()?;
-            let ipv6_address = get_interface_ipv6_address(&interface)?;
+            let ipv6_address = get_router_advertisement_ipv6_address()?;
 
             let ipv6_prefix = generate_ipv6_prefix(&ipv6_address);
             Ok((ipv6_address, ipv6_prefix))
@@ -112,7 +101,7 @@ fn configure_ipv4(guestos_config: &GuestOSConfig) -> (String, String) {
     }
 }
 
-fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
+fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
     let (ipv6_address, ipv6_prefix) = configure_ipv6(guestos_config)?;
 
     let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
@@ -186,7 +175,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
         .map(|mb| serde_json::to_string(mb).unwrap_or_default())
         .unwrap_or_default();
 
-    Ok(ConfigVariables {
+    Ok(IcConfigTemplate {
         ipv6_address,
         ipv6_prefix,
         ipv4_address,
@@ -202,101 +191,23 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
     })
 }
 
-fn substitute_template(template_content: &str, config_vars: &ConfigVariables) -> String {
-    let mut content = template_content.to_string();
+fn get_router_advertisement_ipv6_address() -> Result<String> {
+    const MAX_RETRIES: usize = 12;
+    const RETRY_DELAY: Duration = Duration::from_secs(10);
 
-    content = content.replace("{{ ipv6_address }}", &config_vars.ipv6_address);
-    content = content.replace("{{ ipv6_prefix }}", &config_vars.ipv6_prefix);
-    content = content.replace("{{ ipv4_address }}", &config_vars.ipv4_address);
-    content = content.replace("{{ ipv4_gateway }}", &config_vars.ipv4_gateway);
-    content = content.replace("{{ domain_name }}", &config_vars.domain_name);
-    content = content.replace("{{ nns_urls }}", &config_vars.nns_urls);
-    content = content.replace(
-        "{{ backup_retention_time_secs }}",
-        &config_vars.backup_retention_time_secs,
-    );
-    content = content.replace(
-        "{{ backup_purging_interval_secs }}",
-        &config_vars.backup_purging_interval_secs,
-    );
-    content = content.replace("{{ malicious_behavior }}", &config_vars.malicious_behavior);
-    content = content.replace(
-        "{{ query_stats_epoch_length }}",
-        &config_vars.query_stats_epoch_length,
-    );
-    content = content.replace("{{ node_reward_type }}", &config_vars.node_reward_type);
-    content = content.replace("{{ jaeger_addr }}", &config_vars.jaeger_addr);
-
-    content
-}
-
-fn get_network_interface() -> Result<String> {
-    String::from_utf8_lossy(
-        &Command::new("find")
-            .args([
-                "/sys/class/net",
-                "-type",
-                "l",
-                "-not",
-                "-lname",
-                "*virtual*",
-                "-exec",
-                "basename",
-                "{}",
-                ";",
-            ])
-            .output()
-            .context("Failed to find network interfaces")?
-            .stdout,
-    )
-    .lines()
-    .next()
-    .map(|s| s.to_string())
-    .ok_or_else(|| anyhow::anyhow!("No network interfaces found"))
-}
-
-fn get_interface_ipv6_address(interface: &str) -> Result<String> {
-    let parse_ipv6_address = |output_str: &str| -> Result<String> {
-        let addr = output_str
-            .lines()
-            .next()
-            .context("No output lines found")?
-            .split_whitespace()
-            .nth(3)
-            .context("No IPv6 address found in output")?
-            .split('/')
-            .next()
-            .expect("Failed to extract address part");
-
-        if addr.is_empty() {
-            anyhow::bail!("Empty IPv6 address found");
-        }
-
-        Ok(addr.to_string())
-    };
-
-    // Try to get IPv6 address with retries
-    for retry in 0..12 {
-        let output = Command::new("ip")
-            .args([
-                "-o", "-6", "addr", "show", "up", "primary", "scope", "global", interface,
-            ])
-            .output()
-            .context("Failed to get IPv6 address")?;
-
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        match parse_ipv6_address(&output_str) {
-            Ok(ipv6_address) => return Ok(ipv6_address),
+    for attempt in 1..=MAX_RETRIES {
+        match get_router_advertisement_ipv6_address_helper() {
+            Ok(ipv6_addr) => return Ok(ipv6_addr.to_string()),
             Err(e) => {
-                if retry < 11 {
+                if attempt < MAX_RETRIES {
                     eprintln!(
-                        "Retrying {} ... (Failed to parse IPv6 address: {})",
-                        11 - retry,
+                        "Retrying {} more times... (Failed to get IPv6 address: {})",
+                        MAX_RETRIES - attempt,
                         e
                     );
-                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    std::thread::sleep(RETRY_DELAY);
                 } else {
-                    return Err(e.context("Failed to parse IPv6 address after all retries"));
+                    return Err(e.context("Failed to get IPv6 address after all retries"));
                 }
             }
         }
@@ -305,11 +216,35 @@ fn get_interface_ipv6_address(interface: &str) -> Result<String> {
     anyhow::bail!("Cannot determine an IPv6 address, aborting");
 }
 
+fn get_router_advertisement_ipv6_address_helper() -> Result<Ipv6Addr> {
+    let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
+    let ipv6_addr = ifaces
+        .iter()
+        .find_map(|iface| {
+            // Filter out virtual interfaces
+            if is_virtual_interface(&iface.name) {
+                return None;
+            }
+
+            match &iface.addr {
+                get_if_addrs::IfAddr::V6(addr) => Some(addr.ip),
+                _ => None,
+            }
+        })
+        .context("No suitable network interface with IPv6 address found")?;
+
+    Ok(ipv6_addr)
+}
+
+fn is_virtual_interface(interface_name: &str) -> bool {
+    let device_path = format!("/sys/class/net/{interface_name}/device");
+    !Path::new(&device_path).exists()
+}
+
 fn generate_tls_certificate(domain_name: &str) -> Result<()> {
     let tls_key_path = "/var/lib/ic/data/ic-boundary-tls.key";
     let tls_cert_path = "/var/lib/ic/data/ic-boundary-tls.crt";
 
-    // Generate certificate using openssl
     let status = Command::new("openssl")
         .args([
             "req",
@@ -336,7 +271,6 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
         anyhow::bail!("openssl command failed with status: {}", status);
     }
 
-    // Set ownership and permissions
     let status = Command::new("chown")
         .args(["ic-replica:nogroup", tls_key_path, tls_cert_path])
         .status()
@@ -363,14 +297,10 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
 mod tests {
     use super::*;
     use config_types::{
-        FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings, GuestOSUpgradeConfig,
-        GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings, CONFIG_VERSION,
+        CONFIG_VERSION, FixedIpv6Config, GuestOSConfig, GuestOSSettings, GuestOSUpgradeConfig,
+        GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings,
     };
-    use ic_config::{config_parser::ConfigSource, ConfigOptional};
-
-    const IC_JSON5_TEMPLATE_BYTES: &[u8] = include_bytes!(
-        "../../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template"
-    );
+    use ic_config::{ConfigOptional, config_parser::ConfigSource};
 
     #[test]
     fn test_generate_ipv6_prefix() {
@@ -385,10 +315,8 @@ mod tests {
     #[test]
     fn test_template_substitution_with_default_config() {
         let guestos_config = create_test_guestos_config();
-        let config_vars = get_config_vars(&guestos_config).unwrap();
-
-        let template_content = String::from_utf8_lossy(IC_JSON5_TEMPLATE_BYTES);
-        let output_content = substitute_template(&template_content, &config_vars);
+        let template = get_config_vars(&guestos_config).unwrap();
+        let output_content = render_ic_config(template).unwrap();
 
         // Verify that all placeholders were replaced
         assert!(!output_content.contains("{{ ipv6_address }}"));
@@ -468,15 +396,11 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: config_types::ICOSDevSettings::default(),
             },
-            guestos_settings: GuestOSSettings {
-                inject_ic_crypto: false,
-                inject_ic_state: false,
-                inject_ic_registry_local_store: false,
-                guestos_dev_settings: GuestOSDevSettings::default(),
-            },
+            guestos_settings: GuestOSSettings::default(),
             guest_vm_type: GuestVMType::Default,
             upgrade_config: GuestOSUpgradeConfig::default(),
             trusted_execution_environment_config: None,
+            recovery_config: None,
         }
     }
 }

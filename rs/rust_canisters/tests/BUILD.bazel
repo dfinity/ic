@@ -8,16 +8,15 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/on_wire",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:rand",
     "@crate_index//:rand_pcg",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/rust_canisters/dfn_macro",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
@@ -30,7 +29,6 @@ DEV_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:assert_matches",
-    "@crate_index//:candid",
     "@crate_index//:criterion",
 ]
 

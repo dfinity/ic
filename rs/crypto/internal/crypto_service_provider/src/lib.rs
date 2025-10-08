@@ -21,8 +21,8 @@ pub mod vault;
 
 pub use crate::vault::api::TlsHandshakeCspVault;
 pub use crate::vault::local_csp_vault::LocalCspVault;
-pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 pub use crate::vault::remote_csp_vault::RemoteCspVault;
+pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 
 use crate::api::{CspSigner, NiDkgCspClient, ThresholdSignatureCspClient};
 use crate::secret_key_store::SecretKeyStore;
@@ -30,7 +30,7 @@ use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::CspVault;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::{new_logger, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, new_logger, replica_logger::no_op_logger};
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;

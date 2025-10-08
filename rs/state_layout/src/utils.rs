@@ -1,4 +1,4 @@
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_sys::fs::copy_file_sparse;
 use std::io::Error;
 use std::path::Path;
@@ -70,13 +70,4 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
         copy_file_sparse(src, dst).map_err(on_err)?;
         Ok(())
     }
-}
-
-/// Copies `src` into `dst` using do_copy semantics overwriting destination if
-/// it exists
-pub fn do_copy_overwrite(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<()> {
-    if dst.exists() {
-        std::fs::remove_file(dst)?;
-    }
-    do_copy(log, src, dst)
 }

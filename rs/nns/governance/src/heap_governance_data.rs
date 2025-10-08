@@ -1,10 +1,10 @@
 use crate::{
     neuron::Neuron,
     pb::v1::{
-        governance::{GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
         Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
-        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
+        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent, Topic,
         XdrConversionRate as XdrConversionRatePb,
+        governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };
 use ic_nns_governance_api::{
@@ -33,9 +33,9 @@ pub struct HeapGovernanceData {
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,
-    pub making_sns_proposal: Option<MakingSnsProposal>,
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
+    pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
 }
 
 /// Internal representation for `XdrConversionRatePb`.
@@ -135,7 +135,6 @@ pub fn initialize_governance(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
         xdr_conversion_rate,
         restore_aging_summary,
     } = initial_governance;
@@ -156,7 +155,6 @@ pub fn initialize_governance(
     let metrics = metrics.map(|x| x.into());
     let most_recent_monthly_node_provider_rewards =
         most_recent_monthly_node_provider_rewards.map(|x| x.into());
-    let making_sns_proposal = making_sns_proposal.map(|x| x.into());
     let restore_aging_summary = restore_aging_summary.map(|x| x.into());
 
     // Third, fill in the missing fields.
@@ -204,9 +202,9 @@ pub fn initialize_governance(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals: HashMap::new(),
     };
 
     // Finally, return the result.
@@ -243,9 +241,9 @@ pub fn split_governance_proto(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals,
         rng_seed,
     } = governance_proto;
 
@@ -257,7 +255,7 @@ pub fn split_governance_proto(
 
     let xdr_conversion_rate =
         XdrConversionRate::try_from(xdr_conversion_rate).unwrap_or_else(|err| {
-            panic!("Deserialization failed for XdrConversionRate: {}", err);
+            panic!("Deserialization failed for XdrConversionRate: {err}");
         });
 
     let rng_seed = rng_seed
@@ -282,9 +280,13 @@ pub fn split_governance_proto(
             cached_daily_maturity_modulation_basis_points,
             maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons,
-            making_sns_proposal,
+
             xdr_conversion_rate,
             restore_aging_summary,
+            topic_of_garbage_collected_proposals: topic_of_garbage_collected_proposals
+                .into_iter()
+                .map(|(k, v)| (k, Topic::try_from(v).unwrap_or(Topic::Unspecified)))
+                .collect(),
         },
         rng_seed,
     )
@@ -318,9 +320,10 @@ pub fn reassemble_governance_proto(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
+
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -344,9 +347,13 @@ pub fn reassemble_governance_proto(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
+
         xdr_conversion_rate: Some(xdr_conversion_rate),
         restore_aging_summary,
+        topic_of_garbage_collected_proposals: topic_of_garbage_collected_proposals
+            .into_iter()
+            .map(|(k, v)| (k, v as i32))
+            .collect(),
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
     }
 }
@@ -380,12 +387,12 @@ mod tests {
             cached_daily_maturity_modulation_basis_points: Some(6),
             maturity_modulation_last_updated_at_timestamp_seconds: Some(7),
             spawning_neurons: Some(true),
-            making_sns_proposal: Some(MakingSnsProposal::default()),
             xdr_conversion_rate: Some(XdrConversionRatePb {
                 timestamp_seconds: Some(1),
                 xdr_permyriad_per_icp: Some(50_000),
             }),
             restore_aging_summary: None,
+            topic_of_garbage_collected_proposals: hashmap! { 1 => Topic::Unspecified as i32 },
             rng_seed: Some(vec![1u8; 32]),
         }
     }

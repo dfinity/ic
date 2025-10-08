@@ -6,16 +6,16 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_interfaces_certified_stream_store::EncodeStreamError;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::{
-    messages::{MessageId, RequestOrResponse},
-    xnet::StreamHeader,
     Cycles,
+    messages::{MessageId, StreamMessage},
+    xnet::StreamHeader,
 };
 use proptest::prop_compose;
-use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
+use random_traffic_test::{Config as CanisterConfig, Record as CanisterRecord, extract_metrics};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -410,28 +410,24 @@ impl SubnetPair {
         let (local_memory, remote_memory) = self.guaranteed_response_message_memory_taken();
         if local_memory > local_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: local guaranteed response message memory exceeds limit",
-                label
+                "{label}: local guaranteed response message memory exceeds limit"
             ));
         }
         if remote_memory > remote_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: remote guaranteed response message memory exceeds limit",
-                label
+                "{label}: remote guaranteed response message memory exceeds limit"
             ));
         }
 
         let (local_memory, remote_memory) = self.best_effort_message_memory_taken();
         if local_memory > local_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: local best-effort message memory exceeds limit",
-                label
+                "{label}: local best-effort message memory exceeds limit"
             ));
         }
         if remote_memory > remote_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: remote best-effort message memory exceeds limit",
-                label
+                "{label}: remote best-effort message memory exceeds limit"
             ));
         }
 
@@ -607,7 +603,7 @@ impl SubnetPair {
     pub fn check_canister_traps(&self) -> Result<(), (String, DebugInfo)> {
         let traps = self.gather_canister_traps();
         if !traps.is_empty() {
-            return self.failed_with_reason(format!("{:#?}", traps));
+            return self.failed_with_reason(format!("{traps:#?}"));
         }
 
         let invocations = self.gather_successful_heartbeat_invocations();
@@ -632,11 +628,11 @@ pub fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
         .expect("Installing random-traffic-test-canister failed")
 }
 
-/// Returns a snapshot of an XNet stream as a stream header and a vec of messages.
+/// Returns a snapshot of a XNet stream as a stream header and a vec of messages.
 pub fn stream_snapshot(
     from_subnet: &StateMachine,
     to_subnet: &StateMachine,
-) -> Option<(StreamHeader, Vec<RequestOrResponse>)> {
+) -> Option<(StreamHeader, Vec<StreamMessage>)> {
     from_subnet
         .get_latest_state()
         .get_stream(&to_subnet.get_subnet_id())

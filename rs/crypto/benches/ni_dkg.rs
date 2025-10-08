@@ -1,25 +1,25 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
+use criterion::measurement::Measurement;
 use criterion::{
-    criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, SamplingMode,
+    BenchmarkGroup, BenchmarkId, Criterion, SamplingMode, criterion_group, criterion_main,
 };
-
-use rand::CryptoRng;
-
 use ic_base_types::RegistryVersion;
 use ic_crypto_test_utils_ni_dkg::{
-    create_dealing, create_dealings, create_transcript, load_transcript, retain_only_active_keys,
-    run_ni_dkg_and_create_single_transcript, verify_dealing, NiDkgTestEnvironment,
-    RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, create_dealing, create_dealings, create_transcript,
+    load_transcript, retain_only_active_keys, run_ni_dkg_and_create_single_transcript,
+    verify_dealing,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_types::NodeId;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    config::NiDkgConfig, NiDkgDealing, NiDkgTag, NiDkgTranscript,
+    NiDkgDealing, NiDkgTag, NiDkgTranscript, config::NiDkgConfig,
 };
-use ic_types::NodeId;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashSet};
+
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
 
 criterion_main!(benches);
 criterion_group!(benches, crypto_nidkg_benchmarks,);
@@ -31,6 +31,7 @@ fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name().to_string());
         group
+            .warm_up_time(WARMUP_TIME)
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
@@ -57,12 +58,16 @@ fn bench_create_initial_dealing<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config) = prepare_create_initial_dealing_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("create_initial_dealing", |bench| {
         bench.iter_batched_ref(
-            || config.random_dealer_id(rng),
-            |creator_node_id| {
+            || {
+                let (env, config) = bench_context
+                    .get_or_init(|| prepare_create_initial_dealing_test_vectors(test_case, rng));
+                (env, config, config.random_dealer_id(rng))
+            },
+            |(env, config, creator_node_id)| {
                 create_dealing(config.get(), &env.crypto_components, *creator_node_id)
             },
             SmallInput,
@@ -75,13 +80,17 @@ fn bench_create_reshare_dealing<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config) = prepare_create_reshare_dealing_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("create_reshare_dealing", |bench| {
-        bench.iter_batched_ref(
-            || config.random_dealer_id(rng),
-            |creator_node_id| {
-                create_dealing(config.get(), &env.crypto_components, *creator_node_id)
+        bench.iter_batched(
+            || {
+                let (env, config) = bench_context
+                    .get_or_init(|| prepare_create_reshare_dealing_test_vectors(test_case, rng));
+                (env, config, config.random_dealer_id(rng))
+            },
+            |(env, config, creator_node_id)| {
+                create_dealing(config.get(), &env.crypto_components, creator_node_id)
             },
             SmallInput,
         )
@@ -93,20 +102,28 @@ fn bench_verify_dealing<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config, dealings) = prepare_verify_dealing_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("verify_dealing", |bench| {
         bench.iter_batched_ref(
             || {
+                let (env, config, dealings) = bench_context
+                    .get_or_init(|| prepare_verify_dealing_test_vectors(test_case, rng));
                 let (dealer_id, dealing) = dealings
                     .get(rng.gen_range(0..test_case.num_of_dealers))
                     .unwrap();
 
                 let receiver_id = config.random_receiver_id(rng);
 
-                (&env.crypto_components, *dealer_id, dealing, receiver_id)
+                (
+                    config,
+                    &env.crypto_components,
+                    *dealer_id,
+                    dealing,
+                    receiver_id,
+                )
             },
-            |(crypto_components, dealer, dealing, receiver_id)| {
+            |(config, crypto_components, dealer, dealing, receiver_id)| {
                 verify_dealing(
                     config.get(),
                     crypto_components,
@@ -125,14 +142,18 @@ fn bench_create_transcript<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env, config, dealings, creator_node_id) =
-        prepare_create_transcript_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     group.bench_function("create_transcript", |bench| {
         bench.iter_batched_ref(
-            || &env.crypto_components,
-            |crypto_components| {
-                create_transcript(&config, crypto_components, &dealings, creator_node_id)
+            || {
+                let (env, config, dealings, creator_node_id) = bench_context
+                    .get_or_init(|| prepare_create_transcript_test_vectors(test_case, rng));
+
+                (config, dealings, creator_node_id, &env.crypto_components)
+            },
+            |(config, dealings, creator_node_id, crypto_components)| {
+                create_transcript(config, crypto_components, dealings, **creator_node_id)
             },
             SmallInput,
         )
@@ -144,14 +165,16 @@ fn bench_load_transcript<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env_to_copy, config, transcript_to_load) =
-        prepare_load_transcript_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
 
     let path = std::path::Path::new("load_transcript_env");
 
     group.bench_function("load_transcript", |bench| {
         bench.iter_batched_ref(
             || {
+                let (env_to_copy, config, transcript_to_load) = bench_context
+                    .get_or_init(|| prepare_load_transcript_test_vectors(test_case, rng));
+
                 // clean-up the dir if it exists
                 let _ = std::fs::remove_dir_all(path);
 
@@ -183,8 +206,7 @@ fn bench_retain_keys<M: Measurement, R: Rng + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let (env_to_copy, config, transcript1, transcript2) =
-        prepare_retain_keys_test_vectors(test_case, rng);
+    let bench_context = OnceCell::new();
     let path = std::path::Path::new("retain_active_keys_env");
 
     for exp in [0, 1, 5, 15, 30].iter() {
@@ -194,6 +216,9 @@ fn bench_retain_keys<M: Measurement, R: Rng + CryptoRng>(
             |bench, exp| {
                 bench.iter_batched(
                     || {
+                        let (env_to_copy, config, transcript1, transcript2) = bench_context
+                            .get_or_init(|| prepare_retain_keys_test_vectors(test_case, rng));
+
                         let retainer_node_id = config.random_receiver_id(rng);
                         // clean-up the dir if it exists
                         let _ = std::fs::remove_dir_all(path);

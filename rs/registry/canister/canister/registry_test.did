@@ -242,7 +242,9 @@ type MigrateCanistersPayload = record {
   target_subnet_id : principal;
 };
 
-type MigrateCanistersResponse = record {};
+type MigrateCanistersResponse = record {
+  registry_version: nat64;
+};
 
 type NodeOperatorRecord = record {
   ipv6 : opt text;
@@ -466,6 +468,11 @@ type UpdateUnassignedNodesConfigPayload = record {
   ssh_readonly_access : opt vec text;
 };
 
+type SwapNodeInSubnetDirectlyPayload = record {
+    new_node_id : opt principal;
+    old_node_id : opt principal;
+}
+
 service : {
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
@@ -524,4 +531,5 @@ service : {
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
+  swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
 };

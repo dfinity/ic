@@ -1,8 +1,8 @@
-use canister_test::{local_test_e, Wasm};
+use canister_test::{Wasm, local_test_e};
 use ic_canister_client_sender::Sender;
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
-use ic_test_utilities::universal_canister::wasm as universal_canister_argument_builder;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_test_utilities::universal_canister::wasm as universal_canister_argument_builder;
 use on_wire::bytes;
 
 #[test]

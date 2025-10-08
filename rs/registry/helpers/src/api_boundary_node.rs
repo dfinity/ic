@@ -3,8 +3,8 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_registry_keys::{
-    get_api_boundary_node_record_node_id, make_api_boundary_node_record_key,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, get_api_boundary_node_record_node_id,
+    make_api_boundary_node_record_key,
 };
 use ic_types::registry::RegistryClientError;
 use std::collections::HashSet;
@@ -30,6 +30,12 @@ pub trait ApiBoundaryNodeRegistry {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<NodeId>, RegistryClientError>;
+
+    fn is_system_api_boundary_node(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> Result<bool, RegistryClientError>;
 }
 
 impl<T: RegistryClient + ?Sized> ApiBoundaryNodeRegistry for T {
@@ -82,6 +88,15 @@ impl<T: RegistryClient + ?Sized> ApiBoundaryNodeRegistry for T {
             .collect();
 
         Ok(app_ids)
+    }
+
+    fn is_system_api_boundary_node(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> Result<bool, RegistryClientError> {
+        let system_api_bn_ids = self.get_system_api_boundary_node_ids(version)?;
+        Ok(system_api_bn_ids.contains(&node_id))
     }
 }
 
@@ -166,5 +181,35 @@ mod tests {
 
         assert_eq!(system_ids, vec![node_id(100)]);
         assert!(app_ids.is_empty());
+    }
+
+    #[test]
+    fn test_is_system_api_boundary_node() {
+        let version = RegistryVersion::from(1);
+        let registry = setup_test_client(
+            vec![node_id(1), node_id(2), node_id(3), node_id(4)],
+            version,
+        );
+
+        assert!(
+            registry
+                .is_system_api_boundary_node(node_id(1), version)
+                .unwrap()
+        );
+        assert!(
+            registry
+                .is_system_api_boundary_node(node_id(2), version)
+                .unwrap()
+        );
+        assert!(
+            !registry
+                .is_system_api_boundary_node(node_id(3), version)
+                .unwrap()
+        );
+        assert!(
+            !registry
+                .is_system_api_boundary_node(node_id(4), version)
+                .unwrap()
+        );
     }
 }

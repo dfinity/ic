@@ -7,9 +7,32 @@ The process that populates this file is described in
 `rs/nervous_system/changelog_process.md`. In general though, the entries you see
 here were moved from the adjacent `unreleased_changelog.md` file.
 
-
 INSERT NEW RELEASES HERE
 
+# 2025-10-03: Proposal 138825
+
+http://dashboard.internetcomputer.org/proposal/138825
+
+## Fixed
+
+- The `migrate_canisters` endpoint recertifies registry.
+
+# 2025-09-26: Proposal 138718
+
+http://dashboard.internetcomputer.org/proposal/138718
+
+## Added
+
+- Whitelisted the migration canister to call `migrate_canisters`
+
+# 2025-09-05: Proposal 138371
+
+http://dashboard.internetcomputer.org/proposal/138371
+
+## Added
+
+* New update method that will be used for node swapping feature.
+* `migrate_canisters` returns the new registry version.
 
 # 2025-08-22: Proposal 138164
 
@@ -18,7 +41,6 @@ http://dashboard.internetcomputer.org/proposal/138164
 ## Removed
 
 * The single entry routing table is no longer updated when there are changes to the routing table.
-
 
 # 2025-08-15: Proposal 137917
 
@@ -35,13 +57,11 @@ http://dashboard.internetcomputer.org/proposal/137917
 - Removed the `guest_launch_measurement_sha256_hex` field from ReplicaVersionRecord in favor of the
   `guest_launch_measurements` field.
 
-
 # 2025-07-18: Proposal 137500
 
 https://dashboard.internetcomputer.org/proposal/137500
 
 Back fill some node records with reward type.
-
 
 # 2025-07-11: Proposal 137347
 
@@ -50,7 +70,6 @@ http://dashboard.internetcomputer.org/proposal/137347
 ## Changed
 
 * `create_subnet` now returns the new subnet's ID.
-
 
 # 2025-07-06: Proposal 137254
 
@@ -64,7 +83,6 @@ http://dashboard.internetcomputer.org/proposal/137254
 
 [subnet rental]: https://dashboard.internetcomputer.org/proposal/128820
 
-
 # 2025-06-20: Proposal 137081
 
 https://dashboard.internetcomputer.org/proposal/137081
@@ -74,7 +92,6 @@ https://dashboard.internetcomputer.org/proposal/137081
 * The `check_routing_table_invariants` method now checks the new canister_ranges_
   and ensures they match the `routing_table` record. The old invariant check will be
   removed once `routing_table` is removed.
-
 
 # 2025-06-13: Proposal 136988
 
@@ -102,7 +119,6 @@ http://dashboard.internetcomputer.org/proposal/136988
 
 [chunking]: https://forum.dfinity.org/t/breaking-registry-changes-for-large-records/42893?u=daniel-wong
 
-
 # 2025-06-06: Proposal 136894
 
 http://dashboard.internetcomputer.org/proposal/136894
@@ -113,7 +129,6 @@ http://dashboard.internetcomputer.org/proposal/136894
   with the same structure as `rewardable_nodes`, but with a different purpose. This field will set the upper limit
   on the number of nodes that can be rewarded for a given node operator for the next version of Node Provider Rewards.
 
-
 # 2025-05-16: Proposal 136695
 
 http://dashboard.internetcomputer.org/proposal/136695
@@ -122,7 +137,6 @@ http://dashboard.internetcomputer.org/proposal/136695
 
 * The field `node_reward_type` in AddNodePayload is now required to be populated with a valid node_reward_type when
   adding a node (in `do_add_node`) if a node_rewards table record is present in the registry.
-
 
 # 2025-05-10: Proposal 136581
 
@@ -138,8 +152,8 @@ http://dashboard.internetcomputer.org/proposal/136581
 
 ## Changed
 
-* The `create_subnet` and `recover_subnet` calls are using the `reshare_chain_key` endpoint rather than the old `compute_initial_i_dkg_dealings` endpoint. With this change, recovery of vetkeys is supported.
-
+* The `create_subnet` and `recover_subnet` calls are using the `reshare_chain_key` endpoint rather than the old
+  `compute_initial_i_dkg_dealings` endpoint. With this change, recovery of vetkeys is supported.
 
 # 2025-05-02: Proposal 136428
 
@@ -174,7 +188,6 @@ No "real" behavior changes. This is just a maintenance upgrade.
 
 Technically, there is a new get_chunk method, but it does not actually do anything useful yet. Watch this space.
 
-
 # 2025-02-13: Proposal 135300
 
 https://dashboard.internetcomputer.org/proposal/135300
@@ -183,9 +196,10 @@ https://dashboard.internetcomputer.org/proposal/135300
 
 ### Disable replacement of nodes that are active in subnets
 
-Direct node replacements of nodes that are active in a subnet may result in unexpected behavior and potential problems in the current Consensus code.
-So to be on the safe side we need to disable the functionality on the Registry side until the rest of the core protocol can handle it safely.
-
+Direct node replacements of nodes that are active in a subnet may result in unexpected behavior and potential problems
+in the current Consensus code.
+So to be on the safe side we need to disable the functionality on the Registry side until the rest of the core protocol
+can handle it safely.
 
 # 2025-02-07: Proposal 135207
 
@@ -196,7 +210,7 @@ http://dashboard.internetcomputer.org/proposal/135207
 ### Migrate Registry to use ic_stable_structures' MemoryManager
 
 This update migrates registry from using dfn_core to using virtual memory regions provided by ic_stable_structures
-MemoryManager.  This allows in the future to migrate the Registry records into stable memory.
+MemoryManager. This allows in the future to migrate the Registry records into stable memory.
 
 ### Automatically replace the nodes when an active API boundary node is replaced
 
@@ -217,11 +231,10 @@ The legacy ECDSA-specific fields are no longer supported in Registry canister's 
 
 ### Backfill node_reward_type for existing nodes
 
-A one-time migration to fill in the `node_reward_type` field for existing nodes was added.  Previously, there was no
-on-chain connection between the specific nodes and their reward types.  This data came from off-chain sources
-at DFINITY.  In the future, the `node_reward_type` will be used to determine the reward type for each node, and
+A one-time migration to fill in the `node_reward_type` field for existing nodes was added. Previously, there was no
+on-chain connection between the specific nodes and their reward types. This data came from off-chain sources
+at DFINITY. In the future, the `node_reward_type` will be used to determine the reward type for each node, and
 it will be a required field for node registration in the IC.
-
 
 # 2025-01-20: Proposal 134904
 
@@ -241,6 +254,5 @@ the subnet was required to enable redeployments for such nodes.
 Such behavior is conservative and not strictly necessary since the subnet
 decentralization is not affected when the new node has all properties
 identical as the old node, which is the case if the IPv6 address is unchanged.
-
 
 END

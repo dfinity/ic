@@ -12,14 +12,14 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
 use ic_types::{
-    batch::{vetkd_payload_to_bytes, VetKdAgreement, VetKdErrorCode, VetKdPayload},
+    Height, NumBytes,
+    batch::{VetKdAgreement, VetKdErrorCode, VetKdPayload, vetkd_payload_to_bytes},
     consensus::idkg::VetKdKeyShare,
     crypto::vetkd::VetKdEncryptedKeyShare,
     crypto::vetkd::VetKdEncryptedKeyShareContent,
     crypto::{CryptoHash, CryptoHashOf},
     messages::CallbackId,
     time::UNIX_EPOCH,
-    Height, NumBytes,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
 use std::str::FromStr;
@@ -68,7 +68,7 @@ pub(super) fn as_bytes(vetkd_agreements: BTreeMap<CallbackId, VetKdAgreement>) -
 }
 
 /// Turn the given payload bytes into a generic [`PastPayload`]
-pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload {
+pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload<'_> {
     PastPayload {
         height: Height::from(0),
         time: UNIX_EPOCH,

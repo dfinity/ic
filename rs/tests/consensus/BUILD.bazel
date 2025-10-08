@@ -48,6 +48,7 @@ system_test(
         "k8s",
         "long_test",
     ],
+    test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -192,6 +193,7 @@ system_test_nns(
     name = "cup_explorer_test",
     tags = [
         "k8s",
+        "long_test",  # The P90 duration was over 6 minutes for the week starting on 2025-08-25.
     ],
     deps = [
         # Keep sorted.
@@ -253,6 +255,9 @@ system_test(
         "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64)",
         "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64)",
     },
+    tags = [
+        "long_test",  # the P90 duration of this test is over 6 minutes in the week starting on 2025-08-25.
+    ],
     uses_guestos_img = False,
     uses_guestos_recovery_dev_img = True,
     runtime_deps = IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + [
@@ -359,6 +364,7 @@ system_test_nns(
         "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
         "//conditions:default": [],
     }),
+    enable_head_nns_variant = False,
     env = {"ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)"},
     tags = [
         "colocate",

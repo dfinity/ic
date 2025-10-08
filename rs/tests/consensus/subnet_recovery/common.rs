@@ -33,13 +33,16 @@ use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::assert_node_is_unassigned,
+    node::assert_node_is_unassigned_with_ssh_session,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
         install_nns_and_check_progress, store_message,
     },
     set_sandbox_env_vars,
-    ssh_access::execute_bash_command,
+    ssh_access::{
+        AuthMean, disable_ssh_access_to_node, execute_bash_command,
+        wait_until_authentication_is_granted,
+    },
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
     },
@@ -51,26 +54,30 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
+    NodeMetrics, Recovery, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
+    get_node_metrics,
     steps::Step,
     util::DataLocation,
-    NodeMetrics, Recovery, RecoveryArgs,
 };
-use ic_recovery::{file_sync_helper, get_node_metrics};
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env_api::scp_send_to;
+use ic_system_test_driver::driver::{constants::SSH_USERNAME, test_env::SshKeyGen};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{consensus::CatchUpPackage, Height, ReplicaVersion, SubnetId};
+use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
-use std::{collections::BTreeMap, convert::TryFrom};
+use slog::{Logger, info};
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::TryFrom,
+};
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 use url::Url;
@@ -85,6 +92,10 @@ const APP_NODES_LARGE: usize = 37;
 /// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
+
+const READONLY_USERNAME: &str = "readonly";
+
+const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
@@ -301,6 +312,16 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
+    if cfg.local_recovery {
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe {
+            std::env::set_var(
+                "IC_ADMIN_BIN",
+                get_dependency_path_from_env("IC_ADMIN_PATH"),
+            )
+        };
+    }
+
     let initial_version = get_guestos_img_version();
     info!(logger, "IC_VERSION_ID: {initial_version:?}");
     let topology_snapshot = env.topology_snapshot();
@@ -409,8 +430,18 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
-    let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(SSH_USERNAME))
-        .expect("Couldn't read public key");
+    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
+    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
+        .expect("Failed to read admin SSH private key");
+    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
+
+    // Generate a new readonly keypair
+    env.ssh_keygen_for_user(READONLY_USERNAME)
+        .expect("ssh-keygen failed for readonly key");
+    let ssh_readonly_priv_key_path = ssh_authorized_priv_keys_dir.join(READONLY_USERNAME);
+    let ssh_readonly_pub_key_path = ssh_authorized_pub_keys_dir.join(READONLY_USERNAME);
+    let ssh_readonly_pub_key = std::fs::read_to_string(&ssh_readonly_pub_key_path)
+        .expect("Failed to read readonly SSH public key");
 
     let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
@@ -419,18 +450,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
         replica_version: Some(initial_version.clone()),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
+        admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
-    };
-
-    let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
-
-    let upload_node = if let Some(node) = unassigned_nodes.next() {
-        node
-    } else {
-        app_nodes.next().unwrap()
+        use_local_binaries: cfg.local_recovery,
     };
 
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
@@ -457,10 +480,11 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
-        pub_key: (!cfg.corrupt_cup).then_some(pub_key),
+        readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
+        readonly_key_file: Some(ssh_readonly_priv_key_path),
         download_method: None, // We will set this after breaking/halting the subnet, see below
-        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
-        wait_for_cup_node: Some(upload_node.get_ip_addr()),
+        upload_method: None,   // We will set this after breaking/halting the subnet, see below
+        wait_for_cup_node: None, // We will set this after breaking/halting the subnet, see below
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
         next_step: None,
         skip: None,
@@ -481,7 +505,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     );
     if cfg.upgrade {
         break_subnet(
-            app_nodes,
+            &mut app_nodes,
             cfg.subnet_size,
             subnet_recovery.get_recovery_api(),
             &logger,
@@ -497,6 +521,22 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
     let download_node = select_download_node(&app_subnet, &logger);
+    let upload_node = if cfg.local_recovery {
+        // In local recoveries, we download and upload from/to the same node
+        download_node.0.clone()
+    } else {
+        env.topology_snapshot()
+            .unassigned_nodes()
+            .next()
+            .or_else(|| app_nodes.next())
+            .unwrap()
+    };
+
+    subnet_recovery.params.download_method =
+        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
+    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
+    subnet_recovery.params.upload_method = Some(DataLocation::Remote(upload_node.get_ip_addr()));
+    subnet_recovery.params.wait_for_cup_node = Some(upload_node.get_ip_addr());
 
     if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
@@ -504,9 +544,48 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
     }
 
-    subnet_recovery.params.download_method =
-        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
-    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
+    // Mirror production setup by removing admin SSH access from all nodes except the ones we need
+    // for recovery.
+    let admin_nodes = if subnet_recovery.params.readonly_pub_key.is_some() {
+        // If we can deploy read-only access, we only need admin access on the upload node to upload
+        // the state
+        vec![&upload_node]
+    } else {
+        // In cases where we cannot deploy read-only access, we download the state & pool using
+        // admin access instead of read-only, so we need admin access on the download node as well
+        vec![&upload_node, &download_node.0]
+    };
+    info!(
+        logger,
+        "Admin nodes: {:?}. Removing admin SSH access from all other nodes",
+        admin_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>()
+    );
+    let mut admin_ssh_sessions = HashMap::new();
+    for node in app_subnet
+        .nodes()
+        .filter(|n| !admin_nodes.iter().any(|an| an.node_id == n.node_id))
+    {
+        info!(
+            logger,
+            "Removing admin SSH access from node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+
+        let session =
+            disable_ssh_access_to_node(&logger, &node, SSH_USERNAME, &admin_auth).unwrap();
+
+        admin_ssh_sessions.insert(node.node_id, session);
+    }
+    // Ensure we can still SSH into admin nodes
+    for node in admin_nodes {
+        wait_until_authentication_is_granted(
+            &logger,
+            &node.get_ip_addr(),
+            SSH_USERNAME,
+            &admin_auth,
+        );
+    }
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
@@ -583,9 +662,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         logger,
         "Making sure unassigned nodes deleted their state..."
     );
-    topology_snapshot
-        .unassigned_nodes()
-        .for_each(|n| assert_node_is_unassigned(&n, &logger));
+    topology_snapshot.unassigned_nodes().for_each(|n| {
+        assert_node_is_unassigned_with_ssh_session(&n, admin_ssh_sessions.get(&n.node_id), &logger);
+    });
 }
 
 fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
@@ -600,11 +679,26 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
     }
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+    let session = &node.block_on_ssh_session().unwrap();
+    let node_id = node.node_id;
+    let node_ip = node.get_ip_addr();
+    info!(
+        logger,
+        "Copying ic-admin to node {node_id} with IP {node_ip} such that ic-recovery can execute it ..."
+    );
+    scp_send_to(
+        logger.clone(),
+        session,
+        &get_dependency_path_from_env("IC_ADMIN_PATH"),
+        Path::new(IC_ADMIN_REMOTE_PATH),
+        0o755,
+    );
+
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
     let maybe_replay_until_height = subnet_recovery
@@ -612,18 +706,17 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         .replay_until_height
         .map(|h| format!("--replay-until-height {h} "))
         .unwrap_or_default();
-    let pub_key = subnet_recovery.params.pub_key.unwrap();
-    let pub_key = pub_key.trim();
-    let node_ip = node.get_ip_addr();
+    let readonly_pub_key = subnet_recovery.params.readonly_pub_key.unwrap();
+    let readonly_pub_key = readonly_pub_key.trim();
 
     let command = format!(
-        r#"/opt/ic/bin/ic-recovery \
+        r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
         --subnet-id {subnet_id} \
         {maybe_replay_until_height}\
-        --pub-key "{pub_key}" \
+        --readonly-pub-key "{readonly_pub_key}" \
         --download-method local \
         --upload-method local \
         --wait-for-cup-node {node_ip} \
@@ -633,7 +726,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     );
 
     info!(logger, "Executing local recovery command: \n{command}");
-    match node.block_on_bash_script(&command) {
+    match node.block_on_bash_script_from_session(session, &command) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
@@ -642,7 +735,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
 fn break_subnet(
-    subnet: Box<dyn Iterator<Item = IcNodeSnapshot>>,
+    subnet: &mut dyn Iterator<Item = IcNodeSnapshot>,
     subnet_size: usize,
     recovery: &Recovery,
     logger: &Logger,
@@ -659,8 +752,7 @@ fn break_subnet(
     for node in faulty_nodes {
         // simulate subnet failure by breaking the replica process, but not the orchestrator
         recovery
-            .execute_ssh_command(
-                "admin",
+            .execute_admin_ssh_command(
                 node.get_ip_addr(),
                 "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
             )
@@ -758,10 +850,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         let session = node.block_on_ssh_session().unwrap();
         execute_bash_command(
             &session,
-            format!(
-                "sudo touch {}; sudo chmod a+rw {}",
-                NEW_CUP_PATH, NEW_CUP_PATH
-            ),
+            format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
         )
         .expect("touch");
         let mut channel = session
@@ -772,10 +861,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         info!(logger, "Restarting node {:?}", node.get_ip_addr());
         execute_bash_command(
             &session,
-            format!(
-                "sudo mv {} {}; sudo systemctl restart ic-replica",
-                NEW_CUP_PATH, CUP_PATH
-            ),
+            format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
         )
         .expect("restart");
     }
@@ -822,8 +908,7 @@ fn assert_subnet_is_broken(
         info!(logger, "Ensure the subnet works in read mode");
         assert!(
             can_read_msg(logger, node_url, can_id, msg),
-            "Failed to read message on node: {}",
-            node_url
+            "Failed to read message on node: {node_url}"
         );
     }
     info!(
@@ -832,8 +917,7 @@ fn assert_subnet_is_broken(
     );
     assert!(
         cannot_store_msg(logger.clone(), node_url, can_id, msg),
-        "Writing messages still successful on: {}",
-        node_url
+        "Writing messages still successful on: {node_url}"
     );
 }
 

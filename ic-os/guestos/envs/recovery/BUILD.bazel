@@ -11,7 +11,6 @@ icos_images = icos_build(
     name = "recovery",
     image_deps_func = image_deps,
     tags = [
-        "manual",
         "no-cache",
     ],
     visibility = [
@@ -60,9 +59,6 @@ artifact_bundle(
     prefix = "guest-os/update-img-recovery",
     tags = [
         "manual",
-        "no-cache",
     ],
-    visibility = [
-        "//rs:ic-os-pkg",
-    ],
+    visibility = ["//visibility:public"],
 )

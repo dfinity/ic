@@ -1,14 +1,13 @@
 use super::*;
-use crate::{providers::Provider, CheckTransactionIrrecoverableError};
+use crate::{CheckTransactionIrrecoverableError, providers::Provider};
 use bitcoin::{
-    absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
-    PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    Amount, OutPoint, PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    absolute::LockTime, address::Address, hashes::Hash, transaction::Version,
 };
 use ic_btc_checker::{
-    blocklist, BtcNetwork, CheckMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    BtcNetwork, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE, CheckMode,
+    blocklist,
 };
-use ic_cdk::api::call::RejectionCode;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::str::FromStr;
@@ -55,7 +54,7 @@ impl FetchEnv for MockEnv {
             .borrow_mut()
             .pop_front()
             .unwrap_or(Err(HttpGetTxError::Rejected {
-                code: RejectionCode::SysTransient,
+                code: 2, //SYS_TRANSIENT
                 message: "no more reply".to_string(),
             }))
     }
@@ -530,7 +529,7 @@ async fn test_check_fetched() {
             provider: provider.clone(),
             max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
             error: HttpGetTxError::Rejected {
-                code: RejectionCode::SysTransient,
+                code: 2, //SYS_TRANSIENT
                 message: "no more reply".to_string(),
             },
         }),

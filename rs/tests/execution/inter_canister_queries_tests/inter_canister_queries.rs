@@ -3,7 +3,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::util::{
-    assert_reject, create_and_install, escape_for_wat, UniversalCanister,
+    UniversalCanister, assert_reject, create_and_install, escape_for_wat,
 };
 use ic_types::CanisterId;
 use ic_universal_canister::{call_args, wasm};

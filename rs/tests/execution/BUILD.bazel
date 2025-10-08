@@ -144,6 +144,34 @@ system_test(
     ],
 )
 
+system_test_nns(
+    name = "canister_migration_test",
+    enable_mainnet_nns_variant = False,
+    env = UNIVERSAL_CANISTER_ENV | {
+        "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
+    },
+    tags = [
+        "k8s",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
 system_test(
     name = "system_api_security_test",
     tags = [
@@ -240,6 +268,7 @@ system_test_nns(
     tags = [
         "colocate",
         "k8s",
+        "long_test",  # the P90 duration was over 7 minutes for the week starting on 2025-08-25.
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +

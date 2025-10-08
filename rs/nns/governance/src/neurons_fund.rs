@@ -5,8 +5,9 @@ use ic_cdk::println;
 use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
 use ic_nervous_system_proto::pb::v1::{Decimal as DecimalPb, Percentage as PercentagePb};
 use ic_neurons_fund::{
-    dec_to_u64, rescale_to_icp, u64_to_dec, DeserializableFunction, HalfOpenInterval,
-    IdealMatchingFunction, NeuronsFundParticipationLimits, PolynomialMatchingFunction,
+    DeserializableFunction, HalfOpenInterval, IdealMatchingFunction,
+    NeuronsFundParticipationLimits, PolynomialMatchingFunction, dec_to_u64, rescale_to_icp,
+    u64_to_dec,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_swap::pb::v1::{
@@ -23,19 +24,18 @@ use std::{
 };
 
 use crate::{
-    governance,
+    Governance, governance,
     neuron_store::{NeuronStore, NeuronsFundNeuron},
     pb::v1::{
-        create_service_nervous_system::SwapParameters, governance_error,
-        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         GovernanceError, IdealMatchedParticipationFunction,
         NeuronsFundEconomics as NeuronsFundEconomicsPb,
         NeuronsFundMatchedFundingCurveCoefficients as NeuronsFundMatchedFundingCurveCoefficientsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb,
         SwapParticipationLimits as SwapParticipationLimitsPb,
+        create_service_nervous_system::SwapParameters, governance_error,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
     },
-    Governance,
 };
 
 /// The Neurons' Fund should not participate in any SNS swap with more than this portion of its
@@ -101,7 +101,7 @@ pub struct NeuronsFundEconomics {
 
 impl NeuronsFundEconomics {
     fn missing_field(field_name: &str) -> String {
-        format!("NeuronsFundEconomics.{} must be specified.", field_name)
+        format!("NeuronsFundEconomics.{field_name} must be specified.")
     }
 
     fn convert_to_rust_decimal_or_err(
@@ -109,10 +109,7 @@ impl NeuronsFundEconomics {
         field_value_pb: DecimalPb,
     ) -> Result<Decimal, String> {
         Decimal::try_from(field_value_pb).map_err(|err| {
-            format!(
-                "NeuronsFundEconomics.{} must be parsed as Decimal: {}",
-                field_name, err,
-            )
+            format!("NeuronsFundEconomics.{field_name} must be parsed as Decimal: {err}",)
         })
     }
 }
@@ -283,8 +280,7 @@ impl Governance {
         let convert_xdr_to_icp = |amount_xdr: Decimal| -> Result<Decimal, String> {
             amount_xdr.checked_mul(xdr_icp_rate).ok_or_else(|| {
                 format!(
-                    "Cannot convert {} XDR to ICP due to a Decimal overflow. xdr_icp_rate = {}.",
-                    amount_xdr, xdr_icp_rate,
+                    "Cannot convert {amount_xdr} XDR to ICP due to a Decimal overflow. xdr_icp_rate = {xdr_icp_rate}.",
                 )
             })
         };
@@ -388,7 +384,7 @@ impl std::fmt::Display for NeuronsFundNeuronPortionError {
         let prefix = "Invalid NeuronsFundNeuronPortion: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                write!(f, "{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{prefix}field `{field_name}` is not specified.")
             }
             Self::AmountTooBig {
                 amount_icp_e8s,
@@ -396,8 +392,7 @@ impl std::fmt::Display for NeuronsFundNeuronPortionError {
             } => {
                 write!(
                     f,
-                    "{}`amount_icp_e8s` ({}) exceeds `maturity_equivalent_icp_e8s` ({})",
-                    prefix, amount_icp_e8s, maturity_equivalent_icp_e8s,
+                    "{prefix}`amount_icp_e8s` ({amount_icp_e8s}) exceeds `maturity_equivalent_icp_e8s` ({maturity_equivalent_icp_e8s})",
                 )
             }
         }
@@ -559,7 +554,7 @@ impl NeuronsFundSnapshot {
                 let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, hotkeys, is_capped) =
                     if let Some(right) = deductible_neurons.remove(&id) {
                         let err_prefix =
-                            || format!("Cannot compute diff of two portions of neuron {:?}: ", id);
+                            || format!("Cannot compute diff of two portions of neuron {id:?}: ");
                         let Some(amount_icp_e8s) =
                             left.amount_icp_e8s.checked_sub(right.amount_icp_e8s)
                         else {
@@ -669,7 +664,7 @@ impl NeuronsFundSnapshot {
         if !deductible_neurons.is_empty() {
             let extra_neuron_portions_str = deductible_neurons
                 .keys()
-                .map(|n| format!("{:?}", n))
+                .map(|n| format!("{n:?}"))
                 .collect::<Vec<String>>()
                 .join(", ");
             return Err(format!(
@@ -707,11 +702,7 @@ impl std::fmt::Display for NeuronsFundSnapshotValidationError {
         let prefix = "Cannot validate NeuronsFundSnapshot: ";
         match self {
             Self::NeuronsFundNeuronPortionError(index, error) => {
-                write!(
-                    f,
-                    "{}neurons_fund_neuron_portions[{}]: {}",
-                    prefix, index, error
-                )
+                write!(f, "{prefix}neurons_fund_neuron_portions[{index}]: {error}")
             }
         }
     }
@@ -777,7 +768,7 @@ impl std::fmt::Display for SwapParametersError {
         let prefix = "Cannot extract data from SwapParameters: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                write!(f, "{}field `{}` is not specified.", prefix, field_name,)
+                write!(f, "{prefix}field `{field_name}` is not specified.",)
             }
             Self::MaxIsLessThanOrEqualMinParticipationIcp {
                 min_direct_participation_icp_e8s,
@@ -785,9 +776,8 @@ impl std::fmt::Display for SwapParametersError {
             } => {
                 write!(
                     f,
-                    "{}invariant violated: min_direct_participation_icp_e8s ({}) \
-                    <= max_direct_participation_icp_e8s ({}).",
-                    prefix, min_direct_participation_icp_e8s, max_direct_participation_icp_e8s,
+                    "{prefix}invariant violated: min_direct_participation_icp_e8s ({min_direct_participation_icp_e8s}) \
+                    <= max_direct_participation_icp_e8s ({max_direct_participation_icp_e8s}).",
                 )
             }
             Self::MinIsLessThanOrEqualMaxParticipantIcp {
@@ -796,9 +786,8 @@ impl std::fmt::Display for SwapParametersError {
             } => {
                 write!(
                     f,
-                    "{}invariant violated: min_participant_icp_e8s ({}) \
-                    <= max_participant_icp_e8s ({}).",
-                    prefix, min_participant_icp_e8s, max_participant_icp_e8s,
+                    "{prefix}invariant violated: min_participant_icp_e8s ({min_participant_icp_e8s}) \
+                    <= max_participant_icp_e8s ({max_participant_icp_e8s}).",
                 )
             }
         }
@@ -1063,7 +1052,7 @@ where
                 ideal_matched_participation_function,
                 ideal_matched_participation_function
                     .plot(NonZeroU64::try_from(50).unwrap())
-                    .map(|plot| format!("{:?}", plot))
+                    .map(|plot| format!("{plot:?}"))
                     .unwrap_or_else(|e| e)
             ));
         }
@@ -1143,7 +1132,7 @@ where
                     // and `max_participant_icp_e8s`, both of which were converted from `u64`.
                     let amount_icp_e8s = dec_to_u64(amount_icp_e8s)
                         .map_err(|err| {
-                            format!("NeuronsFundParticipation cannot be created: {}", err)
+                            format!("NeuronsFundParticipation cannot be created: {err}")
                         })?;
                     let new_neuron_portion = NeuronsFundNeuronPortion {
                         id,
@@ -1156,8 +1145,7 @@ where
                     if let Some(old_neuron_portion) = overall_neuron_portions.insert(id, new_neuron_portion) {
                         // This should not happen as `neurons_fund` should contain unique values.
                         return Err(format!(
-                            "Duplicate Neurons' Fund neurons for {:?}: {:?}.",
-                            id, old_neuron_portion
+                            "Duplicate Neurons' Fund neurons for {id:?}: {old_neuron_portion:?}."
                         ));
                     }
                     Ok((overall_neuron_portions, allocated_neurons_fund_participation_icp_e8s))
@@ -1173,8 +1161,7 @@ where
                 // This should never actually happen, as the value is at most `intended_neurons_fund_participation_icp_e8s`
                 // which has been converted from `u64`.
                 format!(
-                    "Cannot convert allocated_neurons_fund_participation_icp_e8s from Decimal to u64: {}",
-                    err
+                    "Cannot convert allocated_neurons_fund_participation_icp_e8s from Decimal to u64: {err}"
                 )
             })?;
         Ok(Self {
@@ -1244,10 +1231,10 @@ where
             rescale_to_icp(self.swap_participation_limits.max_participant_icp_e8s)?;
         let eligibility_intervals = self
             .compute_neuron_partition_intervals(min_participant_icp)
-            .map_err(|err| format!("Error while computing eligibility intervals: {}", err))?;
+            .map_err(|err| format!("Error while computing eligibility intervals: {err}"))?;
         let capping_intervals = self
             .compute_neuron_partition_intervals(max_participant_icp)
-            .map_err(|err| format!("Error while computing capping intervals: {}", err))?;
+            .map_err(|err| format!("Error while computing capping intervals: {err}"))?;
         // Merge all steps into a single vector, removing duplicates (a duplicate step occurs if
         // a neuron becomes eligible exactly exactly when another neuron becomes capped).
         // First, merge the steps from `eligibility_intervals` and `capping_intervals` and sort them.
@@ -1284,8 +1271,7 @@ where
                     .ok_or_else(|| {
                         format!(
                             "Cannot find the set of eligible neurons for \
-                        direct_participation_icp_e8s in [{}, {})",
-                            from_direct_participation_icp_e8s, to_direct_participation_icp_e8s
+                        direct_participation_icp_e8s in [{from_direct_participation_icp_e8s}, {to_direct_participation_icp_e8s})"
                         )
                     })?;
                     let capped = HalfOpenInterval::find(
@@ -1295,8 +1281,7 @@ where
                     .ok_or_else(|| {
                         format!(
                             "Cannot find the set of capped neurons for \
-                        direct_participation_icp_e8s in [{}, {})",
-                            from_direct_participation_icp_e8s, to_direct_participation_icp_e8s
+                        direct_participation_icp_e8s in [{from_direct_participation_icp_e8s}, {to_direct_participation_icp_e8s})"
                         )
                     })?;
                     let intercept_icp_e8s = Some(
@@ -1425,10 +1410,9 @@ where
                     // `ideal_matched_participation_function` is monotonically non-decreasing
                     // is violated.
                     return Err(format!(
-                        "intended_amount_icp ({}) < matching_function_min_value_icp ({}); this is \
+                        "intended_amount_icp ({intended_amount_icp}) < matching_function_min_value_icp ({matching_function_min_value_icp}); this is \
                         likely related to ideal_matched_participation_function not being \
                         monotonically non-decreasing.",
-                        intended_amount_icp, matching_function_min_value_icp,
                     ));
                 }
                 if intended_amount_icp > matching_function_max_value_icp {
@@ -1593,20 +1577,19 @@ impl std::fmt::Display for NeuronsFundParticipationValidationError {
         let prefix = "NeuronsFundParticipation is invalid: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                write!(f, "{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{prefix}field `{field_name}` is not specified.")
             }
             Self::NeuronsFundSnapshotValidationError(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             Self::MatchFunctionDeserializationFailed(error) => {
                 write!(
                     f,
-                    "{}failed to deserialize an IdealMatchingFunction instance: {}",
-                    prefix, error
+                    "{prefix}failed to deserialize an IdealMatchingFunction instance: {error}"
                 )
             }
             Self::SwapParametersError(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             Self::NeuronsFundParticipationGreaterThanDirectParticipation {
                 allocated_neurons_fund_participation_icp_e8s,
@@ -1614,11 +1597,8 @@ impl std::fmt::Display for NeuronsFundParticipationValidationError {
             } => {
                 write!(
                     f,
-                    "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
-                    must be <= direct_participation_icp_e8s ({}).",
-                    prefix,
-                    allocated_neurons_fund_participation_icp_e8s,
-                    direct_participation_icp_e8s,
+                    "{prefix}invariant violated: allocated_neurons_fund_participation_icp_e8s ({allocated_neurons_fund_participation_icp_e8s}) \
+                    must be <= direct_participation_icp_e8s ({direct_participation_icp_e8s}).",
                 )
             }
             Self::InvalidAllocation {
@@ -1629,15 +1609,10 @@ impl std::fmt::Display for NeuronsFundParticipationValidationError {
             } => {
                 write!(
                     f,
-                    "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
-                    must be <= intended_neurons_fund_participation_icp_e8s ({}) \
-                    must be <= max_neurons_fund_swap_participation_icp_e8s ({}) \
-                    must be <= 10% of (total_maturity_equivalent_icp_e8s ({})).",
-                    prefix,
-                    allocated_neurons_fund_participation_icp_e8s,
-                    intended_neurons_fund_participation_icp_e8s,
-                    max_neurons_fund_swap_participation_icp_e8s,
-                    total_maturity_equivalent_icp_e8s,
+                    "{prefix}invariant violated: allocated_neurons_fund_participation_icp_e8s ({allocated_neurons_fund_participation_icp_e8s}) \
+                    must be <= intended_neurons_fund_participation_icp_e8s ({intended_neurons_fund_participation_icp_e8s}) \
+                    must be <= max_neurons_fund_swap_participation_icp_e8s ({max_neurons_fund_swap_participation_icp_e8s}) \
+                    must be <= 10% of (total_maturity_equivalent_icp_e8s ({total_maturity_equivalent_icp_e8s})).",
                 )
             }
             Self::InconsistentTotalAllocationData {
@@ -1646,12 +1621,9 @@ impl std::fmt::Display for NeuronsFundParticipationValidationError {
             } => {
                 write!(
                     f,
-                    "{}inconsistent total allocation data: \
-                    allocated_neurons_fund_participation_icp_e8s ({}) \
-                    must be == neurons_fund_reserves.total_amount_icp_e8s ({}).",
-                    prefix,
-                    allocated_neurons_fund_participation_icp_e8s,
-                    neurons_fund_reserves_total_amount_icp_e8s,
+                    "{prefix}inconsistent total allocation data: \
+                    allocated_neurons_fund_participation_icp_e8s ({allocated_neurons_fund_participation_icp_e8s}) \
+                    must be == neurons_fund_reserves.total_amount_icp_e8s ({neurons_fund_reserves_total_amount_icp_e8s}).",
                 )
             }
         }
@@ -2154,9 +2126,10 @@ mod pick_most_important_hotkeys_tests {
 mod test_functions_tests {
     use ic_nervous_system_common::E8;
     use ic_neurons_fund::{
+        InvertError, InvertibleFunction, MatchedParticipationFunction, MatchingFunction,
+        SerializableFunction, ValidatedNeuronsFundParticipationConstraints,
         test_functions::{AnalyticallyInvertibleFunction, LinearFunction, SimpleLinearFunction},
-        u64_to_dec, InvertError, InvertibleFunction, MatchedParticipationFunction,
-        MatchingFunction, SerializableFunction, ValidatedNeuronsFundParticipationConstraints,
+        u64_to_dec,
     };
     use ic_sns_swap::pb::v1::{
         IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
@@ -2170,13 +2143,13 @@ mod test_functions_tests {
         let f = SimpleLinearFunction {};
         let run_test_for_a = |x_icp_e8s: u64| {
             let y_icp = f.apply(x_icp_e8s).unwrap();
-            println!("({}, {})", x_icp_e8s, y_icp);
+            println!("({x_icp_e8s}, {y_icp})");
             let x1_icp_e8s = f.invert(y_icp).unwrap();
             assert_eq!(x_icp_e8s, x1_icp_e8s);
         };
         let run_test_for_b = |y_icp: Decimal| {
             let x1_icp_e8s = f.invert(y_icp).unwrap();
-            println!("({}, {})", x1_icp_e8s, y_icp);
+            println!("({x1_icp_e8s}, {y_icp})");
             let y1_icp = f.apply(x1_icp_e8s).unwrap();
             assert_eq!(y_icp, y1_icp);
         };

@@ -7,14 +7,14 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Request,
-    RequestMetadata, Response, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
+    RequestMetadata, Response,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
-    PrincipalId, Time, UserId,
+    CanisterId, Cycles, Funds, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
+    user_id_try_from_protobuf,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -318,8 +318,7 @@ impl CallContextManagerStats {
                 Entry::Vacant(_) => {
                     debug_assert!(
                         false,
-                        "Aborted or paused DTS response with no matching callback: {:?}",
-                        response
+                        "Aborted or paused DTS response with no matching callback: {response:?}"
                     )
                 }
             }
@@ -550,7 +549,7 @@ impl CallContextManager {
         let mut context = self
             .call_contexts
             .remove(&call_context_id)
-            .unwrap_or_else(|| panic!("no call context with ID={}", call_context_id));
+            .unwrap_or_else(|| panic!("no call context with ID={call_context_id}"));
         // Update call context `instructions_executed += instructions_used`
         context.instructions_executed = context
             .instructions_executed
@@ -647,7 +646,7 @@ impl CallContextManager {
         let mut call_context = self
             .call_contexts
             .remove(&call_context_id)
-            .ok_or(format!("Call context not found: {}", call_context_id))?;
+            .ok_or(format!("Call context not found: {call_context_id}"))?;
         if !call_context.responded {
             call_context.mark_responded();
 
@@ -731,7 +730,10 @@ impl CallContextManager {
     /// best-effort callbacks whose deadlines are `< now`.
     ///
     /// Note: A given callback ID will be returned at most once by this function.
-    pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
+    pub(super) fn expire_callbacks(
+        &mut self,
+        now: CoarseTime,
+    ) -> impl Iterator<Item = CallbackId> + use<> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 
         // Unfortunate two-step splitting off of the expired callbacks.

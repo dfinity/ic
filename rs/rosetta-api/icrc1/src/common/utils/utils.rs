@@ -1,14 +1,14 @@
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
 use crate::common::types::{FeeMetadata, FeeSetter};
 use crate::{
+    AppState, MultiTokenAppState,
     common::{
         constants::{DEFAULT_BLOCKCHAIN, MIN_PROGRESS_BAR},
         storage::storage_client::StorageClient,
         types::{ApproveMetadata, BlockMetadata, OperationType, TransactionMetadata},
     },
-    AppState, MultiTokenAppState,
 };
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use candid::Nat;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_bigint::BigInt;
@@ -57,8 +57,7 @@ pub fn get_state_from_network_id(
 pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> {
     let millis = Duration::from_nanos(timestamp_nanos).as_millis();
     u64::try_from(millis).context(format!(
-        "Failed to convert timestamp to milliseconds: {}",
-        millis
+        "Failed to convert timestamp to milliseconds: {millis}"
     ))
 }
 
@@ -83,25 +82,31 @@ pub fn get_rosetta_block_from_partial_block_identifier(
         ) {
             (None, Some(hash)) => {
                 let hash_bytes = hex::decode(hash)
-                    .with_context(|| format!("Invalid block hash provided: {:?}", hash))?;
+                    .with_context(|| format!("Invalid block hash provided: {hash:?}"))?;
                 let hash_buf = ByteBuf::from(hash_bytes);
                 storage_client
                     .get_block_by_hash(hash_buf.clone())
-                    .with_context(|| format!("Unable to retrieve block with hash: {:?}", hash_buf))?
-                    .with_context(|| format!("Block with hash {} could not be found", hash))?
+                    .with_context(|| format!("Unable to retrieve block with hash: {hash_buf:?}"))?
+                    .with_context(|| format!("Block with hash {hash} could not be found"))?
             }
 
             (Some(block_idx), None) => storage_client
                 .get_block_at_idx(block_idx)
-                .with_context(|| format!("Unable to retrieve block with idx: {}", block_idx))?
-                .with_context(|| format!("Block at index {} could not be found", block_idx))?,
+                .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
+                .with_context(|| format!("Block at index {block_idx} could not be found"))?,
             (Some(block_idx), Some(hash)) => {
                 let rosetta_block = storage_client
                     .get_block_at_idx(block_idx)
-                    .with_context(|| format!("Unable to retrieve block with idx: {}", block_idx))?
-                    .with_context(|| format!("Block at index {} could not be found", block_idx))?;
+                    .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
+                    .with_context(|| format!("Block at index {block_idx} could not be found"))?;
                 if &hex::encode(rosetta_block.clone().get_block_hash()) != hash {
-                    bail!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_idx,hash,rosetta_block.index,hex::encode(rosetta_block.clone().get_block_hash()));
+                    bail!(
+                        "Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",
+                        block_idx,
+                        hash,
+                        rosetta_block.index,
+                        hex::encode(rosetta_block.clone().get_block_hash())
+                    );
                 }
                 rosetta_block
             }
@@ -577,25 +582,25 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
         rosetta_block.get_fee_paid()?,
     )?;
 
-    if let Some(fee_collector) = rosetta_block.get_fee_collector() {
-        if let Some(_fee_payed) = rosetta_block.get_fee_paid()? {
-            operations.push(rosetta_core::objects::Operation::new(
-                operations.len().try_into().unwrap(),
-                OperationType::FeeCollector.to_string(),
-                Some(fee_collector.into()),
-                Some(rosetta_core::objects::Amount::new(
-                    BigInt::from(
-                        rosetta_block
-                            .get_fee_paid()?
-                            .context("Fee payed needs to be populated for FeeCollector operation")?
-                            .0,
-                    ),
-                    currency.clone(),
-                )),
-                None,
-                None,
-            ));
-        }
+    if let Some(fee_collector) = rosetta_block.get_fee_collector()
+        && let Some(_fee_payed) = rosetta_block.get_fee_paid()?
+    {
+        operations.push(rosetta_core::objects::Operation::new(
+            operations.len().try_into().unwrap(),
+            OperationType::FeeCollector.to_string(),
+            Some(fee_collector.into()),
+            Some(rosetta_core::objects::Amount::new(
+                BigInt::from(
+                    rosetta_block
+                        .get_fee_paid()?
+                        .context("Fee payed needs to be populated for FeeCollector operation")?
+                        .0,
+                ),
+                currency.clone(),
+            )),
+            None,
+            None,
+        ));
     }
     Ok(operations)
 }
@@ -702,8 +707,8 @@ mod tests {
     use ic_icrc1_test_utils::account_strategy;
     use ic_icrc1_test_utils::arb_amount;
     use ic_icrc1_test_utils::blocks_strategy;
-    use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
+    use ic_icrc1_tokens_u256::U256;
     use ic_ledger_core::{block::BlockType, tokens::TokensType};
     use proptest::prelude::ProptestConfig;
     use proptest::proptest;

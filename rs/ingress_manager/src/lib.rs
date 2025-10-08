@@ -18,19 +18,19 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
 use ic_types::{
+    Height, RegistryVersion, SubnetId,
     artifact::IngressMessageId,
     consensus::BlockPayload,
     crypto::CryptoHashOf,
     malicious_flags::MaliciousFlags,
     time::{Time, UNIX_EPOCH},
-    Height, RegistryVersion, SubnetId,
 };
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
@@ -239,7 +239,7 @@ pub(crate) mod tests {
     use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
+    use ic_types::{Height, RegistryVersion, SubnetId, ingress::IngressStatus};
     use std::{ops::DerefMut, sync::Arc};
 
     pub(crate) fn setup_registry(

@@ -2,10 +2,10 @@ use anyhow::Result;
 use assert_json_diff::assert_json_eq;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{Neuron, neuron::DissolveState};
 use ic_rosetta_api::{
     convert::neuron_subaccount_bytes_from_public_key,
-    request::{request_result::RequestResult, Request},
+    request::{Request, request_result::RequestResult},
     request_types::{AddHotKey, Follow, PublicKeyOrPrincipal},
 };
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
@@ -15,14 +15,14 @@ use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use rosetta_test_lib::{
     ledger_client::LedgerClient,
     rosetta_client::RosettaApiClient,
-    setup::{setup, ROSETTA_TESTS_OVERALL_TIMEOUT, ROSETTA_TESTS_PER_TEST_TIMEOUT},
+    setup::{ROSETTA_TESTS_OVERALL_TIMEOUT, ROSETTA_TESTS_PER_TEST_TIMEOUT, setup},
     test_neurons::TestNeurons,
     utils::{
-        create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
-        one_day_from_now_nanos, raw_construction, sign, to_public_key, NeuronDetails,
+        NeuronDetails, create_ledger_client, do_multiple_txn, do_multiple_txn_external,
+        make_user_ed25519, one_day_from_now_nanos, raw_construction, sign, to_public_key,
     },
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     sync::Arc,

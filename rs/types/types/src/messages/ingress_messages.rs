@@ -1,26 +1,27 @@
 //! This module contains various definitions related to Ingress messages
 
-use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
+use super::{EXPECTED_MESSAGE_ID_LENGTH, MessageId};
 use crate::{
+    CanisterId, CountBytes, PrincipalId, Time, UserId,
     artifact::{IdentifiableArtifact, IngressMessageId, PbArtifact},
     messages::{
-        http::{representation_independent_hash_call_or_query, CallOrQuery},
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
+        http::{CallOrQuery, representation_independent_hash_call_or_query},
     },
-    CanisterId, CountBytes, PrincipalId, Time, UserId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    RenameCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
@@ -134,14 +135,12 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
         Ok(Self {
             sender: UserId::from(PrincipalId::try_from(update.sender.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting sender to PrincipalId failed with {}",
-                    err
+                    "Converting sender to PrincipalId failed with {err}"
                 ))
             })?),
             canister_id: CanisterId::try_from(update.canister_id.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting canister_id to PrincipalId failed with {:?}",
-                    err
+                    "Converting canister_id to PrincipalId failed with {err:?}"
                 ))
             })?,
             method_name: update.method_name,
@@ -280,6 +279,10 @@ impl SignedIngress {
 
     pub fn content(&self) -> &SignedIngressContent {
         self.signed.content()
+    }
+
+    pub fn take_content(self) -> SignedIngressContent {
+        self.signed.take_content()
     }
 
     pub fn authentication(&self) -> &Authentication {
@@ -462,21 +465,15 @@ impl ParseIngressError {
         match self {
             ParseIngressError::UnknownSubnetMethod => UserError::new(
                 ErrorCode::CanisterMethodNotFound,
-                format!("ic00 interface does not expose method {}", method_name),
+                format!("ic00 interface does not expose method {method_name}"),
             ),
             ParseIngressError::SubnetMethodNotAllowed => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "ic00 method {} can not be called via ingress messages",
-                    method_name
-                ),
+                format!("ic00 method {method_name} can not be called via ingress messages"),
             ),
             ParseIngressError::InvalidSubnetPayload(err) => UserError::new(
                 ErrorCode::InvalidManagementPayload,
-                format!(
-                    "Failed to parse payload for ic00 method {}: {}",
-                    method_name, err
-                ),
+                format!("Failed to parse payload for ic00 method {method_name}: {err}"),
             ),
         }
     }
@@ -502,6 +499,10 @@ pub fn extract_effective_canister_id(
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
         Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::CanisterMetadata) => match CanisterMetadataRequest::decode(ingress.arg()) {
             Ok(record) => Ok(Some(record.canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
@@ -609,10 +610,10 @@ pub fn extract_effective_canister_id(
 
 #[cfg(test)]
 mod test {
-    use crate::messages::ingress_messages::{
-        extract_effective_canister_id, ParseIngressError, SignedIngressContent,
-    };
     use crate::UserId;
+    use crate::messages::ingress_messages::{
+        ParseIngressError, SignedIngressContent, extract_effective_canister_id,
+    };
     use ic_base_types::PrincipalId;
     use ic_management_canister_types_private::IC_00;
     use std::convert::From;
@@ -630,8 +631,7 @@ mod test {
         let result = extract_effective_canister_id(&msg);
         assert!(
             matches!(result, Err(ParseIngressError::InvalidSubnetPayload(_))),
-            "Expected InvalidSubnetPayload error, got: {:?}",
-            result
+            "Expected InvalidSubnetPayload error, got: {result:?}"
         );
     }
 

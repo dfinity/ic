@@ -2,8 +2,8 @@ use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
-        tests::{MockEnvironment, StubCMC, StubIcpLedger},
         Governance,
+        tests::{MockEnvironment, StubCMC, StubIcpLedger},
     },
     pb::v1::manage_neuron::StakeMaturity,
 };
@@ -35,7 +35,7 @@ fn test_stake_maturity() {
     .with_maturity_e8s_equivalent(1000)
     .with_staked_maturity_e8s_equivalent(100)
     .build();
-    governance.add_neuron(1, neuron, false).unwrap();
+    governance.add_neuron(1, neuron).unwrap();
 
     let request = StakeMaturity {
         percentage_to_stake: Some(40),

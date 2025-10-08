@@ -26,6 +26,12 @@ pub fn compute_neuron_disburse_subaccount_bytes(controller: PrincipalId, nonce: 
     compute_neuron_domain_subaccount_bytes(controller, b"neuron-split", nonce)
 }
 
+// Computes the subaccount to which neuron split transfers are made.
+pub fn compute_neuron_split_subaccount_bytes(controller: PrincipalId, nonce: u64) -> [u8; 32] {
+    // Unfortunately "neuron-split" is used for disburse, so we need to use a different domain.
+    compute_neuron_domain_subaccount_bytes(controller, b"split-neuron", nonce)
+}
+
 fn compute_neuron_domain_subaccount_bytes(
     controller: PrincipalId,
     domain: &[u8],

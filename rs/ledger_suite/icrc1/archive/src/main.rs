@@ -1,13 +1,13 @@
 use candid::Principal;
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
+use ic_icrc1::{Block, blocks::encoded_block_to_generic_block};
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl, RestrictedMemory, Storable,
+    DefaultMemoryImpl, RestrictedMemory, Storable, cell::Cell as StableCell, log::Log as StableLog,
+    memory_manager::MemoryManager, storable::Bound,
 };
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResult};
@@ -75,7 +75,7 @@ thread_local! {
 }
 
 /// Configuration of the archive node.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 struct ArchiveConfig {
     /// The maximum number of bytes archive can use to store encoded blocks.
     max_memory_size_bytes: u64,
@@ -86,6 +86,17 @@ struct ArchiveConfig {
     ledger_id: Principal,
     /// The maximum number of transactions returned by [get_transactions].
     max_transactions_per_response: u64,
+    /// The type of tokens this archive supports (U64 or U256).
+    #[serde(default = "undefined_token_type")]
+    pub token_type: String,
+}
+
+pub fn wasm_token_type() -> String {
+    Tokens::TYPE.to_string()
+}
+
+pub fn undefined_token_type() -> String {
+    "UNDEFINED".to_string()
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -97,12 +108,13 @@ impl Default for ArchiveConfig {
             block_index_offset: 0,
             ledger_id: Principal::management_canister(),
             max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE,
+            token_type: wasm_token_type(),
         }
     }
 }
 
 impl Storable for ArchiveConfig {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode archive config");
         Cow::Owned(buf)
@@ -132,7 +144,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
     Block::<Tokens>::decode(EncodedBlock::from(bytes))
-        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {}: {}", txid, e)))
+        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {txid}: {e}")))
         .into()
 }
 
@@ -160,6 +172,7 @@ fn init(
                 block_index_offset,
                 ledger_id,
                 max_transactions_per_response,
+                token_type: wasm_token_type(),
             })
             .expect("failed to set archive config");
     });
@@ -176,6 +189,24 @@ fn init(
     })
 }
 
+/// Verifies that the `token_type` stored in the archive state is the same as to
+/// `token_type` of the current wasm. If the archive state's `token_type` is undefined
+/// it is set to the current wasm's `token_type`.
+fn verify_token_type() {
+    CONFIG.with(|cell| {
+        let curr_conf = cell.borrow().get().clone();
+        if curr_conf.token_type == undefined_token_type() {
+            let new_conf = ArchiveConfig {
+                token_type: wasm_token_type(),
+                ..curr_conf
+            };
+            assert!(cell.borrow_mut().set(new_conf).is_ok());
+        } else if curr_conf.token_type != wasm_token_type() {
+            panic!("Incompatible token type, the upgraded archive token type is {}, current wasm token type is {}", curr_conf.token_type, wasm_token_type());
+        }
+    });
+}
+
 #[post_upgrade]
 fn post_upgrade() {
     // NB. we do not need to do anything to decode the values from the stable
@@ -185,6 +216,12 @@ fn post_upgrade() {
     // the upgrade if the initialization traps.
     let max_memory_size_bytes = with_archive_opts(|opts| opts.max_memory_size_bytes);
     with_blocks(|blocks| assert!(blocks.log_size_bytes() <= max_memory_size_bytes));
+
+    // Ensure that the archive is upgraded with the correct wasm (U64 or U256).
+    // The check does not work if the archive is older and does not have
+    // the `token_type` set in its config. In that case, `token_type`
+    // is set to the current wasm's token type.
+    verify_token_type();
 }
 
 #[update]
@@ -405,7 +442,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -418,7 +455,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     use std::path::PathBuf;
 
     candid::export_service!();

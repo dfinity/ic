@@ -13,11 +13,11 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_consensus_system_test_utils::ssh_access::{
-    assert_authentication_fails, assert_authentication_works, fail_to_update_subnet_record,
-    fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
-    get_updatesshreadonlyaccesskeyspayload, get_updatesubnetpayload_with_keys,
-    update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
-    wait_until_authentication_fails, wait_until_authentication_is_granted, AuthMean,
+    AuthMean, assert_authentication_fails, assert_authentication_works,
+    fail_to_update_subnet_record, fail_updating_ssh_keys_for_all_unassigned_nodes,
+    generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+    get_updatesubnetpayload_with_keys, update_ssh_keys_for_all_unassigned_nodes,
+    update_subnet_record, wait_until_authentication_fails, wait_until_authentication_is_granted,
 };
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_registry_subnet_type::SubnetType;
@@ -104,6 +104,7 @@ fn readonly_cannot_authenticate_with_random_key(env: TestEnv) {
 }
 
 fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
+    let logger = env.logger();
     let (nns_node, app_node, _unassigned_node, app_subnet) =
         topology_entities(env.topology_snapshot());
 
@@ -130,7 +131,7 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
-    wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
+    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
@@ -142,11 +143,12 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     ));
 
     // Check that the access for these keys are also removed.
-    wait_until_authentication_fails(&node_ip, "backup", &backup_mean);
+    wait_until_authentication_fails(&logger, &node_ip, "backup", &backup_mean);
     assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
 fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
+    let logger = env.logger();
     let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
@@ -160,7 +162,7 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     ));
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    wait_until_authentication_is_granted(&node_ip, "readonly", &readonly_mean);
+    wait_until_authentication_is_granted(&logger, &node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
     let no_key_payload = get_updatesshreadonlyaccesskeyspayload(vec![]);
@@ -170,10 +172,11 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     ));
 
     // Check that the access for these keys are also removed.
-    wait_until_authentication_fails(&node_ip, "readonly", &readonly_mean);
+    wait_until_authentication_fails(&logger, &node_ip, "readonly", &readonly_mean);
 }
 
 fn multiple_keys_can_access_one_account(env: TestEnv) {
+    let logger = env.logger();
     let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
@@ -211,7 +214,7 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
-    wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean1);
+    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean1);
     assert_authentication_works(&node_ip, "backup", &backup_mean2);
     assert_authentication_works(&node_ip, "backup", &backup_mean3);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean1);
@@ -220,6 +223,7 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
 }
 
 fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
+    let logger = env.logger();
     let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
@@ -245,12 +249,13 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
-    wait_until_authentication_is_granted(&node_ip, "readonly", &readonly_mean1);
+    wait_until_authentication_is_granted(&logger, &node_ip, "readonly", &readonly_mean1);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean2);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
 
 fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
+    let logger = env.logger();
     let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
@@ -264,7 +269,7 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
 
     // Check that the backup key can authenticate.
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
-    wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
+    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
 
     // Now add a readonly key.
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
@@ -275,7 +280,7 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     // Check that the readonly key can authenticate now and the backup key can still
     // authenticate too.
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    wait_until_authentication_is_granted(&node_ip, "readonly", &readonly_mean);
+    wait_until_authentication_is_granted(&logger, &node_ip, "readonly", &readonly_mean);
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 
     // Now send a proposal that only removes the readonly keys.
@@ -284,7 +289,7 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
 
     // Wait until the readonly key loses its access and ensure backup key still has
     // access.
-    wait_until_authentication_fails(&node_ip, "readonly", &readonly_mean);
+    wait_until_authentication_fails(&logger, &node_ip, "readonly", &readonly_mean);
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
