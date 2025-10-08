@@ -18,6 +18,12 @@ struct Checklist {
     subnet_available_memory: bool,
 }
 
+fn canister_status(test: &mut ExecutionTest, canister_id: CanisterId) -> CanisterStatusResultV2 {
+    let res = test.canister_status(canister_id);
+    let bytes = get_reply(res);
+    CanisterStatusResultV2::decode(&bytes).unwrap()
+}
+
 fn test_memory_allocation<F>(runbook_1: Runbook<F>, runbook_2: Runbook<F>, checklist: Checklist)
 where
     F: Fn(&mut ExecutionTest, CanisterId),
@@ -32,6 +38,7 @@ where
                 Some(runbook.memory_allocation),
             )
             .unwrap();
+        let initial_status = canister_status(&mut test, canister_id);
         test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
         if let Some(op) = runbook.op {
@@ -51,10 +58,12 @@ where
                     .get() as i64,
             initial_subnet_available_memory.get_execution_memory()
         );
-        let res = test.canister_status(canister_id);
-        let bytes = get_reply(res);
+        let status = canister_status(&mut test, canister_id);
+        assert!(status.memory_size() > initial_status.memory_size());
+        assert!(status.cycles() < initial_status.cycles());
+        // assert!(status.reserved_cycles() > initial_status.reserved_cycles()); // TODO: fix!!!
         (
-            CanisterStatusResultV2::decode(&bytes).unwrap(),
+            status,
             test.subnet_available_memory().get_execution_memory(),
         )
     };
