@@ -709,6 +709,11 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         .unwrap_or_default();
     let readonly_pub_key = subnet_recovery.params.readonly_pub_key.unwrap();
     let readonly_pub_key = readonly_pub_key.trim();
+    let maybe_nb_checkpoints = subnet_recovery
+        .params
+        .nb_checkpoints
+        .map(|n| format!("--nb-checkpoints {n} "))
+        .unwrap_or_default();
 
     let command = format!(
         r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
@@ -719,6 +724,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         {maybe_replay_until_height}\
         --readonly-pub-key "{readonly_pub_key}" \
         --download-method local \
+        {maybe_nb_checkpoints}\
         --upload-method local \
         --wait-for-cup-node {node_ip} \
         --skip DownloadCertifications \
