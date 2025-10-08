@@ -28,6 +28,7 @@ use ic_management_canister_types_private::{
     SnapshotSource, StoredChunksReply, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
+use ic_nns_constants::MIGRATION_CANISTER_ID;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -66,6 +67,7 @@ use ic_types::{
 use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
+use std::collections::BTreeSet;
 use std::iter::zip;
 use std::path::PathBuf;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
@@ -2880,7 +2882,14 @@ impl CanisterManager {
         // has to be a controller of the canister to be renamed.
         validate_controller(canister, &sender)?;
 
-        // TODO(MR-684): Only the migration orchestrator should be able to be the sender.
+        // Only the migration orchestrator should be able to be the sender.
+        if sender != MIGRATION_CANISTER_ID.into() {
+            return Err(CanisterManagerError::CanisterInvalidController {
+                canister_id: old_id,
+                controllers_expected: BTreeSet::from_iter(vec![MIGRATION_CANISTER_ID.into()]),
+                controller_provided: sender,
+            });
+        }
 
         if state.canister_state(&new_id).is_some() {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_id));
