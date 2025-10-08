@@ -16,9 +16,8 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SnapshotId, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SnapshotId, SubnetId,
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext},
 };
@@ -259,46 +258,16 @@ impl InstallCodeContext {
 /// an [`InstallCodeContext`].
 #[derive(Debug)]
 pub enum InstallCodeContextError {
-    ComputeAllocation(InvalidComputeAllocationError),
-    MemoryAllocation(InvalidMemoryAllocationError),
     InvalidHash(String),
 }
 
 impl From<InstallCodeContextError> for UserError {
     fn from(err: InstallCodeContextError) -> Self {
         match err {
-            InstallCodeContextError::ComputeAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "ComputeAllocation expected to be in the range [{}..{}], got {}",
-                    err.min(),
-                    err.max(),
-                    err.given()
-                ),
-            ),
-            InstallCodeContextError::MemoryAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
-                ),
-            ),
             InstallCodeContextError::InvalidHash(err) => {
                 UserError::new(ErrorCode::CanisterContractViolation, err)
             }
         }
-    }
-}
-
-impl From<InvalidComputeAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidComputeAllocationError) -> Self {
-        Self::ComputeAllocation(err)
-    }
-}
-
-impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidMemoryAllocationError) -> Self {
-        Self::MemoryAllocation(err)
     }
 }
 
@@ -756,7 +725,7 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "canister-metadata-no-wasm-module".to_string(),
             },
             CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
-                suggestion: "The canister has no metadata section with the given name.".to_string(),
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
                 doc_link: "canister-metadata-section-not-found".to_string(),
             },
         }

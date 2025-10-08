@@ -1472,7 +1472,7 @@ impl StateManagerImpl {
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
             // build the manifest data from this height.
-            let manifest_delta = states
+            let base_manifest_info = states
                 .read()
                 .states_metadata
                 .iter()
@@ -1483,7 +1483,7 @@ impl StateManagerImpl {
                         checkpoint_layout: Some(checkpoint_layout),
                         bundled_manifest: Some(bundled_manifest),
                         ..
-                    } => Some(crate::manifest::ManifestDelta {
+                    } => Some(crate::manifest::BaseManifestInfo {
                         base_manifest: bundled_manifest.manifest.clone(),
                         base_height: *height,
                         target_height: checkpoint_layout.height(),
@@ -1495,7 +1495,7 @@ impl StateManagerImpl {
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta,
+                    base_manifest_info,
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
@@ -2329,7 +2329,7 @@ impl StateManagerImpl {
             //   4) Resetting the tip and merging the overlays.
             //
             // In particular, we need the previous manifest computation to complete because:
-            //   1) We need it to speed up the next manifest computation using ManifestDelta
+            //   1) We need it to speed up the next manifest computation using BaseManifestInfo
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
 
@@ -2395,12 +2395,12 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        let manifest_delta = {
+        let base_manifest_info = {
             let _timer = self
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["manifest_delta"])
+                .with_label_values(&["base_manifest_info"])
                 .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
@@ -2408,7 +2408,7 @@ impl StateManagerImpl {
                      base_manifest,
                      base_height,
                  }| {
-                    manifest::ManifestDelta {
+                    manifest::BaseManifestInfo {
                         base_manifest,
                         base_height,
                         target_height: height,
@@ -2440,7 +2440,7 @@ impl StateManagerImpl {
                 },
                 compute_manifest_request: TipRequest::ComputeManifest {
                     checkpoint_layout: cp_layout,
-                    manifest_delta,
+                    base_manifest_info,
                     states: self.states.clone(),
                     persist_metadata_guard: self.persist_metadata_guard.clone(),
                 },
