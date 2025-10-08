@@ -53,10 +53,6 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub upgrade_version: Option<ReplicaVersion>,
 
-    #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
-    pub replay_until_height: Option<u64>,
-
     /// URL of the upgrade image
     #[clap(long)]
     pub upgrade_image_url: Option<Url>,
@@ -64,6 +60,14 @@ pub struct NNSRecoverySameNodesArgs {
     /// SHA256 hash of the upgrade image
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
+
+    /// Whether to add and bless the upgrade version before upgrading the subnet to it.
+    #[clap(long)]
+    pub add_and_bless_upgrade_version: Option<bool>,
+
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
 
     /// IP address of the node to download the consensus pool from.
     #[clap(long)]
@@ -228,6 +232,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
                 };
+                if self.params.upgrade_version.is_some()
+                    && self.params.add_and_bless_upgrade_version.is_none()
+                {
+                    self.params.add_and_bless_upgrade_version = Some(consent_given(
+                        &self.logger,
+                        "Add and bless the upgrade version before upgrading the subnet?",
+                    ));
+                }
+
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
                         read_optional(&self.logger, "Replay until height: ");
@@ -342,6 +355,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         upgrade_version,
                         url,
                         hash,
+                        params.add_and_bless_upgrade_version == Some(true),
                         self.params.replay_until_height,
                         !self.interactive(),
                     )?))

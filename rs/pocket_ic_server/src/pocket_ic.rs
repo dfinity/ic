@@ -76,6 +76,8 @@ use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_registry_canister_api::GetChunkRequest;
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
@@ -127,7 +129,7 @@ use pocket_ic::common::rest::{
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
-use registry_canister::init::RegistryCanisterInitPayload;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::cmp::max;
@@ -1039,7 +1041,7 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, REGISTRY_CANISTER_ID);
 
             // Install the registry canister.
-            let registry_init_payload = RegistryCanisterInitPayload { mutations: vec![] };
+            let registry_init_payload = RegistryCanisterInitPayloadBuilder::new().build();
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -2132,6 +2134,15 @@ impl PocketIcSubnets {
             }
             if synced_registry_version_before != self.synced_registry_version {
                 self.persist_registry_changes();
+                // update routing table
+                let registry_client =
+                    RegistryClientImpl::new(self.registry_data_provider.clone(), None);
+                registry_client.poll_once().unwrap();
+                let routing_table = registry_client
+                    .get_routing_table(self.registry_data_provider.latest_version())
+                    .expect("Failed to get routing table")
+                    .expect("Failed to get routing table");
+                self.routing_table = routing_table;
             }
         }
     }
