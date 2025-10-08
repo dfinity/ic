@@ -41,7 +41,7 @@ fn create_test_neuron_store() -> NeuronStore {
         name: "Existing Known Neuron".to_string(),
         description: Some("Already registered".to_string()),
         links: vec!["https://existing.com".to_string()],
-        committed_topics: vec![],
+        committed_topics: vec![Topic::NetworkEconomics as i32, Topic::Governance as i32],
     }))
     .build();
 
@@ -440,6 +440,11 @@ fn test_clobbering_same_neuron_allowed() {
         name: "Existing Known Neuron".to_string(), // Same name as neuron ID 2 already has
         description: Some("Updated description".to_string()),
         links: vec!["https://updated.com".to_string()],
+        committed_topics: vec![
+            Topic::NetworkEconomics as i32,
+            Topic::Governance as i32,
+            Topic::SnsAndCommunityFund as i32,
+        ],
     };
     let request = KnownNeuron {
         id: Some(NeuronId { id: 2 }),
