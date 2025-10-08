@@ -672,7 +672,7 @@ jobs:
         include:
           - name: Lint
           - name: Build
-    name: Cargo Clippy Linux ${{ matrix.name }}
+    name: Cargo  ${{ matrix.name }} Linux
     runs-on:
       labels: dind-small
     container: *container-setup
