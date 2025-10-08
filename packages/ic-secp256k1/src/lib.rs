@@ -714,6 +714,27 @@ pub enum MasterPublicKeyId {
     SchnorrTestKey1,
 }
 
+/// An identifier for the mainnet production key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PocketIcMasterPublicKeyId {
+    /// The PocketIC hardcoded key for ECDSA "key_1"
+    EcdsaKey1,
+    /// The PocketIC hardcoded key for ECDSA "test_key_1"
+    EcdsaTestKey1,
+    /// The PocketIC hardcoded key for Schnorr "key_1"
+    ///
+    /// Note this is the same as the ECDSA key
+    SchnorrKey1,
+    /// The PocketIC hardcoded key for Schnorr "test_key_1"
+    ///
+    /// Note this is the same as the ECDSA key
+    SchnorrTestKey1,
+    /// Another test key
+    EcdsaDfxTestKey,
+    /// Another test key
+    SchnorrDfxTestKey,
+}
+
 /// A secp256k1 public key, suitable for verifying ECDSA or BIP340 signatures
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
@@ -743,6 +764,41 @@ impl PublicKey {
         }
     }
 
+    /// Return the public master keys used by PocketIC
+    ///
+    /// Note that the secret keys for these public keys are known, and these keys are
+    /// should only be used for offline testing with PocketIC
+    pub fn pocketic_key(key_id: PocketIcMasterPublicKeyId) -> Self {
+        match key_id {
+            PocketIcMasterPublicKeyId::EcdsaKey1 | PocketIcMasterPublicKeyId::SchnorrKey1 => {
+                // PocketIC uses the same key for ECDSA secp256k1 and BIP340 Schnorr
+                // Secret key is 6f65b33c736ceaf3d89e6b913a508e0612a2f43d872128606d59ab855b80d288
+
+                Self::deserialize_sec1(&hex!(
+                    "036ad6e838b46811ad79c37b2f4b854b7a05f406715b2935edc5d3251e7666977b"
+                ))
+                .expect("Hardcoded master key was rejected")
+            }
+            PocketIcMasterPublicKeyId::EcdsaTestKey1
+            | PocketIcMasterPublicKeyId::SchnorrTestKey1 => {
+                // Secret key is cb1eb3d67ff91be823715ee2f2af9c2b88252dacbf67f8d09c167c10e7deca7a
+
+                Self::deserialize_sec1(&hex!(
+                    "03cc365e15cb552589c7175717b2ac63d1050b9bb2e5aed35432b1b1be55d3abcf"
+                ))
+                .expect("Hardcoded master key was rejected")
+            }
+            PocketIcMasterPublicKeyId::EcdsaDfxTestKey | PocketIcMasterPublicKeyId::SchnorrDfxTestKey => {
+                // Secret key is 2aff2be7e3e57007909036d08767bcc5e192717b59eeae19ead8eff9ee874a48
+
+                Self::deserialize_sec1(&hex!(
+                    "03e6f78b1a90e361c5cc9903f73bb8acbe3bc17ad01e82554d25cf0ecd70c67484"
+                ))
+                .expect("Hardcoded master key was rejected")
+            }
+        }
+    }
+
     /// Derive a public key from the mainnet parameters
     ///
     /// This is an offline equivalent to the `ecdsa_public_key` or
@@ -753,6 +809,22 @@ impl PublicKey {
         derivation_path: &[Vec<u8>],
     ) -> (Self, [u8; 32]) {
         let mk = PublicKey::mainnet_key(key_id);
+        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+            canister_id.as_slice(),
+            derivation_path,
+        ))
+    }
+
+    /// Derive a public key from the mainnet parameters
+    ///
+    /// This is an offline equivalent to the `ecdsa_public_key` or
+    /// `schnorr_public_key` management canister call
+    pub fn derive_pocketic_key(
+        key_id: PocketIcMasterPublicKeyId,
+        canister_id: &CanisterId,
+        derivation_path: &[Vec<u8>],
+    ) -> (Self, [u8; 32]) {
+        let mk = PublicKey::pocketic_key(key_id);
         mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
             canister_id.as_slice(),
             derivation_path,

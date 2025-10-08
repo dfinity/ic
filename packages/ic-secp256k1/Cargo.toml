@@ -29,5 +29,6 @@ zeroize = { workspace = true }
 bip32 = "0.5"
 bitcoin = { version = "0.28.2" }
 hex = { workspace = true }
+ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
 secp256k1 = { version = "0.22", features = ["global-context", "rand-std"] }
 wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }
