@@ -788,7 +788,8 @@ impl PublicKey {
                 ))
                 .expect("Hardcoded master key was rejected")
             }
-            PocketIcMasterPublicKeyId::EcdsaDfxTestKey | PocketIcMasterPublicKeyId::SchnorrDfxTestKey => {
+            PocketIcMasterPublicKeyId::EcdsaDfxTestKey
+            | PocketIcMasterPublicKeyId::SchnorrDfxTestKey => {
                 // Secret key is 2aff2be7e3e57007909036d08767bcc5e192717b59eeae19ead8eff9ee874a48
 
                 Self::deserialize_sec1(&hex!(
