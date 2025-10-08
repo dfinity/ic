@@ -236,8 +236,6 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
 mod tests {
     use super::*;
     use candid::Principal;
-    use serde_bytes::ByteBuf as Blob;
-    use serde_cbor;
 
     #[test]
     fn deserialize_short_method_name() {
