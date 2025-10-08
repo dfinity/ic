@@ -54,7 +54,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    NodeMetrics, Recovery, RecoveryArgs,
+    Recovery, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     get_node_metrics,
     steps::Step,
@@ -394,33 +394,37 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         })
         .expect("there is no application subnet");
     let mut app_nodes = app_subnet.nodes();
-    let app_node = app_nodes.next().expect("there is no application node");
+    let download_state_node = app_nodes.next().expect("there is no application node");
     info!(
         logger,
         "Selected random application subnet node: {} ({:?})",
-        app_node.node_id,
-        app_node.get_ip_addr()
+        download_state_node.node_id,
+        download_state_node.get_ip_addr()
     );
-    info!(logger, "app node URL: {}", app_node.get_public_url());
+    info!(
+        logger,
+        "app node URL: {}",
+        download_state_node.get_public_url()
+    );
 
     info!(logger, "Ensure app subnet is functional");
     cert_state_makes_progress_with_retries(
-        &app_node.get_public_url(),
-        app_node.effective_canister_id(),
+        &download_state_node.get_public_url(),
+        download_state_node.effective_canister_id(),
         &logger,
         secs(600),
         secs(10),
     );
     let msg = "subnet recovery works!";
     let app_can_id = store_message(
-        &app_node.get_public_url(),
-        app_node.effective_canister_id(),
+        &download_state_node.get_public_url(),
+        download_state_node.effective_canister_id(),
         msg,
         &logger,
     );
     assert!(can_read_msg(
         &logger,
-        &app_node.get_public_url(),
+        &download_state_node.get_public_url(),
         app_can_id,
         msg
     ));
@@ -471,6 +475,14 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         initial_version
     };
 
+    // If there are unassigned nodes, we are in a failover nodes scenario. Otherwise, just use the
+    // same node that we downloaded the state from.
+    let upload_node = env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .next()
+        .unwrap_or_else(|| download_state_node.clone());
+
     let subnet_args = AppSubnetRecoveryArgs {
         keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
@@ -482,9 +494,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         // If the latest CUP is corrupted we can't deploy read-only access
         readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
         readonly_key_file: Some(ssh_readonly_priv_key_path),
-        download_method: None, // We will set this after breaking/halting the subnet, see below
-        upload_method: None,   // We will set this after breaking/halting the subnet, see below
-        wait_for_cup_node: None, // We will set this after breaking/halting the subnet, see below
+        download_pool_node: None, // We will set this after breaking/halting the subnet, see below
+        download_state_method: Some(DataLocation::Remote(download_state_node.get_ip_addr())),
+        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
+        wait_for_cup_node: Some(download_state_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
         next_step: None,
         skip: None,
@@ -512,49 +525,74 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     } else {
         halt_subnet(
-            &app_node,
+            &download_state_node,
             subnet_id,
             subnet_recovery.get_recovery_api(),
             &logger,
         )
     }
-    assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
+    assert_subnet_is_broken(
+        &download_state_node.get_public_url(),
+        app_can_id,
+        msg,
+        true,
+        &logger,
+    );
 
-    let download_node = select_download_node(&app_subnet, &logger);
-    let upload_node = if cfg.local_recovery {
-        // In local recoveries, we download and upload from/to the same node
-        download_node.0.clone()
-    } else {
-        env.topology_snapshot()
-            .unassigned_nodes()
-            .next()
-            .or_else(|| app_nodes.next())
+    let (download_pool_node, replay_height, admin_nodes) =
+        if subnet_recovery.params.readonly_pub_key.is_some() {
+            // If we can deploy read-only access to the subnet, then we can download the consensus
+            // poll from the node with highest certification, and we only need admin access on the
+            // upload node to upload the state
+
+            let (download_pool_node, highest_certification_height) =
+                node_with_highest_certification_height(&app_subnet, &logger);
+            let admins = vec![&upload_node];
+
+            (download_pool_node, highest_certification_height, admins)
+        } else {
+            // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
+            // corrupted on enough nodes to stall the subnet which, in practice, should happen only
+            // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
+            // and the node with admin access should have the highest certification height, which
+            // can be used to download both the consensus pool and the state. We would then replay
+            // until the highest certification height that this node has seen. Though, this also
+            // means that this node requires admin access.
+            //
+            // Note: inside this system test, it is not the case that all nodes stalled at the same
+            // height. But since we do not break `download_state_node`, we know that it will have the
+            // highest certification height available in the subnet.
+
+            let download_pool_node = download_state_node.clone();
+            let node_certification_height = block_on(get_node_metrics(
+                &logger,
+                &download_state_node.get_ip_addr(),
+            ))
             .unwrap()
-    };
+            .certification_height
+            .get();
+            let admins = vec![&upload_node, &download_state_node];
 
-    subnet_recovery.params.download_method =
-        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
-    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
-    subnet_recovery.params.upload_method = Some(DataLocation::Remote(upload_node.get_ip_addr()));
-    subnet_recovery.params.wait_for_cup_node = Some(upload_node.get_ip_addr());
+            (download_pool_node, node_certification_height, admins)
+        };
+
+    subnet_recovery.params.download_pool_node = Some(download_pool_node.get_ip_addr());
+    subnet_recovery.params.replay_until_height = Some(replay_height);
 
     if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
         corrupt_latest_cup(&app_subnet, subnet_recovery.get_recovery_api(), &logger);
-        assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
+        assert_subnet_is_broken(
+            &download_state_node.get_public_url(),
+            app_can_id,
+            msg,
+            false,
+            &logger,
+        );
     }
 
     // Mirror production setup by removing admin SSH access from all nodes except the ones we need
     // for recovery.
-    let admin_nodes = if subnet_recovery.params.readonly_pub_key.is_some() {
-        // If we can deploy read-only access, we only need admin access on the upload node to upload
-        // the state
-        vec![&upload_node]
-    } else {
-        // In cases where we cannot deploy read-only access, we download the state & pool using
-        // admin access instead of read-only, so we need admin access on the download node as well
-        vec![&upload_node, &download_node.0]
-    };
     info!(
         logger,
         "Admin nodes: {:?}. Removing admin SSH access from all other nodes",
@@ -589,7 +627,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
-        local_recovery(&download_node.0, subnet_recovery, &logger);
+        local_recovery(&download_state_node, subnet_recovery, &logger);
     } else {
         info!(logger, "Performing remote recovery");
         remote_recovery(&cfg, subnet_recovery, &logger);
@@ -708,6 +746,11 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         .unwrap_or_default();
     let readonly_pub_key = subnet_recovery.params.readonly_pub_key.unwrap();
     let readonly_pub_key = readonly_pub_key.trim();
+    let maybe_download_pool_node = subnet_recovery
+        .params
+        .download_pool_node
+        .map(|n| format!("--download-pool-node {n} "))
+        .unwrap_or_default();
 
     let command = format!(
         r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
@@ -717,7 +760,8 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         --subnet-id {subnet_id} \
         {maybe_replay_until_height}\
         --readonly-pub-key "{readonly_pub_key}" \
-        --download-method local \
+        {maybe_download_pool_node}\
+        --download-state-method local \
         --upload-method local \
         --wait-for-cup-node {node_ip} \
         --skip DownloadCertifications \
@@ -922,19 +966,25 @@ fn assert_subnet_is_broken(
 }
 
 /// Select a node with highest certification height in the given subnet snapshot
-fn select_download_node(subnet: &SubnetSnapshot, logger: &Logger) -> (IcNodeSnapshot, NodeMetrics) {
-    let node = subnet
+fn node_with_highest_certification_height(
+    subnet: &SubnetSnapshot,
+    logger: &Logger,
+) -> (IcNodeSnapshot, u64) {
+    let (node, cert_height) = subnet
         .nodes()
-        .filter_map(|n| block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| (n, m)))
-        .max_by_key(|(_, metric)| metric.certification_height)
+        .filter_map(|n| {
+            block_on(get_node_metrics(logger, &n.get_ip_addr()))
+                .map(|m| (n, m.certification_height.get()))
+        })
+        .max_by_key(|&(_, cert_height)| cert_height)
         .expect("No download node found");
     info!(
         logger,
         "Selected download node: ({}, {})",
-        node.0.get_ip_addr(),
-        node.1.certification_height
+        node.get_ip_addr(),
+        cert_height
     );
-    node
+    (node, cert_height)
 }
 
 /// Print ID and IP of the source subnet, the first app subnet found that is not the source, and all
