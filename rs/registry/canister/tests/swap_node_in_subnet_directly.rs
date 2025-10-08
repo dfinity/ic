@@ -9,14 +9,11 @@ use ic_nns_test_utils::registry::{
     create_subnet_threshold_signing_pubkey_and_cup_mutations,
     invariant_compliant_mutation_as_atomic_req,
 };
-use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
 };
-use ic_registry_keys::{
-    make_node_operator_record_key, make_subnet_list_record_key, make_subnet_record_key,
-};
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_transport::{
     pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
     upsert,
@@ -72,7 +69,6 @@ fn get_mutations_and_node_ids(
 ) -> (Vec<RegistryMutation>, Vec<NodeId>) {
     let mut mutations = invariant_compliant_mutation_as_atomic_req(0).mutations;
     let mut subnets = BTreeMap::new();
-    let mut node_operators = BTreeMap::new();
 
     let mut nodes = vec![];
 
@@ -85,18 +81,6 @@ fn get_mutations_and_node_ids(
                 .or_insert(vec![])
                 .push(valid_keys.clone());
         }
-        node_operators
-            .entry(node.operator)
-            .or_insert(NodeOperatorRecord {
-                node_operator_principal_id: node.operator.to_vec(),
-                node_allowance: 0,
-                node_provider_principal_id: PrincipalId::new_user_test_id(10_000_000 + ind as u64)
-                    .to_vec(),
-                dc_id: "abc".to_string(),
-                rewardable_nodes: Default::default(),
-                ipv6: None,
-                max_rewardable_nodes: Default::default(),
-            });
         nodes.push(valid_keys.node_id());
 
         mutations.extend(make_add_node_registry_mutations(
@@ -113,13 +97,6 @@ fn get_mutations_and_node_ids(
             },
             valid_keys,
         ));
-    }
-
-    for (node_operator, record) in &node_operators {
-        mutations.push(upsert(
-            make_node_operator_record_key(*node_operator),
-            record.encode_to_vec(),
-        ))
     }
 
     for (subnet, valid_keys) in &subnets {

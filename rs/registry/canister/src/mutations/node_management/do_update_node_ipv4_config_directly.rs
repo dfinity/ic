@@ -45,7 +45,8 @@ impl Registry {
         self.check_caller_is_node_operator(caller_id, node_id);
         let node_operator_id = caller_id;
 
-        let reservation = self.try_reserve_node_provider_op_capacity(now, node_operator_id, 1)?;
+        let reservation =
+            self.try_reserve_node_operation_rate_limit_capacity(now, node_operator_id, 1)?;
 
         // Ensure payload is valid
         self.validate_update_node_ipv4_config_directly_payload(&payload);
@@ -70,7 +71,7 @@ impl Registry {
         // Check invariants before applying the mutation
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_operation_rate_limit_capacity(now, reservation) {
             std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
@@ -428,12 +429,16 @@ mod tests {
         let now = now_system_time();
 
         // Exhaust the rate limit capacity
-        let available = registry.get_available_node_provider_op_capacity(node_operator_id, now);
+        let available_operator =
+            registry.get_available_node_operator_op_capacity(node_operator_id, now);
+        let available_provider =
+            registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let available = available_operator.min(available_provider);
         let reservation = registry
-            .try_reserve_node_provider_op_capacity(now, node_operator_id, available)
+            .try_reserve_node_operation_rate_limit_capacity(now, node_operator_id, available)
             .unwrap();
         registry
-            .commit_node_provider_op_reservation(now, reservation)
+            .commit_node_operation_rate_limit_capacity(now, reservation)
             .unwrap();
 
         let error = registry

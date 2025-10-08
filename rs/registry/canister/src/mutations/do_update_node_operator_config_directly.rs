@@ -67,7 +67,7 @@ impl Registry {
         // 3. Check Rate Limits
         let current_node_provider = caller;
         let reservation =
-            self.try_reserve_node_provider_op_capacity(now, current_node_provider, 1)?;
+            self.try_reserve_node_provider_rate_limit_capacity(now, current_node_provider, 1)?;
 
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
@@ -92,13 +92,9 @@ impl Registry {
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = self.commit_node_provider_op_reservation(now, reservation) {
+        if let Err(e) = self.commit_node_provider_rate_limit_capacity(now, reservation) {
             println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
-
-        // TODO DO NOT MERGE - how do we apply the rate limits to the new NP principal, since
-        // now there could in theory be multiple principals under NP control, thus increasing
-        // the total allowed operations for the NP.
 
         Ok(())
     }
@@ -240,17 +236,17 @@ mod tests {
             node_provider_id: Some(node_provider_id),
         };
 
-        // Original should be able to change this.
-        let caller = node_provider_id;
-
-        let available = registry.get_available_node_provider_op_capacity(caller, now);
+        // Max out node provider operations
+        let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
         let reservation = registry
-            .try_reserve_node_provider_op_capacity(now, caller, available)
+            .try_reserve_node_provider_rate_limit_capacity(now, node_provider_id, available)
             .unwrap();
         registry
-            .commit_node_provider_op_reservation(now, reservation)
+            .commit_node_provider_rate_limit_capacity(now, reservation)
             .unwrap();
 
+        // Original should be able to change this.
+        let caller = node_provider_id;
         let error = registry
             .do_update_node_operator_config_directly_(request, caller, now)
             .unwrap_err();
