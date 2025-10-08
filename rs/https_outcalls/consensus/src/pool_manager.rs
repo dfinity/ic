@@ -88,7 +88,7 @@ fn validate_response_size(
         }
         CanisterHttpResponseContent::Reject(reject) => {
             let response_size = reject.message.len() as u64;
-            if response_size > MINIMUM_ALLOWED_ERROR_MESSAGE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES {
+            if response_size > MINIMUM_ALLOWED_ERROR_MESSAGE_BYTES {
                 Err(format!(
                     "Reject message size {response_size} exceeds the maximum allowed size of {MINIMUM_ALLOWED_ERROR_MESSAGE_BYTES}"
                 ))
@@ -340,7 +340,28 @@ impl CanisterHttpPoolManagerImpl {
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
-                Ok(response) => {
+                Ok(mut response) => {
+                    // Truncate the reject message if it's too long.
+                    //
+                    // The "happy path" response is organically bounded by max_response_bytes, however we need to set a
+                    // limit for the error message as well.
+                    //
+                    // The current limit is 1KB, which should be reasonable for an error message.
+                    if let CanisterHttpResponseContent::Reject(reject) = &mut response.content {
+                        let max_len = MINIMUM_ALLOWED_ERROR_MESSAGE_BYTES as usize;
+                        if reject.message.len() > max_len {
+                            let original_len = reject.message.len();
+                            warn!(
+                                self.log,
+                                "Pruning oversized reject message for request ID {}. Original size: {}, New size: {}",
+                                response.id,
+                                original_len,
+                                max_len
+                            );
+                            reject.message.truncate(max_len);
+                        }
+                    }
+
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: response.id,
                         timeout: response.timeout,
@@ -1586,6 +1607,127 @@ pub mod test {
                 // 5. ASSERT: The artifact should be successfully validated and moved to the validated pool.
                 assert_eq!(changes.len(), 1);
                 assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+            })
+        });
+    }
+
+    #[test]
+    fn test_oversized_reject_message_is_pruned_not_invalidated() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                // 1. SETUP: Standard dependencies.
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                let callback_id = CallbackId::from(5);
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+
+                // 2. CONTEXT: Set up a NonReplicated request context in the state manager.
+                // This ensures we test the gossiping code path.
+                let request_context = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                };
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            callback_id,
+                            request_context,
+                        )]))),
+                    ));
+
+                // 3. OVERSIZED RESPONSE: Define an error message that is intentionally too large.
+                let oversized_len = (MINIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 100) as usize;
+                let max_len: usize = MINIMUM_ALLOWED_ERROR_MESSAGE_BYTES as usize;
+                let oversized_message = "a".repeat(oversized_len);
+
+                let oversized_response = CanisterHttpResponse {
+                    id: callback_id,
+                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysFatal,
+                        message: oversized_message,
+                    }),
+                    ..empty_canister_http_response(callback_id.get())
+                };
+
+                // 4. MOCK ADAPTER: Mock the adapter to return the oversized response once.
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                let mut sequence = Sequence::new();
+                shim_mock
+                    .expect_try_receive()
+                    .times(1)
+                    .returning(move || Ok(oversized_response.clone()))
+                    .in_sequence(&mut sequence);
+                shim_mock
+                    .expect_try_receive()
+                    .times(1)
+                    .returning(|| Err(TryReceiveError::Empty))
+                    .in_sequence(&mut sequence);
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // 5. ACTION: Call the function to generate shares from responses.
+                let change_set = pool_manager.create_shares_from_responses(Height::from(1));
+
+                // 6. ASSERTIONS:
+                assert_eq!(
+                    change_set.len(),
+                    1,
+                    "A change action should have been created"
+                );
+
+                // Check that the action contains the *pruned* response and a share with the correct hash.
+                assert_matches!(
+                    &change_set[0],
+                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
+                        // Assert that the response message was indeed truncated.
+                        let pruned_message_len = if let CanisterHttpResponseContent::Reject(r) = &response.content {
+                            r.message.len()
+                        } else {
+                            panic!("Test failed: Expected a Reject response content");
+                        };
+                        assert_eq!(
+                            pruned_message_len, max_len,
+                            "The reject message should have been truncated to the maximum allowed length"
+                        );
+
+                        // Assert that the hash in the share matches the hash of the *truncated* response.
+                        let expected_hash = ic_types::crypto::crypto_hash(response);
+                        assert_eq!(
+                            share.content.content_hash, expected_hash,
+                            "The share's content hash must match the pruned response"
+                        );
+                    }
+                );
             })
         });
     }
