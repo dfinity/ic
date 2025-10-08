@@ -91,7 +91,7 @@ impl Registry {
     ) -> Result<RateLimitReservation, RateLimiterError> {
         // Find the associated node provider ID for this node operator
         let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)
-            .map_err(|e| RateLimiterError::InvalidArguments(e))?;
+            .map_err(RateLimiterError::InvalidArguments)?;
 
         // First reserve from node operator rate limiter (primary)
         let operator_reservation = with_node_operator_rate_limiter(|rate_limiter| {
