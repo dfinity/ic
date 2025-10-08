@@ -105,8 +105,10 @@ pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 
 /// Artifact pool for the Canister HTTP messages (query interface)
 pub trait CanisterHttpPool: Send + Sync {
-    fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
-    fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
+    fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;    
+    fn get_unvalidated_artifacts(
+        &self,
+    ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_>;
     fn get_unvalidated_artifact(
         &self,
         share: &CanisterHttpResponseShare,

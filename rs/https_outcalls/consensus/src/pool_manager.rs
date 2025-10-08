@@ -169,10 +169,11 @@ impl CanisterHttpPoolManagerImpl {
             })
             .chain(
                 canister_http_pool
-                    .get_unvalidated_shares()
+                    .get_unvalidated_artifacts()
                     // Only check the unvalidated shares belonging to the requests that we can validate.
-                    .filter(|share| share.content.id < next_callback_id)
-                    .filter_map(|share| {
+                    .filter(|artifact| artifact.share.content.id < next_callback_id)
+                    .filter_map(|artifact| {
+                        let share = &artifact.share;
                         if active_callback_ids.contains(&share.content.id) {
                             None
                         } else {
@@ -457,30 +458,23 @@ impl CanisterHttpPoolManagerImpl {
             .collect();
 
         canister_http_pool
-            .get_unvalidated_shares()
-            // Only consider shares belonging to the requests that we can validate.
-            .filter(|share| share.content.id < next_callback_id)
-            .filter_map(|share| {
+            .get_unvalidated_artifacts()
+            .filter(|artifact| artifact.share.content.id < next_callback_id)
+            .filter_map(|artifact| {
+                let share = &artifact.share;
+
                 if existing_signed_requests.contains(&key_from_share(share)) {
                     return match is_current_protocol_version(&share.content.replica_version) {
-                            true => Some(CanisterHttpChangeAction::HandleInvalid(
+                        true => Some(CanisterHttpChangeAction::HandleInvalid(
                             share.clone(),
                             "Redundant share".into(),
-                    )),
+                        )),
                         false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
                     };
                 }
 
                 let Some(context) = active_contexts.get(&share.content.id) else {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
-                };
-
-                let Some(artifact) = canister_http_pool.get_unvalidated_artifact(share) else {
-                    // This should never happen
-                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
-                        "Share exists without artifact".to_string(),
-                    ));
                 };
 
                 match context.replication {
@@ -539,7 +533,7 @@ impl CanisterHttpPoolManagerImpl {
                     .map_err(|e| {
                         warn!(
                             self.log,
-                            "Unabled to check membership for share at height {}, {:?}",
+                            "Unable to check membership for share at height {}, {:?}",
                             finalized_height,
                             e
                         );

@@ -70,8 +70,10 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
         Box::new(self.validated.keys())
     }
 
-    fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
-        Box::new(self.unvalidated.keys())
+    fn get_unvalidated_artifacts(
+            &self,
+        ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_> {
+        Box::new(self.unvalidated.values())
     }
 
     fn get_unvalidated_artifact(
