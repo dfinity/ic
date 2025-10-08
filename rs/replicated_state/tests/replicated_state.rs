@@ -605,15 +605,13 @@ fn memory_taken_by_canister_history() {
 
     // Test small fixed memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation =
-        MemoryAllocation::try_from(NumBytes::from(2)).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(2));
     assert_execution_memory_taken(canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Test large fixed memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation =
-        MemoryAllocation::try_from(NumBytes::from(888)).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(888));
     assert_execution_memory_taken(888, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 

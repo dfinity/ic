@@ -1090,7 +1090,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::try_from(NumBytes::from(bytes_per_cycle)).unwrap(),
+        MemoryAllocation::from(NumBytes::from(bytes_per_cycle)),
         None,
         Some(initial_time),
         None,
@@ -1296,7 +1296,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
         test.create_canister_with(
             Cycles::new(100),
             ComputeAllocation::zero(),
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap(),
+            MemoryAllocation::from(NumBytes::from(1 << 30)),
             None,
             Some(initial_time),
             None,
@@ -1341,7 +1341,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1447,7 +1447,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1579,7 +1579,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1587,7 +1587,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
     let paused_canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,

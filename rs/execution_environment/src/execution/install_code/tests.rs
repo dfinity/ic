@@ -334,9 +334,15 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     // only a few canisters.
     let available_wasm_custom_sections_memory = 1024; // 1 KiB
 
+    let canister_history_memory_for_creation =
+        size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let canister_history_memory_for_install = size_of::<CanisterChange>();
+    let canister_history_memory_per_canister =
+        canister_history_memory_for_creation + canister_history_memory_for_install;
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
-    let total_memory_taken_per_canister_in_bytes = 364441;
+    let total_memory_taken_per_canister_in_bytes =
+        364441 + canister_history_memory_per_canister as i64;
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
@@ -372,24 +378,11 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
         iterations += 1;
     }
 
-    // One more request to install a canister with wasm custom sections should fail.
-    let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
-        .unwrap();
-
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
-        arg: vec![],
-        sender_canister_version: None,
-    };
-    let result = test.subnet_message(Method::InstallCode, payload.encode());
-
-    assert!(result.is_err());
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        subnet_available_memory_before - iterations * total_memory_taken_per_canister_in_bytes
+        test.subnet_available_memory().get_execution_memory()
+            + iterations * total_memory_taken_per_canister_in_bytes
+            + canister_history_memory_for_creation as i64,
+        subnet_available_memory_before
     );
 }
 

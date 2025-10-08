@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -3436,12 +3436,9 @@ fn subnet_available_memory_is_updated_by_canister_init() {
             .get_guaranteed_response_message_memory()
     );
     let memory_used = test.state().memory_taken().execution().get() as i64;
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
         test.subnet_available_memory().get_execution_memory(),
         initial_subnet_available_memory.get_execution_memory() - memory_used
-            + canister_history_memory as i64
     );
 }
 
@@ -3470,17 +3467,15 @@ fn subnet_available_memory_is_updated_by_canister_start() {
     let mem_before_upgrade = test.subnet_available_memory().get_execution_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
+    let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
     assert_eq!(
-        mem_before_upgrade,
+        mem_before_upgrade - extra_canister_history_memory,
         test.subnet_available_memory().get_execution_memory()
     );
     let memory_used = test.state().memory_taken().execution().get() as i64;
-    let canister_history_memory = 3 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
         test.subnet_available_memory().get_execution_memory(),
         initial_subnet_available_memory.get_execution_memory() - memory_used
-            + canister_history_memory as i64
     );
     assert_eq!(
         initial_subnet_available_memory.get_guaranteed_response_message_memory(),
@@ -3506,8 +3501,11 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
+    let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        initial_subnet_available_memory.get_execution_memory()
+            - 10 * WASM_PAGE_SIZE as i64
+            - extra_canister_history_memory,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -3531,8 +3529,9 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
+    let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory() - extra_canister_history_memory,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -3556,8 +3555,11 @@ fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
+    let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        initial_subnet_available_memory.get_execution_memory()
+            - 10 * WASM_PAGE_SIZE as i64
+            - extra_canister_history_memory,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -7325,9 +7327,13 @@ fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
+    let expected_err = format!(
+        "Canister cannot grow memory by {} bytes due to insufficient cycles",
+        655360000 + extra_canister_history_memory
+    );
     assert!(
-        err.description()
-            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        err.description().contains(&expected_err),
         "Unexpected error: {}",
         err.description()
     );
@@ -7354,9 +7360,13 @@ fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
+    let expected_err = format!(
+        "Canister cannot grow memory by {} bytes due to insufficient cycles",
+        655360000 + extra_canister_history_memory
+    );
     assert!(
-        err.description()
-            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        err.description().contains(&expected_err),
         "Unexpected error: {}",
         err.description()
     );
@@ -7461,9 +7471,13 @@ fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    let extra_canister_history_memory = size_of::<CanisterChange>();
+    let expected_err = format!(
+        "Canister cannot grow memory by {} bytes due to insufficient cycles",
+        655360000 + extra_canister_history_memory
+    );
     assert!(
-        err.description()
-            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        err.description().contains(&expected_err),
         "Unexpected error: {}",
         err.description()
     );
@@ -7639,7 +7653,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
     let memory_allocation = 655360000 + empty_memory_usage.get();
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         freezing_threshold,
-        ic_types::MemoryAllocation::try_from(NumBytes::new(memory_allocation)).unwrap(),
+        ic_types::MemoryAllocation::from(NumBytes::new(memory_allocation)),
         NumBytes::new(0),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
@@ -9686,7 +9700,7 @@ fn canister_balance_is_roughly(
     );
 }
 
-#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[rstest]
 #[case::query_does_not_trap("query", "", ErrorCode::CanisterDidNotReply)]
 #[case::update_does_not_trap("update", "", ErrorCode::CanisterDidNotReply)]

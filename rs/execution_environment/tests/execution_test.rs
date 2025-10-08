@@ -18,7 +18,9 @@ use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
+use ic_test_utilities_metrics::{
+    fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
+};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, Cycles, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
@@ -3069,4 +3071,43 @@ fn get_canister_metadata() {
         ErrorCode::CanisterRejectedMessage,
         "Only canisters can call ic00 method canister_metadata",
     );
+}
+
+#[test]
+fn test_canister_status_via_query_call() {
+    fn canister_status_count(env: &StateMachine) -> u64 {
+        fetch_histogram_vec_stats(
+            env.metrics_registry(),
+            "execution_subnet_query_message_duration_seconds",
+        )
+        .get(&labels(&[
+            ("method_name", "query_ic00_canister_status"),
+            ("status", "success"),
+        ]))
+        .map_or(0, |stats| stats.count)
+    }
+
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .build();
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    assert_eq!(canister_status_count(&env), 0);
+
+    let result = env.query(
+        CanisterId::ic_00(),
+        "canister_status",
+        CanisterIdRecord::from(canister_id).encode(),
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(canister_status_count(&env), 1);
 }

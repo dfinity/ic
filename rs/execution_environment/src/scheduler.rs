@@ -889,6 +889,7 @@ impl SchedulerImpl {
 
     /// Charge canisters for their resource allocation and usage. Canisters
     /// that did not manage to pay are uninstalled.
+    /// This function is expected to be called at the end of a round.
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
@@ -934,6 +935,7 @@ impl SchedulerImpl {
                     all_rejects.push(uninstall_canister(
                         &self.log,
                         canister,
+                        None, /* we're at the end of a round so no need to update round limits */
                         state_time,
                         AddCanisterChangeToHistory::No,
                         Arc::clone(&self.fd_factory),
@@ -1570,6 +1572,14 @@ impl Scheduler for SchedulerImpl {
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(canister.system_state.canister_log.used_space() as f64);
+                    self.metrics
+                        .canister_log_memory_usage_v3
+                        .observe(canister.system_state.canister_log.used_space() as f64);
+                    for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
+                        self.metrics
+                            .canister_log_delta_memory_usage
+                            .observe(memory_usage as f64);
+                    }
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_allocated_bytes += canister
                         .memory_allocation()

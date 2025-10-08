@@ -56,8 +56,8 @@ fn test_can_charge_application_subnets() {
             SubnetType::VerifiedApplication,
         ] {
             for memory_allocation in &[
-                MemoryAllocation::try_from(NumBytes::from(0)).unwrap(),
-                MemoryAllocation::try_from(NumBytes::from(1 << 20)).unwrap(),
+                MemoryAllocation::from(NumBytes::from(0)),
+                MemoryAllocation::from(NumBytes::from(1 << 20)),
             ] {
                 for freeze_threshold in &[NumSeconds::from(1000), NumSeconds::from(0)] {
                     let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
@@ -416,8 +416,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
@@ -435,8 +434,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
@@ -454,8 +452,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
@@ -485,8 +482,7 @@ fn charge_canister_for_memory_usage() {
             INITIAL_BALANCE,
             NumSeconds::from(0),
         );
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(MEMORY_ALLOCATION).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(MEMORY_ALLOCATION);
         canister
             .push_output_request(
                 RequestBuilder::new().sender(canister_id).build().into(),
@@ -548,8 +544,7 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
             INITIAL_BALANCE,
             NumSeconds::from(0),
         );
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(MEMORY_ALLOCATION).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(MEMORY_ALLOCATION);
         canister
             .push_output_request(
                 RequestBuilder::new().sender(canister_id).build().into(),
