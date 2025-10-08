@@ -5,6 +5,7 @@ members = [
     "packages/canlog_derive",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
+    "packages/ic-error-types",
     "packages/ic-ethereum-types",
     "packages/ic-heap-bytes",
     "packages/ic-heap-bytes-derive",
