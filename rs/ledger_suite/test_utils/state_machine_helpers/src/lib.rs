@@ -3,7 +3,7 @@ use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::{Block, endpoints::StandardRecord};
-use ic_icrc3_test_ledger::ArchiveBlocksArgs;
+use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::tokens::TokensType;
@@ -15,6 +15,7 @@ use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -844,4 +845,18 @@ pub fn archive_blocks(
     )
     .expect("failed to decode archive_blocks response")
     .expect("archiving blocks operation failed")
+}
+
+pub fn add_block(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    block: &ICRC3Value,
+) -> Result<Nat, String> {
+    Decode!(
+        &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
+            .expect("failed to add block")
+            .bytes(),
+        AddBlockResult
+    )
+    .expect("failed to decode add_block response")
 }

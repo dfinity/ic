@@ -9,9 +9,8 @@ use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_icrc3_test_ledger::AddBlockResult;
 use ic_ledger_suite_state_machine_helpers::{
-    archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+    add_block, archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
@@ -58,20 +57,6 @@ fn setup_icrc3_test_ledger() -> (StateMachine, CanisterId) {
         .install_canister(icrc3_test_ledger_wasm(), vec![], None)
         .unwrap();
     (env, canister_id)
-}
-
-fn add_block(
-    env: &StateMachine,
-    canister_id: CanisterId,
-    block: &ICRC3Value,
-) -> Result<Nat, String> {
-    Decode!(
-        &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
-            .expect("failed to add block")
-            .bytes(),
-        AddBlockResult
-    )
-    .expect("failed to decode add_block response")
 }
 
 fn icrc3_get_blocks(

@@ -18,7 +18,7 @@ use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
 };
-use ic_ledger_suite_state_machine_helpers::archive_blocks;
+use ic_ledger_suite_state_machine_helpers::{add_block, archive_blocks};
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -233,22 +233,6 @@ fn transfer(
         memo: None,
     };
     icrc1_transfer(env, ledger_id, owner.into(), req)
-}
-
-fn add_block(env: &StateMachine, ledger_id: CanisterId, block: &ICRC3Value) -> BlockIndex {
-    let req = Encode!(block).expect("Failed to encode block");
-    let res = env
-        .execute_ingress_as(
-            ic_base_types::PrincipalId(Principal::anonymous()),
-            ledger_id,
-            "add_block",
-            req,
-        )
-        .unwrap_or_else(|e| panic!("Failed to add block. arg:{:?} error:{}", block, e))
-        .bytes();
-    Decode!(&res, Result<Nat, String>)
-        .expect("Failed to decode Result<Nat, String>")
-        .unwrap_or_else(|e| panic!("Failed to add block. arg:{:?} error:{}", block, e))
 }
 
 fn icrc2_approve(
@@ -530,7 +514,7 @@ fn verify_unknown_block_handling(
             block
         };
         prev_hash = Some(block.clone().hash().to_vec());
-        add_block(env, ledger_id, &block);
+        add_block(env, ledger_id, &block).expect("failed adding block to the ledger");
     }
 
     let archive1 = install_icrc3_test_ledger(env);
@@ -1412,12 +1396,9 @@ mod metrics {
 #[cfg(not(feature = "icrc3_disabled"))]
 mod fees_in_burn_and_mint_blocks {
     use super::*;
-    use crate::common::STARTING_CYCLES_PER_CANISTER;
     use ic_icrc1_ledger::Tokens;
     use ic_icrc1_test_utils::icrc3::BlockBuilder;
-    use ic_icrc3_test_ledger::AddBlockResult;
     use ic_types::time::GENESIS;
-    use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 
     #[test]
     fn should_take_mint_block_fee_into_account() {
@@ -1437,14 +1418,7 @@ mod fees_in_burn_and_mint_blocks {
 
         let env = StateMachine::new();
 
-        let ledger_id = env
-            .install_canister_with_cycles(
-                test_ledger_wasm(),
-                Encode!(&()).unwrap(),
-                None,
-                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
-            )
-            .unwrap();
+        let ledger_id = install_icrc3_test_ledger(&env);
 
         let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
             .with_fee(Tokens::from(MINT_FEE))
@@ -1507,14 +1481,7 @@ mod fees_in_burn_and_mint_blocks {
 
         let env = StateMachine::new();
 
-        let ledger_id = env
-            .install_canister_with_cycles(
-                test_ledger_wasm(),
-                Encode!(&()).unwrap(),
-                None,
-                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
-            )
-            .unwrap();
+        let ledger_id = install_icrc3_test_ledger(&env);
 
         let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
             .with_fee_collector(FEE_COLLECTOR_ACCOUNT)
@@ -1569,31 +1536,5 @@ mod fees_in_burn_and_mint_blocks {
             "Actual fee collector balance does not match expected balance after burn block ({} vs {})",
             actual_fee_collector_balance, BURN_FEE
         );
-    }
-
-    fn add_block(
-        env: &StateMachine,
-        canister_id: CanisterId,
-        block: &ICRC3Value,
-    ) -> Result<Nat, String> {
-        Decode!(
-            &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
-                .expect("failed to add block")
-                .bytes(),
-            AddBlockResult
-        )
-        .expect("failed to decode add_block response")
-    }
-
-    fn test_ledger_wasm() -> Vec<u8> {
-        let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
-            "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",
-        );
-        std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
-            panic!(
-                "failed to load Wasm file from path {} (env var IC_ICRC3_TEST_LEDGER_WASM_PATH): {}",
-                ledger_wasm_path, e
-            )
-        })
     }
 }
