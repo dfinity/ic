@@ -57,7 +57,7 @@ pub struct CanisterHttpPoolManagerImpl {
     log: ReplicaLogger,
 }
 
-const MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES: u64 = 1024; // 1KB
+const MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 const CANDID_OVERHEAD_RESERVE_BYTES: u64 = 1024; // 1KB
 
 // Checks that the response size is within the allowed limits.
@@ -90,7 +90,7 @@ fn validate_response_size(
             }
         }
         CanisterHttpResponseContent::Reject(reject) => {
-            let response_size = reject.message.len() as u64;
+            let response_size = reject.message.len();
             if response_size > MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES {
                 Err(format!(
                     "Reject message size {response_size} exceeds the maximum allowed size of {MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES}"
@@ -351,19 +351,20 @@ impl CanisterHttpPoolManagerImpl {
                     // limit for the error message as well.
                     //
                     // The current limit is 1KB, which should be reasonable for an error message.
-                    if let CanisterHttpResponseContent::Reject(reject) = &mut response.content {
-                        let max_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES as usize;
-                        if reject.message.len() > max_len {
-                            let original_len = reject.message.len();
-                            warn!(
-                                self.log,
-                                "Pruning oversized reject message for request ID {}. Original size: {}, New size: {}",
-                                response.id,
-                                original_len,
-                                max_len
-                            );
-                            reject.message = reject.message.ellipsize(max_len, 90);
-                        }
+                    if let CanisterHttpResponseContent::Reject(reject) = &mut response.content
+                        && reject.message.len() > MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES
+                    {
+                        let original_len = reject.message.len();
+                        warn!(
+                            self.log,
+                            "Pruning oversized reject message for request ID {}. Original size: {}, New size: {}",
+                            response.id,
+                            original_len,
+                            MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES
+                        );
+                        reject.message = reject
+                            .message
+                            .ellipsize(MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, 90);
                     }
 
                     let response_metadata = CanisterHttpResponseMetadata {
@@ -1756,8 +1757,8 @@ pub mod test {
                     ));
 
                 // 3. OVERSIZED RESPONSE: Define an error message that is intentionally too large.
-                let oversized_len = (MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 100) as usize;
-                let max_len: usize = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES as usize;
+                let oversized_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 100;
+                let max_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES;
                 let oversized_message = "a".repeat(oversized_len);
 
                 let oversized_response = CanisterHttpResponse {
@@ -1877,7 +1878,7 @@ pub mod test {
                     ));
 
                 // 3. DISHONEST ARTIFACT:
-                let oversized_len = (MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 1) as usize;
+                let oversized_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 1;
                 let dishonest_response = CanisterHttpResponse {
                     id: callback_id,
                     content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
@@ -2019,7 +2020,7 @@ pub mod test {
                 let reject_message =
                     "This error message is definitely longer than 10 bytes.".to_string();
                 assert!(reject_message.len() as u64 > LOW_MAX_RESPONSE_BYTES);
-                assert!(reject_message.len() as u64 <= MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES);
+                assert!(reject_message.len() <= MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES);
 
                 let reject_content = CanisterHttpReject {
                     reject_code: RejectCode::SysFatal,
