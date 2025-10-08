@@ -3386,7 +3386,6 @@ impl Governance {
         new_followees: Followees,
     ) -> Result<HashMap<i32, Followees>, GovernanceError> {
         let controller = neuron.controller();
-        let hotkeys: &Vec<PrincipalId> = neuron.hot_keys.as_ref();
         let mut updated_followees = topic_to_followees.clone();
         if new_followees.followees.is_empty() {
             // If the new followees list is empty, remove the entry for the topic.
@@ -3401,11 +3400,12 @@ impl Governance {
                 // the doesn't adhere to the aforementioned rules, return a GovernanceError.
                 let (mut invalid_followees, mut error_message) = (0_u32, String::new());
 
-                for follow in &new_followees.followees {
-                    if let Ok(follow_neuron) = self.with_neuron(follow, |neuron| neuron.clone()) {
-                        if follow_neuron.visibility() == Visibility::Public
-                            || follow_neuron.controller() == controller
-                            || hotkeys.contains(&follow_neuron.controller())
+                for followee in &new_followees.followees {
+                    if let Ok(followee_neuron) = self.with_neuron(followee, |neuron| neuron.clone())
+                    {
+                        if followee_neuron.visibility() == Visibility::Public
+                            || followee_neuron.controller() == controller
+                            || followee_neuron.hot_keys.contains(&controller)
                         {
                             continue;
                         } else {
@@ -3414,8 +3414,8 @@ impl Governance {
                                 "{}: Neuron {} is a private neuron.\n\
                                 If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
                                 invalid_followees,
-                                follow.id,
-                                follow.id,
+                                followee.id,
+                                followee.id,
                                 controller
                             ));
                         }
@@ -3424,7 +3424,7 @@ impl Governance {
                         error_message.push_str(&format!(
                             "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
                             invalid_followees,
-                            follow.id
+                            followee.id
                         ));
                     }
                 }
