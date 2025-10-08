@@ -904,6 +904,15 @@ impl Blocks {
             [],
         )?;
 
+        // Composite index for efficient account balance lookups
+        tx.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS account_block_idx_balances_index
+        ON account_balances(account, block_idx DESC)
+        "#,
+            [],
+        )?;
+
         // Add account and operation type indexes if optimization is enabled
         if config.index_optimization == IndexOptimization::Enabled {
             // From account index
