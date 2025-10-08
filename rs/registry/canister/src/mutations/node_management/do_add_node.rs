@@ -47,7 +47,7 @@ impl Registry {
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
 
         let reservation =
-            self.try_reserve_node_operation_rate_limit_capacity(now, caller_id, 20)?;
+            self.try_reserve_capacity_for_node_operator_operation(now, caller_id, 20)?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
@@ -187,7 +187,7 @@ impl Registry {
 
         println!("{LOG_PREFIX}do_add_node finished: {payload:?}");
 
-        if let Err(e) = self.commit_node_operation_rate_limit_capacity(now, reservation) {
+        if let Err(e) = self.commit_used_capacity_for_node_operator_operation(now, reservation) {
             println!("{LOG_PREFIX}do_add_node did not use reservation capacity: {e}");
         }
 
@@ -1091,10 +1091,10 @@ mod tests {
             registry.get_available_node_provider_op_capacity(node_provider_id, now);
         let available = available_operator.min(available_provider);
         let reservation = registry
-            .try_reserve_node_operation_rate_limit_capacity(now, node_operator_id, available)
+            .try_reserve_capacity_for_node_operator_operation(now, node_operator_id, available)
             .unwrap();
         registry
-            .commit_node_operation_rate_limit_capacity(now, reservation)
+            .commit_used_capacity_for_node_operator_operation(now, reservation)
             .unwrap();
 
         let error = registry

@@ -27,31 +27,38 @@ const NODE_OPERATOR_MAX_SPIKE: u64 = NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY * 
 pub const NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
 
+/// Creates a rate limiter configuration for node providers
+fn create_node_provider_rate_limiter_config() -> RateLimiterConfig {
+    RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS),
+        max_capacity: NODE_PROVIDER_MAX_SPIKE,
+        max_reservations: NODE_PROVIDER_MAX_SPIKE * 2,
+    }
+}
+
+/// Creates a rate limiter configuration for node operators
+fn create_node_operator_rate_limiter_config() -> RateLimiterConfig {
+    RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS),
+        max_capacity: NODE_OPERATOR_MAX_SPIKE,
+        max_reservations: NODE_OPERATOR_MAX_SPIKE * 2,
+    }
+}
+
 thread_local! {
     static NODE_PROVIDER_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
     > = RefCell::new(RateLimiter::new_stable(
-        RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS),
-            max_capacity: NODE_PROVIDER_MAX_SPIKE,
-            // This value is somewhat arbitrary.  Given the short-lived nature of the requests, and
-            // the fact that the operations are largely sy this
-            // should never actually be a factor
-            max_reservations: NODE_PROVIDER_MAX_SPIKE * 2,
-        },
+        create_node_provider_rate_limiter_config(),
         get_node_provider_rate_limiter_memory(),
     ));
 
     static NODE_OPERATOR_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
     > = RefCell::new(RateLimiter::new_stable(
-        RateLimiterConfig {
-            add_capacity_amount: 1,
-            add_capacity_interval: Duration::from_secs(NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS),
-            max_capacity: NODE_OPERATOR_MAX_SPIKE,
-            max_reservations: NODE_OPERATOR_MAX_SPIKE * 2,
-        },
+        create_node_operator_rate_limiter_config(),
         get_node_operator_rate_limiter_memory(),
     ));
 }
@@ -83,7 +90,7 @@ pub struct RateLimitReservation {
 
 impl Registry {
     /// Try to reserve capacity for an operation that is rate limited by both Node Operator and Node Provider
-    pub fn try_reserve_node_operation_rate_limit_capacity(
+    pub fn try_reserve_capacity_for_node_operator_operation(
         &self,
         now: SystemTime,
         node_operator_id: PrincipalId,
@@ -109,7 +116,7 @@ impl Registry {
         })
     }
 
-    pub fn try_reserve_node_provider_rate_limit_capacity(
+    pub fn try_reserve_capacity_for_node_provider_operation(
         &self,
         now: SystemTime,
         node_provider_id: PrincipalId,
@@ -121,7 +128,7 @@ impl Registry {
     }
 
     /// Commit the reserved usage (i.e. commit the reserved usage)
-    pub fn commit_node_operation_rate_limit_capacity(
+    pub fn commit_used_capacity_for_node_operator_operation(
         &self,
         now: SystemTime,
         reservation: RateLimitReservation,
@@ -138,7 +145,7 @@ impl Registry {
         Ok(())
     }
 
-    pub fn commit_node_provider_rate_limit_capacity(
+    pub fn commit_used_capacity_for_node_provider_operation(
         &self,
         now: SystemTime,
         reservation: Reservation<String>,
@@ -201,7 +208,7 @@ mod tests {
         let first_available_provider = registry.get_available_node_provider_op_capacity(key, now);
 
         let reservation = registry
-            .try_reserve_node_operation_rate_limit_capacity(now, key, 5)
+            .try_reserve_capacity_for_node_operator_operation(now, key, 5)
             .unwrap();
 
         let second_available_operator = registry.get_available_node_operator_op_capacity(key, now);

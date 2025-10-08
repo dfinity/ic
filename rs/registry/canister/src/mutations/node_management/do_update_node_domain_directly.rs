@@ -53,7 +53,7 @@ impl Registry {
         );
 
         let reservation =
-            self.try_reserve_node_operation_rate_limit_capacity(now, node_operator_id, 1)?;
+            self.try_reserve_capacity_for_node_operator_operation(now, node_operator_id, 1)?;
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain
@@ -73,7 +73,7 @@ impl Registry {
         // Check invariants before applying the mutation
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = self.commit_node_operation_rate_limit_capacity(now, reservation) {
+        if let Err(e) = self.commit_used_capacity_for_node_operator_operation(now, reservation) {
             std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
@@ -314,10 +314,10 @@ mod tests {
             registry.get_available_node_provider_op_capacity(node_provider_id, now);
         let available = available_operator.min(available_provider);
         let reservation = registry
-            .try_reserve_node_operation_rate_limit_capacity(now, node_operator_id, available)
+            .try_reserve_capacity_for_node_operator_operation(now, node_operator_id, available)
             .unwrap();
         registry
-            .commit_node_operation_rate_limit_capacity(now, reservation)
+            .commit_used_capacity_for_node_operator_operation(now, reservation)
             .unwrap();
 
         let error = registry

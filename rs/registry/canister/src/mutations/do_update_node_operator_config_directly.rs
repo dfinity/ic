@@ -67,7 +67,7 @@ impl Registry {
         // 3. Check Rate Limits
         let current_node_provider = caller;
         let reservation =
-            self.try_reserve_node_provider_rate_limit_capacity(now, current_node_provider, 1)?;
+            self.try_reserve_capacity_for_node_provider_operation(now, current_node_provider, 1)?;
 
         // 4. Check that the Node Provider is not being set with the same ID as the Node Operator
         let node_provider_id = payload
@@ -92,7 +92,7 @@ impl Registry {
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        if let Err(e) = self.commit_node_provider_rate_limit_capacity(now, reservation) {
+        if let Err(e) = self.commit_used_capacity_for_node_provider_operation(now, reservation) {
             println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
@@ -239,10 +239,10 @@ mod tests {
         // Max out node provider operations
         let available = registry.get_available_node_provider_op_capacity(node_provider_id, now);
         let reservation = registry
-            .try_reserve_node_provider_rate_limit_capacity(now, node_provider_id, available)
+            .try_reserve_capacity_for_node_provider_operation(now, node_provider_id, available)
             .unwrap();
         registry
-            .commit_node_provider_rate_limit_capacity(now, reservation)
+            .commit_used_capacity_for_node_provider_operation(now, reservation)
             .unwrap();
 
         // Original should be able to change this.
