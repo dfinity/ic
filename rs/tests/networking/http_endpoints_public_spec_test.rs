@@ -474,11 +474,6 @@ fn method_name_edge_cases(env: TestEnv) {
                 &'x'.to_string().repeat(10_000),
                 &'x'.to_string().repeat(20_000),
             ] {
-                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
-                if is_api_bn && method_name.len() > 10_000 {
-                    continue;
-                }
-
                 // We start with the successful case of a canister
                 // actually exporting a method with the given name.
                 let wasm = wasm_with_exported_method_name(method_name.to_string());
@@ -508,18 +503,21 @@ fn method_name_edge_cases(env: TestEnv) {
                     .call_and_wait()
                     .await
                     .unwrap_err();
-                assert!(matches!(err, AgentError::CertifiedReject { .. }));
+                assert!(
+                    matches!(err, AgentError::CertifiedReject { .. }),
+                    "1 - Got error: {}",
+                    err
+                );
                 let err = agent
                     .query(&canister_id, method_name)
                     .call()
                     .await
                     .unwrap_err();
-                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
-
-                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
-                if is_api_bn {
-                    continue;
-                }
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "2 - Got error: {}",
+                    err
+                );
 
                 let too_long_method_name = 'x'.to_string().repeat(1 << 20);
                 let err = agent
@@ -527,13 +525,21 @@ fn method_name_edge_cases(env: TestEnv) {
                     .call_and_wait()
                     .await
                     .unwrap_err();
-                assert!(matches!(err, AgentError::CertifiedReject { .. }));
+                assert!(
+                    matches!(err, AgentError::CertifiedReject { .. }),
+                    "3 - Got error: {}",
+                    err
+                );
                 let err = agent
                     .query(&canister_id, &too_long_method_name)
                     .call()
                     .await
                     .unwrap_err();
-                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "4 - Got error: {}",
+                    err
+                );
 
                 let too_long_method_name = 'x'.to_string().repeat(3 << 20);
                 let err = agent
@@ -555,7 +561,11 @@ fn method_name_edge_cases(env: TestEnv) {
                     .call()
                     .await
                     .unwrap_err();
-                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "5 - Got error: {}",
+                    err
+                );
 
                 let too_long_method_name = 'x'.to_string().repeat(5 << 20);
                 let err = agent
