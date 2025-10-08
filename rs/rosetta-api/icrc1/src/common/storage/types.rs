@@ -910,6 +910,7 @@ mod tests {
                     from,
                     spender,
                     amount,
+                    fee: _,
                 },
                 IcrcOperation::Burn {
                     from: rosetta_from,
@@ -922,7 +923,7 @@ mod tests {
                 assert_eq!(amount.into(), rosetta_amount, "amount");
             }
             (
-                ic_icrc1::Operation::Mint { to, amount },
+                ic_icrc1::Operation::Mint { to, amount, fee: _ },
                 IcrcOperation::Mint {
                     to: rosetta_to,
                     amount: rosetta_amount,
