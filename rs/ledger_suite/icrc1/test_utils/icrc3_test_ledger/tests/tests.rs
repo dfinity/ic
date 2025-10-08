@@ -11,7 +11,7 @@ use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_ledger_suite_state_machine_helpers::{
-    balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+    archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
@@ -104,26 +104,6 @@ fn get_blocks(
         GetBlocksResponse
     )
     .expect("failed to decode icrc3_get_blocks response")
-}
-
-fn archive_blocks(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    archive_id: CanisterId,
-    num_blocks: u64,
-) -> u64 {
-    let archive_args = ArchiveBlocksArgs {
-        archive_id: archive_id.into(),
-        num_blocks,
-    };
-    Decode!(
-        &env.execute_ingress(ledger_id, "archive_blocks", Encode!(&archive_args).unwrap())
-            .expect("failed to archive blocks")
-            .bytes(),
-        Result<u64, String>
-    )
-    .expect("failed to decode archive_blocks response")
-    .expect("archiving blocks operation failed")
 }
 
 fn check_legacy_get_blocks(

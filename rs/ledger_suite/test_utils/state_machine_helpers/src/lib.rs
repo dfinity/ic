@@ -3,6 +3,7 @@ use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::{Block, endpoints::StandardRecord};
+use ic_icrc3_test_ledger::ArchiveBlocksArgs;
 use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::tokens::TokensType;
@@ -823,4 +824,24 @@ fn universal_canister_payload(
             cycles,
         )
         .build()
+}
+
+pub fn archive_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    archive_id: CanisterId,
+    num_blocks: u64,
+) -> u64 {
+    let archive_args = ArchiveBlocksArgs {
+        archive_id: archive_id.into(),
+        num_blocks,
+    };
+    Decode!(
+        &env.execute_ingress(ledger_id, "archive_blocks", Encode!(&archive_args).unwrap())
+            .expect("failed to archive blocks")
+            .bytes(),
+        Result<u64, String>
+    )
+    .expect("failed to decode archive_blocks response")
+    .expect("archiving blocks operation failed")
 }

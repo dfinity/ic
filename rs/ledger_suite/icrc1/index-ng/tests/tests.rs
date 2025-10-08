@@ -18,6 +18,7 @@ use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
 };
+use ic_ledger_suite_state_machine_helpers::archive_blocks;
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -531,6 +532,13 @@ fn verify_unknown_block_handling(
         prev_hash = Some(block.clone().hash().to_vec());
         add_block(env, ledger_id, &block);
     }
+
+    let archive1 = install_icrc3_test_ledger(env);
+    let archive2 = install_icrc3_test_ledger(env);
+    let archived_count = archive_blocks(&env, ledger_id, archive1, 2);
+    assert_eq!(archived_count, 2);
+    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
 
     env.advance_time(Duration::from_secs(60));
     env.tick();
