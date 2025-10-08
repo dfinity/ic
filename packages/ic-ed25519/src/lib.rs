@@ -492,6 +492,17 @@ pub enum MasterPublicKeyId {
     TestKey1,
 }
 
+/// An identifier for the mainnet production key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PocketIcMasterPublicKeyId {
+    /// The PocketIC hardcoded key "key_1"
+    Key1,
+    /// The PocketIC hardcoded key "test_key_1"
+    TestKey1,
+    /// The PocketIC hardcoded key "dfx_test_key"
+    DfxTestKey,
+}
+
 /// An Ed25519 public key
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
@@ -788,6 +799,27 @@ impl PublicKey {
         }
     }
 
+    /// Return the public master keys used by PocketIC
+    ///
+    /// Note that the secret keys for these public keys are known, and these keys are
+    /// should only be used for offline testing with PocketIC
+    pub fn pocketic_key(key_id: PocketIcMasterPublicKeyId) -> Self {
+        match key_id {
+            PocketIcMasterPublicKeyId::Key1 => Self::deserialize_raw(&hex!(
+                "db415b8eb85bd5127b0984723e0448054042cf40e7a9c262ed0cc87ecea98349"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            PocketIcMasterPublicKeyId::TestKey1 => Self::deserialize_raw(&hex!(
+                "6ed9121ecf701b9e301fce17d8a65214888984e8211225691b089d6b219ec144"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            PocketIcMasterPublicKeyId::DfxTestKey => Self::deserialize_raw(&hex!(
+                "7124afcb1be5927cac0397a7447b9c3cda2a4099af62d9bc0a2c2fe42d33efe1"
+            ))
+            .expect("Hardcoded master key was rejected"),
+        }
+    }
+
     /// Derive a public key from the mainnet parameters
     ///
     /// This is an offline equivalent to the `schnorr_public_key` management canister call
@@ -797,6 +829,21 @@ impl PublicKey {
         derivation_path: &[Vec<u8>],
     ) -> (Self, [u8; 32]) {
         let mk = PublicKey::mainnet_key(key_id);
+        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+            canister_id.as_slice(),
+            derivation_path,
+        ))
+    }
+
+    /// Derive a public key from the mainnet parameters
+    ///
+    /// This is an offline equivalent to the `schnorr_public_key` management canister call
+    pub fn derive_pocketic_key(
+        key_id: PocketIcMasterPublicKeyId,
+        canister_id: &CanisterId,
+        derivation_path: &[Vec<u8>],
+    ) -> (Self, [u8; 32]) {
+        let mk = PublicKey::pocketic_key(key_id);
         mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
             canister_id.as_slice(),
             derivation_path,

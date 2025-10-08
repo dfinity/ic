@@ -27,6 +27,7 @@ rand = ["dep:rand"]
 
 [dev-dependencies]
 hex = { workspace = true }
+ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }
