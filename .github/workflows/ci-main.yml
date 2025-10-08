@@ -214,10 +214,10 @@ jobs:
               targets_args+=("--skip_long_tests")
             fi
             if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
-              targets_args+=("--skip_didc_checks")
+              targets_args+=("--exclude_tags=didc")
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-              targets_args+=("--skip_buf_checks")
+              targets_args+=("--exclude_tags=buf")
             fi
             if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
               targets_args+=(
@@ -688,7 +688,7 @@ jobs:
               - "**/*.rs"
               - "**/*.toml"
               - "**/*.lock"
-      - name: Run Cargo ${{ matrix.name }} Linux 
+      - name: Run Cargo ${{ matrix.name }} Linux
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         if: |
