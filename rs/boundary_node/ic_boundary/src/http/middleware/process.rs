@@ -27,7 +27,7 @@ const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
 struct ICRequestContent {
     sender: Principal,
     canister_id: Option<Principal>,
-    #[serde(deserialize_with = "truncate_method_name")]
+    #[serde(default, deserialize_with = "truncate_method_name")]
     method_name: Option<String>,
     nonce: Option<Blob>,
     ingress_expiry: Option<u64>,
@@ -236,6 +236,8 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
 mod tests {
     use super::*;
     use candid::Principal;
+    use serde_cbor::Value;
+    use std::collections::BTreeMap;
 
     #[test]
     fn deserialize_short_method_name() {
@@ -297,5 +299,19 @@ mod tests {
         let deserialized: ICRequestEnvelope = serde_cbor::from_slice(&serialized).unwrap();
 
         assert!(deserialized.content.method_name.is_none());
+    }
+
+    #[test]
+    fn deserialize_with_missing_values() {
+        let mut map = BTreeMap::new();
+        map.insert(
+            Value::Text("sender".to_string()),
+            Value::Text(Principal::anonymous().to_string()),
+        );
+
+        let data = serde_cbor::to_vec(&Value::Map(map)).unwrap();
+
+        let content: ICRequestContent = serde_cbor::from_slice(&data).unwrap();
+        assert!(content.method_name.is_none());
     }
 }
