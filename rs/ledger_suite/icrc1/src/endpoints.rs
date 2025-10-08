@@ -165,7 +165,8 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
         let memo = b.transaction.memo;
 
         match b.transaction.operation {
-            Operation::Mint { to, amount } => {
+            Operation::Mint { to, amount, fee } => {
+                assert!(fee.is_none());
                 tx.kind = "mint".to_string();
                 tx.mint = Some(Mint {
                     to,
@@ -178,7 +179,9 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
+                assert!(fee.is_none());
                 tx.kind = "burn".to_string();
                 tx.burn = Some(Burn {
                     from,

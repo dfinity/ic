@@ -30,6 +30,8 @@ pub enum Operation<Tokens: TokensType> {
         to: Account,
         #[serde(rename = "amt")]
         amount: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee: Option<Tokens>,
     },
     #[serde(rename = "xfer")]
     Transfer {
@@ -60,6 +62,8 @@ pub enum Operation<Tokens: TokensType> {
         spender: Option<Account>,
         #[serde(rename = "amt")]
         amount: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee: Option<Tokens>,
     },
     #[serde(rename = "approve")]
     Approve {
@@ -140,10 +144,12 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                     .ok_or("`from` field required for `burn` operation")?,
                 amount: value.amount,
                 spender: value.spender,
+                fee: value.fee,
             },
             "mint" => Operation::Mint {
                 to: value.to.ok_or("`to` field required for `mint` operation")?,
-                amount: value.amount,
+                amount: value.amount.clone(),
+                fee: value.fee,
             },
             "xfer" => Operation::Transfer {
                 from: value
@@ -210,8 +216,10 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Approve { amount, .. } => amount.clone(),
             },
             fee: match &t.operation {
-                Transfer { fee, .. } | Approve { fee, .. } => fee.to_owned(),
-                _ => None,
+                Transfer { fee, .. }
+                | Approve { fee, .. }
+                | Mint { fee, .. }
+                | Burn { fee, .. } => fee.to_owned(),
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -253,6 +261,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 from,
                 spender,
                 amount,
+                fee: None,
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo: memo.map(Memo::from),
@@ -355,7 +364,9 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
+                assert!(fee.is_none());
                 if spender.is_some() && from != &spender.unwrap() {
                     let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
                     if allowance.amount < *amount {
@@ -372,7 +383,10 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                         .expect("bug: cannot use allowance");
                 }
             }
-            Operation::Mint { to, amount } => context.balances_mut().mint(to, amount.clone())?,
+            Operation::Mint { to, amount, fee } => {
+                assert!(fee.is_none());
+                context.balances_mut().mint(to, amount.clone())?;
+            }
             Operation::Approve {
                 from,
                 spender,
@@ -416,7 +430,11 @@ impl<Tokens: TokensType> Transaction<Tokens> {
         memo: Option<Memo>,
     ) -> Self {
         Self {
-            operation: Operation::Mint { to, amount },
+            operation: Operation::Mint {
+                to,
+                amount,
+                fee: None,
+            },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo,
         }
@@ -458,6 +476,7 @@ impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transac
             let operation = Operation::Mint {
                 to: mint.to,
                 amount,
+                fee: None,
             };
             return Ok(Self {
                 operation,
@@ -472,6 +491,7 @@ impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transac
                 from: burn.from,
                 spender: burn.spender,
                 amount,
+                fee: None,
             };
             return Ok(Self {
                 operation,

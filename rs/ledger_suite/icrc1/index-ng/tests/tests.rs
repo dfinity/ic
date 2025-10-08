@@ -548,10 +548,10 @@ fn verify_unknown_block_handling(
     let status = sync_status(env, index_id);
     if bad_block_index < NUM_BLOCKS {
         assert!(!status.sync_active);
-        assert_eq!(
-            status.sync_error,
-            Some(format!("Unknown block at index {}.", bad_block_index))
-        );
+        assert!(status.sync_error.unwrap().starts_with(&format!(
+            "Block at index {} has unknown fields.",
+            bad_block_index
+        )));
     } else {
         assert!(status.sync_active);
         assert_eq!(status.sync_error, None);
@@ -560,7 +560,7 @@ fn verify_unknown_block_handling(
 
 #[test]
 fn test_ledger_unknown_block_icrc3() {
-    for bad_block_index in 0..NUM_BLOCKS {
+    for bad_block_index in 0..NUM_BLOCKS + 1 {
         let env = &StateMachine::new();
         let ledger_id = install_icrc3_test_ledger(env);
         let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
@@ -571,7 +571,7 @@ fn test_ledger_unknown_block_icrc3() {
 
 #[test]
 fn test_ledger_unknown_block_legacy() {
-    for bad_block_index in 0..NUM_BLOCKS {
+    for bad_block_index in 0..NUM_BLOCKS + 1 {
         let env = &StateMachine::new();
         let ledger_id = install_icrc3_test_ledger(env);
         let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));

@@ -709,6 +709,7 @@ fn set_build_index_timer(after: Duration) {
 
 fn stop_timer_with_error(error: String) {
     log!(P0, "{}", error);
+    ic_cdk::eprintln!("{}", error);
     if let Some(timer_id) = TIMER_ID.with(|tid| *tid.borrow()) {
         ic_cdk_timers::clear_timer(timer_id);
         TIMER_ID.with(|tid| *tid.borrow_mut() = None);
@@ -722,8 +723,8 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()
             sync_active(),
             "Trying to append a block, even though the sync is stopped."
         );
+        let original_block = block.clone();
 
-        let original_hash = block.hash();
         let block = match generic_block_to_encoded_block(block) {
             Ok(block) => block,
             Err(e) => {
@@ -743,9 +744,12 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()
                 return Err(());
             }
         };
-        let decoded_hash = Block::<Tokens>::block_hash(&decoded_block.clone().encode());
-        if original_hash != decoded_hash.as_slice() {
-            stop_timer_with_error(format!("Unknown block at index {block_index}."));
+        let decoded_value = encoded_block_to_generic_block(&decoded_block.clone().encode());
+        if original_block.hash() != decoded_value.hash() {
+            stop_timer_with_error(format!(
+                "Block at index {block_index} has unknown fields. Original block {}, decoded block: {}.",
+                original_block, decoded_value
+            ));
             return Err(());
         }
 
@@ -841,8 +845,13 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
         &PROFILING_DATA,
         "append_blocks.process_balance_changes",
         move || match block.transaction.operation {
-            Operation::Burn { from, amount, .. } => debit(block_index, from, amount),
-            Operation::Mint { to, amount } => credit(block_index, to, amount),
+            Operation::Burn {
+                from,
+                amount,
+                fee: _,
+                ..
+            } => debit(block_index, from, amount),
+            Operation::Mint { to, amount, fee: _ } => credit(block_index, to, amount),
             Operation::Transfer {
                 from,
                 to,

@@ -744,6 +744,7 @@ fn execute_transfer_not_async(
                         from: from_account,
                         spender,
                         amount,
+                        fee: None,
                     },
                     created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
                     memo,

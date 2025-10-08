@@ -94,12 +94,14 @@ fn operation_strategy<Tokens: TokensType>(
         let mint_strategy = account_strategy().prop_map(move |to| Operation::Mint {
             to,
             amount: mint_amount.clone(),
+            fee: None,
         });
         let burn_amount = amount.clone();
         let burn_strategy = account_strategy().prop_map(move |from| Operation::Burn {
             from,
             spender: None,
             amount: burn_amount.clone(),
+            fee: None,
         });
         let transfer_amount = amount.clone();
         let transfer_strategy = (
@@ -418,12 +420,14 @@ impl ArgWithCaller {
                     Operation::Mint {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
+                        fee: None,
                     }
                 } else if burn_operation {
                     Operation::Burn {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         from: caller,
                         spender: None,
+                        fee: None,
                     }
                 } else {
                     Operation::Transfer {
@@ -770,6 +774,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                         operation: Operation::Mint::<Tokens> {
                             amount: Tokens::from_e8s(amount),
                             to,
+                            fee: None,
                         },
                         created_at_time,
                         memo: memo.clone(),
@@ -832,6 +837,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                                 amount: Tokens::from_e8s(amount),
                                 from,
                                 spender: None,
+                                fee: None,
                             },
                             created_at_time,
                             memo: memo.clone(),
@@ -1394,7 +1400,11 @@ where
     Tokens: TokensType,
     S: Strategy<Value = Tokens>,
 {
-    (arb_account(), arb_tokens()).prop_map(|(to, amount)| Operation::Mint { to, amount })
+    (arb_account(), arb_tokens()).prop_map(|(to, amount)| Operation::Mint {
+        to,
+        amount,
+        fee: None,
+    })
 }
 
 pub fn arb_burn<Tokens, S>(arb_tokens: fn() -> S) -> impl Strategy<Value = Operation<Tokens>>
@@ -1411,6 +1421,7 @@ where
             from,
             spender,
             amount,
+            fee: None,
         })
 }
 
