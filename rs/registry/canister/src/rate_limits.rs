@@ -175,6 +175,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_helpers::invariant_compliant_registry;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use maplit::btreemap;
 
@@ -182,7 +183,7 @@ mod tests {
     fn test_drop_behavior_in_thread_local() {
         let now = SystemTime::now();
         let key = PrincipalId::new_user_test_id(1);
-        let mut registry = Registry::new();
+        let mut registry = invariant_compliant_registry(0);
 
         // Add a node operator record to the registry
         let payload = AddNodeOperatorPayload {
