@@ -42,7 +42,9 @@ fn make_body(
 }
 
 pub(super) type ReplacementFunction = (
+    // Function parameters.
     Vec<wirm::DataType>,
+    // Function results.
     Vec<wirm::DataType>,
     wirm::ir::types::Body<'static>,
 );

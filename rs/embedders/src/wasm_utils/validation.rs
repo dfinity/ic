@@ -1000,7 +1000,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                     match valid_system_apis.get(field) {
                         Some(signatures) => match signatures.get(import_module) {
                             Some(signature) => {
-                                validate_function_signature(signature, &field, params, results)?;
+                                validate_function_signature(signature, field, params, results)?;
                             }
                             None => {
                                 return Err(WasmValidationError::InvalidImportSection(format!(

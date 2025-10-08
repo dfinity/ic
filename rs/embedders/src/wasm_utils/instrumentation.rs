@@ -125,7 +125,11 @@ use wirm::{
     ir::{
         function::FunctionBuilder,
         id::ImportsID,
-        module::{LocalOrImport, module_functions::FuncKind, module_globals::GlobalKind},
+        module::{
+            LocalOrImport,
+            module_functions::{FuncKind, Function},
+            module_globals::GlobalKind,
+        },
         types::{Body, InitExpr, Instructions, Value},
     },
 };
@@ -779,15 +783,13 @@ fn inject_helper_functions(
         fr_type_idx,
     );
 
-    let injected_functions = InjectedFunctions {
+    InjectedFunctions {
         out_of_instructions: *out_of_instructions_fn_id,
         try_grow_wasm_memory: *try_grow_wasm_memory_fn_id,
         try_grow_stable_memory: *try_grow_stable_memory_fn_id,
         internal_trap: *internal_trap_fn_id,
         stable_read_first_access: *stable_read_first_access_fn_id,
-    };
-
-    injected_functions
+    }
 }
 
 /// Indices for injected counters and functions to update them.
@@ -1598,7 +1600,7 @@ pub(super) fn instrument(
         .functions
         .iter_mut()
         .filter(|f| f.is_local())
-        .map(|f| f.unwrap_local_mut())
+        .map(Function::unwrap_local_mut)
     {
         let num_params = module.types.get(func_body.ty_id).unwrap().params().len() as u32;
         inject_try_grow_wasm_memory(

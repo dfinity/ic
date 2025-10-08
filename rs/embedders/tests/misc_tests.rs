@@ -16,7 +16,7 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::sync::Arc;
-use wirm::{wasmparser::ExternalKind, Module};
+use wirm::{Module, wasmparser::ExternalKind};
 
 fn assert_memory_and_table_exports(module: &Module) {
     let export_section = &module.exports;
