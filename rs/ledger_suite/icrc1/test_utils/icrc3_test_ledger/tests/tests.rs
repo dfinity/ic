@@ -11,6 +11,7 @@ use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_ledger_suite_state_machine_helpers::{
     add_block, archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+    set_icrc3_enabled,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
@@ -537,16 +538,6 @@ fn get_supported_standards(env: &StateMachine, canister_id: CanisterId) -> Vec<S
         Vec<StandardRecord>
     )
     .expect("failed to decode icrc1_supported_standards response")
-}
-
-fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
-    Decode!(
-        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
-            .expect("failed to set_icrc3_enabled")
-            .bytes(),
-        ()
-    )
-    .expect("failed to decode set_icrc3_enabled response")
 }
 
 #[test]

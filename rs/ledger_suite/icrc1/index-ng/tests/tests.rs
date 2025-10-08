@@ -18,7 +18,7 @@ use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
 };
-use ic_ledger_suite_state_machine_helpers::{add_block, archive_blocks};
+use ic_ledger_suite_state_machine_helpers::{add_block, archive_blocks, set_icrc3_enabled};
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -338,16 +338,6 @@ fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollec
         FeeCollectorRanges
     )
     .expect("failed to decode get_fee_collectors_ranges response")
-}
-
-fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
-    Decode!(
-        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
-            .expect("failed to set_icrc3_enabled")
-            .bytes(),
-        ()
-    )
-    .expect("failed to decode set_icrc3_enabled response")
 }
 
 // Assert that the index canister contains the same blocks as the ledger.
