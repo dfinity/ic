@@ -338,8 +338,8 @@ impl Step for DownloadIcStateStep {
 
         let res = ssh_helper
             .ssh(format!(
-                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>={tot} {{ print a[n%{tot}] }} {{ a[n++%{tot}]=$0 }}');",
-                tot = self.nb_checkpoints
+                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>={nb} {{ print a[n%{nb}] }} {{ a[n++%{nb]=$0 }}');",
+                nb = self.nb_checkpoints
             ))?
             .unwrap_or_default();
         res.trim().split(' ').for_each(|cp| {
