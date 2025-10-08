@@ -747,7 +747,7 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()
         let decoded_value = encoded_block_to_generic_block(&decoded_block.clone().encode());
         if original_block.hash() != decoded_value.hash() {
             stop_timer_with_error(format!(
-                "Block at index {block_index} has unknown fields. Original block {}, decoded block: {}.",
+                "Block at index {block_index} has unknown fields. Original block: {}, decoded block: {}.",
                 original_block, decoded_value
             ));
             return Err(());
