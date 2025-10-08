@@ -46,7 +46,7 @@ where
 {
     let s: Option<String> = Option::<String>::deserialize(deserializer)?;
     Ok(s.map(|mut val| {
-        val.truncate(20_000);
+        val.truncate(100);
         val
     }))
 }
