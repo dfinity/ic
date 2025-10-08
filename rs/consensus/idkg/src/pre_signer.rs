@@ -648,6 +648,21 @@ impl IDkgPreSignerImpl {
             });
         let ret = ret.chain(action);
 
+        // Completed transcripts.
+        let action = idkg_pool
+            .validated()
+            .transcripts()
+            .filter(|(_, transcript)| {
+                self.should_purge(
+                    &transcript.transcript_id,
+                    current_height,
+                    &in_progress,
+                    &target_subnet_xnet_transcripts,
+                )
+            })
+            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id));
+        let ret = ret.chain(action);
+
         ret.collect()
     }
 
