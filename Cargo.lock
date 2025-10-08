@@ -24750,12 +24750,12 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.238.1"
+version = "0.239.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d50d48c31c615f77679b61c607b8151378a5d03159616bf3d17e8e2005afdaf5"
+checksum = "5be00faa2b4950c76fe618c409d2c3ea5a3c9422013e079482d78544bb2d184c"
 dependencies = [
  "leb128fmt",
- "wasmparser 0.238.1",
+ "wasmparser 0.239.0",
 ]
 
 [[package]]
@@ -24838,9 +24838,9 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.238.1"
+version = "0.239.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fa99c8328024423875ae4a55345cfde8f0371327fb2d0f33b0f52a06fc44408"
+checksum = "8c9d90bb93e764f6beabf1d02028c70a2156a6583e63ac4218dd07ef733368b0"
 dependencies = [
  "bitflags 2.9.0",
  "hashbrown 0.15.2",
@@ -25667,15 +25667,16 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wirm"
-version = "2.0.0"
-source = "git+https://github.com/adambratschikaye/wirm.git?rev=63b5dd7ff15bdd94cfd0f5ce607238fe518f0bd0#63b5dd7ff15bdd94cfd0f5ce607238fe518f0bd0"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14732cb9a0eaf9ec52ecd36b9394ade5c16eea5405d160d8829f0199d97d507d"
 dependencies = [
  "log",
  "rayon",
  "serde_json",
  "tempfile",
- "wasm-encoder 0.238.1",
- "wasmparser 0.238.1",
+ "wasm-encoder 0.239.0",
+ "wasmparser 0.239.0",
 ]
 
 [[package]]
