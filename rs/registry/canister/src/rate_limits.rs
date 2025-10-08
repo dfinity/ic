@@ -1,7 +1,7 @@
 use crate::mutations::node_management::common::get_node_provider_id_for_operator_id;
 use crate::registry::Registry;
 use crate::storage::{
-    get_node_operator_rate_limiter_memory, get_node_proivder_rate_limiter_memory,
+    get_node_operator_rate_limiter_memory, get_node_provider_rate_limiter_memory,
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
@@ -40,7 +40,7 @@ thread_local! {
             // should never actually be a factor
             max_reservations: NODE_PROVIDER_MAX_SPIKE * 2,
         },
-        get_node_proivder_rate_limiter_memory(),
+        get_node_provider_rate_limiter_memory(),
     ));
 
     static NODE_OPERATOR_RATE_LIMITER: RefCell<
