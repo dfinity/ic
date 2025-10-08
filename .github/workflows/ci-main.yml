@@ -670,8 +670,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: lint
-          - name: build
+          - name: Lint
+          - name: Build
     name: Cargo Clippy Linux ${{ matrix.name }}
     runs-on:
       labels: dind-small
@@ -689,7 +689,7 @@ jobs:
               - "**/*.toml"
               - "**/*.lock"
       - name: Run Cargo Clippy Linux ${{ matrix.name }}
-        id: cargo-clippy-linux-${{ matrix.name }}
+        id: cargo-clippy-linux-run
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         if: |
@@ -702,7 +702,7 @@ jobs:
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
 
-          if [[ "${{ matrix.name }}" == "lint" ]]; then
+          if [[ "${{ matrix.name }}" == "Lint" ]]; then
             "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
           else
             cargo build --release --locked
