@@ -571,15 +571,22 @@ where
                 from,
                 spender,
                 amount,
-            } => Self::Burn {
-                from,
-                spender,
-                amount: amount.into(),
-            },
-            Op::Mint { to, amount } => Self::Mint {
-                to,
-                amount: amount.into(),
-            },
+                fee,
+            } => {
+                assert!(fee.is_none());
+                Self::Burn {
+                    from,
+                    spender,
+                    amount: amount.into(),
+                }
+            }
+            Op::Mint { to, amount, fee } => {
+                assert!(fee.is_none());
+                Self::Mint {
+                    to,
+                    amount: amount.into(),
+                }
+            }
             Op::Transfer {
                 from,
                 to,
