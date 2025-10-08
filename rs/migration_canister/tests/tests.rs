@@ -370,7 +370,7 @@ async fn migration_succeeds() {
         .update_call(source, sender, "yesn't", vec![])
         .await
         .unwrap_err();
-    assert!(format!("{:?}", err).contains("no wasm module"));
+    assert!(err.reject_message.contains("no wasm module"));
 }
 
 #[tokio::test]
