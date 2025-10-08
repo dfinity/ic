@@ -860,3 +860,13 @@ pub fn add_block(
     )
     .expect("failed to decode add_block response")
 }
+
+pub fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
+    Decode!(
+        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
+            .expect("failed to set_icrc3_enabled")
+            .bytes(),
+        ()
+    )
+    .expect("failed to decode set_icrc3_enabled response")
+}
