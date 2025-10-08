@@ -796,9 +796,18 @@ type GetNeuronIndexRequest = record {
   page_size: opt nat32;
 };
 
-type GetNeuronIndexResponse = record {
-  neurons: vec Neuron;
+type NeuronIndex = record {
+  neurons: vec NeuronInfo;
 };
+
+type GetNeuronIndexResult = variant {
+  Ok : GetNeuronIndexResponse;
+  Err : GovernanceError;
+};
+
+type GetNeuronIndexResponse = record {
+  result : opt GetNeuronIndexResult
+}
 
 // A limit view of Neuron that allows some aspects of all neurons to be read by
 // anyone (i.e. without having to be the neuron's controller nor one of its

@@ -4399,9 +4399,28 @@ pub struct GetNeuronIndexRequest {
     page_size: Option<u32>,
 }
 
-#[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
-)]
-pub struct GetNeuronIndexResponse {
-    neurons: Vec<Neuron>,
+pub mod neuron_index {
+    use super::{GovernanceError, NeuronInfo};
+
+    #[derive(
+        candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+    )]
+    pub struct NeuronIndex {
+        neurons: Vec<NeuronInfo>,
+    }
+
+    #[derive(
+        candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq,
+    )]
+    pub enum GetNeuronIndexResult {
+        Ok(NeuronIndex),
+        Err(GovernanceError),
+    }
+
+    #[derive(
+        candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+    )]
+    pub struct GetNeuronIndexResponse {
+        result: Option<GetNeuronIndexResult>,
+    }
 }
