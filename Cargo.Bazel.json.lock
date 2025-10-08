@@ -1,11 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "5f4cefcb9acb6067994c0d3ab0702b0be1d6e86257fb77e19778998db0bf7204",
-||||||| db65a720ff
-  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
-=======
-  "checksum": "7feedba152e1ec92d5d680933db408d452d7d1132fdb66b04cbc9539b3a7bd3a",
->>>>>>> master
+  "checksum": "4d50308e1f52483b5aec450f8c02d46ede2ae20adb5fc6de6cd8c7792d4cf131",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21934,7 +21928,7 @@
               "target": "which"
             },
             {
-              "id": "wirm 2.0.0",
+              "id": "wirm 2.1.0",
               "target": "wirm"
             },
             {
@@ -24726,7 +24720,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -66286,7 +66280,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ],
@@ -66440,7 +66434,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ],
@@ -67444,7 +67438,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -76991,7 +76985,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ],
@@ -82912,7 +82906,7 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 0.1.10",
+              "id": "cfg-if 1.0.0",
               "target": "cfg_if"
             },
             {
@@ -86436,14 +86430,14 @@
       ],
       "license_file": null
     },
-    "wasm-encoder 0.238.1": {
+    "wasm-encoder 0.239.0": {
       "name": "wasm-encoder",
-      "version": "0.238.1",
+      "version": "0.239.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.238.1/download",
-          "sha256": "d50d48c31c615f77679b61c607b8151378a5d03159616bf3d17e8e2005afdaf5"
+          "url": "https://static.crates.io/crates/wasm-encoder/0.239.0/download",
+          "sha256": "5be00faa2b4950c76fe618c409d2c3ea5a3c9422013e079482d78544bb2d184c"
         }
       },
       "targets": [
@@ -86493,18 +86487,18 @@
               "target": "leb128fmt"
             },
             {
-              "id": "wasm-encoder 0.238.1",
+              "id": "wasm-encoder 0.239.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmparser 0.238.1",
+              "id": "wasmparser 0.239.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.238.1"
+        "version": "0.239.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -87093,14 +87087,14 @@
       ],
       "license_file": null
     },
-    "wasmparser 0.238.1": {
+    "wasmparser 0.239.0": {
       "name": "wasmparser",
-      "version": "0.238.1",
+      "version": "0.239.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.238.1/download",
-          "sha256": "3fa99c8328024423875ae4a55345cfde8f0371327fb2d0f33b0f52a06fc44408"
+          "url": "https://static.crates.io/crates/wasmparser/0.239.0/download",
+          "sha256": "8c9d90bb93e764f6beabf1d02028c70a2156a6583e63ac4218dd07ef733368b0"
         }
       },
       "targets": [
@@ -87170,14 +87164,14 @@
               "target": "serde"
             },
             {
-              "id": "wasmparser 0.238.1",
+              "id": "wasmparser 0.239.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.238.1"
+        "version": "0.239.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -92733,16 +92727,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wirm 2.0.0": {
+    "wirm 2.1.0": {
       "name": "wirm",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "package_url": "https://github.com/thesuhas/wirm",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/adambratschikaye/wirm.git",
-          "commitish": {
-            "Rev": "63b5dd7ff15bdd94cfd0f5ce607238fe518f0bd0"
-          }
+        "Http": {
+          "url": "https://static.crates.io/crates/wirm/2.1.0/download",
+          "sha256": "14732cb9a0eaf9ec52ecd36b9394ade5c16eea5405d160d8829f0199d97d507d"
         }
       },
       "targets": [
@@ -92791,24 +92783,24 @@
               "target": "tempfile"
             },
             {
-              "id": "wasm-encoder 0.238.1",
+              "id": "wasm-encoder 0.239.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.238.1",
+              "id": "wasmparser 0.239.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.0"
+        "version": "2.1.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": null
     },
     "wit-bindgen-rt 0.33.0": {
       "name": "wit-bindgen-rt",
@@ -95463,7 +95455,7 @@
     "wat 1.234.0",
     "wee_alloc 0.4.5",
     "which 4.4.0",
-    "wirm 2.0.0",
+    "wirm 2.1.0",
     "wsl 0.1.0",
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
