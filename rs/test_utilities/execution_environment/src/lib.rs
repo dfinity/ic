@@ -1,6 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
-use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -1806,6 +1805,9 @@ impl ExecutionTest {
 }
 
 /// A builder for `ExecutionTest`.
+///
+/// Invariant: `subnet_config` must match the `subnet_type`. If `subnet_type` is
+/// updated, then `subnet_config` must be updated accordingly.
 pub struct ExecutionTestBuilder {
     execution_config: Config,
     subnet_config: SubnetConfig,
@@ -1829,7 +1831,6 @@ pub struct ExecutionTestBuilder {
     resource_saturation_scaling: usize,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
-    cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
     cost_schedule: CanisterCyclesCostSchedule,
 }
 
@@ -1866,7 +1867,6 @@ impl Default for ExecutionTestBuilder {
             resource_saturation_scaling: 1,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
-            cycles_account_manager_config: None,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
@@ -1921,11 +1921,12 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        Self {
-            subnet_type,
-            ..self
-        }
+    pub fn with_subnet_type(mut self, subnet_type: SubnetType) -> Self {
+        self.subnet_type = subnet_type;
+        // If `subnet_type` is updated, then we need to update the subnet config
+        // to match it.
+        self.subnet_config = SubnetConfig::new(subnet_type);
+        self
     }
 
     pub fn with_subnet_id(self, principal_id: PrincipalId) -> Self {
@@ -2334,14 +2335,15 @@ impl ExecutionTestBuilder {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let mut config = self
-            .cycles_account_manager_config
-            .unwrap_or_else(|| SubnetConfig::new(self.subnet_type).cycles_account_manager_config);
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
-            config.ecdsa_signature_fee = ecdsa_signature_fee;
+            self.subnet_config
+                .cycles_account_manager_config
+                .ecdsa_signature_fee = ecdsa_signature_fee;
         }
         if let Some(schnorr_signature_fee) = self.schnorr_signature_fee {
-            config.schnorr_signature_fee = schnorr_signature_fee;
+            self.subnet_config
+                .cycles_account_manager_config
+                .schnorr_signature_fee = schnorr_signature_fee;
         }
         for (key_id, is_enabled) in &self.chain_keys_enabled_status {
             // Populate the chain key settings
@@ -2441,7 +2443,7 @@ impl ExecutionTestBuilder {
                 .max_instructions_per_message,
             self.subnet_type,
             self.own_subnet_id,
-            config,
+            self.subnet_config.cycles_account_manager_config.clone(),
         ));
         let config = self.execution_config.clone();
 
