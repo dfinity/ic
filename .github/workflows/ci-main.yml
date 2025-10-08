@@ -688,7 +688,7 @@ jobs:
               - "**/*.rs"
               - "**/*.toml"
               - "**/*.lock"
-      - name: Run Cargo Clippy Linux ${{ matrix.name }}
+      - name: Run Cargo ${{ matrix.name }} Linux 
         id: cargo-clippy-linux-run
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
