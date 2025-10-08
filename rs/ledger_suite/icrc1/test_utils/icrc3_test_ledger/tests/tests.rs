@@ -9,7 +9,7 @@ use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
+use ic_icrc3_test_ledger::AddBlockResult;
 use ic_ledger_suite_state_machine_helpers::{
     archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
 };

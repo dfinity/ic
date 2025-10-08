@@ -535,9 +535,9 @@ fn verify_unknown_block_handling(
 
     let archive1 = install_icrc3_test_ledger(env);
     let archive2 = install_icrc3_test_ledger(env);
-    let archived_count = archive_blocks(&env, ledger_id, archive1, 2);
+    let archived_count = archive_blocks(env, ledger_id, archive1, 2);
     assert_eq!(archived_count, 2);
-    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    let archived_count = archive_blocks(env, ledger_id, archive2, 2);
     assert_eq!(archived_count, 2);
 
     env.advance_time(Duration::from_secs(60));
