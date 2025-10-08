@@ -845,13 +845,36 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
         &PROFILING_DATA,
         "append_blocks.process_balance_changes",
         move || match block.transaction.operation {
-            Operation::Burn {
-                from,
-                amount,
-                fee: _,
-                ..
-            } => debit(block_index, from, amount),
-            Operation::Mint { to, amount, fee: _ } => credit(block_index, to, amount),
+            Operation::Burn { from, amount, .. } => {
+                let mut amount_with_fee = amount;
+                if let Some(fee) = block.effective_fee {
+                    amount_with_fee = amount.checked_add(&fee).unwrap_or_else(|| {
+                        trap(format!(
+                            "token amount overflow while indexing block {block_index}"
+                        ))
+                    });
+                    mutate_state(|s| s.last_fee = Some(fee));
+                    if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                        credit(block_index, fee_collector, fee);
+                    }
+                }
+                debit(block_index, from, amount_with_fee);
+            }
+            Operation::Mint { to, amount } => {
+                let mut amount_without_fee = amount;
+                if let Some(fee) = block.effective_fee {
+                    amount_without_fee = amount.checked_sub(&fee).unwrap_or_else(|| {
+                        trap(format!(
+                            "token amount underflow while indexing block {block_index}"
+                        ))
+                    });
+                    mutate_state(|s| s.last_fee = Some(fee));
+                    if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                        credit(block_index, fee_collector, fee);
+                    }
+                }
+                credit(block_index, to, amount_without_fee)
+            }
             Operation::Transfer {
                 from,
                 to,
