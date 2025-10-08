@@ -32,11 +32,18 @@ Malformed HTTP request tests:
 3. Update call with wrong request type is rejected with 4xx.
 4. Update call with malformed textual representation of its effective canister ID is rejected with 4xx.
 
+
+Edge cases for method names in update and query calls:
+- empty method name (succeeds if the canister exports a method with an empty name, fails gracefully otherwise);
+- method name with spaces (succeeds if the canister exports a method whose name contains spaces, fails gracefully otherwise);
+- long method name (succeeds if the canister exports a method with a long name, fails gracefully otherwise);
+- too long method name (always fails gracefully).
+
 end::catalog[] */
 
 use anyhow::Result;
 use candid::Principal;
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_public::{query, read_state};
@@ -56,6 +63,8 @@ use ic_system_test_driver::{
 };
 use ic_types::{CanisterId, PrincipalId};
 use ic_universal_canister::wasm;
+use ic_utils::interfaces::ManagementCanister;
+use ic_utils::interfaces::management_canister::builders::InstallMode;
 use maplit::btreemap;
 use reqwest::{Response, StatusCode};
 use serde_cbor::Value;
@@ -207,7 +216,7 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
-    let subnet_replica_url = get_subnet_replica_url(&snapshot);
+    let subnet_replica_url = get_sys_subnet_replica_url(&snapshot);
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
@@ -252,7 +261,7 @@ fn malformed_http_request(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _test_ids) = get_canister_test_ids(&snapshot);
-    let subnet_replica_url = get_subnet_replica_url(&snapshot);
+    let subnet_replica_url = get_sys_subnet_replica_url(&snapshot);
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
@@ -396,6 +405,176 @@ fn malformed_http_request(env: TestEnv) {
     });
 }
 
+fn wasm_with_exported_method_name(method_name: String) -> Vec<u8> {
+    let wat = format!(
+        r#"
+(module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (func $foo
+        (call $msg_reply)
+    )
+    (memory 1)
+    (export "canister_query {}" (func $foo))
+)"#,
+        method_name
+    );
+    wat::parse_str(wat).unwrap()
+}
+
+async fn deploy_wasm_to_fresh_canister(
+    agent: &Agent,
+    effective_canister_id: Principal,
+    wasm: &[u8],
+) -> Principal {
+    let ic00 = ManagementCanister::create(agent);
+    let canister_id = ic00
+        .create_canister()
+        .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id)
+        .call_and_wait()
+        .await
+        .unwrap()
+        .0;
+    ic00.install_code(&canister_id, wasm)
+        .with_mode(InstallMode::Reinstall)
+        .call_and_wait()
+        .await
+        .unwrap();
+    canister_id
+}
+
+fn method_name_edge_cases(env: TestEnv) {
+    let snapshot = env.topology_snapshot();
+
+    // We use an application subnet in this test
+    // since its update call size limits are lower
+    // and thus we can easily test the case of
+    // an update call already failing with HTTP status code 413
+    // and a query call still returning a reject.
+    let (_primary, _sys_uc, app_uc) = get_canister_ids(&snapshot);
+    let subnet_replica_url = get_app_subnet_replica_url(&snapshot);
+    let api_bn_url = get_api_bn_url(&snapshot);
+
+    block_on(async {
+        for (url, is_api_bn) in [(subnet_replica_url, false), (api_bn_url, true)] {
+            let client = reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .build()
+                .unwrap();
+            let agent = Agent::builder()
+                .with_url(url)
+                .with_http_client(client)
+                .build()
+                .unwrap();
+            agent.fetch_root_key().await.unwrap();
+
+            for method_name in [
+                "",
+                "method name with spaces",
+                &'x'.to_string().repeat(10_000),
+                &'x'.to_string().repeat(20_000),
+            ] {
+                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
+                if is_api_bn && method_name.len() > 10_000 {
+                    continue;
+                }
+
+                // We start with the successful case of a canister
+                // actually exporting a method with the given name.
+                let wasm = wasm_with_exported_method_name(method_name.to_string());
+                let canister_id =
+                    deploy_wasm_to_fresh_canister(&agent, app_uc.into(), wasm.as_slice()).await;
+
+                let response = agent
+                    .update(&canister_id, method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap();
+                assert!(response.is_empty());
+                let response = agent.query(&canister_id, method_name).call().await.unwrap();
+                assert!(response.is_empty());
+
+                // We continue with testing graceful handling of method names
+                // not exported by the canister.
+                // To this end, we use a trivial WASM exporting no method.
+                let trivial_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+                // We deploy a fresh canister to prevent test flakiness due to query caching.
+                let canister_id =
+                    deploy_wasm_to_fresh_canister(&agent, app_uc.into(), trivial_wasm.as_slice())
+                        .await;
+
+                let err = agent
+                    .update(&canister_id, method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::CertifiedReject { .. }));
+                let err = agent
+                    .query(&canister_id, method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+
+                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
+                if is_api_bn {
+                    continue;
+                }
+
+                let too_long_method_name = 'x'.to_string().repeat(1 << 20);
+                let err = agent
+                    .update(&canister_id, &too_long_method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::CertifiedReject { .. }));
+                let err = agent
+                    .query(&canister_id, &too_long_method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+
+                let too_long_method_name = 'x'.to_string().repeat(3 << 20);
+                let err = agent
+                    .update(&canister_id, &too_long_method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                let payload_too_large = |err: AgentError| {
+                    match err {
+                        AgentError::HttpError(payload) => {
+                            assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
+                        }
+                        _ => panic!("Unexpected error: {:?}", err),
+                    };
+                };
+                payload_too_large(err);
+                let err = agent
+                    .query(&canister_id, &too_long_method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+
+                let too_long_method_name = 'x'.to_string().repeat(5 << 20);
+                let err = agent
+                    .update(&canister_id, &too_long_method_name)
+                    .call_and_wait()
+                    .await
+                    .unwrap_err();
+                payload_too_large(err);
+                let err = agent
+                    .query(&canister_id, &too_long_method_name)
+                    .call()
+                    .await
+                    .unwrap_err();
+                payload_too_large(err);
+            }
+        }
+    });
+}
+
 async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16 {
     let status = response.status().as_u16();
     let text = if !(200..300).contains(&status) {
@@ -457,7 +636,13 @@ fn get_socket_addr(snapshot: &TopologySnapshot) -> SocketAddr {
     SocketAddr::new(sys_node.get_ip_addr(), 8080)
 }
 
-fn get_subnet_replica_url(snapshot: &TopologySnapshot) -> Url {
+fn get_app_subnet_replica_url(snapshot: &TopologySnapshot) -> Url {
+    let (_, app_subnet) = get_subnets(snapshot);
+    let app_node = app_subnet.nodes().next().unwrap();
+    app_node.get_public_url()
+}
+
+fn get_sys_subnet_replica_url(snapshot: &TopologySnapshot) -> Url {
     let (sys_subnet, _) = get_subnets(snapshot);
     let sys_node = sys_subnet.nodes().next().unwrap();
     sys_node.get_public_url()
@@ -519,6 +704,7 @@ fn main() -> Result<()> {
         .add_test(systest!(read_time; read_state::canister::Version::V2))
         .add_test(systest!(read_time; read_state::canister::Version::V3))
         .add_test(systest!(malformed_http_request))
+        .add_test(systest!(method_name_edge_cases))
         .execute_from_args()?;
 
     Ok(())

@@ -7,6 +7,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
+assert_matches = { workspace = true }
 candid = { workspace = true }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-ckdoge-minter = { path = "../minter" }
