@@ -169,7 +169,6 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
 
 def targets(
     command: str,
-    skip_system_tests: bool,
     skip_long_tests: bool,
     exclude_tags: list[str],
     base: str | None,
@@ -177,7 +176,6 @@ def targets(
 ):
     """Print the bazel targets to build or test to stdout."""
     # If no base is specified, form a query to return all targets
-    # but exclude those tagged with 'system_test' (in case --skip_system_tests was specified)
     # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified)
     # and those with any of the excluded tags.
     # Otherwise return a query for all targets that have modified inputs in the specified
@@ -269,7 +267,6 @@ def main():
         choices=["build", "test", "check"],
         help="Bazel command to generate targets for. If 'check' then check PULL_REQUEST_BAZEL_TARGETS for correctness",
     )
-    parser.add_argument("--skip_system_tests", action="store_true", help="Exclude tests tagged as 'system_test'")
     parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
     parser.add_argument(
         "--exclude_tags", action="append", default=[], help="Exclude targets tagged with the specified tags"
