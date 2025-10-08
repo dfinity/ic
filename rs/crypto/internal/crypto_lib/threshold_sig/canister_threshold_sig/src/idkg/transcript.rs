@@ -85,6 +85,13 @@ impl CombinedCommitment {
         }
     }
 
+    pub fn into_commitment(self) -> PolynomialCommitment {
+        match self {
+            Self::BySummation(c) => c,
+            Self::ByInterpolation(c) => c,
+        }
+    }
+
     pub(crate) fn curve_type(&self) -> EccCurveType {
         match self {
             Self::BySummation(c) => c.curve_type(),

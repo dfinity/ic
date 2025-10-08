@@ -160,8 +160,7 @@ jobs:
 
   dependencies-check:
     name: Dependency Scan for PR
-    runs-on: *dind-small-setup
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     if: ${{ github.event_name != 'merge_group' }}
     permissions:

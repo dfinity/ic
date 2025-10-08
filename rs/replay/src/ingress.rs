@@ -1,5 +1,5 @@
 use crate::cmd::{
-    AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, WithLedgerAccountCmd, WithNeuronCmd,
+    AddRegistryContentCmd, UpgradeSubnetToReplicaVersionCmd, WithLedgerAccountCmd, WithNeuronCmd,
     WithTrustedNeuronsFollowingNeuronCmd,
 };
 use candid::{Encode, decode_one};
@@ -296,37 +296,44 @@ pub fn cmd_add_ledger_account(
     ])
 }
 
-/// Creates signed ingress messages to add a new blessed replica version and
-/// potentially updates the subnet record with this replica version.
-pub(crate) fn cmd_add_and_bless_replica_version(
+/// Creates signed ingress messages to potentially add a new blessed replica
+/// version and updates the subnet record with this replica version.
+pub(crate) fn cmd_upgrade_subnet_to_replica_version(
     agent: &Agent,
     player: &crate::player::Player,
-    cmd: &AddAndBlessReplicaVersionCmd,
+    cmd: &UpgradeSubnetToReplicaVersionCmd,
     context_time: Time,
 ) -> Result<Vec<SignedIngress>, String> {
     let replica_version_id = cmd.replica_version_id.clone();
     let replica_version_record =
         serde_json::from_str::<ReplicaVersionRecord>(&cmd.replica_version_value)
             .unwrap_or_else(|err| panic!("Error parsing replica version JSON value: {err:?}"));
-    let mut msgs = vec![
-        add_replica_version(
+
+    let mut msgs = Vec::new();
+
+    if cmd.add_and_bless_replica_version {
+        msgs.push(add_replica_version(
             agent,
             replica_version_id.clone(),
             replica_version_record,
             context_time,
-        )?,
-        bless_replica_version(agent, player, replica_version_id.clone(), context_time)?,
-    ];
-    if cmd.update_subnet_record {
-        let mut subnet_record = player.get_subnet_record(context_time + Duration::from_secs(60))?;
-        subnet_record.replica_version_id = replica_version_id;
-        msgs.push(update_subnet_record(
+        )?);
+        msgs.push(bless_replica_version(
             agent,
-            player.subnet_id,
-            subnet_record,
+            player,
+            replica_version_id.clone(),
             context_time,
         )?);
     }
+
+    let mut subnet_record = player.get_subnet_record(context_time + Duration::from_secs(60))?;
+    subnet_record.replica_version_id = replica_version_id;
+    msgs.push(update_subnet_record(
+        agent,
+        player.subnet_id,
+        subnet_record,
+        context_time,
+    )?);
     Ok(msgs)
 }
 
