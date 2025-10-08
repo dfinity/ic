@@ -667,8 +667,13 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   cargo-clippy-linux:
-    name: Cargo Clippy Linux
-    runs-on: &dind-small-setup
+    strategy:
+      matrix:
+        include:
+          - name: lint
+          - name: build
+    name: Cargo Clippy Linux ${{ matrix.name }}
+    runs-on:
       labels: dind-small
     container: *container-setup
     timeout-minutes: 30
@@ -683,8 +688,8 @@ jobs:
               - "**/*.rs"
               - "**/*.toml"
               - "**/*.lock"
-      - name: Run Cargo Clippy Linux
-        id: cargo-clippy-linux
+      - name: Run Cargo Clippy Linux ${{ matrix.name }}
+        id: cargo-clippy-linux-${{ matrix.name }}
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         if: |
@@ -696,38 +701,12 @@ jobs:
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
-          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
 
-  cargo-build-release-linux:
-    name: Cargo Build Release Linux
-    runs-on: *dind-small-setup
-    container: *container-setup
-    timeout-minutes: 30
-    steps:
-      - *checkout
-      - name: Filter Rust Files [*.{rs,toml,lock}]
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          filters: |
-            cargo:
-              - "**/*.rs"
-              - "**/*.toml"
-              - "**/*.lock"
-      - name: Run Cargo Build Release Linux
-        id: cargo-build-release-linux
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-        if: |
-          steps.filter.outputs.cargo == 'true' ||
-          env.BRANCH_NAME == 'master' ||
-          startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
-        shell: bash
-        run: |
-          set -eExuo pipefail
-          export CARGO_TERM_COLOR=always # ensure output has colors
-          cargo build --release --locked
+          if [[ "${{ matrix.name }}" == "lint" ]]; then
+            "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+          else
+            cargo build --release --locked
+          fi
 
   check-pull-request-bazel-targets:
     name: Check PULL_REQUEST_BAZEL_TARGETS
