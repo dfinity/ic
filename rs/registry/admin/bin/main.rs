@@ -1496,6 +1496,7 @@ impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
         AddWasmRequest {
             wasm: Some(sns_wasm),
             hash: hex::decode(&self.wasm_module_sha256).unwrap(),
+            skip_update_latest_version: Some(false),
         }
     }
 }

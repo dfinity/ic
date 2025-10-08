@@ -11,9 +11,9 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-config = { path = "../../config" }
+config = { path = "../../config", features = ["dev"] }
 config_types = { path = "../../config_types" }
 
 [[bin]]
 name = "setupos-inject-config"
-path = "src/bin/inject.rs"
+path = "src/main.rs"

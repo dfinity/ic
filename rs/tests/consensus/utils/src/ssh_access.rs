@@ -1,5 +1,6 @@
 /// SSH Key Utilities
 use ic_system_test_driver::{
+    driver::test_env_api::{IcNodeSnapshot, SshSession as _},
     nns::{
         get_governance_canister, submit_external_proposal_with_test_id,
         vote_execute_proposal_assert_executed, vote_execute_proposal_assert_failed,
@@ -120,6 +121,43 @@ pub fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthM
             _ => {}
         }
     }
+}
+
+/// Disables the establiment of new SSH connections to the given node for the given account. This
+/// is done by deleting the `authorized_keys` file in the corresponding directory.
+/// Returns the SSH session used to to perform this operation, which can still be used to execute
+/// further commands.
+pub fn disable_ssh_access_to_node(
+    node: &IcNodeSnapshot,
+    account: &str,
+    auth_mean: &AuthMean,
+) -> Result<Session, String> {
+    let session = node.block_on_ssh_session().map_err(|e| {
+        format!(
+            "Failed to establish SSH session to node {} ({:?}): {}",
+            node.node_id,
+            node.get_ip_addr(),
+            e
+        )
+    })?;
+
+    node.block_on_bash_script_from_session(
+        &session,
+        &format!("rm /var/lib/{account}/.ssh/authorized_keys"),
+    )
+    .map_err(|e| {
+        format!(
+            "Failed to disable {} SSH access on node {} ({:?}): {}",
+            account,
+            node.node_id,
+            node.get_ip_addr(),
+            e
+        )
+    })?;
+
+    wait_until_authentication_fails(&node.get_ip_addr(), account, auth_mean);
+
+    Ok(session)
 }
 
 pub fn get_updatesubnetpayload_with_keys(
