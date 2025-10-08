@@ -1159,6 +1159,7 @@ fn test_icrc3_get_archives() {
             operation: Operation::Mint {
                 to: minting_account,
                 amount: Tokens::from(1_000_000u64),
+                fee: None,
             },
             created_at_time: None,
             memo: None,

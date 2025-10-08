@@ -128,6 +128,7 @@ fn test_icrc3_get_blocks() {
         Operation::Mint {
             to: Account::from(Principal::anonymous()),
             amount: Tokens::from(1_000_000_000u64),
+            fee: None,
         },
     );
     let blockid0 = block_with_id(0, block0.clone());
@@ -259,6 +260,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
                 operation: Operation::Mint {
                     to: Account::from(Principal::anonymous()),
                     amount: Tokens::from(amount as u64),
+                    fee: None,
                 },
                 created_at_time: None,
                 memo: None,
