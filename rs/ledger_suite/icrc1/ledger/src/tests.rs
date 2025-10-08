@@ -521,6 +521,7 @@ fn test_burn_smoke() {
             from,
             spender: None,
             amount: tokens(100_000),
+            fee: None,
         },
         created_at_time: None,
         memo: None,
