@@ -1145,7 +1145,7 @@ pub mod test {
                 );
 
                 // TEST 1: Non-replicated request artifact is missing the response.
-                // It should be removed from the unvalidated pool.
+                // It should be marked as invalid.
                 {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
@@ -1165,7 +1165,7 @@ pub mod test {
                         Height::from(0),
                     );
 
-                    assert_matches!(&changes[0], CanisterHttpChangeAction::HandleInvalid(_, _));
+                    assert_matches!(&changes[0], CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Artifact should contain response");
                 }
 
                 // TEST 2: Non-replicated request artifact has a mismatched content hash.
@@ -1198,6 +1198,111 @@ pub mod test {
                         CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content hash does not match the response"
                     );
                 }
+            })
+        });
+    }
+
+    #[test]
+    fn test_non_replicated_share_from_wrong_signer_is_invalid() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                // 1. SETUP: Create dependencies for a subnet with at least 3 nodes.
+                let Dependencies {
+                    pool,
+                    replica_config, // Our node, ID 0
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                // Define the delegated node and a different, incorrect signer.
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+                let wrong_signer_id = ic_test_utilities_types::ids::node_test_id(2);
+                let callback_id = CallbackId::from(0);
+
+                // 2. CONTEXT: The request is explicitly delegated to `delegated_node_id`.
+                let request_context = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                };
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            callback_id,
+                            request_context,
+                        )]))),
+                    ));
+
+                // 3. MALICIOUS ARTIFACT: Create a share that is signed by the `wrong_signer_id`.
+                let response = empty_canister_http_response(callback_id.get());
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: callback_id,
+                    timeout: response.timeout,
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    replica_version: ReplicaVersion::default(),
+                };
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    // The signature is created by the WRONG node.
+                    signature: crypto
+                        .sign(
+                            &response_metadata,
+                            wrong_signer_id,
+                            RegistryVersion::from(1),
+                        )
+                        .unwrap(),
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: Some(response),
+                    },
+                    peer_id: wrong_signer_id, // The artifact comes from the wrong signer.
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // 4. ACTION: Our replica attempts to validate the artifact.
+                let change_set = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(1),
+                );
+
+                // 5. ASSERTION: The artifact must be invalidated with the specific reason.
+                assert_eq!(change_set.len(), 1, "Expected exactly one change action");
+                assert_matches!(
+                    &change_set[0],
+                    CanisterHttpChangeAction::HandleInvalid(_, reason) => {
+                        assert_eq!(reason, "Share signed by node that is not the delegated node for the request");
+                    }
+                );
             })
         });
     }
@@ -1727,12 +1832,130 @@ pub mod test {
     }
 
     #[test]
+    fn test_dishonest_oversized_reject_is_invalidated() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                // 1. SETUP: Standard dependencies.
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                // This is the ID of the dishonest replica sending the artifact
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+                let callback_id = CallbackId::from(0);
+
+                // 2. CONTEXT: A valid request context must exist for validation to proceed.
+                let request_context = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                };
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            callback_id,
+                            request_context,
+                        )]))),
+                    ));
+
+                // 3. DISHONEST ARTIFACT:
+                let oversized_len = (MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 1) as usize;
+                let dishonest_response = CanisterHttpResponse {
+                    id: callback_id,
+                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysFatal,
+                        message: "b".repeat(oversized_len),
+                    }),
+                    ..empty_canister_http_response(callback_id.get())
+                };
+
+                let dishonest_hash = ic_types::crypto::crypto_hash(&dishonest_response);
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: callback_id,
+                    timeout: dishonest_response.timeout,
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: dishonest_hash,
+                    replica_version: ReplicaVersion::default(),
+                };
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    signature: crypto
+                        .sign(
+                            &response_metadata,
+                            delegated_node_id,
+                            RegistryVersion::from(1),
+                        )
+                        .unwrap(),
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: Some(dishonest_response.clone()),
+                    },
+                    peer_id: delegated_node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // 4. ACTION: Our replica attempts to validate the artifact.
+                let change_set = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(1),
+                );
+
+                // 5. ASSERTION: The artifact is now correctly invalidated by the validate_response_size check.
+                assert_eq!(change_set.len(), 1, "Expected exactly one change action");
+
+                let expected_error = format!(
+                    "Http Response for request ID {} is too large: Reject message size {} exceeds the maximum allowed size of {}",
+                    callback_id, oversized_len, MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES
+                );
+                assert_matches!(
+                    &change_set[0],
+                    CanisterHttpChangeAction::HandleInvalid(_, reason) => {
+                        assert_eq!(reason, &expected_error);
+                    }
+                );
+            })
+        });
+    }
+
+    #[test]
     fn test_reject_message_is_valid_when_context_limit_is_too_low() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 use ic_types::canister_http::CanisterHttpReject;
 
-                const MINIMUM_ALLOWED_RESPONSE_BYTES: u64 = 1024;
+                const MAXIMUM_ALLOWED_RESPONSE_BYTES: u64 = 1024;
                 // This value is intentionally lower than the reject message size.
                 const LOW_MAX_RESPONSE_BYTES: u64 = 10;
 
@@ -1795,7 +2018,7 @@ pub mod test {
                 let reject_message =
                     "This error message is definitely longer than 10 bytes.".to_string();
                 assert!(reject_message.len() as u64 > LOW_MAX_RESPONSE_BYTES);
-                assert!(reject_message.len() as u64 <= MINIMUM_ALLOWED_RESPONSE_BYTES);
+                assert!(reject_message.len() as u64 <= MAXIMUM_ALLOWED_RESPONSE_BYTES);
 
                 let reject_content = CanisterHttpReject {
                     reject_code: RejectCode::SysFatal,
