@@ -168,6 +168,8 @@ jobs:
       pull-requests: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
+      CARGO_AUDIT_VERSION: "0.21.0"
+      CARGO_WASMPACK_VERSION: "0.12.1"
       CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
@@ -196,13 +198,15 @@ jobs:
         if: steps.filter.outputs.depcheck == 'true'
         with:
           python-version: "3.12"
-      - name: Setup python deps
-        id: setup-python-deps
+      - name: Setup environment deps
+        id: setup-environment-deps
         if: steps.filter.outputs.depcheck == 'true'
         shell: bash
         run: |
           # Ignore externally-managed-environment pip error, install packages system-wide.
           PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
+          cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+          cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
       - name: Dependency Scan for Pull Request
         id: dependencies-check
         if: steps.filter.outputs.depcheck == 'true'
