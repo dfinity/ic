@@ -354,14 +354,21 @@ impl CanisterHttpPoolManagerImpl {
                         let max_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES as usize;
                         if reject.message.len() > max_len {
                             let original_len = reject.message.len();
+                            let mut safe_len = max_len;
+
+                            while !reject.message.is_char_boundary(safe_len) {
+                                safe_len -= 1;
+                            }
+
                             warn!(
                                 self.log,
                                 "Pruning oversized reject message for request ID {}. Original size: {}, New size: {}",
                                 response.id,
                                 original_len,
-                                max_len
+                                safe_len
                             );
-                            reject.message.truncate(max_len);
+                            // This would panic if not on a char boundary. 
+                            reject.message.truncate(safe_len);
                         }
                     }
 
