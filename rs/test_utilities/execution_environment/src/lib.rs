@@ -388,10 +388,7 @@ impl ExecutionTest {
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
-        let memory_usage = self.execution_state(canister_id).memory_usage()
-            + self
-                .canister_state(canister_id)
-                .canister_history_memory_usage();
+        let memory_usage = self.canister_state(canister_id).memory_usage();
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state
@@ -1452,6 +1449,10 @@ impl ExecutionTest {
                     );
                 }
                 canister = result.canister;
+                println!(
+                    "balance in execution test: {}",
+                    canister.system_state.balance()
+                );
                 if let Some(ir) = result.ingress_status {
                     self.ingress_history_writer
                         .set_status(&mut state, ir.0, ir.1);
@@ -1813,6 +1814,18 @@ impl ExecutionTest {
 
     pub fn get_own_subnet_id(&self) -> SubnetId {
         self.cycles_account_manager.get_subnet_id()
+    }
+
+    pub fn expected_storage_reservation_cycles(&self, allocated_bytes: NumBytes) -> Cycles {
+        let subnet_memory_saturation = self
+            .exec_env
+            .subnet_memory_saturation(&self.subnet_available_memory);
+        self.cycles_account_manager.storage_reservation_cycles(
+            allocated_bytes,
+            &subnet_memory_saturation,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 }
 
