@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `try_from_subaccount_to_principal` that returns an error rather than panicking if the subaccount is not a valid Principal.
+
+## 0.1.11
+
+### Changed
+- Fix the generic ICRC-21 message to conform to https://github.com/dfinity/wg-identity-authentication/tree/main/topics/ICRC-21/examples, add FieldsDisplay and remove LineDisplay.
+
 ## 0.1.10
 
 ### Changed

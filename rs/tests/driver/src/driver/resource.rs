@@ -390,14 +390,27 @@ fn vm_spec_from_nested_node(
     node: &NestedNode,
     default_vm_resources: Option<VmResources>,
 ) -> VmSpec {
+    let vm_resources = &node.vm_resources;
     VmSpec {
         name: node.name.clone(),
         // Note that the nested GuestOS VM uses half the vCPUs and memory of this host VM.
-        vcpus: HOSTOS_VCPUS_PER_VM,
-        memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
+        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
+            default_vm_resources
+                .and_then(|vm_resources| vm_resources.vcpus)
+                .unwrap_or(HOSTOS_VCPUS_PER_VM)
+        }),
+        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
+            default_vm_resources
+                .and_then(|vm_resources| vm_resources.memory_kibibytes)
+                .unwrap_or(HOSTOS_MEMORY_KIB_PER_VM)
+        }),
         boot_image: BootImage::GroupDefault,
-        boot_image_minimal_size_gibibytes: default_vm_resources
-            .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes),
+        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
+            || {
+                default_vm_resources
+                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
+            },
+        ),
         has_ipv4: false,
         vm_allocation: None,
         required_host_features: Vec::new(),

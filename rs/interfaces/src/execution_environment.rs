@@ -13,8 +13,7 @@ use ic_types::{
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
     messages::{
-        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query,
-        SignedIngressContent,
+        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -460,6 +459,28 @@ impl SubnetAvailableMemory {
         Ok(())
     }
 
+    /// Updates (increments/decrements) the available execution memory
+    /// by the given number of bytes.
+    /// This function should only be used to account for canister history
+    /// in the available execution memory.
+    /// This is because we do not want an operation tracked in canister history
+    /// to fail due to insufficient available execution memory
+    /// to update canister history.
+    /// Note that the available memory can become negative after this change.
+    pub fn update_execution_memory_unchecked(
+        &mut self,
+        execution_memory_change: SubnetAvailableExecutionMemoryChange,
+    ) {
+        match execution_memory_change {
+            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
+                self.execution_memory -= allocated_bytes.get() as i64;
+            }
+            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
+                self.execution_memory += deallocated_bytes.get() as i64;
+            }
+        }
+    }
+
     pub fn increment(
         &mut self,
         execution_amount: NumBytes,
@@ -498,6 +519,19 @@ impl SubnetAvailableMemory {
     }
 }
 
+/// Represents an update (allocation/deallocation)
+/// of the subnet available execution memory
+/// by the given number of bytes.
+/// This enum should only be used to account for canister history
+/// in the subnet available execution memory.
+/// This is because we do not want an operation tracked in canister history
+/// to fail due to insufficient available execution memory
+/// to update canister history.
+pub enum SubnetAvailableExecutionMemoryChange {
+    Allocated(NumBytes),
+    Deallocated(NumBytes),
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ExecutionMode {
     Replicated,
@@ -508,11 +542,8 @@ pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
-pub type IngressFilterService = BoxCloneService<
-    (ProvisionalWhitelist, SignedIngressContent),
-    Result<(), UserError>,
-    Infallible,
->;
+pub type IngressFilterService =
+    BoxCloneService<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>, Infallible>;
 
 /// Errors that can occur when handling a query execution request.
 #[derive(Debug, Error)]

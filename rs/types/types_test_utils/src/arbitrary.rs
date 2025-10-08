@@ -4,8 +4,8 @@ use ic_types::{
     CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
-        CallbackId, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata,
-        RequestOrResponse, Response,
+        CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
+        RequestOrResponse, Response, StreamMessage,
     },
     time::{CoarseTime, UNIX_EPOCH},
     xnet::StreamIndex,
@@ -212,14 +212,24 @@ prop_compose! {
     }
 }
 
-/// Produces an arbitrary [`RequestOrResponse`], with the `deadline` field
-/// populated or not.
-pub fn request_or_response_with_config(
-    populate_deadline: bool,
-) -> impl Strategy<Value = RequestOrResponse> {
+prop_compose! {
+    /// Returns an arbitrary [`Refund`].
+    pub fn refund() (
+        recipient in canister_id(),
+        cycles in 1u64..,
+    ) -> Refund {
+        Refund::anonymous(recipient, Cycles::from(cycles))
+    }
+}
+
+/// Produces an arbitrary [`StreamMessage`], including or not anonymous `Refunds`.
+pub fn stream_message_with_config(
+    including_anonymous_refund: bool,
+) -> impl Strategy<Value = StreamMessage> {
     prop_oneof![
-        request_with_config(populate_deadline).prop_flat_map(|req| Just(req.into())),
-        response_with_config(populate_deadline).prop_flat_map(|rep| Just(rep.into())),
+        1 => request_with_config(true).prop_flat_map(|req| Just(StreamMessage::from(req))),
+        1 => response_with_config(true).prop_flat_map(|rep| Just(StreamMessage::from(rep))),
+        including_anonymous_refund as u32 => refund().prop_flat_map(|refund| Just(StreamMessage::from(refund))),
     ]
 }
 

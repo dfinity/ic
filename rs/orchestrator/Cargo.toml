@@ -11,6 +11,7 @@ assert_matches = { workspace = true }
 async-trait = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
+config = { path = "../ic_os/config" }
 clap = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
@@ -22,7 +23,7 @@ hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
 ic-agent = { workspace = true }
 ic-config = { path = "../config" }
-ic-consensus = { path = "../consensus" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }

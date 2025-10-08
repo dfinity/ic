@@ -1,5 +1,5 @@
 {
-  "checksum": "36990c5a65a063e1cafbe1967cf76f27f3d4d9027c2928cc97ee8fcf04d525e4",
+  "checksum": "8d07cf7411b6cf04166d1145863ad8abd3ccb0422ee3d7d8c1645b272bb56edd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32373,15 +32373,6 @@
           "selects": {}
         },
         "edition": "2018",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "x86_64-apple-darwin": [
-              "-C",
-              "opt-level=0"
-            ]
-          }
-        },
         "version": "0.14.27"
       },
       "license": "MIT",
@@ -32488,15 +32479,6 @@
           "selects": {}
         },
         "edition": "2021",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "x86_64-apple-darwin": [
-              "-C",
-              "opt-level=0"
-            ]
-          }
-        },
         "version": "1.6.0"
       },
       "license": "MIT",
@@ -80991,6 +80973,7 @@
         ],
         "crate_features": {
           "common": [
+            "add-extension",
             "async-compression",
             "compression-br",
             "compression-deflate",

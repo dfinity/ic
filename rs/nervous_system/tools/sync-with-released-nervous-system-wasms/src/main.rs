@@ -197,10 +197,10 @@ impl Tag {
             {
                 return Ok(Some(release));
             }
-        } else if let Some(prod_canister) = release.asset(&canister_filename) {
-            if prod_canister.sha256().await? == expected_module_hash_str {
-                return Ok(Some(release));
-            }
+        } else if let Some(prod_canister) = release.asset(&canister_filename)
+            && prod_canister.sha256().await? == expected_module_hash_str
+        {
+            return Ok(Some(release));
         }
 
         Ok(None)
@@ -294,10 +294,10 @@ async fn get_mainnet_canister_release(
             .await?;
 
         for tag in &tags {
-            if let Some(ref tag_name_prefix) = canister_tag_name_prefix {
-                if !tag.name.starts_with(tag_name_prefix) {
-                    continue;
-                }
+            if let Some(ref tag_name_prefix) = canister_tag_name_prefix
+                && !tag.name.starts_with(tag_name_prefix)
+            {
+                continue;
             }
             match tag
                 .release_for_canister(

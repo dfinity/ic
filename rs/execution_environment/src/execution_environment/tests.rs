@@ -4,12 +4,13 @@ use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
-    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
-    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod, IC_00,
+    LogVisibilityV2, MasterPublicKeyId, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UpdateSettingsArgs,
+    UploadChunkArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
@@ -23,7 +24,7 @@ use ic_replicated_state::{
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
-    get_reply,
+    get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
@@ -331,12 +332,9 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // Canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS.
     assert_eq!(
-        available_memory_after_create,
-        ONE_GIB - test.state().memory_taken().execution().get() as i64
-            + canister_history_memory as i64
+        available_memory_after_create + test.state().memory_taken().execution().get() as i64,
+        ONE_GIB
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -363,12 +361,9 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // Canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS.
     assert_eq!(
-        available_memory_after_create,
-        ONE_GIB - test.state().memory_taken().execution().get() as i64
-            + canister_history_memory as i64
+        available_memory_after_create + test.state().memory_taken().execution().get() as i64,
+        ONE_GIB
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -1069,6 +1064,138 @@ fn get_canister_status_memory_metrics_snapshots_size() {
         get_canister_status(&mut test, canister_id).snapshots_size(),
         csr.snapshots_size()
     );
+}
+
+// A Wasm module with custom sections
+const CUSTOM_SECTIONS_WAT: &str = r#"(module
+(memory $memory 1)
+(export "memory" (memory $memory))
+(@custom "icp:public my_public_section" "my_public_section_value✅")
+(@custom "icp:private my_private_section" "my_private_section_value")
+)"#;
+
+#[test]
+fn get_canister_metadata_success() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_public_section".to_string()).encode();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args().other_side(canister_metadata_args),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+    let reply = get_reply(result);
+    let response = CanisterMetadataResponse::decode(&reply).unwrap();
+
+    assert_eq!(response.value(), b"my_public_section_value\xE2\x9C\x85");
+}
+
+#[test]
+fn get_canister_metadata_no_execution_state_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.create_canister_with_default_cycles();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_public_section".to_string()).encode();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args()
+                .other_side(canister_metadata_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reject = get_reject(result);
+    assert!(
+        reject.contains("has no Wasm module and hence no metadata is available")
+            && reject.contains(&canister.to_string())
+    );
+}
+
+#[test]
+fn get_canister_metadata_not_found_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_not_found_section".to_string()).encode();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args()
+                .other_side(canister_metadata_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reject = get_reject(result);
+    assert!(
+        reject.contains("has no metadata section with the name my_not_found_section")
+            && reject.contains(&canister.to_string())
+    );
+}
+
+#[test]
+fn get_canister_metadata_private_section_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_private_section".to_string()).encode();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args()
+                .other_side(canister_metadata_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reject = get_reject(result);
+    assert!(
+        reject.contains("has no metadata section with the name my_private_section")
+            && reject.contains(&canister.to_string())
+    );
+}
+
+#[test]
+fn get_canister_metadata_private_section_succeeds_for_controller() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller = test.universal_canister().unwrap();
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    test.canister_update_controller(canister, vec![caller.get()])
+        .unwrap();
+
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister, "my_private_section".to_string()).encode();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args().other_side(canister_metadata_args),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+
+    let reply = get_reply(result);
+    let response = CanisterMetadataResponse::decode(&reply).unwrap();
+    assert_eq!(response.value(), b"my_private_section_value");
 }
 
 #[test]
@@ -2180,10 +2307,49 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
 fn message_to_empty_canister_is_rejected() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let test_empty_canister = |test: &mut ExecutionTest| {
+        let err = test
+            .should_accept_ingress_message(canister, "query", vec![])
+            .unwrap_err();
+        assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+        let err = test
+            .non_replicated_query(canister, "query", wasm().reply().build())
+            .unwrap_err();
+        assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+    };
+
+    test_empty_canister(&mut test);
+
+    test.install_canister(canister, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    test.should_accept_ingress_message(canister, "query", vec![])
+        .unwrap();
+    test.non_replicated_query(canister, "query", wasm().reply().build())
+        .unwrap();
+
+    test.uninstall_code(canister).unwrap();
+
+    test_empty_canister(&mut test);
+}
+
+#[test]
+fn message_to_deleted_canister_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    test.stop_canister(canister);
+    test.process_stopping_canisters();
+    test.delete_canister(canister).unwrap();
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "query", vec![])
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+    assert_eq!(ErrorCode::CanisterNotFound, err.code());
+    let err = test
+        .non_replicated_query(canister, "query", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterNotFound, err.code());
 }
 
 #[test]
@@ -2534,20 +2700,14 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        ONE_GIB - memory_after_create + canister_history_memory as i64
+        test.subnet_available_memory().get_execution_memory() + memory_after_create,
+        ONE_GIB
     );
     let err = test.ingress(id, "test_with_trap", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let memory = test.subnet_available_memory();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
-    assert_eq!(
-        memory.get_execution_memory(),
-        ONE_GIB - memory_after_create + canister_history_memory as i64
-    );
+    assert_eq!(memory.get_execution_memory() + memory_after_create, ONE_GIB);
     assert_eq!(memory.get_guaranteed_response_message_memory(), ONE_GIB);
 }
 
@@ -2560,21 +2720,18 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        ONE_GIB - memory_after_create + canister_history_memory as i64
+        test.subnet_available_memory().get_execution_memory() + memory_after_create,
+        ONE_GIB
     );
     let result = test.ingress(id, "test_without_trap", vec![]);
     expect_canister_did_not_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
     let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
     let memory = test.subnet_available_memory();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
         memory.get_execution_memory() + new_memory_allocated + memory_after_create,
-        ONE_GIB + canister_history_memory as i64,
+        ONE_GIB
     );
     assert_eq!(ONE_GIB, memory.get_guaranteed_response_message_memory());
 }

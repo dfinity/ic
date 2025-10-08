@@ -248,12 +248,11 @@ impl TestConsensusPool {
     }
 
     pub fn make_next_block_with_rank(&self, rank: Rank) -> BlockProposal {
-        match self.latest_notarized_blocks().next() {
-            Some(parent) => self.make_next_block_from_parent(&parent, rank),
-            _ => {
-                panic!("Pool contains a valid notarization on a block that is not in the pool");
-            }
-        }
+        let parent = self
+            .latest_notarized_blocks()
+            .next()
+            .expect("Pool contains a valid notarization on a block that is not in the pool");
+        self.make_next_block_from_parent(&parent, rank)
     }
 
     pub fn make_next_block_from_parent(&self, parent: &Block, rank: Rank) -> BlockProposal {
@@ -515,7 +514,7 @@ impl TestConsensusPool {
 
     /// Returns a round, which can be granularly configured before it's
     /// executed.
-    pub fn prepare_round(&mut self) -> Round {
+    pub fn prepare_round(&mut self) -> Round<'_> {
         Round::new(self)
     }
 

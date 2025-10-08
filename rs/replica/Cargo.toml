@@ -17,6 +17,7 @@ ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-certification = { path = "../consensus/certification" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
@@ -80,7 +81,7 @@ harness = false
 
 [[bin]]
 name = "replica"
-path = "src/main.rs"
+path = "bin/replica/main.rs"
 
 [features]
 profiler = ["pprof"]

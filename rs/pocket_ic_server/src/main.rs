@@ -2,7 +2,7 @@
 use aide::{
     axum::{
         ApiRouter, IntoApiResponse,
-        routing::{get, post},
+        routing::{delete, get, post},
     },
     openapi::{Info, OpenApi},
 };
@@ -28,11 +28,12 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
-use pocket_ic_server::state_api::routes::handler_read_graph;
+use pocket_ic_server::state_api::routes::{handler_prune_graph, handler_read_graph};
 use pocket_ic_server::state_api::{
     routes::{AppState, RouterExt, http_gateway_routes, instances_routes, status},
     state::{ApiState, PocketIcApiStateBuilder},
 };
+use std::cmp::max;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -40,10 +41,10 @@ use std::io::{self, Error};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc::channel;
-use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -198,7 +199,12 @@ async fn start(runtime: Arc<Runtime>) {
         .build();
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while.
-    let min_alive_until = Arc::new(RwLock::new(Instant::now()));
+    let min_alive_until = Arc::new(AtomicU64::new(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64,
+    ));
     let app_state = AppState {
         api_state,
         pending_requests: Arc::new(AtomicU64::new(0)),
@@ -225,7 +231,13 @@ async fn start(runtime: Arc<Runtime>) {
         .directory_route("/verify_signature", post(verify_signature))
         //
         // Read state: Poll a result based on a received Started{} reply.
-        .directory_route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
+        .route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
+        //
+        // Prune state: Prune a result after successful polling based on a received Started{} reply.
+        .route(
+            "/prune_graph/{state_label}/{op_id}",
+            delete(handler_prune_graph),
+        )
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
@@ -265,12 +277,15 @@ async fn start(runtime: Arc<Runtime>) {
     // This is a safeguard against orphaning this child process.
     tokio::spawn(async move {
         loop {
-            let pending_requests = app_state.pending_requests.load(Ordering::Relaxed);
-            let guard = app_state.min_alive_until.read().await;
-            if pending_requests == 0 && guard.elapsed() > Duration::from_secs(args.ttl) {
+            let pending_requests = app_state.pending_requests.load(Ordering::SeqCst);
+            let min_alive_until =
+                UNIX_EPOCH + Duration::from_nanos(app_state.min_alive_until.load(Ordering::SeqCst));
+            let elapsed = SystemTime::now()
+                .duration_since(min_alive_until)
+                .unwrap_or_default();
+            if pending_requests == 0 && elapsed > Duration::from_secs(args.ttl) {
                 break;
             }
-            drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
@@ -398,6 +413,42 @@ fn create_file<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File>
         .open(&file_path)
 }
 
+struct PendingGuard {
+    pending_requests: Arc<AtomicU64>,
+    min_alive_until: Arc<AtomicU64>,
+}
+
+impl PendingGuard {
+    fn new(pending_requests: Arc<AtomicU64>, min_alive_until: Arc<AtomicU64>) -> Self {
+        pending_requests.fetch_add(1, Ordering::SeqCst);
+        Self {
+            pending_requests,
+            min_alive_until,
+        }
+    }
+}
+
+impl Drop for PendingGuard {
+    fn drop(&mut self) {
+        // TTL should not decrease: If now is later
+        // than the current TTL (from previous requests), reset it.
+        // Otherwise, a previous request set a larger TTL and we don't
+        // touch it.
+        let alive_until = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        self.min_alive_until
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |min_alive_until| {
+                Some(max(min_alive_until, alive_until))
+            })
+            .unwrap();
+        // Only mark the pending request as completed (by subtracting the counter)
+        // *after* updating TTL!
+        self.pending_requests.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 async fn bump_last_request_timestamp(
     State(AppState {
         pending_requests,
@@ -407,22 +458,8 @@ async fn bump_last_request_timestamp(
     request: http::Request<axum::body::Body>,
     next: Next,
 ) -> impl IntoApiResponse {
-    pending_requests.fetch_add(1, Ordering::Relaxed);
-    let resp = next.run(request).await;
-    // TTL should not decrease: If now is later
-    // than the current TTL (from previous requests), reset it.
-    // Otherwise, a previous request set a larger TTL and we don't
-    // touch it.
-    let alive_until = Instant::now();
-    let mut min_alive_until = min_alive_until.write().await;
-    if *min_alive_until < alive_until {
-        *min_alive_until = alive_until;
-    }
-    drop(min_alive_until);
-    // Only mark the pending request as completed (by subtracting the counter)
-    // *after* updating TTL!
-    pending_requests.fetch_sub(1, Ordering::Relaxed);
-    resp
+    let _guard = PendingGuard::new(pending_requests.clone(), min_alive_until.clone());
+    next.run(request).await
 }
 
 async fn get_blob_store_entry(

@@ -3,9 +3,9 @@ use ic_canonical_state::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
         CborProxyDecoder, CborProxyEncoder,
-        old_types::{RequestOrResponseV19, StreamHeaderV19},
+        old_types::{RequestOrResponseV21, StreamHeaderV19},
         types::{
-            RequestOrResponse as RequestOrResponseV21, StreamHeader as StreamHeaderV21,
+            StreamHeader as StreamHeaderV21, StreamMessage as StreamMessageV22,
             SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
         },
     },
@@ -17,7 +17,7 @@ use ic_test_utilities_types::arbitrary;
 use ic_types::{
     CryptoHashOfPartialState,
     crypto::CryptoHash,
-    messages::RequestOrResponse,
+    messages::StreamMessage,
     xnet::{RejectReason, StreamHeader},
 };
 use lazy_static::lazy_static;
@@ -219,43 +219,49 @@ fn stream_header_encoding_panic_on_invalid(
     }
 }
 
-/// Produces a `RequestOrResponse` valid at all certification versions in the range.
+/// Produces a `StreamMessage` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_message()
--> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![(
-        arbitrary::request_or_response_with_config(true),
-        Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-    ),]
+-> impl Strategy<Value = (StreamMessage, RangeInclusive<CertificationVersion>)> {
+    prop_oneof![
+        (
+            arbitrary::stream_message_with_config(false),
+            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+        (
+            arbitrary::stream_message_with_config(true),
+            Just(CertificationVersion::V22..=CertificationVersion::V22)
+        ),
+    ]
 }
 
 lazy_static! {
-    /// Current and previous canonical `RequestOrResponse` types and applicable
+    /// Current and previous canonical `StreamMessage` types and applicable
     /// certification versions.
-    static ref MESSAGE_ENCODINGS: Vec<VersionedEncoding<RequestOrResponse>> = vec![
+    static ref MESSAGE_ENCODINGS: Vec<VersionedEncoding<StreamMessage>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V19,
-            "RequestOrResponseV19",
-            |v| RequestOrResponseV19::proxy_encode(v),
-            |v| RequestOrResponseV19::proxy_decode(v),
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V21,
+            "RequestOrResponseV21",
+            |v| RequestOrResponseV21::proxy_encode(v),
+            |v| RequestOrResponseV21::proxy_decode(v),
         ),
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
-            "RequestOrResponse",
-            |v| RequestOrResponseV21::proxy_encode(v),
-            |v| RequestOrResponseV21::proxy_decode(v),
+            "StreamMessage",
+            |v| StreamMessageV22::proxy_encode(v),
+            |v| StreamMessageV22::proxy_decode(v),
         ),
     ];
 }
 
-/// Tests that given a `RequestOrResponse` that is valid for a given certification
-/// version range (e.g. no `reject_signals` before certification version 8) all
-/// supported canonical type (e.g. `RequestOrResponseV3` or `RequestOrResponse`)
+/// Tests that given a `StreamMessage` that is valid for a given certification
+/// version range (e.g. no `refund` before certification version 22) all
+/// supported canonical type (e.g. `RequestOrResponseV21` or `StreamMessage`)
 /// and certification version combinations produce the exact same encoding.
 #[test_strategy::proptest]
 fn message_unique_encoding(
     #[strategy(arb_valid_versioned_message())] test_message: (
-        RequestOrResponse,
+        StreamMessage,
         RangeInclusive<CertificationVersion>,
     ),
 ) {
@@ -288,13 +294,13 @@ fn message_unique_encoding(
     }
 }
 
-/// Tests that, given a `RequestOrResponse` that is valid for a given
+/// Tests that, given a `StreamMessage` that is valid for a given
 /// certification version range, all supported encodings will decode back into
-/// the same `RequestOrResponse`.
+/// the same `StreamMessage`.
 #[test_strategy::proptest]
 fn message_roundtrip_encoding(
     #[strategy(arb_valid_versioned_message())] test_message: (
-        RequestOrResponse,
+        StreamMessage,
         RangeInclusive<CertificationVersion>,
     ),
 ) {

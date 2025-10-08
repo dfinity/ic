@@ -9,20 +9,18 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added a new proposal type `DeregisterKnownNeuron` without enabling it (behind feature flag).
-
-* Enable FulfillSubnetRentalRequest proposals. The main effect of such proposals
-  is the creation of an EXCLUSIVE subnet, meaning that only ONE principal is
-  allowed to create canisters in the subnet. For details, see
-  https://forum.dfinity.org/t/subnet-rental-canister-work-on-next-phase-has-started/52803
-  (This is also discussed under the heading "Swiss subnet".)
-
-* Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
-  proposal.
+* Record votes by known neurons before clearing ballots.
+* Allow updating known neuron through RegisterKnownNeuron without having to change its name.
 
 ## Changed
 
+* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
+  limit.
+
 ## Deprecated
+
+* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
+  instead).
 
 ## Removed
 

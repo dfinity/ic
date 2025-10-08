@@ -1,5 +1,4 @@
 use crate::{
-    are_fulfill_subnet_rental_request_proposals_enabled,
     governance::{Environment, LOG_PREFIX},
     pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
 };
@@ -41,13 +40,6 @@ impl FulfillSubnetRentalRequest {
     /// because that would require calling other canisters, which makes
     /// validation code fraught with peril.
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-        if !are_fulfill_subnet_rental_request_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "FulfillSubnetRentalRequest proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         let Self {
             user,
             node_ids,
@@ -93,13 +85,6 @@ impl FulfillSubnetRentalRequest {
         proposal_id: ProposalId,
         env: &Arc<dyn Environment>,
     ) -> Result<(), GovernanceError> {
-        if !are_fulfill_subnet_rental_request_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "FulfillSubnetRentalRequest proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         // The last step also does this, but we do this first to avoid creating
         // a subnet (in the next step) that needs to be immediately "disbanded"
         // due to it being "orphaned" (i.e. nobody can create canisters in it).
@@ -149,8 +134,12 @@ impl FulfillSubnetRentalRequest {
                 )
             })?;
 
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code schrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct RentalRequest {
             user: Principal,
@@ -328,8 +317,12 @@ impl FulfillSubnetRentalRequest {
         let proposal_id = proposal_id.id;
 
         // Assemble the request.
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code shrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct CreateRentalAgreementPayload {
             user: Principal,

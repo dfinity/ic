@@ -87,6 +87,16 @@ pub enum RpcError {
     AddressNotAvailable,
 }
 
+impl RpcError {
+    pub fn is_resource_temporarily_unavailable(&self) -> bool {
+        if let RpcError::JsonRpc(jsonrpc::error::Error::Transport(err)) = self {
+            err.to_string().contains("Resource temporarily unavailable")
+        } else {
+            false
+        }
+    }
+}
+
 impl From<BtcAddressParseError> for RpcError {
     fn from(e: BtcAddressParseError) -> Self {
         Self::InvalidBtcAddress(e)

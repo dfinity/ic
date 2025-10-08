@@ -15,11 +15,13 @@ use ic_types::crypto::ExtendedDerivationPath;
 use rand::{CryptoRng, Rng, RngCore};
 use strum::IntoEnumIterator;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 criterion_main!(benches);
 criterion_group!(benches, crypto_tschnorr_benchmarks);
 
 fn crypto_tschnorr_benchmarks(criterion: &mut Criterion) {
-    let number_of_nodes = [1, 4, 13, 34, 40];
+    let number_of_nodes = [34];
 
     let test_cases = generate_test_cases(&number_of_nodes);
 
@@ -27,6 +29,7 @@ fn crypto_tschnorr_benchmarks(criterion: &mut Criterion) {
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
+            .warm_up_time(WARMUP_TIME)
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 

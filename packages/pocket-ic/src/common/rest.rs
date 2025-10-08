@@ -590,10 +590,10 @@ pub struct IcpFeatures {
     pub cycles_minting: Option<IcpFeaturesConfig>,
     /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
     pub icp_token: Option<IcpFeaturesConfig>,
-    /// Deploys the cycles ledger and index canisters.
+    /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
     pub cycles_token: Option<IcpFeaturesConfig>,
     /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
-    /// The initial NNS neuron is controlled by the principal `hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe`.
+    /// The initial NNS neuron is controlled by the anonymous principal.
     pub nns_governance: Option<IcpFeaturesConfig>,
     /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
     /// and uploads the SNS canister WASMs to the SNS-W canister.
@@ -766,12 +766,12 @@ impl ExtendedSubnetConfigSet {
 
     pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
         let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
-            if let Some(config) = subnet {
-                if !matches!(config.state_config, SubnetStateConfig::New) {
-                    return Err(format!(
-                        "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
-                    ));
-                }
+            if let Some(config) = subnet
+                && !matches!(config.state_config, SubnetStateConfig::New)
+            {
+                return Err(format!(
+                    "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
+                ));
             }
             Ok(())
         };

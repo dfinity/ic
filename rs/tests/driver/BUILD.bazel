@@ -20,7 +20,6 @@ rust_library(
         "//rs/utils": "utils",
     },
     compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
         ":assets/vector.toml",
     ],
     crate_name = "ic_system_test_driver",
@@ -32,7 +31,6 @@ rust_library(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     visibility = [
         "//rs:system-tests-pkg",
-        "//rs/ic_os/dev_test_tools/launch-single-vm:__pkg__",
     ],
     deps = [
         # Keep sorted.
@@ -45,6 +43,7 @@ rust_library(
         "//rs/ic_os/config:config_lib_dev",
         "//rs/ic_os/config_types",
         "//rs/ic_os/deterministic_ips",
+        "//rs/ic_os/dev_test_tools/setupos-image-config",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/ledger_suite/common/ledger_core",

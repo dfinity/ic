@@ -131,12 +131,12 @@ generate_nns_upgrade_proposal_text() {
     # If the canister has an unrelease_changelog.md file, use that to populate
     # the "Features & Fixes" section of the upgrade proposal.
     FEATURES_AND_FIXES="TODO Hand-craft this section."
-    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
-    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
-    if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
+    PRIMARY_CANISTER_RELATIVE_CODE_LOCATION=$(echo "${RELATIVE_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_RELATIVE_PATH="${PRIMARY_CANISTER_RELATIVE_CODE_LOCATION}/unreleased_changelog.md"
+    if [[ -e "${UNRELEASED_CHANGELOG_RELATIVE_PATH}" ]]; then
         FEATURES_AND_FIXES=$(
-            sed -n '/# Next Upgrade Proposal/,$p' \
-                "${UNRELEASED_CHANGELOG_PATH}" \
+            git show "${NEXT_COMMIT}:${UNRELEASED_CHANGELOG_RELATIVE_PATH}" \
+                | sed -n '/# Next Upgrade Proposal/,$p' \
                 | tail -n +3 \
                 | filter_out_empty_markdown_sections \
                 | increment_markdown_heading_levels
@@ -151,7 +151,7 @@ get too old. One reason to run recent builds is so that the next release
 does not have a huge amount of changes in it.'
         fi
     else
-        print_yellow "No unreleased_changelog.md found at ${UNRELEASED_CHANGELOG_PATH} for ${CANISTER_NAME} " >&2
+        print_yellow "No unreleased_changelog.md found at ${UNRELEASED_CHANGELOG_RELATIVE_PATH} for ${CANISTER_NAME} " >&2
         print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
     fi
 
@@ -288,12 +288,12 @@ generate_sns_bless_wasm_proposal_text() {
     # If the canister has an unrelease_changelog.md file, use that to populate
     # the "Features & Fixes" section of the proposal.
     FEATURES_AND_FIXES="TODO Hand-craft this section."
-    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
-    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
-    if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
+    PRIMARY_CANISTER_RELATIVE_CODE_LOCATION=$(echo "${RELATIVE_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_RELATIVE_PATH="${PRIMARY_CANISTER_RELATIVE_CODE_LOCATION}/unreleased_changelog.md"
+    if [[ -e "${UNRELEASED_CHANGELOG_RELATIVE_PATH}" ]]; then
         FEATURES_AND_FIXES=$(
-            sed -n '/# Next Upgrade Proposal/,$p' \
-                "${UNRELEASED_CHANGELOG_PATH}" \
+            git show "${NEXT_COMMIT}:${UNRELEASED_CHANGELOG_RELATIVE_PATH}" \
+                | sed -n '/# Next Upgrade Proposal/,$p' \
                 | tail -n +3 \
                 | filter_out_empty_markdown_sections \
                 | increment_markdown_heading_levels
@@ -308,7 +308,7 @@ get too old. One reason to run recent builds is so that the next release
 does not have a huge amount of changes in it.'
         fi
     else
-        print_yellow 'No unreleased_changelog.md file for ${CANISTER_NAME}.' >&2
+        print_yellow "No unreleased_changelog.md file at ${UNRELEASED_CHANGELOG_RELATIVE_PATH} for ${CANISTER_NAME}." >&2
         print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
     fi
 

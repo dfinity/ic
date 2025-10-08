@@ -21,7 +21,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     batch::CanisterCyclesCostSchedule,
-    messages::{SignedIngressContent, extract_effective_canister_id},
+    messages::{SignedIngress, extract_effective_canister_id},
     nominal_cycles::NominalCycles,
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -56,8 +56,8 @@ fn test_can_charge_application_subnets() {
             SubnetType::VerifiedApplication,
         ] {
             for memory_allocation in &[
-                MemoryAllocation::try_from(NumBytes::from(0)).unwrap(),
-                MemoryAllocation::try_from(NumBytes::from(1 << 20)).unwrap(),
+                MemoryAllocation::from(NumBytes::from(0)),
+                MemoryAllocation::from(NumBytes::from(1 << 20)),
             ] {
                 for freeze_threshold in &[NumSeconds::from(1000), NumSeconds::from(0)] {
                     let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
@@ -367,68 +367,42 @@ fn verify_no_cycles_charged_for_message_execution_on_free_schedule() {
 
 #[test]
 fn ingress_induction_cost_valid_subnet_message() {
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let msg: SignedIngressContent = SignedIngressBuilder::new()
-        .sender(user_test_id(0))
-        .canister_id(IC_00)
-        .method_name("start_canister")
-        .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
-        .build()
-        .into();
-    let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let num_bytes = msg.arg().len() + msg.method_name().len();
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let msg: SignedIngress = SignedIngressBuilder::new()
+            .sender(user_test_id(0))
+            .canister_id(IC_00)
+            .method_name("start_canister")
+            .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
+            .build();
+        let signed_ingress_content = &msg.content();
+        let effective_canister_id = extract_effective_canister_id(signed_ingress_content).unwrap();
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let num_bytes = msg.binary().len();
 
-    assert_eq!(
-        cycles_account_manager.ingress_induction_cost(
-            &msg,
-            effective_canister_id,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            cost_schedule,
-        ),
-        IngressInductionCost::Fee {
-            payer: canister_test_id(0),
-            cost: cycles_account_manager
-                .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                + cycles_account_manager
-                    .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                    * num_bytes
+        let cost = cycles_account_manager
+            .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+            + cycles_account_manager
+                .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+                * num_bytes;
+        if let CanisterCyclesCostSchedule::Free = cost_schedule {
+            assert_eq!(cost, Cycles::new(0));
         }
-    );
-}
-
-#[test]
-fn ingress_induction_cost_valid_subnet_message_free_schedule() {
-    let cost_schedule = CanisterCyclesCostSchedule::Free;
-    let msg: SignedIngressContent = SignedIngressBuilder::new()
-        .sender(user_test_id(0))
-        .canister_id(IC_00)
-        .method_name("start_canister")
-        .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
-        .build()
-        .into();
-    let effective_canister_id = extract_effective_canister_id(&msg).unwrap();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let num_bytes = msg.arg().len() + msg.method_name().len();
-
-    let cost = cycles_account_manager
-        .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-        + cycles_account_manager
-            .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-            * num_bytes;
-    assert_eq!(cost, Cycles::new(0));
-    assert_eq!(
-        cycles_account_manager.ingress_induction_cost(
-            &msg,
-            effective_canister_id,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            cost_schedule,
-        ),
-        IngressInductionCost::Fee {
-            payer: canister_test_id(0),
-            cost
-        }
-    );
+        assert_eq!(
+            cycles_account_manager.ingress_induction_cost(
+                &msg,
+                effective_canister_id,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule,
+            ),
+            IngressInductionCost::Fee {
+                payer: canister_test_id(0),
+                cost
+            }
+        );
+    }
 }
 
 #[test]
@@ -445,8 +419,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
@@ -464,8 +437,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
@@ -483,8 +455,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
@@ -514,8 +485,7 @@ fn charge_canister_for_memory_usage() {
             INITIAL_BALANCE,
             NumSeconds::from(0),
         );
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(MEMORY_ALLOCATION).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(MEMORY_ALLOCATION);
         canister
             .push_output_request(
                 RequestBuilder::new().sender(canister_id).build().into(),
@@ -577,8 +547,7 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
             INITIAL_BALANCE,
             NumSeconds::from(0),
         );
-        canister.system_state.memory_allocation =
-            MemoryAllocation::try_from(MEMORY_ALLOCATION).unwrap();
+        canister.system_state.memory_allocation = MemoryAllocation::from(MEMORY_ALLOCATION);
         canister
             .push_output_request(
                 RequestBuilder::new().sender(canister_id).build().into(),

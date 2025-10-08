@@ -7,13 +7,17 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{Tokens, block::BlockType};
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, balance_of, icrc21_consent_message, send_approval, send_transfer,
+    send_transfer_from, supported_standards, total_supply, transfer,
+};
 use ic_ledger_suite_state_machine_tests::archiving::icp_archives;
 use ic_ledger_suite_state_machine_tests::{
-    AllowanceProvider, FEE, MINTER, balance_of, convert_to_fields_args, default_approve_args,
-    default_transfer_from_args, expect_icrc2_disabled, extract_icrc21_fields_message,
-    extract_icrc21_message_string, icrc21_consent_message, modify_field, send_approval,
-    send_transfer, send_transfer_from, setup, supported_standards, total_supply, transfer,
+    MINTER, convert_to_fields_args, default_approve_args, default_transfer_from_args,
+    expect_icrc2_disabled, extract_icrc21_fields_message, extract_icrc21_message_string,
+    modify_field, setup,
 };
+use ic_ledger_suite_state_machine_tests_constants::FEE;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
@@ -68,14 +72,6 @@ fn ledger_wasm_prev_version() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister-prev-version",
-        &[],
-    )
-}
-
-fn ledger_wasm_notify_method() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger-canister_notify-method",
         &[],
     )
 }
@@ -1916,11 +1912,7 @@ fn test_notify_caller_logging() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_notify_method(),
-            Encode!(&payload).unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister");
 
     // Make a transfer that we can notify about

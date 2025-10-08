@@ -5,8 +5,8 @@ use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
-    CspTlsSignError, IDkgCreateDealingVaultError, PublicRandomSeedGeneratorError,
-    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    CspTlsSignError, IDkgCreateDealingVaultError, IDkgTranscriptOperationInternalBytes,
+    PublicRandomSeedGeneratorError, ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
     VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::api::{
@@ -43,9 +43,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
@@ -98,9 +96,10 @@ where
             return;
         }
         let result = job();
-        let _ = tx.send(result); // Errors occur if the associated receiver
-        // handle was dropped and are considered
+
+        // Errors occur if the associated receiver handle was dropped and are considered
         // legitimate and are thus ignored.
+        let _ = tx.send(result);
     });
     rx.await.expect("the sender was dropped")
 }
@@ -338,7 +337,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -382,7 +381,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,

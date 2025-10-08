@@ -201,15 +201,16 @@ thread_local! {
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    // TODO(NNS1-4115): Delete after the Swiss subnet has been created, which is
-    // expected to occur in mid September 2025 or so.
-    static ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS: Cell<bool>
-        = const { Cell::new(true) };
-
     static ENABLE_KNOWN_NEURON_VOTING_HISTORY: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
 
     static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_COMPREHENSIVE_NEURON_LIST: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
 }
 
@@ -234,20 +235,6 @@ pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
-}
-
-pub fn are_fulfill_subnet_rental_request_proposals_enabled() -> bool {
-    ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_fulfill_subnet_rental_request_proposals() -> Temporary {
-    Temporary::new(&ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_fulfill_subnet_rental_request_proposals() -> Temporary {
-    Temporary::new(&ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS, false)
 }
 
 pub fn is_known_neuron_voting_history_enabled() -> bool {
@@ -276,6 +263,34 @@ pub fn temporarily_enable_deregister_known_neuron() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_deregister_known_neuron() -> Temporary {
     Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, false)
+}
+
+pub fn is_comprehensive_neuron_list_enabled() -> bool {
+    ENABLE_COMPREHENSIVE_NEURON_LIST.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_comprehensive_neuron_list() -> Temporary {
+    Temporary::new(&ENABLE_COMPREHENSIVE_NEURON_LIST, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_comprehensive_neuron_list() -> Temporary {
+    Temporary::new(&ENABLE_COMPREHENSIVE_NEURON_LIST, false)
+}
+
+pub fn is_neuron_follow_restrictions_enabled() -> bool {
+    ENABLE_NEURON_FOLLOW_RESTRICTIONS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
+    Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
+    Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

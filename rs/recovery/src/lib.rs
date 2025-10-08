@@ -18,7 +18,7 @@ use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
-    cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
+    cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
     player::StateParams,
 };
 use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
@@ -62,6 +62,7 @@ pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
+pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
 pub const IC_STATE_EXCLUDES: &[&str] = &[
@@ -75,6 +76,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     // page deltas. We do not need to copy page deltas when nodes are re-assigned.
     "page_deltas",
     "node_operator_private_key.pem",
+    "ic_adapter",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";
@@ -104,7 +106,7 @@ pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,
     pub replica_version: Option<ReplicaVersion>,
-    pub key_file: Option<PathBuf>,
+    pub admin_key_file: Option<PathBuf>,
     pub test_mode: bool,
     pub skip_prompts: bool,
     pub use_local_binaries: bool,
@@ -128,7 +130,7 @@ pub struct Recovery {
     pub admin_helper: AdminHelper,
     pub registry_helper: RegistryHelper,
 
-    pub key_file: Option<PathBuf>,
+    pub admin_key_file: Option<PathBuf>,
     ssh_confirmation: bool,
 
     pub logger: Logger,
@@ -220,7 +222,7 @@ impl Recovery {
             local_store_path,
             admin_helper,
             registry_helper,
-            key_file: args.key_file,
+            admin_key_file: args.admin_key_file,
             ssh_confirmation,
             logger,
         })
@@ -273,32 +275,19 @@ impl Recovery {
     }
 
     /// Executes the given SSH command.
-    pub fn execute_ssh_command(
+    pub fn execute_admin_ssh_command(
         &self,
-        account: &str,
         node_ip: IpAddr,
         commands: &str,
     ) -> RecoveryResult<Option<String>> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            account.to_string(),
+            SshUser::Admin.to_string(),
             node_ip,
             self.ssh_confirmation,
-            self.key_file.clone(),
+            self.admin_key_file.clone(),
         );
         ssh_helper.ssh(commands.to_string())
-    }
-
-    /// Returns true if ssh access to the given account and ip exists.
-    pub fn check_ssh_access(&self, account: &str, node_ip: IpAddr) -> bool {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            account.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            self.key_file.clone(),
-        );
-        ssh_helper.can_connect()
     }
 
     // Execute an `ic-admin` command, log the output.
@@ -318,7 +307,7 @@ impl Recovery {
         &self,
         subnet_id: SubnetId,
         ssh_user: SshUser,
-        alt_key_file: Option<PathBuf>,
+        key_file: Option<PathBuf>,
         auto_retry: bool,
     ) -> impl Step + use<> {
         DownloadCertificationsStep {
@@ -327,7 +316,7 @@ impl Recovery {
             registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: alt_key_file.or(self.key_file.clone()),
+            key_file,
             auto_retry,
             ssh_user,
         }
@@ -347,19 +336,20 @@ impl Recovery {
     pub fn get_download_state_step(
         &self,
         node_ip: IpAddr,
-        try_readonly: bool,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
         additional_excludes: Vec<&str>,
     ) -> impl Step + use<> {
         DownloadIcStateStep {
             logger: self.logger.clone(),
-            try_readonly,
+            ssh_user,
             node_ip,
             target: self.data_dir.display().to_string(),
             keep_downloaded_state,
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file,
             additional_excludes: additional_excludes
                 .iter()
                 .map(std::string::ToString::to_string)
@@ -401,13 +391,14 @@ impl Recovery {
     }
 
     /// Return a [ReplayStep] to replay the downloaded state of the given
-    /// subnet and execute [SubCommand::AddAndBlessReplicaVersion].
+    /// subnet and execute [SubCommand::UpgradeSubnetToReplicaVersion].
     pub fn get_replay_with_upgrade_step(
         &self,
         subnet_id: SubnetId,
         upgrade_version: ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        add_and_bless_replica_version: bool,
         replay_until_height: Option<u64>,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
@@ -417,13 +408,18 @@ impl Recovery {
         Ok(self.get_replay_step(
             subnet_id,
             Some(ReplaySubCmd {
-                cmd: SubCommand::AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd {
+                cmd: SubCommand::UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd {
                     replica_version_id: upgrade_version.to_string(),
                     replica_version_value: version_record.clone(),
-                    update_subnet_record: true,
+                    add_and_bless_replica_version,
                 }),
                 descr: format!(
-                    r#" add-and-bless-replica-version --update-subnet-record "{upgrade_version}" {version_record}"#
+                    r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
+                    if add_and_bless_replica_version {
+                        " --and-and-bless-replica-version"
+                    } else {
+                        ""
+                    },
                 ),
             }),
             None,
@@ -522,26 +518,13 @@ impl Recovery {
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step + use<> {
-        self.get_upload_and_restart_step_with_data_src(
-            upload_method,
-            self.work_dir.join(IC_STATE_DIR),
-        )
-    }
-
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
-    pub fn get_upload_and_restart_step_with_data_src(
-        &self,
-        upload_method: DataLocation,
-        data_src: PathBuf,
-    ) -> impl Step + use<> {
         UploadAndRestartStep {
             logger: self.logger.clone(),
             upload_method,
             work_dir: self.work_dir.clone(),
-            data_src,
+            data_src: self.work_dir.join(IC_STATE_DIR),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
             check_ic_replay_height: true,
         }
     }
@@ -802,7 +785,7 @@ impl Recovery {
             logger: self.logger.clone(),
             node_ip,
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 
@@ -873,7 +856,7 @@ impl Recovery {
             node_ip,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 
@@ -886,9 +869,7 @@ impl Recovery {
         CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
             work_dir: self.work_dir.clone(),
-            // If no output directory is specified, save the files in a directory that will
-            // not be deleted by the cleanup step (i.e., not `self.work_dir`).
-            output_dir: output_dir.unwrap_or(PathBuf::from("/tmp/recovery_artifacts")),
+            output_dir: output_dir.unwrap_or(self.recovery_dir.join("output")),
         }
     }
 
@@ -915,6 +896,8 @@ impl Recovery {
         &self,
         download_node: IpAddr,
         original_nns_id: SubnetId,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
     ) -> impl Step + use<> {
         DownloadRegistryStoreStep {
             logger: self.logger.clone(),
@@ -922,7 +905,8 @@ impl Recovery {
             original_nns_id,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            ssh_user,
+            key_file,
         }
     }
 
@@ -939,7 +923,7 @@ impl Recovery {
             aux_ip,
             tar,
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 }

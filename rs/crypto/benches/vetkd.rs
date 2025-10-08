@@ -23,6 +23,8 @@ use rand::prelude::*;
 use rand::{CryptoRng, Rng};
 use rand_chacha::ChaCha20Rng;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 criterion_main!(benches);
 criterion_group!(benches, vetkd_bench);
 
@@ -33,12 +35,15 @@ fn vetkd_bench(criterion: &mut Criterion) {
         name: "dummy_key_name".to_string(),
     }));
 
-    for subnet_size in [1, 4, 13, 34, 40] {
+    let number_of_nodes = [34];
+    for subnet_size in number_of_nodes {
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
 
         let group = &mut criterion.benchmark_group(format!(
             "crypto_vetkd_{subnet_size}_nodes_threshold_{threshold}_remote_vault",
         ));
+
+        group.warm_up_time(WARMUP_TIME);
 
         let (config, env) = setup_with_random_ni_dkg_config(&dkg_tag, subnet_size, rng);
         assert_eq!(config.threshold().get().get(), threshold as u32);
