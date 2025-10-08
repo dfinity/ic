@@ -807,7 +807,7 @@ type GetNeuronIndexResult = variant {
 
 type GetNeuronIndexResponse = record {
   result : opt GetNeuronIndexResult
-}
+};
 
 // A limit view of Neuron that allows some aspects of all neurons to be read by
 // anyone (i.e. without having to be the neuron's controller nor one of its
