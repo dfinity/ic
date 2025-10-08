@@ -66,8 +66,6 @@ impl Registry {
         let num_removed_nodes = nodes_with_same_ip.len() as u64;
         if !nodes_with_same_ip.is_empty() {
             if nodes_with_same_ip.len() == 1 {
-                // TODO DO NOT MERGE - evaluate this behavior - this set of mutations overlaps with
-                // update of node_operator_record, which seems suspicious.
                 mutations = self.make_remove_or_replace_node_mutations(
                     RemoveNodeDirectlyPayload {
                         node_id: nodes_with_same_ip[0],
