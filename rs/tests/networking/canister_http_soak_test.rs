@@ -36,16 +36,9 @@ use ic_types::Cycles;
 use proxy_canister::RemoteHttpRequest;
 use proxy_canister::RemoteHttpResponse;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 
-#[derive(Serialize, Deserialize, Debug)]
-struct BenchmarkResult {
-    subnet_size: usize,
-    concurrent_requests: u64,
-    qps: f64,
-    average_latency_s: f64,
-}
+const INSTALLED_CANISTERS: usize = 6;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -74,7 +67,9 @@ pub fn test(env: TestEnv) {
         let mut proxy_canisters = Vec::new();
         // Each requests costs ~6-7 billion cycles, and we make many thousands of requests.
         // The default 100T cycles may not be enough.
-        for i in 0..6 {
+
+        // Install 6 proxy canisters and make them all send requests in paralel.
+        for i in 0..INSTALLED_CANISTERS {
             let canister_name = format!("canister_name_{}", i);
             let proxy_canister = create_proxy_canister_with_name_and_cycles(
                 &env,
