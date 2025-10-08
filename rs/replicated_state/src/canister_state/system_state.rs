@@ -515,7 +515,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64), // TODO(EXC-2118): replace with default canister log capacity.
+            log_memory_limit: NumBytes::new(DEFAULT_LOG_MEMORY_LIMIT as u64),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
