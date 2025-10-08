@@ -1956,9 +1956,6 @@ pub mod test {
     fn test_reject_message_is_valid_when_context_limit_is_too_low() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
-                use ic_types::canister_http::CanisterHttpReject;
-
-                const MAXIMUM_ALLOWED_RESPONSE_BYTES: u64 = 1024;
                 // This value is intentionally lower than the reject message size.
                 const LOW_MAX_RESPONSE_BYTES: u64 = 10;
 
@@ -2021,7 +2018,7 @@ pub mod test {
                 let reject_message =
                     "This error message is definitely longer than 10 bytes.".to_string();
                 assert!(reject_message.len() as u64 > LOW_MAX_RESPONSE_BYTES);
-                assert!(reject_message.len() as u64 <= MAXIMUM_ALLOWED_RESPONSE_BYTES);
+                assert!(reject_message.len() as u64 <= MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES);
 
                 let reject_content = CanisterHttpReject {
                     reject_code: RejectCode::SysFatal,
@@ -2069,8 +2066,6 @@ pub mod test {
                     Height::from(0),
                 );
 
-                // The share should be moved to validated because the effective limit is
-                // max(1024, 10) = 1024, and the message is smaller than that.
                 assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
             })
         });
