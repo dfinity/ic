@@ -2443,7 +2443,7 @@ impl ExecutionTestBuilder {
                 .max_instructions_per_message,
             self.subnet_type,
             self.own_subnet_id,
-            self.subnet_config.cycles_account_manager_config.clone(),
+            self.subnet_config.cycles_account_manager_config,
         ));
         let config = self.execution_config.clone();
 
