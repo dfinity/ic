@@ -1498,7 +1498,6 @@ impl PocketIc {
     }
 
     pub(crate) async fn do_drop(&mut self) {
-        self.stop_http_gateway().await;
         if self.owns_instance {
             self.reqwest_client
                 .delete(self.instance_url())
