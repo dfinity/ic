@@ -801,7 +801,7 @@ type NeuronIndex = record {
 };
 
 type GetNeuronIndexResult = variant {
-  Ok : GetNeuronIndexResponse;
+  Ok : NeuronIndex;
   Err : GovernanceError;
 };
 
