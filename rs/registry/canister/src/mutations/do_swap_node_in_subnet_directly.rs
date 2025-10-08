@@ -139,6 +139,7 @@ impl SwapNodeInSubnetDirectlyPayload {
 
 #[cfg(test)]
 mod tests {
+
     use std::collections::BTreeMap;
 
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
@@ -159,6 +160,7 @@ mod tests {
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         registry::Registry,
     };
+    use prost::Message;
 
     fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
     {
