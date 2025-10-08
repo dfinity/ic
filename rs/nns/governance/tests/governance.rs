@@ -13768,7 +13768,7 @@ fn test_neuron_info_private_enforcement() {
 /// 4. private neuron with controller 300, no hot key
 /// 5. public neuron with controller 500, no hot key
 /// 6. a public neuron with ID 1000 set as the followee of 2, 3, 4, and 5
-/// for the topic NeuronManagement.
+///    for the topic NeuronManagement.
 fn fixture_for_follow_private_neuron_restrictions() -> api::Governance {
     let mut driver = fake::FakeDriver::default();
 
@@ -13800,7 +13800,7 @@ fn fixture_for_follow_private_neuron_restrictions() -> api::Governance {
                 1,
                 Some(principal(100)),
                 Some(Visibility::Private as i32),
-                vec![principal(200).into()],
+                vec![principal(200)],
             )
         },
         api::Neuron {
@@ -13814,7 +13814,7 @@ fn fixture_for_follow_private_neuron_restrictions() -> api::Governance {
                 2,
                 Some(principal(100)),
                 Some(Visibility::Private as i32),
-                vec![principal(400).into()],
+                vec![principal(400)],
             )
         },
         api::Neuron {
@@ -13828,7 +13828,7 @@ fn fixture_for_follow_private_neuron_restrictions() -> api::Governance {
                 3,
                 Some(principal(200)),
                 Some(Visibility::Private as i32),
-                vec![principal(400).into()],
+                vec![principal(400)],
             )
         },
         api::Neuron {
