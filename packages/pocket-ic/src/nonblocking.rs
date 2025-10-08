@@ -1504,6 +1504,8 @@ impl PocketIc {
                 .send()
                 .await
                 .expect("Failed to send delete request");
+        } else {
+            self.stop_http_gateway().await;
         }
     }
 
