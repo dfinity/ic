@@ -141,18 +141,60 @@ impl VirtualMachine {
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
     ) -> Result<Self> {
-        let mut retries = 3;
+        const MAX_RETRIES: u32 = 3;
+        let mut retries = MAX_RETRIES;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
             match domain_result {
-                Ok(domain) => break domain,
+                Ok(domain) => {
+                    if let Ok(actual_name) = domain.get_name() {
+                        if actual_name != vm_domain_name {
+                            eprintln!(
+                                "Domain created with unexpected name: {} (expected: {})",
+                                actual_name, vm_domain_name
+                            );
+                            eprintln!("Forcing destroy of domain: {}", actual_name);
+                            if let Err(destroy_err) = domain.destroy() {
+                                eprintln!(
+                                    "Failed to destroy incorrectly named domain: {}",
+                                    destroy_err
+                                );
+                            }
+
+                            if retries > 0 {
+                                retries -= 1;
+                                eprintln!("Attempting to destroy existing VM before retry...");
+                                Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                                eprintln!(
+                                    "Retrying domain creation ({} retries remaining)",
+                                    retries
+                                );
+                                continue;
+                            } else {
+                                bail!(
+                                    "Domain created with wrong name '{}' instead of expected '{}' after {} retries",
+                                    actual_name,
+                                    vm_domain_name,
+                                    MAX_RETRIES
+                                );
+                            }
+                        }
+                    }
+                    break domain;
+                }
                 Err(e) if retries > 0 => {
                     eprintln!("Domain creation failed, retrying: {e}");
                     Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     retries -= 1;
                     continue;
                 }
-                err => err.context("Failed to create domain after retries")?,
+                Err(e) => {
+                    bail!(
+                        "ERROR: Failed to create domain after {} retries. Final error: {}",
+                        MAX_RETRIES,
+                        e
+                    );
+                }
             };
         };
         Ok(Self {
@@ -168,12 +210,30 @@ impl VirtualMachine {
         println!("Attempting to destroy existing '{vm_domain_name}' domain");
         if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
             if let Err(e) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
-                eprintln!("Failed to destroy existing domain: {e}");
+                eprintln!(
+                    "Graceful shutdown failed: {}. Attempting force destruction...",
+                    e
+                );
+                if let Err(force_err) = existing_domain.destroy() {
+                    eprintln!("Force destruction also failed: {}", force_err);
+                    eprintln!(
+                        "WARNING: Existing domain '{}' could not be destroyed",
+                        vm_domain_name
+                    );
+                } else {
+                    println!(
+                        "Successfully force destroyed existing domain '{}'",
+                        vm_domain_name
+                    );
+                }
             } else {
-                println!("Successfully destroyed existing domain");
+                println!(
+                    "Successfully destroyed existing domain '{}' gracefully",
+                    vm_domain_name
+                );
             }
         } else {
-            println!("No existing domain found to destroy");
+            println!("No existing domain '{}' found to destroy", vm_domain_name);
         }
     }
 
