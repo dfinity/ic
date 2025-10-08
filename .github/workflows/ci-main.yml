@@ -336,7 +336,7 @@ jobs:
     name: Bazel Test All (Namespace)
     needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
-    # The 16 vCPU runners have 160 GB disks which are not enough so we use 32 vCPU runners which have 288 GB disks.
+    # The 16 vCPU runners have 160 GB disks which are too small so we use 32 vCPU runners which have 288 GB disks.
     runs-on: namespace-profile-amd64-linux-32x64
     permissions:
       id-token: write # needed for namespacelabs/nscloud-setup
@@ -344,7 +344,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:3b1bdea254318bca524e9c61a441452f3585c8046888702438546a6de5be0d1a
       options: --privileged # needed for the builds of ic-os images.
       volumes:
-        - /var/run/nsc/:/var/run/nsc/
+        - /var/run/nsc/:/var/run/nsc/ # Needed such that namespacelabs/nscloud-setup can authenticate with Namespace.so.
     timeout-minutes: 150
     steps:
       - uses: namespacelabs/nscloud-setup@v0
