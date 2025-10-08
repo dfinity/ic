@@ -56,7 +56,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
-        log_memory_limit: NumBytes::from(DEFAULT_LOG_MEMORY_LIMIT as u64), // TODO(EXC-2118): replace with default canister log capacity.
+        log_memory_limit: NumBytes::from(DEFAULT_LOG_MEMORY_LIMIT as u64),
         canister_log: Default::default(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
