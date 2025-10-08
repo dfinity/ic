@@ -35,9 +35,8 @@ use ic_nns_handler_root_interface::{
 use std::cell::RefCell;
 
 use ic_cdk::futures::spawn_017_compat;
-#[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
-use ic_cdk::{post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::api::msg_caller())
@@ -65,10 +64,7 @@ fn new_management_canister_client() -> impl ManagementCanisterClient {
     )
 }
 
-// canister_init and canister_post_upgrade are needed here
-// to ensure that printer hook is set up, otherwise error
-// messages are quite obscure.
-#[unsafe(export_name = "canister_init")]
+#[init]
 fn canister_init() {
     println!("{LOG_PREFIX}canister_init");
 }

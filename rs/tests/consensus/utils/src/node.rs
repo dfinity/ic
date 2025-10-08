@@ -9,6 +9,7 @@ use ic_types::{Height, RegistryVersion};
 
 use anyhow::{anyhow, bail, ensure};
 use slog::{Logger, info};
+use ssh2::Session;
 
 use crate::ssh_access::execute_bash_command;
 
@@ -93,6 +94,16 @@ pub fn assert_node_is_assigned(node: &IcNodeSnapshot, logger: &Logger) {
 
 /// Assert that the given node has deleted its state within the next 5 minutes.
 pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
+    assert_node_is_unassigned_with_ssh_session(node, None, logger)
+}
+
+/// Assert that the given node has deleted its state within the next 5 minutes.
+/// Reuses the provided SSH session if given, otherwise creates a new one.
+pub fn assert_node_is_unassigned_with_ssh_session(
+    node: &IcNodeSnapshot,
+    existing_session: Option<&Session>,
+    logger: &Logger,
+) {
     info!(
         logger,
         "Asserting that node {} has deleted its state and local CUP.",
@@ -107,9 +118,10 @@ pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
         [ -f /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb ]) && \
         echo "assigned" || echo "unassigned"
     "#;
-    let s = node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
+    let s = existing_session.cloned().unwrap_or_else(|| {
+        node.block_on_ssh_session()
+            .expect("Failed to establish SSH session")
+    });
 
     ic_system_test_driver::retry_with_msg!(
         format!("check if node {} is unassigned", node.node_id),
