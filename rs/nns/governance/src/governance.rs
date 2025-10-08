@@ -12,7 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled, is_neuron_indexes_enabled,
+    is_known_neuron_voting_history_enabled, is_neuron_follow_restrictions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -3393,7 +3393,7 @@ impl Governance {
             updated_followees.remove(&topic);
         } else {
             // Otherwise, update the entry with the new followees list.
-            if is_neuron_indexes_enabled() {
+            if is_neuron_follow_restrictions_enabled() {
                 // A new can follow another neuron if:
                 // 1. the followee neuron is a public neuron
                 // 2. or if the followee neuron is a private neuron, they share a controller.
