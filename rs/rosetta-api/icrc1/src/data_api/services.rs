@@ -1536,6 +1536,7 @@ mod test {
                     operation: IcrcOperation::Mint {
                         to: main_account,
                         amount: Nat::from(1000u64),
+                        fee: None,
                     },
                     created_at_time: Some(1000),
                     memo: None,
@@ -1603,6 +1604,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(500u64),
+                            fee: None,
                         },
                         created_at_time: Some(1000),
                         memo: None,
@@ -1621,6 +1623,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: account1,
                             amount: Nat::from(1000u64),
+                            fee: None,
                         },
                         created_at_time: Some(2000),
                         memo: None,
@@ -1770,6 +1773,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(1000u64),
+                            fee: None,
                         },
                         created_at_time: Some(1000),
                         memo: None,
@@ -2125,6 +2129,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(6000000u64), // 0.06 tokens
+                            fee: None,
                         },
                         created_at_time: Some(1),
                         memo: None,
@@ -2144,6 +2149,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: explicit_zero_account,
                             amount: Nat::from(1000000u64), // 0.01 tokens
+                            fee: None,
                         },
                         created_at_time: Some(2),
                         memo: None,
@@ -2163,6 +2169,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: account1,
                             amount: Nat::from(1000000u64), // 0.01 tokens
+                            fee: None,
                         },
                         created_at_time: Some(3),
                         memo: None,
