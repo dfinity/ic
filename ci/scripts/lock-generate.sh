@@ -24,9 +24,6 @@ if ! git diff --cached --quiet; then
         git push
         echo "new_commit=true" >> $GITHUB_OUTPUT
     fi
-
-    # Because the lockfiles need updating, fail the PR
-    EXIT_STATUS=1
 fi
 
 exit "${EXIT_STATUS}"
