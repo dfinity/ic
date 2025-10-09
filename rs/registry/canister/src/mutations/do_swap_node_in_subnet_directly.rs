@@ -1,6 +1,12 @@
-use std::fmt::Display;
+use std::{
+    cell::RefCell,
+    fmt::Display,
+    time::{Duration, SystemTime},
+};
 
 use candid::CandidType;
+use ic_nervous_system_rate_limits::{InMemoryRateLimiter, RateLimiterConfig, Reservation};
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -14,10 +20,91 @@ use crate::{
     registry::Registry,
 };
 
+const SUBNET_CAPACITY_INTERVAL: Duration = Duration::from_secs(2 * 60 * 60);
+const PROVIDER_CAPACITY_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
+
+struct SwapRateLimiter {
+    subnet_limiter: InMemoryRateLimiter<SubnetId>,
+    provider_limiter: InMemoryRateLimiter<(PrincipalId, SubnetId)>,
+}
+
+#[derive(Debug)]
+struct SwapReservation {
+    subnet_reservation: Reservation<SubnetId>,
+    provider_reservation: Reservation<(PrincipalId, SubnetId)>,
+}
+
+impl SwapRateLimiter {
+    fn new() -> Self {
+        Self {
+            subnet_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: SUBNET_CAPACITY_INTERVAL,
+                max_capacity: 1,
+                max_reservations: 1,
+            }),
+            provider_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: PROVIDER_CAPACITY_INTERVAL,
+                max_capacity: 1,
+                max_reservations: 1,
+            }),
+        }
+    }
+
+    fn try_reserve(
+        &mut self,
+        provider: PrincipalId,
+        subnet_id: SubnetId,
+        now: SystemTime,
+    ) -> Result<SwapReservation, SwapError> {
+        let subnet_reservation =
+            self.subnet_limiter
+                .try_reserve(now, subnet_id, 1)
+                .map_err(|e| match e {
+                    ic_nervous_system_rate_limits::RateLimiterError::NotEnoughCapacity => {
+                        SwapError::SubnetRateLimited { subnet_id }
+                    }
+                    re => panic!("Unexpected error from subnet rate limiter: {re:?}"),
+                })?;
+
+        let provider_reservation = self
+            .provider_limiter
+            .try_reserve(now, (provider, subnet_id), 1)
+            .map_err(|e| match e {
+                ic_nervous_system_rate_limits::RateLimiterError::NotEnoughCapacity => {
+                    SwapError::ProviderRateLimitedOnSubnet {
+                        subnet_id,
+                        caller: provider,
+                    }
+                }
+                re => panic!("Unexpected error from provider rate limiter: {re:?}"),
+            })?;
+
+        Ok(SwapReservation {
+            subnet_reservation,
+            provider_reservation,
+        })
+    }
+
+    fn commit(&mut self, reservation: SwapReservation, now: SystemTime) {
+        // This call cannot fail as the whole execution is performed in a single update context
+        self.subnet_limiter
+            .commit(now, reservation.subnet_reservation)
+            .unwrap();
+        self.provider_limiter
+            .commit(now, reservation.provider_reservation)
+            .unwrap();
+    }
+}
+thread_local! {
+    static SWAP_LIMITER: RefCell<SwapRateLimiter> = RefCell::new(SwapRateLimiter::new());
+}
+
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
     pub fn do_swap_node_in_subnet_directly(&mut self, payload: SwapNodeInSubnetDirectlyPayload) {
-        self.swap_nodes_inner(payload, dfn_core::api::caller())
+        self.swap_nodes_inner(payload, dfn_core::api::caller(), now_system_time())
             .unwrap_or_else(|e| panic!("{e}"));
     }
 
@@ -26,6 +113,7 @@ impl Registry {
         &mut self,
         payload: SwapNodeInSubnetDirectlyPayload,
         caller: PrincipalId,
+        now: SystemTime,
     ) -> Result<(), SwapError> {
         // Check if the feature is enabled on the network.
         if !is_node_swapping_enabled() {
@@ -42,9 +130,12 @@ impl Registry {
         let subnet_id = self.find_subnet_for_old_node(old_node_id)?;
         Self::swapping_allowed_on_subnet(subnet_id)?;
 
-        //TODO(DRE-553): Rate-limiting mechanism
+        let reservation =
+            SWAP_LIMITER.with_borrow_mut(|limiter| limiter.try_reserve(caller, subnet_id, now))?;
 
         //TODO(DRE-548): Implement the swapping functionality
+
+        SWAP_LIMITER.with_borrow_mut(|limiter| limiter.commit(reservation, now));
         Ok(())
     }
 
@@ -95,9 +186,22 @@ pub enum SwapError {
     FeatureDisabled,
     MissingInput,
     SamePrincipals,
-    FeatureDisabledForCaller { caller: PrincipalId },
-    FeatureDisabledOnSubnet { subnet_id: SubnetId },
-    SubnetNotFoundForNode { old_node_id: PrincipalId },
+    FeatureDisabledForCaller {
+        caller: PrincipalId,
+    },
+    FeatureDisabledOnSubnet {
+        subnet_id: SubnetId,
+    },
+    SubnetNotFoundForNode {
+        old_node_id: PrincipalId,
+    },
+    SubnetRateLimited {
+        subnet_id: SubnetId,
+    },
+    ProviderRateLimitedOnSubnet {
+        subnet_id: SubnetId,
+        caller: PrincipalId,
+    },
 }
 
 impl Display for SwapError {
@@ -117,6 +221,12 @@ impl Display for SwapError {
                     format!("Swapping is disabled on subnet `{subnet_id}`."),
                 SwapError::SubnetNotFoundForNode { old_node_id } =>
                     format!("Node {old_node_id} is not a member of any subnet."),
+                SwapError::SubnetRateLimited { subnet_id } => format!(
+                    "Subnet {subnet_id} had a swap performed within last two hours. Try again later."
+                ),
+                SwapError::ProviderRateLimitedOnSubnet { subnet_id, caller } => format!(
+                    "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hours. Try again later."
+                ),
             }
         )
     }
@@ -140,8 +250,9 @@ impl SwapNodeInSubnetDirectlyPayload {
 #[cfg(test)]
 mod tests {
 
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, time::Duration};
 
+    use ic_nervous_system_time_helpers::now_system_time;
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
     use ic_registry_keys::{
         make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -157,7 +268,10 @@ mod tests {
                 test_set_swapping_enabled_subnets, test_set_swapping_whitelisted_callers,
             },
         },
-        mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
+        mutations::do_swap_node_in_subnet_directly::{
+            PROVIDER_CAPACITY_INTERVAL, SUBNET_CAPACITY_INTERVAL, SwapError,
+            SwapNodeInSubnetDirectlyPayload, SwapRateLimiter,
+        },
         registry::Registry,
     };
     use prost::Message;
@@ -213,7 +327,7 @@ mod tests {
 
         assert!(
             registry
-                .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
+                .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1), now_system_time())
                 .is_err_and(|err| err == SwapError::FeatureDisabled)
         )
     }
@@ -226,7 +340,8 @@ mod tests {
 
         let payload = valid_payload();
 
-        let result = registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1));
+        let result =
+            registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1), now_system_time());
 
         // First error that occurs after validation
         assert!(result.is_err_and(|err| err
@@ -242,7 +357,11 @@ mod tests {
         let _temp = temporarily_enable_node_swapping();
 
         for (payload, expected_err) in invalid_payloads_with_expected_errors() {
-            let output = registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1));
+            let output = registry.swap_nodes_inner(
+                payload,
+                PrincipalId::new_user_test_id(1),
+                now_system_time(),
+            );
 
             let expected: Result<(), SwapError> = Err(expected_err);
             assert_eq!(
@@ -331,7 +450,7 @@ mod tests {
 
         // First make a call and expect to fail because
         // the feature is not enabled for this caller.
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id);
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledForCaller {
             caller: operator_id,
         };
@@ -342,7 +461,7 @@ mod tests {
 
         // Enable the feature for the caller
         test_set_swapping_whitelisted_callers(vec![operator_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id);
+        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
         // Expect the first next error which is the missing
         // subnet in the registry.
         assert!(response.is_ok(), "Expected OK but got {response:?}");
@@ -380,7 +499,7 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id);
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id };
 
         // First call when the feature isn't enabled on the subnet.
@@ -391,11 +510,171 @@ mod tests {
 
         // Now enable the feature and call again.
         test_set_swapping_enabled_subnets(vec![subnet_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id);
+        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected the result to be OK but got {response:?}"
         );
+    }
+
+    #[test]
+    fn rate_limit_test() {
+        let mut swap_limiter = SwapRateLimiter::new();
+        let now = now_system_time();
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let caller_1 = PrincipalId::new_user_test_id(1);
+        let caller_2 = PrincipalId::new_user_test_id(2);
+
+        // First call should be successful
+        let reservation = swap_limiter.try_reserve(caller_1, subnet_id, now).unwrap();
+        swap_limiter.commit(reservation, now);
+
+        let before_duration_elapsed = now
+            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let expected_err = SwapError::SubnetRateLimited { subnet_id };
+
+        // Second call from the same provider should fail because of subnet rate limit
+        let response = swap_limiter
+            .try_reserve(caller_1, subnet_id, before_duration_elapsed)
+            .expect_err("Should error out");
+        assert_eq!(response, expected_err);
+
+        // Call from a different provider should fail as well
+        let response = swap_limiter
+            .try_reserve(caller_2, subnet_id, before_duration_elapsed)
+            .expect_err("Should error out");
+        assert_eq!(response, expected_err);
+
+        // After SUBNET_CAPACITY_INTERVAL the second caller should be able to make reservation but
+        // first shouldn't
+        let after_duration_elapsed = now
+            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .unwrap();
+
+        let reservation = swap_limiter
+            .try_reserve(caller_2, subnet_id, after_duration_elapsed)
+            .unwrap();
+        drop(reservation);
+
+        let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+            subnet_id,
+            caller: caller_1,
+        };
+        let response = swap_limiter
+            .try_reserve(caller_1, subnet_id, after_duration_elapsed)
+            .expect_err("Should error out");
+        assert_eq!(response, expected_err);
+
+        // After PROVIDER_CAPACITY_INTERVAL the first provider should be able to perform a swap
+        let after_provider_duration_elapsed = now
+            .checked_add(PROVIDER_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let response =
+            swap_limiter.try_reserve(caller_1, subnet_id, after_provider_duration_elapsed);
+        assert!(response.is_ok());
+    }
+
+    #[test]
+    fn rate_limit_different_subnets() {
+        let mut swap_limiter = SwapRateLimiter::new();
+        let now = now_system_time();
+        let subnet_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let subnet_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
+
+        let caller = PrincipalId::new_user_test_id(1);
+
+        for subnet in [subnet_1, subnet_2] {
+            let reservation = swap_limiter.try_reserve(caller, subnet, now).unwrap();
+            swap_limiter.commit(reservation, now);
+        }
+
+        let before_subnet_duration_elapsed = now
+            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .unwrap();
+        for subnet in [subnet_1, subnet_2] {
+            let response = swap_limiter
+                .try_reserve(caller, subnet, before_subnet_duration_elapsed)
+                .expect_err("Should error out");
+            let expected_err = SwapError::SubnetRateLimited { subnet_id: subnet };
+
+            assert_eq!(response, expected_err);
+        }
+    }
+
+    #[test]
+    fn rate_limits_e2e_respected() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let mut registry = Registry::new();
+
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let operator_id = PrincipalId::new_user_test_id(1);
+
+        let now = now_system_time();
+
+        let mutations = get_mutations_from_node_information(&[
+            NodeInformation {
+                node_id: old_node_id,
+                subnet_id: Some(subnet_id),
+                operator: operator_id,
+            },
+            NodeInformation {
+                node_id: new_node_id,
+                subnet_id: None,
+                operator: operator_id,
+            },
+        ]);
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
+
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now);
+        assert!(
+            response.is_ok(),
+            "Expected OK response but got: {response:?}"
+        );
+
+        // Make an additional call which should fail because of the subnet limit
+        let before_duration_elapsed = now
+            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let response = registry
+            .swap_nodes_inner(payload.clone(), operator_id, before_duration_elapsed)
+            .expect_err("Should error out");
+
+        let expected_err = SwapError::SubnetRateLimited { subnet_id };
+        assert_eq!(response, expected_err);
+
+        // Make an additional call which should fail because of the provider limit
+        let after_subnet_duration_elapsed = now
+            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let response = registry
+            .swap_nodes_inner(payload.clone(), operator_id, after_subnet_duration_elapsed)
+            .expect_err("Should error out");
+
+        let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+            subnet_id,
+            caller: operator_id,
+        };
+        assert_eq!(response, expected_err);
+
+        // Make an additional call after all the rate limits have elapsed
+        let after_provider_duration_elapsed = now
+            .checked_add(PROVIDER_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .unwrap();
+        let response =
+            registry.swap_nodes_inner(payload, operator_id, after_provider_duration_elapsed);
+
+        assert!(response.is_ok());
     }
 
     #[test]
@@ -430,7 +709,7 @@ mod tests {
         test_set_swapping_whitelisted_callers(vec![operator_id]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
-        let response = registry.swap_nodes_inner(payload, operator_id);
+        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
