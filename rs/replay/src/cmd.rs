@@ -49,7 +49,7 @@ pub struct ReplayToolArgs {
 #[derive(Clone, Subcommand)]
 pub enum SubCommand {
     /// Add a new version of the replica binary to the registry.
-    AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd),
+    UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd),
 
     /// Add registry content from external registry store to the registry
     /// canister.
@@ -91,22 +91,18 @@ pub struct GetRecoveryCupCmd {
     pub height: u64,
     /// Output file
     pub output_file: PathBuf,
-    /// Registry store URI
-    pub registry_store_uri: Option<String>,
-    /// Registry store SHA256 hash
-    pub registry_store_sha256: Option<String>,
 }
 
 #[derive(Clone, Parser)]
-pub struct AddAndBlessReplicaVersionCmd {
+pub struct UpgradeSubnetToReplicaVersionCmd {
     /// The Replica version ID.
     pub replica_version_id: String,
     /// JSON value of the replica version record.
     pub replica_version_value: String,
-    /// If true, the registry record of the corresponding subnet will be
-    /// updated with the new replica version.
+    /// If true, the replica version will be added and blessed in the registry
+    /// before upgrading the subnet to it.
     #[clap(long)]
-    pub update_subnet_record: bool,
+    pub add_and_bless_replica_version: bool,
 }
 
 #[derive(Clone, Parser)]

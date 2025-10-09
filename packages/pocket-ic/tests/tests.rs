@@ -17,6 +17,7 @@ use pocket_ic::{
         InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
+    nonblocking::PocketIc as PocketIcAsync,
     query_candid, start_server, update_candid,
 };
 use reqwest::header::CONTENT_LENGTH;
@@ -2813,6 +2814,8 @@ async fn list_http_gateways(server_url: &Url) -> Vec<HttpGatewayDetails> {
 
 #[tokio::test]
 async fn with_http_gateway_config_and_cleanup_works() {
+    // We start a fresh server so that we can easily list instances and HTTP gateways
+    // created by this test (without filtering those created by other tests).
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
@@ -2820,6 +2823,17 @@ async fn with_http_gateway_config_and_cleanup_works() {
     };
     let (_child, server_url) = start_server(server_params).await;
 
+    // Assert that
+    // - an instance exists on the server iff `instance_exists` is set to `true`;
+    // - the number of HTTP gateways on the server matches `gateway_count`.
+    let assert_server_state = |server_url: Url, instance_exists: bool, gateway_count: usize| async move {
+        let instances = list_instances(&server_url).await;
+        assert_eq!(instances.len(), 1);
+        assert!(instances[0].contains("Deleted") != instance_exists);
+        assert_eq!(list_http_gateways(&server_url).await.len(), gateway_count);
+    };
+
+    // We create a PocketIC instance and its HTTP gateway.
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
         port: None,
@@ -2833,18 +2847,34 @@ async fn with_http_gateway_config_and_cleanup_works() {
         .with_auto_progress()
         .build_async()
         .await;
+    assert_server_state(server_url.clone(), true, 1).await;
 
-    let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 1);
-    assert!(!instances[0].contains("Deleted"));
-    assert_eq!(list_http_gateways(&server_url).await.len(), 1);
+    // We create an additional handle for the existing PocketIC instance and start an additional HTTP gateway.
+    let mut pic_handle =
+        PocketIcAsync::new_from_existing_instance(server_url.clone(), pic.instance_id, None);
+    pic_handle.make_live(None).await;
+    assert_server_state(server_url.clone(), true, 2).await;
 
+    // We create yet another handle for the existing PocketIC instance and start an additional HTTP gateway.
+    let mut yet_another_pic_handle =
+        PocketIcAsync::new_from_existing_instance(server_url.clone(), pic.instance_id, None);
+    yet_another_pic_handle.make_live(None).await;
+    assert_server_state(server_url.clone(), true, 3).await;
+
+    // Dropping one of the extra handles for the existing PocketIC instance only stops its new HTTP gateway.
+    pic_handle.drop().await;
+    assert_server_state(server_url.clone(), true, 2).await;
+
+    // The instance is still in auto progress mode.
+    assert!(pic.auto_progress_enabled().await);
+
+    // Dropping the original handle deletes the PocketIC instance and stops all its HTTP gateways.
     pic.drop().await;
+    assert_server_state(server_url.clone(), false, 0).await;
 
-    let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 1);
-    assert_eq!(instances[0], "Deleted");
-    assert!(list_http_gateways(&server_url).await.is_empty());
+    // Dropping the other extra handle for the existing PocketIC instance succeeds, but is a no-op.
+    yet_another_pic_handle.drop().await;
+    assert_server_state(server_url.clone(), false, 0).await;
 }
 
 async fn assert_create_instance_failure(
@@ -3120,4 +3150,26 @@ fn canister_not_found() {
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(bytes.contains("404 - canister not found"));
+}
+
+#[test]
+fn deterministic_registry() {
+    let registry_bytes = || {
+        // Create a temporary state directory from which the test can retrieve PocketIC registry.
+        let state_dir = TempDir::new().unwrap();
+        let state_dir_path_buf = state_dir.path().to_path_buf();
+
+        let _pocket_ic = PocketIcBuilder::new()
+            .with_state_dir(state_dir_path_buf.clone())
+            .with_nns_subnet()
+            .with_ii_subnet()
+            .with_fiduciary_subnet()
+            .with_application_subnet()
+            .build();
+
+        let registry_proto_path = state_dir_path_buf.join("registry.proto");
+        std::fs::read(registry_proto_path).unwrap()
+    };
+
+    assert_eq!(registry_bytes(), registry_bytes());
 }

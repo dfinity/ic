@@ -85,6 +85,7 @@ pub async fn add_sns_wasm<C: CallCanisters>(
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
         wasm: Some(wasm.clone()),
+        skip_update_latest_version: Some(false),
     };
 
     let proposal = MakeProposalRequest {

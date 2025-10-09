@@ -16,9 +16,8 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SnapshotId, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SnapshotId, SubnetId,
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext},
 };
@@ -259,46 +258,16 @@ impl InstallCodeContext {
 /// an [`InstallCodeContext`].
 #[derive(Debug)]
 pub enum InstallCodeContextError {
-    ComputeAllocation(InvalidComputeAllocationError),
-    MemoryAllocation(InvalidMemoryAllocationError),
     InvalidHash(String),
 }
 
 impl From<InstallCodeContextError> for UserError {
     fn from(err: InstallCodeContextError) -> Self {
         match err {
-            InstallCodeContextError::ComputeAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "ComputeAllocation expected to be in the range [{}..{}], got {}",
-                    err.min(),
-                    err.max(),
-                    err.given()
-                ),
-            ),
-            InstallCodeContextError::MemoryAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
-                ),
-            ),
             InstallCodeContextError::InvalidHash(err) => {
                 UserError::new(ErrorCode::CanisterContractViolation, err)
             }
         }
-    }
-}
-
-impl From<InvalidComputeAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidComputeAllocationError) -> Self {
-        Self::ComputeAllocation(err)
-    }
-}
-
-impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidMemoryAllocationError) -> Self {
-        Self::MemoryAllocation(err)
     }
 }
 
@@ -507,6 +476,13 @@ pub(crate) enum CanisterManagerError {
     EnvironmentVariablesValueTooLong {
         value: String,
         max_value_length: usize,
+    },
+    CanisterMetadataNoWasmModule {
+        canister_id: CanisterId,
+    },
+    CanisterMetadataSectionNotFound {
+        canister_id: CanisterId,
+        section_name: String,
     },
 }
 
@@ -743,6 +719,14 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
                 suggestion: "Shorten the environment variable value to fit within the allowed limit.".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataNoWasmModule { .. } => ErrorHelp::UserError {
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-no-wasm-module".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-section-not-found".to_string(),
             },
         }
     }
@@ -1116,6 +1100,21 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::InvalidManagementPayload,
                 format!(
                     "Environment variable value \"{value}\" exceeds the maximum allowed length of {max_value_length}."
+                ),
+            ),
+            CanisterMetadataNoWasmModule { canister_id } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no Wasm module and hence no metadata is available."
+                ),
+            ),
+            CanisterMetadataSectionNotFound {
+                canister_id,
+                section_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no metadata section with the name {section_name}."
                 ),
             ),
         }

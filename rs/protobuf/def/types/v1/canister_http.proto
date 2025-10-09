@@ -78,3 +78,8 @@ message CanisterHttpResponseMessage {
     CanisterHttpResponseDivergence divergence_response = 3;
   }
 }
+
+message CanisterHttpArtifact {
+  CanisterHttpShare share = 1;
+  optional CanisterHttpResponse response = 2;
+}

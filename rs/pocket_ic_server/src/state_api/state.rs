@@ -640,7 +640,28 @@ impl ApiState {
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
+        // stop all HTTP gateways for the instance
+        // to release their resources
+        // (since such HTTP gateways won't work once the instance is deleted)
+        let mut http_gateways = self.http_gateways.write().await;
+        for maybe_http_gateway in http_gateways.iter_mut() {
+            if let Some(http_gateway) = maybe_http_gateway
+                && http_gateway.details.forward_to
+                    == HttpGatewayBackend::PocketIcInstance(instance_id)
+            {
+                *maybe_http_gateway = None;
+            }
+        }
+        // release the lock on HTTP gateways before acquiring a lock on instances
+        // to prevent deadlocks
+        drop(http_gateways);
+
+        // stop progress on the instance
+        // so that the instance is not permanently busy
+        // and can be actually deleted
         self.stop_progress(instance_id).await;
+
+        // finally, delete the instance
         loop {
             let instances = self.instances.read().await;
             let mut instance = instances[instance_id].lock().await;
@@ -654,6 +675,8 @@ impl ApiState {
                 }
                 InstanceState::Busy { .. } => {}
             }
+            // release locks before sleeping so that the instance can actually finish
+            // its computation while we're sleeping
             drop(instance);
             drop(instances);
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -1083,6 +1106,7 @@ impl ApiState {
                                 instance_id, old_state_label, op_id,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            pocket_ic.sync_registry_from_canister();
                             pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!

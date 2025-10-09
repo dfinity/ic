@@ -7,11 +7,13 @@ use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
+use async_trait::async_trait;
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
 use bitcoin::Network;
+use bytes::Bytes;
 use candid::{Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload,
@@ -20,7 +22,6 @@ use cycles_minting_canister::{
 };
 use futures::FutureExt;
 use futures::future::BoxFuture;
-use hyper::body::Bytes;
 use hyper::header::{CONTENT_TYPE, HeaderValue};
 use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey, status};
@@ -74,12 +75,19 @@ use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
+use ic_registry_canister_api::GetChunkRequest;
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, are_disjoint, is_subset_of,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::deserialize_atomic_mutate_response;
+use ic_registry_transport::{
+    GetChunk, dechunkify_delta, deserialize_atomic_mutate_response,
+    deserialize_get_changes_since_response, serialize_get_changes_since_request,
+};
 use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
 use ic_sns_wasm::pb::v1::add_wasm_response::Result as AddWasmResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm};
@@ -121,7 +129,7 @@ use pocket_ic::common::rest::{
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
-use registry_canister::init::RegistryCanisterInitPayload;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::cmp::max;
@@ -481,8 +489,8 @@ impl SubnetsImpl {
             subnets: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
-    fn len(&self) -> usize {
-        self.subnets.read().unwrap().len()
+    fn is_empty(&self) -> bool {
+        self.subnets.read().unwrap().is_empty()
     }
     fn get_subnet(&self, subnet_id: SubnetId) -> Option<Arc<Subnet>> {
         self.subnets.read().unwrap().get(&subnet_id).cloned()
@@ -542,7 +550,7 @@ impl PocketIcSubnets {
         subnet_seed: [u8; 32],
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
-        create_at_registry_version: RegistryVersion,
+        create_at_registry_version: Option<RegistryVersion>,
         icp_config: &IcpConfig,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
@@ -649,10 +657,9 @@ impl PocketIcSubnets {
         initial_time: SystemTime,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
+        registry_data_provider: Arc<ProtoRegistryDataProvider>,
         synced_registry_version: Option<u64>,
     ) -> Self {
-        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        add_initial_registry_records(registry_data_provider.clone());
         let routing_table = RoutingTable::new();
         let chain_keys = BTreeMap::new();
         // `ZERO_REGISTRY_VERSION` is unused in the registry set up by PocketIC.
@@ -730,7 +737,7 @@ impl PocketIcSubnets {
     fn create_subnet(
         &mut self,
         subnet_config_info: SubnetConfigInfo,
-        update_system_canisters: bool,
+        update_registry_and_system_canisters: bool,
     ) -> Result<SubnetConfigInternal, String> {
         let SubnetConfigInfo {
             ranges,
@@ -764,7 +771,16 @@ impl PocketIcSubnets {
                 None
             };
 
-        let create_at_registry_version = RegistryVersion::new(self.subnets.len() as u64 + 1);
+        let latest_registry_version = self.registry_data_provider.latest_version().get();
+        let create_at_registry_version = if update_registry_and_system_canisters {
+            if self.subnets.is_empty() {
+                Some(latest_registry_version) // we need to make sure that the NNS subnet is created at the initial registry version
+            } else {
+                Some(latest_registry_version + 1)
+            }
+        } else {
+            None
+        };
         let mut builder = Self::state_machine_builder(
             state_machine_state_dir,
             self.runtime.clone(),
@@ -772,7 +788,7 @@ impl PocketIcSubnets {
             subnet_seed,
             instruction_config.clone(),
             self.registry_data_provider.clone(),
-            create_at_registry_version,
+            create_at_registry_version.map(RegistryVersion::new),
             &self.icp_config,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
@@ -880,25 +896,15 @@ impl PocketIcSubnets {
             .into_iter()
             .map(|subnet| subnet.get_subnet_id())
             .collect();
-        add_global_registry_records(
-            self.nns_subnet.clone().unwrap().get_subnet_id(),
-            self.routing_table.clone(),
-            subnet_list,
-            self.chain_keys.clone(),
-            self.registry_data_provider.clone(),
-        );
-
-        // Update the registry file on disk.
-        if let Some(ref state_dir) = self.state_dir {
-            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
-            self.registry_data_provider
-                .write_to_file(registry_proto_path);
-        }
-
-        // Reload registry on every `StateMachine` in `self.subnets` to make sure
-        // they have a consistent view of the (latest) registry.
-        for subnet in self.subnets.get_all() {
-            subnet.state_machine.reload_registry();
+        if update_registry_and_system_canisters {
+            add_global_registry_records(
+                self.nns_subnet.clone().unwrap().get_subnet_id(),
+                self.routing_table.clone(),
+                subnet_list,
+                self.chain_keys.clone(),
+                self.registry_data_provider.clone(),
+            );
+            self.persist_registry_changes();
         }
 
         // All subnets must have the same time and time can only advance =>
@@ -939,7 +945,7 @@ impl PocketIcSubnets {
         self.subnet_configs.push(subnet_config.clone());
 
         if let Some(icp_features) = self.icp_features.clone()
-            && update_system_canisters
+            && update_registry_and_system_canisters
         {
             // using `let IcpFeatures { }` with explicit field names
             // to force an update after adding a new field to `IcpFeatures`
@@ -1035,7 +1041,7 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, REGISTRY_CANISTER_ID);
 
             // Install the registry canister.
-            let registry_init_payload = RegistryCanisterInitPayload { mutations: vec![] };
+            let registry_init_payload = RegistryCanisterInitPayloadBuilder::new().build();
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -1727,6 +1733,7 @@ impl PocketIcSubnets {
                         proposal_id: None,
                     }),
                     hash: sns_canister_wasm_hash.to_vec(),
+                    skip_update_latest_version: Some(false),
                 };
                 let res = self.execute_ingress_on(
                     nns_subnet.clone(),
@@ -2083,6 +2090,101 @@ impl PocketIcSubnets {
             "Failed to complete execution of method {method} on canister {canister_id} after 100 rounds."
         );
     }
+
+    fn sync_registry_from_canister(&mut self) {
+        if let Some(icp_features) = &self.icp_features
+            && icp_features.registry.is_some()
+        {
+            let nns_subnet = self.nns_subnet.clone().expect("The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.").state_machine.clone();
+
+            let synced_registry_version_before = self.synced_registry_version;
+            loop {
+                let get_changes_since_request =
+                    serialize_get_changes_since_request(self.synced_registry_version.get())
+                        .unwrap();
+                let wasm_result = nns_subnet
+                    .query(
+                        REGISTRY_CANISTER_ID,
+                        "get_changes_since",
+                        get_changes_since_request,
+                    )
+                    .unwrap();
+                let res = match wasm_result {
+                    WasmResult::Reply(bytes) => bytes,
+                    WasmResult::Reject(err) => {
+                        panic!("Unexpected reject from registry canister: {}", err)
+                    }
+                };
+                let (high_capacity_deltas, latest_version) =
+                    deserialize_get_changes_since_response(res).unwrap();
+                let mut inlined_deltas = vec![];
+                for delta in high_capacity_deltas {
+                    let delta = self
+                        .runtime
+                        .block_on(dechunkify_delta(delta, self))
+                        .unwrap();
+                    inlined_deltas.push(delta);
+                }
+                let records = registry_deltas_to_registry_records(inlined_deltas).unwrap();
+                self.registry_data_provider.add_registry_records(records);
+                self.synced_registry_version = self.registry_data_provider.latest_version();
+                if self.synced_registry_version == latest_version.into() {
+                    break;
+                }
+            }
+            if synced_registry_version_before != self.synced_registry_version {
+                self.persist_registry_changes();
+                // update routing table
+                let registry_client =
+                    RegistryClientImpl::new(self.registry_data_provider.clone(), None);
+                registry_client.poll_once().unwrap();
+                let routing_table = registry_client
+                    .get_routing_table(self.registry_data_provider.latest_version())
+                    .expect("Failed to get routing table")
+                    .expect("Failed to get routing table");
+                self.routing_table = routing_table;
+            }
+        }
+    }
+
+    fn persist_registry_changes(&mut self) {
+        // Update the registry file on disk.
+        if let Some(ref state_dir) = self.state_dir {
+            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+            self.registry_data_provider
+                .write_to_file(registry_proto_path);
+        }
+
+        // Reload registry on every `StateMachine` in `self.subnets` to make sure
+        // they have a consistent view of the (latest) registry.
+        for subnet in self.subnets.get_all() {
+            subnet.state_machine.reload_registry();
+        }
+    }
+}
+
+#[async_trait]
+impl GetChunk for PocketIcSubnets {
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+        let nns_subnet = self.nns_subnet.clone().expect("The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.").state_machine.clone();
+
+        let get_chunk_request = GetChunkRequest {
+            content_sha256: Some(content_sha256.to_vec()),
+        };
+        let wasm_result = nns_subnet
+            .query(
+                REGISTRY_CANISTER_ID,
+                "get_chunk",
+                Encode!(&get_chunk_request).unwrap(),
+            )
+            .unwrap();
+        match wasm_result {
+            WasmResult::Reply(bytes) => Decode!(&bytes, Result<Vec<u8>, String>).unwrap(),
+            WasmResult::Reject(err) => {
+                panic!("Unexpected reject from registry canister: {}", err)
+            }
+        }
+    }
 }
 
 pub struct PocketIc {
@@ -2225,10 +2327,10 @@ impl PocketIc {
 
         let mut range_gen = RangeGen::new();
 
-        // We only update system canisters during subnet creation
+        // We only update registry and system canisters during subnet creation
         // if the PocketIC does not resume from an existing state
-        // in which case system canisters have already been updated before.
-        let update_system_canisters = topology.is_none();
+        // in which case registry and system canisters have already been updated before.
+        let update_registry_and_system_canisters = topology.is_none();
         let mut subnet_config_info: Vec<SubnetConfigInfo> = if let Some(topology) = topology {
             topology
                 .subnet_configs
@@ -2417,6 +2519,15 @@ impl PocketIc {
         });
 
         // Create all subnets and store their configs.
+        let registry_data_provider = if let Some(registry) = registry {
+            Arc::new(ProtoRegistryDataProvider::try_decode(Bytes::from(
+                registry,
+            ))?)
+        } else {
+            let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+            add_initial_registry_records(registry_data_provider.clone());
+            registry_data_provider
+        };
         let mut subnets = PocketIcSubnets::new(
             runtime.clone(),
             state_dir,
@@ -2427,21 +2538,14 @@ impl PocketIc {
             initial_time,
             auto_progress_enabled,
             gateway_port,
+            registry_data_provider,
             synced_registry_version,
         );
         let mut subnet_configs = Vec::new();
         for subnet_config_info in subnet_config_info.into_iter() {
             let subnet_config_internal =
-                subnets.create_subnet(subnet_config_info, update_system_canisters)?;
+                subnets.create_subnet(subnet_config_info, update_registry_and_system_canisters)?;
             subnet_configs.push(subnet_config_internal);
-        }
-
-        if let Some(registry) = registry {
-            let mut buffer = Vec::new();
-            subnets.registry_data_provider.encode(&mut buffer);
-            if registry != buffer {
-                return Err("Registry could not be restored.".to_string());
-            }
         }
 
         let default_effective_canister_id = subnet_configs
@@ -2471,6 +2575,10 @@ impl PocketIc {
             subnets,
             default_effective_canister_id,
         })
+    }
+
+    pub(crate) fn sync_registry_from_canister(&mut self) {
+        self.subnets.sync_registry_from_canister();
     }
 
     pub(crate) fn bump_state_label(&mut self) {
@@ -4319,8 +4427,8 @@ fn route(
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
                     let canister_allocation_range = pic.range_gen.next_range();
-                    // This is a fresh subnet so we always update system canisters.
-                    let update_system_canisters = true;
+                    // This is a fresh subnet so we always update registry and system canisters.
+                    let update_registry_and_system_canisters = true;
                     pic.subnets.create_subnet(
                         SubnetConfigInfo {
                             ranges: vec![range],
@@ -4331,7 +4439,7 @@ fn route(
                             instruction_config,
                             expected_state_time: None,
                         },
-                        update_system_canisters,
+                        update_registry_and_system_canisters,
                     )?;
                     pic.subnets
                         .persist_topology(pic.default_effective_canister_id);
