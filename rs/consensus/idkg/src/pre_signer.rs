@@ -434,7 +434,7 @@ impl IDkgPreSignerImpl {
                             if maybe_signers.is_some_and(|signers| signers.contains(&signer)) {
                                 return Some(IDkgChangeAction::HandleInvalid(
                                     id,
-                                    format!("Duplicate dealing support found in cache: {support}"),
+                                    format!("Duplicate support in unvalidated batch (cache hit): {support}"),
                                 ));
                             }
 
@@ -522,7 +522,7 @@ impl IDkgPreSignerImpl {
                                 if !signers.insert(signer) {
                                     return Some(IDkgChangeAction::HandleInvalid(
                                         id,
-                                        format!("Duplicate dealing support in unvalidated batch: {msg:?}"),
+                                        format!("Duplicate support in unvalidated batch (cache miss): {msg:?}"),
                                     ));
                                 }
                             }
