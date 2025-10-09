@@ -27,7 +27,7 @@ use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
 use ic_btc_adapter::start_server as start_btc_server;
-use ic_btc_interface::{Config as BtcConfig, Network as BtcNetwork};
+use ic_btc_interface::{InitConfig as BtcInitConfig, Network as BtcNetwork};
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
 use ic_config::{
@@ -2118,8 +2118,8 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, BITCOIN_TESTNET_CANISTER_ID);
 
             // Install the Bitcoin testnet canister.
-            let args = BtcConfig {
-                network: BtcNetwork::Regtest,
+            let args = BtcInitConfig {
+                network: Some(BtcNetwork::Regtest),
                 ..Default::default()
             };
             btc_subnet
