@@ -128,7 +128,7 @@ jobs:
     name: Generate Config Fixtures
     runs-on: ubuntu-latest
     container: *container-setup
-    timeout-minutes: 10
+    timeout-minutes: 30
     if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
