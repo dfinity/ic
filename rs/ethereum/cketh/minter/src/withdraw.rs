@@ -4,13 +4,13 @@ use crate::eth_rpc_client::MultiCallError;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
-use crate::state::audit::{process_event, EventType};
+use crate::state::audit::{EventType, process_event};
 use crate::state::transactions::{
-    create_transaction, CreateTransactionError, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, WithdrawalRequest,
+    CreateTransactionError, Reimbursed, ReimbursementIndex, ReimbursementRequest,
+    WithdrawalRequest, create_transaction,
 };
-use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::tx::{lazy_refresh_gas_fee_estimate, GasFeeEstimate};
+use crate::state::{State, TaskType, mutate_state, read_state};
+use crate::tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate};
 use candid::Nat;
 use evm_rpc_types::{SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt};
 use futures::future::join_all;
