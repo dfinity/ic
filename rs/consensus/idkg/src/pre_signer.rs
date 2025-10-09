@@ -559,7 +559,7 @@ impl IDkgPreSignerImpl {
                                 .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
                             warn!(
                                 self.log,
-                                "validate_dealing_support(): Missing hash, meta data mismatch: {support:?}",
+                                "validate_dealing_support(): Missing hash, meta data mismatch: {support}",
                             );
                             return Some(IDkgChangeAction::RemoveUnvalidated(id));
                         }
