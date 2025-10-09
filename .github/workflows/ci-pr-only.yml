@@ -121,7 +121,7 @@ jobs:
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
       - name: Debug
-        if: steps.lock-generate.outputs.new_commit == 'true'
+        if: ${{ failure() && steps.lock-generate.outputs.new_commit == 'true' }}
         run: echo "new_commit=${{ steps.lock-generate.outputs.new_commit }}"
 
   generate-config-fixtures:
