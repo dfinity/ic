@@ -4,6 +4,11 @@ on:
   merge_group:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      github_sha:
+        description: Commit on which the CI should be run
+        required: false
+        type: string
   push:
     branches:
       - master
@@ -65,6 +70,8 @@ jobs:
         id: config
         run: |
           set -euo pipefail
+
+          exit 1
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
