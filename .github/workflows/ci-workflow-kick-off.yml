@@ -1,0 +1,25 @@
+name: CI Workflow Kick Off
+
+on:
+  pull_request:
+    branches-ignore:
+      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
+  workflow_dispatch:
+    inputs:
+      commit-sha:
+        description: 'The commit SHA to run the workflow on'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  ci-main:
+    name: CI Main
+    uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+    with:
+      commit-sha: ${{ github.event.pull_request.head.sha }} || ${{ inputs.commit-sha }}

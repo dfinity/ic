@@ -8,11 +8,13 @@ on:
     branches:
       - master
       - 'dev-gh-*'
-  pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: false
+        type: string
 
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
@@ -49,6 +51,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+          ref: ${{ inputs.commit-sha || github.ref }}
 
   config:
     name: Set Config
