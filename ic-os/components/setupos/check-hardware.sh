@@ -302,7 +302,6 @@ main() {
     log_start "$(basename $0)"
     if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
         detect_hardware_generation
-        verify_cpu
         verify_memory
         verify_disks
         verify_drive_health

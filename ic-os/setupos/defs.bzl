@@ -90,13 +90,13 @@ def _custom_partitions(mode):
     elif mode == "local-base-prod":
         guest_image = Label("//ic-os/guestos/envs/local-base-prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-prod:disk-img.tar.zst")
-        nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
+        nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
         include_nns_public_key_override = False
         deployment_environment = "mainnet"
     elif mode == "prod":
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.zst")
-        nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
+        nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
         include_nns_public_key_override = False
         deployment_environment = "mainnet"
     else:
