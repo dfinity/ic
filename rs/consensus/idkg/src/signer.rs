@@ -38,6 +38,10 @@ use ic_types::{
     },
     messages::CallbackId,
 };
+use rayon::{
+    ThreadPool,
+    iter::{IntoParallelIterator, ParallelIterator},
+};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
@@ -133,6 +137,7 @@ pub(crate) trait ThresholdSigner: Send {
 pub(crate) struct ThresholdSignerImpl {
     node_id: NodeId,
     crypto: Arc<dyn ConsensusCrypto>,
+    thread_pool: Arc<ThreadPool>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: ThresholdSignerMetrics,
     log: ReplicaLogger,
@@ -142,6 +147,7 @@ impl ThresholdSignerImpl {
     pub(crate) fn new(
         node_id: NodeId,
         crypto: Arc<dyn ConsensusCrypto>,
+        thread_pool: Arc<ThreadPool>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -149,6 +155,7 @@ impl ThresholdSignerImpl {
         Self {
             node_id,
             crypto,
+            thread_pool,
             state_reader,
             metrics: ThresholdSignerMetrics::new(metrics_registry),
             log,
@@ -163,28 +170,41 @@ impl ThresholdSignerImpl {
         transcript_loader: &dyn IDkgTranscriptLoader,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> IDkgChangeSet {
-        state_snapshot
-            .get_state()
-            .signature_request_contexts()
-            .iter()
-            .flat_map(|(id, context)| {
-                build_signature_inputs(*id, context).map_err(|err| {
-                    if err.is_fatal() {
-                        warn!(every_n_seconds => 15, self.log,
-                            "send_signature_shares(): failed to build signature inputs: {:?}",
-                            err
-                        );
-                        self.metrics.sign_errors_inc("signature_inputs_malformed");
-                    }
+        self.thread_pool.install(|| {
+            state_snapshot
+                .get_state()
+                .signature_request_contexts()
+                .into_par_iter()
+                .filter_map(|(id, context)| {
+                    build_signature_inputs(*id, context).inspect_err(|err| {
+                        if err.is_fatal() {
+                            warn!(every_n_seconds => 15, self.log,
+                                "send_signature_shares(): failed to build signature inputs: {:?}",
+                                err
+                            );
+                            self.metrics.sign_errors_inc("signature_inputs_malformed");
+                        }
+                    })
+                    .ok()
                 })
-            })
-            .filter(|(request_id, inputs)| {
-                !self.signer_has_issued_share(idkg_pool, &self.node_id, request_id, inputs.scheme())
-            })
-            .flat_map(|(request_id, sig_inputs)| {
-                self.create_signature_share(idkg_pool, transcript_loader, request_id, sig_inputs)
-            })
-            .collect()
+                .filter(|(request_id, inputs)| {
+                    !self.signer_has_issued_share(
+                        idkg_pool,
+                        &self.node_id,
+                        request_id,
+                        inputs.scheme(),
+                    )
+                })
+                .flat_map(|(request_id, sig_inputs)| {
+                    self.create_signature_share(
+                        idkg_pool,
+                        transcript_loader,
+                        request_id,
+                        sig_inputs,
+                    )
+                })
+                .collect()
+        })
     }
 
     /// Processes the received signature shares
@@ -209,40 +229,47 @@ impl ThresholdSignerImpl {
             })
             .collect::<BTreeMap<_, _>>();
 
-        // Collection of validated shares
-        let mut validated_sig_shares = BTreeSet::new();
+        let shares: Vec<_> = idkg_pool.unvalidated().signature_shares().collect();
+
+        let results: Vec<_> = self.thread_pool.install(|| {
+            // Iterate over all signature shares of all schemes
+            shares
+                .into_par_iter()
+                .filter_map(|(id, share)| {
+                    match Action::new(
+                        &sig_inputs_map,
+                        &share.request_id(),
+                        state_snapshot.get_height(),
+                    ) {
+                        Action::Process(sig_inputs) => {
+                            self.validate_signature_share(idkg_pool, id.clone(), share, sig_inputs)
+                        }
+                        Action::Drop => Some(IDkgChangeAction::RemoveUnvalidated(id)),
+                        Action::Defer => None,
+                    }
+                })
+                .collect()
+        });
 
         let mut ret = Vec::new();
-        // Iterate over all signature shares of all schemes
-        for (id, share) in idkg_pool.unvalidated().signature_shares() {
-            // Remove the duplicate entries
-            let key = (share.request_id(), share.signer());
-            if validated_sig_shares.contains(&key) {
+        // Collection of validated shares
+        let mut validated_sig_shares = BTreeSet::new();
+        for action in results {
+            if let IDkgChangeAction::MoveToValidated(msg) = &action
+                && let Some(key) = msg.sig_share_dedup_key()
+                && !validated_sig_shares.insert(key)
+            {
                 self.metrics
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Duplicate share in unvalidated batch: {share}"),
+                    msg.message_id(),
+                    format!("Duplicate share in unvalidated batch: {msg:?}"),
                 ));
                 continue;
             }
-
-            match Action::new(
-                &sig_inputs_map,
-                &share.request_id(),
-                state_snapshot.get_height(),
-            ) {
-                Action::Process(sig_inputs) => {
-                    let action = self.validate_signature_share(idkg_pool, id, share, sig_inputs);
-                    if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
-                        validated_sig_shares.insert(key);
-                    }
-                    ret.append(&mut action.into_iter().collect());
-                }
-                Action::Drop => ret.push(IDkgChangeAction::RemoveUnvalidated(id)),
-                Action::Defer => {}
-            }
+            ret.push(action);
         }
+
         ret
     }
 
