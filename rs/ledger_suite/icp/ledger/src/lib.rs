@@ -322,10 +322,6 @@ impl LedgerData for Ledger {
     ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
         None
     }
-
-    fn expected_fee(&self) -> Self::Tokens {
-        self.transfer_fee
-    }
 }
 
 impl Default for Ledger {

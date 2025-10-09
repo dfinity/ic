@@ -873,10 +873,6 @@ impl LedgerData for Ledger {
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>> {
         self.fee_collector.as_mut()
     }
-
-    fn expected_fee(&self) -> Self::Tokens {
-        self.transfer_fee
-    }
 }
 
 impl Ledger {

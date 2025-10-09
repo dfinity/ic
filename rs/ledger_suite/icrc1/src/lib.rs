@@ -366,9 +366,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 amount,
                 fee,
             } => {
-                if fee.is_some() {
-                    return Err(TxApplyError::BadFee);
-                }
+                assert!(fee.is_none());
                 if spender.is_some() && from != &spender.unwrap() {
                     let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
                     if allowance.amount < *amount {
@@ -386,9 +384,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 }
             }
             Operation::Mint { to, amount, fee } => {
-                if fee.is_some() {
-                    return Err(TxApplyError::BadFee);
-                }
+                assert!(fee.is_none());
                 context.balances_mut().mint(to, amount.clone())?;
             }
             Operation::Approve {
