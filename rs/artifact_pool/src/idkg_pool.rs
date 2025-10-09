@@ -32,8 +32,9 @@ use ic_types::{
             VetKdKeyShare,
         },
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
+    },
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
@@ -333,6 +334,19 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         let object_pool = self.get_pool(IDkgMessageType::Opening);
         object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
+
+    fn transcripts(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Transcript);
+        object_pool.iter()
+    }
+
+    fn transcripts_by_prefix(
+        &self,
+        prefix: IDkgPrefixOf<IDkgTranscript>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Transcript);
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
+    }
 }
 
 impl MutableIDkgPoolSection for InMemoryIDkgPoolSection {
@@ -476,10 +490,13 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         for action in change_set {
             match action {
                 IDkgChangeAction::AddToValidated(message) => {
-                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
-                        artifact: message.clone(),
-                        is_latency_sensitive: true,
-                    }));
+                    if !matches!(message, IDkgMessage::Transcript(_)) {
+                        // Completed transcripts are not gossiped
+                        transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                            artifact: message.clone(),
+                            is_latency_sensitive: true,
+                        }));
+                    }
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::MoveToValidated(message) => {
@@ -488,7 +505,9 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::RemoveValidated(msg_id) => {
-                    transmits.push(ArtifactTransmit::Abort(msg_id.clone()));
+                    if !matches!(msg_id, IDkgArtifactId::Transcript(_, _)) {
+                        transmits.push(ArtifactTransmit::Abort(msg_id.clone()));
+                    }
                     validated_ops.remove(msg_id);
                 }
                 IDkgChangeAction::RemoveUnvalidated(msg_id) => {

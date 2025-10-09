@@ -609,6 +609,8 @@ fn compute_bouncer(
                 BouncerValue::MaybeWantsLater
             }
         }
+        // Completed transcripts aren't gossiped, so we don't want them.
+        IDkgMessageId::Transcript(_, _) => BouncerValue::Unwanted,
     }
 }
 
