@@ -4,7 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
-load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_LATEST", "MAINNET_LATEST_HOSTOS", "MAINNET_NNS", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
+load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
@@ -290,19 +290,10 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 idl_to_json(name = "idl2json")
 
 # Mainnet ICOS image support
-get_mainnet_setupos_images(
-    versions = {
-        "mainnet_latest_setupos_disk_image": MAINNET_LATEST_HOSTOS,
-    },
-)
+get_mainnet_setupos_images()
 
 get_mainnet_guestos_images(
     extract_guestos = "//rs/ic_os/build_tools/partition_tools:extract-guestos",
-    versions = {
-        "mainnet_latest_guest_img": MAINNET_LATEST,
-        "mainnet_nns_guest_img": MAINNET_NNS,
-        "mainnet_app_guest_img": MAINNET_APP,
-    },
 )
 
 # Use libsystemd from the host environment
