@@ -126,8 +126,7 @@ jobs:
 
   generate-config-fixtures:
     name: Generate Config Fixtures
-    runs-on: *dind-small-setup
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     if: ${{ github.event_name != 'merge_group' }}
     env:
