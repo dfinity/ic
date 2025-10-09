@@ -20737,6 +20737,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-replica-tests",
  "ic-stable-structures 0.6.8",
+ "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-types",
