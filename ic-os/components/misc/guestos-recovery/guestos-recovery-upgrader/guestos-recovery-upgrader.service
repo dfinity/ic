@@ -7,7 +7,7 @@ Before=guestos.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/guestos-recovery-upgrader.sh
+ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /dev/tty1 /opt/ic/bin/guestos-recovery-upgrader.sh
 StandardOutput=journal+console
 StandardError=journal+console
 RemainAfterExit=yes
