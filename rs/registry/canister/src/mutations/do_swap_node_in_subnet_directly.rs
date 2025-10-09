@@ -191,7 +191,7 @@ impl Registry {
 
         // Ensure that the new node is not a member of any subnets
         let maybe_subnet_new_node =
-            find_subnet_for_node(&self, new_node_id, &self.get_subnet_list_record());
+            find_subnet_for_node(self, new_node_id, &self.get_subnet_list_record());
 
         if let Some(subnet_id) = maybe_subnet_new_node {
             return Err(SwapError::NewNodeAssigned {
@@ -318,7 +318,7 @@ impl Display for SwapError {
                     "Subnet {subnet_id} changed size after performing the swap which shouldn't happen"
                 ),
                 SwapError::NodesOwnedByDifferentOperators =>
-                    format!("Both nodes must be owned by the same node operator"),
+                    "Both nodes must be owned by the same node operator".to_string(),
                 SwapError::UnknownNode { node_id } => format!("Node {node_id} doesn't exist"),
                 SwapError::NewNodeAssigned { node_id, subnet_id } => format!(
                     "New node {node_id} is a member of subnet {subnet_id} and cannot be used for direct swapping"
@@ -856,6 +856,83 @@ mod tests {
             .expect_err("Should error out");
 
         let expected_err = SwapError::NodesOwnedByDifferentOperators;
+        assert_eq!(
+            response, expected_err,
+            "Expected error {expected_err:?} but got error: {response:?}"
+        );
+    }
+
+    #[test]
+    fn nodes_not_owned_by_the_caller() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
+            setup_registry_for_test();
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        let different_caller = PrincipalId::new_user_test_id(2);
+
+        test_set_swapping_whitelisted_callers(vec![operator_id, different_caller]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
+
+        let response = registry
+            .swap_nodes_inner(payload, different_caller, now_system_time())
+            .expect_err("Should error out");
+
+        let expected_err = SwapError::NodesOwnedByDifferentOperators;
+        assert_eq!(
+            response, expected_err,
+            "Expected error {expected_err:?} but got error: {response:?}"
+        );
+    }
+
+    #[test]
+    fn new_node_in_subnet() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let subnet_id_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
+        let (old_node_id, old_node_keys) = get_new_node_and_keys();
+        let (new_node_id, new_node_keys) = get_new_node_and_keys();
+        let operator_id_1 = PrincipalId::new_user_test_id(1);
+        let operator_id_2 = PrincipalId::new_user_test_id(2);
+
+        let mutations = get_mutations_from_node_information(&[
+            NodeInformation {
+                node_id: old_node_id,
+                subnet_id: Some(subnet_id_1),
+                operator: operator_id_1,
+                valid_pks: old_node_keys,
+            },
+            NodeInformation {
+                node_id: new_node_id,
+                subnet_id: Some(subnet_id_2),
+                operator: operator_id_2,
+                valid_pks: new_node_keys,
+            },
+        ]);
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        test_set_swapping_whitelisted_callers(vec![operator_id_1, operator_id_2]);
+        test_set_swapping_enabled_subnets(vec![subnet_id_1]);
+
+        let response = registry
+            .swap_nodes_inner(payload, operator_id_1, now_system_time())
+            .expect_err("Should error out");
+
+        let expected_err = SwapError::NewNodeAssigned {
+            node_id: new_node_id.get(),
+            subnet_id: subnet_id_2,
+        };
         assert_eq!(
             response, expected_err,
             "Expected error {expected_err:?} but got error: {response:?}"
