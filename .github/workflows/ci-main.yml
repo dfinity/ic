@@ -165,17 +165,17 @@ jobs:
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }, {
-              "name": "Test",
-              "output_id": "test_id",
-            }]
+        run: |
+          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
+          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
+
+          test_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          echo "BuildBuddy link (test): 'https://dash.idx.dfinity.network/invocation/$test_uuid'"
+          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$test_uuid)" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "BUILD_UUIDS=$build_uuid:$test_uuid" >> "$GITHUB_ENV"
+
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
@@ -228,7 +228,6 @@ jobs:
 
             bazel_do() {
               bazel_cmd="$1"
-              invocation_id="$2"
 
               "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
@@ -254,11 +253,11 @@ jobs:
 
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
             }
 
-            bazel_do build "${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
-            bazel_do test "${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
+            bazel_do build
+            bazel_do test
 
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
@@ -281,17 +280,12 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }
-            ${{ needs.config.outputs.full_macos_build == 'true' && ', { "name": "Test", "output_id": "test_id" }' || '' }}
-            ]
+      - name: Generate Bazel invocation IDs (build)
+        run: |
+          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          echo "BuildBuddy link (eval): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
+          echo "[BuildBuddy link (eval)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
+          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
 
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
@@ -301,9 +295,16 @@ jobs:
           run: |
             bazel build \
               --config=stamped \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" \
               --build_tag_filters=test_all_platforms \
               //... --nobuild
+
+      - name: Generate Bazel invocation ID (test)
+        if: ${{ needs.config.outputs.full_macos_build == 'true' }}
+        run: |
+          test_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$test_uuid'"
+          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$test_uuid)" >> "$GITHUB_STEP_SUMMARY"
+          echo "BUILD_UUIDS=$test_uuid" >> "$GITHUB_ENV"
 
       - name: Build & Test
         if: ${{ needs.config.outputs.full_macos_build == 'true' }}
@@ -312,7 +313,6 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=test_all_platforms \
               //...
 
@@ -512,14 +512,11 @@ jobs:
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }]
+        run: |
+          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          echo "BuildBuddy link: 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
+          echo "[BuildBuddy link](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
+          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -531,8 +528,6 @@ jobs:
             DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
             BASE_SHA='${{ github.event.pull_request.base.sha }}'
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
-
-            export BAZEL_BUILD_INVOCATION_ID="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
 
             cd "$CI_PROJECT_DIR"
 
@@ -652,18 +647,15 @@ jobs:
     steps:
       - *checkout
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }]
+        run: |
+          uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
+          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
+          echo "BUILD_UUIDS=$build_uuid:$test_uuid" >> "$GITHUB_ENV"
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
-          run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
+          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   cargo-linux:
