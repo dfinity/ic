@@ -456,7 +456,7 @@ fn method_name_edge_cases(env: TestEnv) {
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
-        for (url, is_api_bn) in [(subnet_replica_url, false), (api_bn_url, true)] {
+        for url in [subnet_replica_url, api_bn_url] {
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
