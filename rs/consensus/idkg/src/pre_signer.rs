@@ -18,7 +18,7 @@ use ic_types::{
     artifact::IDkgMessageId,
     consensus::idkg::{
         IDkgBlockReader, IDkgMessage, IDkgObject, IDkgStats, IDkgTranscriptParamsRef,
-        dealing_prefix, dealing_support_prefix,
+        dealing_prefix, dealing_support_prefix, transcript_prefix,
     },
     crypto::{
         CryptoHashOf,
@@ -1307,6 +1307,30 @@ impl IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'_> {
             || self.validated_dealings(transcript_id),
             &self.metrics.transcript_builder_duration,
         )
+    }
+}
+
+impl<T: ?Sized + IDkgPool> IDkgTranscriptBuilder for T {
+    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+        let prefix = transcript_prefix(&transcript_id);
+        self.validated()
+            .transcripts_by_prefix(prefix)
+            .find(|(_, transcript)| transcript.transcript_id == transcript_id)
+            .map(|(_, transcript)| transcript)
+    }
+
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+        let mut ret = Vec::new();
+        for (_, signed_dealing) in self
+            .validated()
+            .signed_dealings_by_transcript_id(&transcript_id)
+        {
+            let dealing = signed_dealing.idkg_dealing();
+            if dealing.transcript_id == transcript_id {
+                ret.push(signed_dealing);
+            }
+        }
+        ret
     }
 }
 
