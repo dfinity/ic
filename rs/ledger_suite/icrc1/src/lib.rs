@@ -473,10 +473,17 @@ impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transac
         if let Some(mint) = value.mint {
             let amount = Tokens::try_from(mint.amount)
                 .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
+            let fee = match mint.fee {
+                Some(fee) => Some(
+                    Tokens::try_from(fee)
+                        .map_err(|_| "Could not convert Nat to Tokens".to_string())?,
+                ),
+                None => None,
+            };
             let operation = Operation::Mint {
                 to: mint.to,
                 amount,
-                fee: None,
+                fee,
             };
             return Ok(Self {
                 operation,
@@ -487,11 +494,18 @@ impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transac
         if let Some(burn) = value.burn {
             let amount = Tokens::try_from(burn.amount)
                 .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
+            let fee = match burn.fee {
+                Some(fee) => Some(
+                    Tokens::try_from(fee)
+                        .map_err(|_| "Could not convert Nat to Tokens".to_string())?,
+                ),
+                None => None,
+            };
             let operation = Operation::Burn {
                 from: burn.from,
                 spender: burn.spender,
                 amount,
-                fee: None,
+                fee,
             };
             return Ok(Self {
                 operation,

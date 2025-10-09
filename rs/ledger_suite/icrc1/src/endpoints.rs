@@ -173,6 +173,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     amount: amount.into(),
                     created_at_time,
                     memo,
+                    fee: fee.map(Into::into),
                 });
             }
             Operation::Burn {
@@ -189,6 +190,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     amount: amount.into(),
                     created_at_time,
                     memo,
+                    fee: fee.map(Into::into),
                 });
             }
             Operation::Transfer {
