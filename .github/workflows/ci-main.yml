@@ -270,6 +270,8 @@ jobs:
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
           credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+      - name: Stop service container
+        run: docker stop ${{ job.services.service.id }}
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
