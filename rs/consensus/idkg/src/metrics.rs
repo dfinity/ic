@@ -59,8 +59,6 @@ pub struct IDkgPreSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub pre_sign_metrics: IntCounterVec,
     pub pre_sign_errors: IntCounterVec,
-    transcript_builder_metrics: IntCounterVec,
-    transcript_builder_errors: IntCounterVec,
 }
 
 impl IDkgPreSignerMetrics {
@@ -84,17 +82,13 @@ impl IDkgPreSignerMetrics {
                 "Pre-signing related errors",
                 &["type"],
             ),
-            transcript_builder_metrics: metrics_registry.int_counter_vec(
-                "idkg_transcript_builder_metrics",
-                "IDkg transcript builder metrics",
-                &["type"],
-            ),
-            transcript_builder_errors: metrics_registry.int_counter_vec(
-                "idkg_transcript_builder_errors",
-                "IDkg transcript builder related errors",
-                &["type"],
-            ),
         }
+    }
+
+    pub fn pre_sign_metrics_inc_by(&self, value: u64, label: &str) {
+        self.pre_sign_metrics
+            .with_label_values(&[label])
+            .inc_by(value);
     }
 
     pub fn pre_sign_metrics_inc(&self, label: &str) {
@@ -103,24 +97,6 @@ impl IDkgPreSignerMetrics {
 
     pub fn pre_sign_errors_inc(&self, label: &str) {
         self.pre_sign_errors.with_label_values(&[label]).inc();
-    }
-
-    pub(crate) fn transcript_builder_metrics_inc(&self, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc();
-    }
-
-    pub(crate) fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc_by(value);
-    }
-
-    pub(crate) fn transcript_builder_errors_inc(&self, label: &str) {
-        self.transcript_builder_errors
-            .with_label_values(&[label])
-            .inc();
     }
 }
 

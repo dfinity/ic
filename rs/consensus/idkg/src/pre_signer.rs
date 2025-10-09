@@ -611,7 +611,7 @@ impl IDkgPreSignerImpl {
                     transcript_state.init_dealing_state(dealing_hash, signed_dealing);
                 } else {
                     self.metrics
-                        .transcript_builder_errors_inc("build_transcript_id_dealing_hash");
+                        .pre_sign_errors_inc("build_transcript_id_dealing_hash");
                     warn!(
                         self.log,
                         "build_transcript(): Failed to get dealing hash: {:?}", id
@@ -631,8 +631,7 @@ impl IDkgPreSignerImpl {
                         transcript_id,
                         err
                     );
-                    self.metrics
-                        .transcript_builder_errors_inc("add_dealing_support");
+                    self.metrics.pre_sign_errors_inc("add_dealing_support");
                 }
             });
         }
@@ -642,23 +641,11 @@ impl IDkgPreSignerImpl {
                 .into_par_iter()
                 .filter_map(|(_, transcript_state)| {
                     // Look up the transcript params
-                    let transcript_params =
-                        match transcript_state.params_ref.translate(block_reader) {
-                            Ok(transcript_params) => transcript_params,
-                            Err(error) => {
-                                warn!(
-                                    self.log,
-                                    "build_transcript(): failed to translate transcript ref: \
-                                    transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
-                                    transcript_state.params_ref,
-                                    block_reader.tip_height(),
-                                    error
-                                );
-                                self.metrics
-                                    .transcript_builder_errors_inc("resolve_transcript_refs");
-                                return None;
-                            }
-                        };
+                    let transcript_params = self.resolve_ref(
+                        &transcript_state.params_ref,
+                        block_reader,
+                        "build_transcripts",
+                    )?;
 
                     let mut completed_dealings = BatchSignedIDkgDealings::new();
                     // Aggregate the support shares per dealing
@@ -991,7 +978,7 @@ impl IDkgPreSignerImpl {
         // Check if we have enough shares for aggregation
         if support_shares.len() < (transcript_params.verification_threshold().get() as usize) {
             self.metrics
-                .transcript_builder_metrics_inc("insufficient_support_shares");
+                .pre_sign_metrics_inc("insufficient_support_shares");
             return None;
         }
 
@@ -1015,16 +1002,13 @@ impl IDkgPreSignerImpl {
                     error
                 );
                 self.metrics
-                    .transcript_builder_errors_inc("aggregate_dealing_support");
+                    .pre_sign_errors_inc("aggregate_dealing_support");
                 None
             },
             |multi_sig| {
-                self.metrics.transcript_builder_metrics_inc_by(
-                    support_shares.len() as u64,
-                    "support_aggregated",
-                );
                 self.metrics
-                    .transcript_builder_metrics_inc("dealing_aggregated");
+                    .pre_sign_metrics_inc_by(support_shares.len() as u64, "support_aggregated");
+                self.metrics.pre_sign_metrics_inc("dealing_aggregated");
                 Some(multi_sig)
             },
         )
@@ -1039,8 +1023,7 @@ impl IDkgPreSignerImpl {
     ) -> Option<IDkgTranscript> {
         // Check if we have enough dealings to create transcript
         if verified_dealings.len() < (transcript_params.collection_threshold().get() as usize) {
-            self.metrics
-                .transcript_builder_metrics_inc("insufficient_dealings");
+            self.metrics.pre_sign_metrics_inc("insufficient_dealings");
             return None;
         }
 
@@ -1057,13 +1040,11 @@ impl IDkgPreSignerImpl {
                     transcript_params.transcript_id(),
                     error
                 );
-                self.metrics
-                    .transcript_builder_errors_inc("create_transcript");
+                self.metrics.pre_sign_errors_inc("create_transcript");
                 None
             },
             |transcript| {
-                self.metrics
-                    .transcript_builder_metrics_inc("transcript_created");
+                self.metrics.pre_sign_metrics_inc("transcript_created");
                 Some(transcript)
             },
         )
