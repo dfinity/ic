@@ -1,15 +1,15 @@
 use crate::eth_rpc::Hash;
 use crate::lifecycle::EthereumNetwork;
-use crate::logs::{INFO, PrintProxySink, TRACE_HTTP};
+use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
 use crate::numeric::TransactionCount;
 use crate::state::State;
 use candid::Nat;
+use evm_rpc_client::EvmRpcClient;
 use evm_rpc_client::{
-    Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
-    FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig as EvmGetLogsRpcConfig,
-    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, HttpOutcallError, IcRuntime,
-    LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
-    RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
+    Block, BlockTag, ConsensusStrategy, EthSepoliaService, FeeHistory, FeeHistoryArgs, GetLogsArgs,
+    GetLogsRpcConfig as EvmGetLogsRpcConfig, GetTransactionCountArgs as EvmGetTransactionCountArgs,
+    Hex20, HttpOutcallError, IcRuntime, LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
     RpcServices as EvmRpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 use ic_canister_log::log;

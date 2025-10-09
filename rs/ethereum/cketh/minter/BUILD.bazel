@@ -61,6 +61,7 @@ rust_library(
         "//rs/utils/ensure",
         "@crate_index//:candid",
         "@crate_index//:ethnum",
+        "@crate_index//:evm_rpc_types",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:hex-literal",

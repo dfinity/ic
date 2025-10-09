@@ -7484,6 +7484,7 @@ dependencies = [
  "ethers-core",
  "ethnum",
  "evm-rpc-client",
+ "evm_rpc_types",
  "flate2",
  "futures",
  "hex",
