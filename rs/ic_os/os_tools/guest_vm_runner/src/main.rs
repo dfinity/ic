@@ -150,7 +150,10 @@ impl VirtualMachine {
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
             match domain_result {
-                Ok(domain) => break domain,
+                Ok(domain) => {
+                    eprintln!("Domain successfully created: {vm_domain_name}");
+                    break domain;
+                }
                 Err(e) if retries > 0 => {
                     eprintln!("Domain creation failed, retrying: {e}");
                     let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
@@ -171,13 +174,13 @@ impl VirtualMachine {
 
     fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) -> Result<()> {
         if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
-            println!("Attempting to destroy existing '{vm_domain_name}' domain");
+            eprintln!("Attempting to destroy existing '{vm_domain_name}' domain");
             existing_domain
                 .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
                 .context("Failed to destroy existing domain")?;
-            println!("Successfully destroyed existing domain");
+            eprintln!("Successfully destroyed existing domain");
         } else {
-            println!("No existing domain found to destroy");
+            eprintln!("No existing domain found to destroy");
         }
         Ok(())
     }
