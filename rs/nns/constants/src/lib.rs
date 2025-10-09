@@ -42,8 +42,7 @@ pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x2100003;
 // Canisters belonging to the Bitcoin subnet, whose ID begins with w4rem.
 pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00001;
 pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x1a00004;
-// Dogecoin. The value here corresponds to the value that Manu Drijvers shared
-// with the Governance team. To wit, gordg-fyaaa-aaaan-aaadq-cai.
+// Dogecoin.
 pub const DOGECOIN_CANISTER_INDEX: u64 = 0x1a00007;
 
 // SNS Aggregator canister is deployed to the `x33ed` (SNS) subnet.
