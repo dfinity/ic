@@ -5,6 +5,8 @@ on:
   merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
 
 concurrency:
   # only triggered on PR, so head_ref will always be set
@@ -120,6 +122,19 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
+      - name: Add PR Comment
+        uses: actions/github-script@v7
+        if: ${{ steps.check.outputs.new_commit == 'true' }}
+        with:
+          script: |
+            let message = 'New commit created - re-trigger CI.';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            })
 
   generate-config-fixtures:
     name: Generate Config Fixtures
