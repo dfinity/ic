@@ -22,13 +22,13 @@ use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_quic_transport::{Shutdown, Transport};
+use std::sync::RwLock;
 use std::{
     collections::{HashMap, hash_map::Entry},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use thiserror::Error;
-use tokio::sync::{Mutex, RwLock};
 use tokio::{
     runtime::Handle,
     select,
@@ -148,7 +148,7 @@ impl OngoingStateSync {
 
                             if self.is_base_layer {
                                 let new_partial_state = self.chunks_to_download.next_xor_distance();
-                                *self.partial_state.write().await = new_partial_state;
+                                *self.partial_state.write().unwrap() = new_partial_state;
                             }
 
                             info!(self.log, "STATE_SYNC: Finished downloading chunk {}", chunk_id);
@@ -272,7 +272,7 @@ impl OngoingStateSync {
 
                     // If we store chunks in self.chunks_to_download we will eventually initiate and
                     // by filtering with the current in flight request we avoid double download.
-                    let tracker = tracker.lock().await;
+                    let tracker = tracker.lock().unwrap();
 
                     let chunks_to_download = tracker
                         .chunks_to_download()
@@ -316,7 +316,7 @@ impl OngoingStateSync {
             .filter(|(_, peer_state)| peer_state.active_downloads() <= PARALLEL_CHUNK_DOWNLOADS)
             // Filter out peers that do not serve the chunk in question
             .filter(|&(peer_id, peer_state)| {
-                peer_state.is_chunk_served(peer_id.clone(), self.artifact_id.clone(), chunk_id)
+                peer_state.is_chunk_served(*peer_id, self.artifact_id.clone(), chunk_id)
             })
             // Find the peer with the lowest number of parital downloads
             .map(|(peer_id, peer_state)| (peer_id, peer_state.active_downloads()))
@@ -328,7 +328,7 @@ impl OngoingStateSync {
                 }
             });
 
-        minimally_loaded_peer.map(|(peer_id, _)| peer_id.clone())
+        minimally_loaded_peer.map(|(peer_id, _)| peer_id).copied()
     }
 
     async fn download_chunk_task<T: 'static + Send>(
@@ -373,9 +373,9 @@ impl OngoingStateSync {
             }
         };
 
-        let mut tracker_guard = tracker.clone().lock_owned().await;
         let result = tokio::task::spawn_blocking(move || {
             let chunk = parse_chunk_handler_response(response, chunk_id, metrics)?;
+            let mut tracker_guard = tracker.lock().unwrap();
             tracker_guard.add_chunk(chunk_id, chunk).map_err(|err| {
                 DownloadChunkError::RequestError {
                     chunk_id,

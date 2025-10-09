@@ -14239,6 +14239,7 @@ dependencies = [
  "prometheus 0.13.4",
  "prost 0.13.4",
  "rand 0.8.5",
+ "sha2 0.10.9",
  "slog",
  "thiserror 2.0.12",
  "tokio",

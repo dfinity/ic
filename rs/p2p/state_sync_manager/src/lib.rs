@@ -29,8 +29,11 @@ use routes::{
     STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH, StateSyncAdvertHandler, StateSyncChunkHandler,
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
 };
-use std::{sync::Arc, time::Duration};
-use tokio::{runtime::Handle, select, sync::Mutex, task::JoinSet, time::MissedTickBehavior};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::{runtime::Handle, select, task::JoinSet, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 mod metrics;
@@ -139,7 +142,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
             state_sync
                 .partial_state
                 .read()
-                .await
+                .unwrap()
                 .as_ref()
                 .map(|distance| (state_sync.artifact_id.clone(), distance.clone()))
         } else {
@@ -261,7 +264,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
         for (peer_id, _) in transport.peers() {
             for state_id in &available_states {
                 futures.push(send_advert(
-                    peer_id.clone(),
+                    peer_id,
                     transport.clone(),
                     state_id.clone(),
                     None,
@@ -272,7 +275,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
             // Send adverts for incomplete state
             if let Some((state_id, partial_state)) = &partial_state {
                 futures.push(send_advert(
-                    peer_id.clone(),
+                    peer_id,
                     transport.clone(),
                     state_id.clone(),
                     Some(partial_state.clone()),

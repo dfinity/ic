@@ -29,7 +29,7 @@ impl TryFrom<pb::Advert> for Advert {
         Ok(Advert {
             id: advert
                 .id
-                .map(|id| StateSyncArtifactId::from(id))
+                .map(StateSyncArtifactId::from)
                 .ok_or(ProxyDecodeError::MissingField("id"))?,
             partial_state: match advert.partial_state {
                 Some(partial_state) => Some(
@@ -55,13 +55,13 @@ impl XorDistance {
         artifact_id: StateSyncArtifactId,
         chunk_id: ChunkId,
     ) -> Self {
-        let mut lhs_hash: [u8; 32] = Sha256::digest(peer_id.get().to_vec()).try_into().unwrap();
+        let mut lhs_hash: [u8; 32] = Sha256::digest(peer_id.get().to_vec()).into();
 
         let mut rhs_hash = Sha256::new();
         rhs_hash.update(artifact_id.height.get().to_be_bytes());
         rhs_hash.update(artifact_id.hash.0);
         rhs_hash.update(chunk_id.get().to_be_bytes());
-        let rhs_hash: [u8; 32] = rhs_hash.finalize().try_into().unwrap();
+        let rhs_hash: [u8; 32] = rhs_hash.finalize().into();
 
         lhs_hash
             .iter_mut()
@@ -105,10 +105,10 @@ impl ChunksToDownload {
         let next_chunk = self
             .0
             .iter_mut()
-            .find(|(_, (_, downloading))| *downloading == false)?;
+            .find(|(_, (_, downloading))| !downloading)?;
 
         next_chunk.1.1 = true;
-        Some(next_chunk.1.0.clone())
+        Some(next_chunk.1.0)
     }
 
     pub(crate) fn download_finished(&mut self, chunk_id: ChunkId) {
