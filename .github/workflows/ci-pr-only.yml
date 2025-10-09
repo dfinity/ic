@@ -93,7 +93,7 @@ jobs:
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     steps:
       - name: Filter Relevant Files
