@@ -4,6 +4,7 @@ use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
 };
+use crate::util::MIGRATION_CANISTER_ID;
 use crate::{
     canister_settings::{CanisterSettings, ValidatedCanisterSettings},
     hypervisor::Hypervisor,
@@ -28,7 +29,6 @@ use ic_management_canister_types_private::{
     SnapshotSource, StoredChunksReply, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
-use ic_nns_constants::MIGRATION_CANISTER_ID;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -67,7 +67,6 @@ use ic_types::{
 use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
-use std::collections::BTreeSet;
 use std::iter::zip;
 use std::path::PathBuf;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
@@ -2884,11 +2883,7 @@ impl CanisterManager {
 
         // Only the migration orchestrator should be able to be the sender.
         if sender != MIGRATION_CANISTER_ID.into() {
-            return Err(CanisterManagerError::CanisterInvalidController {
-                canister_id: old_id,
-                controllers_expected: BTreeSet::from_iter(vec![MIGRATION_CANISTER_ID.into()]),
-                controller_provided: sender,
-            });
+            return Err(CanisterManagerError::CallerNotAuthorized);
         }
 
         if state.canister_state(&new_id).is_some() {

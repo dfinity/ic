@@ -9,6 +9,7 @@ use crate::{
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
+    util::MIGRATION_CANISTER_ID,
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
@@ -6653,6 +6654,7 @@ fn test_environment_variables() {
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
 /// in addition to both canisters being controlled by the anonymous principal.
+/// The first canister has the id of the migration canister such that it can call `rename_canister`.
 fn install_two_universal_canisters(
     env1: &StateMachine,
     env2: &StateMachine,
@@ -6660,14 +6662,17 @@ fn install_two_universal_canisters(
     const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
     // Create a canister on each of the two subnets.
-    let canister_id1 = env1
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
-            INITIAL_CYCLES_BALANCE,
-        )
-        .unwrap();
+    let mut canister_id1 = CanisterId::from_u64(0);
+    while canister_id1 != MIGRATION_CANISTER_ID {
+        canister_id1 = env1
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                INITIAL_CYCLES_BALANCE,
+            )
+            .unwrap();
+    }
     let canister_id2 = env2
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.to_vec(),

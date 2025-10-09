@@ -334,6 +334,7 @@ pub(crate) enum CanisterManagerError {
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
+    CallerNotAuthorized,
     CanisterAlreadyExists(CanisterId),
     CanisterIdAlreadyExists(CanisterId),
     CanisterNotFound(CanisterId),
@@ -728,6 +729,10 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
                 doc_link: "canister-metadata-section-not-found".to_string(),
             },
+            CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
+                suggestion: "The caller is not authorized to call this method.".to_string(),
+                doc_link: "".to_string(),
+            }
         }
     }
 }
@@ -1116,6 +1121,10 @@ impl From<CanisterManagerError> for UserError {
                 format!(
                     "The canister {canister_id} has no metadata section with the name {section_name}."
                 ),
+            ),
+            CallerNotAuthorized => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("The caller is not authorized to call this method."),
             ),
         }
     }
