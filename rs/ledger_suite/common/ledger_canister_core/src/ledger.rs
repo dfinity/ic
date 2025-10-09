@@ -34,6 +34,7 @@ pub enum TxApplyError<Tokens> {
     ExpiredApproval { now: TimeStamp },
     AllowanceChanged { current_allowance: Tokens },
     SelfApproval,
+    BadFee,
 }
 
 impl<Tokens> From<BalanceError<Tokens>> for TxApplyError<Tokens> {
@@ -186,6 +187,8 @@ pub trait LedgerData: LedgerContext {
     fn on_purged_transaction(&mut self, height: BlockIndex);
 
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>>;
+
+    fn expected_fee(&self) -> Self::Tokens;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -264,6 +267,9 @@ where
                 TransferError::AllowanceChanged { current_allowance }
             }
             TxApplyError::SelfApproval => TransferError::SelfApproval,
+            TxApplyError::BadFee => TransferError::BadFee {
+                expected_fee: ledger.expected_fee(),
+            },
         })?;
 
     let fee_collector = ledger.fee_collector().cloned();
