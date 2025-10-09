@@ -22,8 +22,12 @@ if ! git diff --cached --quiet; then
         git config --global user.name "IDX GitHub Automation"
         git commit -m "Automatically updated Cargo*.lock"
         git push
+
         echo "new_commit=true" >> $GITHUB_OUTPUT
     fi
+
+    # Because the lockfiles need updating, fail the PR
+    EXIT_STATUS=1
 fi
 
 exit "${EXIT_STATUS}"

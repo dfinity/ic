@@ -124,7 +124,7 @@ jobs:
         run: ./ci/scripts/lock-generate.sh
       - name: Add PR Comment
         uses: actions/github-script@v7
-        if: ${{ steps.check.outputs.new_commit == 'true' }}
+        if: ${{ steps.lock-generate.outputs.new_commit == 'true' && failure()) }}
         with:
           script: |
             let message = 'New commit created - re-trigger CI.';
