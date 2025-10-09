@@ -69,14 +69,9 @@ use_repo(pip, "python_deps")
 bazel_dep(
     name = "protobuf",
     version = "28.2",
-    # We need to give the repository an explicit name that rules_closure
-    # can find
+    # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
-
-# Closure (JS framework) dependencies
-
-bazel_dep(name = "rules_java", version = "7.11.1")
 
 # Go dependencies
 
