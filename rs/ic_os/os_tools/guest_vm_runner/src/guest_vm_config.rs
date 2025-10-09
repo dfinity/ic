@@ -110,7 +110,7 @@ pub fn generate_vm_config(
     };
 
     // We need 4GB for the upgrade VM. We subtract that from the total memory. This is not
-    // necessary when SEV is disabled (since not upgrade VM is necessary) but mixed subnets that
+    // necessary when SEV is disabled (since no upgrade VM is needed) but mixed subnets that
     // contain nodes with and without SEV should have the same memory settings for consistency
     // across nodes.
     const UPGRADE_VM_MEMORY_GB: u32 = 4;
