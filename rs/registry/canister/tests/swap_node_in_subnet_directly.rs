@@ -290,12 +290,14 @@ async fn subnet_rate_limited() {
 
     assert!(response.is_ok(), "Expected ok but got {response:?}");
 
-    // Make a call again which should fail because of rate limiting
+    // Make a call again which should fail because of rate limiting.
+    // Now old and new nodes are swapped in the payload because they
+    // were swaped in the previous call to the canister.
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
         operator_id,
     )
@@ -314,8 +316,8 @@ async fn subnet_rate_limited() {
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
         different_sender,
     )
@@ -376,12 +378,14 @@ async fn subnet_rate_limit_passed() {
 
     assert!(response.is_ok(), "Expected ok but got {response:?}");
 
-    // Make a call again which should fail because of rate limiting
+    // Make a call again which should fail because of rate limiting.
+    // Old and new nodes are now changed because they were swapped
+    // in a previous call.
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
         operator_id,
     )
@@ -405,8 +409,8 @@ async fn subnet_rate_limit_passed() {
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
         operator_id,
     )
@@ -433,8 +437,8 @@ async fn subnet_rate_limit_passed() {
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
         operator_id,
     )
