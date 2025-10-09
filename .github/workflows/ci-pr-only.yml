@@ -92,6 +92,9 @@ jobs:
     if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -107,18 +110,12 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
