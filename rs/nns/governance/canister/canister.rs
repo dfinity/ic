@@ -26,12 +26,12 @@ use ic_nns_governance::{
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
-    GetNeuronIndexRequest, GetNeuronIndexResponse, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
+    GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
     NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
@@ -378,9 +378,9 @@ fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
 }
 
 #[query]
-fn get_neuron_index(_req: GetNeuronIndexRequest) -> GetNeuronIndexResponse {
+fn get_neuron_index(_req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
     debug_log("get_neuron_index");
-    GetNeuronIndexResponse::default()
+    Ok(NeuronIndexData::default())
 }
 
 #[query]

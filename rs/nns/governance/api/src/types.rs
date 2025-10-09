@@ -4402,13 +4402,6 @@ pub struct GetNeuronIndexRequest {
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
-pub struct NeuronIndex {
+pub struct NeuronIndexData {
     neurons: Vec<NeuronInfo>,
-}
-
-#[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
-)]
-pub struct GetNeuronIndexResponse {
-    result: Option<Result<NeuronIndex, GovernanceError>>,
 }
