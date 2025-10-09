@@ -1906,6 +1906,7 @@ mod verify_written_blocks {
             to: mint_args.to,
             memo: mint_args.memo,
             created_at_time: mint_args.created_at_time,
+            fee: None,
         });
     }
 
@@ -2020,6 +2021,7 @@ mod verify_written_blocks {
                 spender: Some(spender_account),
                 memo: burn_args.memo,
                 created_at_time: burn_args.created_at_time,
+                fee: None,
             });
     }
 
