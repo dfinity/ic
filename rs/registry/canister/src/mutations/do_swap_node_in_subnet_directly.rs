@@ -434,7 +434,7 @@ mod tests {
 
         let mut subnets = BTreeMap::new();
 
-        for (index, node) in node_information.into_iter().enumerate() {
+        for (index, node) in node_information.iter().enumerate() {
             if let Some(subnet) = node.subnet_id {
                 subnets
                     .entry(subnet)
@@ -478,7 +478,7 @@ mod tests {
             ));
 
             let relevant_nodes = nodes
-                .into_iter()
+                .iter()
                 .map(|n| (n.node_id(), n.dkg_dealing_encryption_key().clone()))
                 .collect();
             let threshold_and_cup_mutations =

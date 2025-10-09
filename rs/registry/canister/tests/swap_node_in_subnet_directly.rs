@@ -4,7 +4,9 @@ use common::test_helpers::install_registry_canister_with_payload_builder;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::swap_node_in_subnet_directly;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
+    get_value, swap_node_in_subnet_directly,
+};
 use ic_nns_test_utils::registry::{
     create_subnet_threshold_signing_pubkey_and_cup_mutations,
     invariant_compliant_mutation_as_atomic_req,
@@ -492,5 +494,25 @@ async fn e2e_valid_swap() {
     )
     .await;
 
-    assert!(response.is_ok(), "Expected ok but got {response:?}")
+    assert!(response.is_ok(), "Expected ok but got {response:?}");
+
+    let response = get_value(&pocket_ic, make_subnet_record_key(subnet_id), None)
+        .await
+        .unwrap();
+
+    let content = match response.content.unwrap() {
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(items) => items,
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => panic!("Didn't expect large value chunk keys"),
+    };
+
+    let subnet_record = SubnetRecord::decode(content.as_slice()).unwrap();
+
+    let members: Vec<_> = subnet_record
+        .membership
+        .into_iter()
+        .map(|n| NodeId::new(PrincipalId::try_from(n).unwrap()))
+        .collect();
+
+    assert!(members.contains(&new_node_id));
+    assert!(!members.contains(&old_node_id));
 }
