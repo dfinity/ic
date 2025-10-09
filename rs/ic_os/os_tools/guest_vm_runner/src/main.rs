@@ -42,7 +42,8 @@ const UPGRADE_METRICS_FILE_PATH: &str =
 const DEFAULT_GUESTOS_SERVICE_NAME: &str = "guestos.service";
 const UPGRADE_GUESTOS_SERVICE_NAME: &str = "upgrade-guestos.service";
 
-const CONSOLE_TTY_PATH: &str = "/dev/tty1";
+const CONSOLE_TTY1_PATH: &str = "/dev/tty1";
+const CONSOLE_TTY_SERIAL_PATH: &str = "/dev/ttyS0";
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
 
 const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
@@ -257,7 +258,7 @@ pub struct GuestVmService {
     libvirt_connection: Connect,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
-    console_tty: Box<dyn Write + Send + Sync>,
+    console_ttys: Vec<Box<dyn Write + Send + Sync>>,
     guest_vm_type: GuestVMType,
     sev_certificate_provider: HostSevCertificateProvider,
     disk_device: PathBuf,
@@ -280,10 +281,15 @@ impl GuestVmService {
         let hostos_config: HostOSConfig =
             config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
-        let console_tty = std::fs::File::options()
+        let console_tty1 = std::fs::File::options()
             .write(true)
-            .open(CONSOLE_TTY_PATH)
-            .context("Failed to open console")?;
+            .open(CONSOLE_TTY1_PATH)
+            .context("Failed to open console tty1")?;
+
+        let console_tty_serial = std::fs::File::options()
+            .write(true)
+            .open(CONSOLE_TTY_SERIAL_PATH)
+            .context("Failed to open console ttyS0")?;
 
         let sev_certificate_provider = HostSevCertificateProvider::new(
             PathBuf::from(SEV_CERTIFICATE_CACHE_DIR),
@@ -313,7 +319,7 @@ impl GuestVmService {
             hostos_config,
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
-            console_tty: Box::new(console_tty),
+            console_ttys: vec![Box::new(console_tty1), Box::new(console_tty_serial)],
             sev_certificate_provider,
             partition_provider: Box::new(
                 GptPartitionProvider::new(disk_device.to_path_buf())
@@ -597,8 +603,10 @@ impl GuestVmService {
     }
 
     fn write_to_console(&mut self, message: &str) {
-        let _ignore = writeln!(self.console_tty, "{message}");
-        let _ignore = self.console_tty.flush();
+        for console_tty in &mut self.console_ttys {
+            let _ignore = writeln!(console_tty, "{message}");
+            let _ignore = console_tty.flush();
+        }
     }
 }
 
@@ -815,7 +823,7 @@ mod tests {
                 libvirt_connection: self.libvirt_connection.clone(),
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),
-                console_tty: Box::new(File::create(console_file.path()).unwrap()),
+                console_ttys: vec![Box::new(File::create(console_file.path()).unwrap())],
                 partition_provider: Box::new(
                     GptPartitionProvider::with_mounter(
                         self.guestos_device.clone(),
