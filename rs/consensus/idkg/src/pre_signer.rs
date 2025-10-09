@@ -2436,8 +2436,12 @@ mod tests {
                 let block_reader = block_reader.clone().with_fail_to_resolve();
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
+                // Resolving the transcript params for id_2 fails, so both supports are handled invalid
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
                 assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
+                // The share for id_3 is deferred since we don't have the dealing yet, meaning
+                // we don't attempt to resolve the references.
+                // The share for id_4 is dropped since the transcript is not requested.
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
                 assert!(pre_signer.validated_dealing_supports().is_empty());
