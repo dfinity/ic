@@ -526,48 +526,48 @@ impl IDkgPreSignerImpl {
                                     ));
                                 }
                             }
-                            action
-
-                        } else {
-                            // If the dealer_id in the share is invalid, drop it.
-                            if !transcript_params_ref.dealers.contains(&support.dealer_id) {
-                                self.metrics
-                                    .pre_sign_errors_inc("missing_hash_invalid_dealer");
-                                warn!(
-                                    self.log,
-                                    "validate_dealing_support(): Missing hash, invalid dealer: {:?}",
-                                    support
-                                );
-                                return Some(IDkgChangeAction::RemoveUnvalidated(id));
-                            }
-
-                            // If the share points to a different dealing hash than what we
-                            // have for the same <transcript Id, dealer Id>, drop it. This is
-                            // different from the case where we don't have the dealing yet
-                            let mut dealing_hash_mismatch = false;
-                            for signed_dealing in valid_dealings.values() {
-                                if support.transcript_id
-                                    == signed_dealing.idkg_dealing().transcript_id
-                                    && support.dealer_id == signed_dealing.dealer_id()
-                                {
-                                    dealing_hash_mismatch = true;
-                                    break;
-                                }
-                            }
-                            if dealing_hash_mismatch {
-                                self.metrics
-                                    .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
-                                warn!(
-                                    self.log,
-                                    "validate_dealing_support(): Missing hash, meta data mismatch: {:?}",
-                                    support
-                                );
-                                return Some(IDkgChangeAction::RemoveUnvalidated(id));
-                            }
-
-                            // Else: Support for a dealing we don't have yet, defer it
-                            None
+                            return action;
                         }
+
+                        // Else: We don't have the dealing being supported.
+                        // If the dealer_id in the share is invalid, drop it.
+                        if !transcript_params_ref.dealers.contains(&support.dealer_id) {
+                            self.metrics
+                                .pre_sign_errors_inc("missing_hash_invalid_dealer");
+                            warn!(
+                                self.log,
+                                "validate_dealing_support(): Missing hash, invalid dealer: {:?}",
+                                support
+                            );
+                            return Some(IDkgChangeAction::RemoveUnvalidated(id));
+                        }
+
+                        // If the share points to a different dealing hash than what we
+                        // have for the same <transcript Id, dealer Id>, drop it. This is
+                        // different from the case where we don't have the dealing yet
+                        let mut dealing_hash_mismatch = false;
+                        for signed_dealing in valid_dealings.values() {
+                            if support.transcript_id
+                                == signed_dealing.idkg_dealing().transcript_id
+                                && support.dealer_id == signed_dealing.dealer_id()
+                            {
+                                dealing_hash_mismatch = true;
+                                break;
+                            }
+                        }
+                        if dealing_hash_mismatch {
+                            self.metrics
+                                .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
+                            warn!(
+                                self.log,
+                                "validate_dealing_support(): Missing hash, meta data mismatch: {:?}",
+                                support
+                            );
+                            return Some(IDkgChangeAction::RemoveUnvalidated(id));
+                        }
+
+                        // Else: Support for a dealing we don't have yet, defer it
+                        None
                     }
                     Action::Drop => Some(IDkgChangeAction::RemoveUnvalidated(id)),
                     Action::Defer => None,
