@@ -2,9 +2,10 @@ use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
 use ic_certification::Label;
 use ic_management_canister_types::{
-    Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
-    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
-    SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
+    Bip341, CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings,
+    EcdsaPublicKeyResult, HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs,
+    SchnorrAlgorithm, SchnorrAux, SchnorrKeyId as SchnorrPublicKeyArgsKeyId,
+    SchnorrPublicKeyResult,
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
@@ -1865,6 +1866,54 @@ fn get_controllers_of_nonexisting_canister() {
     pic.delete_canister(canister_id, None).unwrap();
 
     let _ = pic.get_controllers(canister_id);
+}
+
+#[test]
+fn test_persisted_canister_snapshot() {
+    let dir = std::path::PathBuf::from(std::env::var("PIC_STATE_DIR").unwrap());
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_state_dir(dir)
+        .build();
+    /*
+    let canister_id = pic
+        .create_canister_with_id(
+            None,
+            None,
+            CanisterId::from(Principal::from_text("bhuiy-ciaaa-aaaad-abwea-cai").unwrap()),
+        )
+        .unwrap();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    */
+    let canister_id =
+        CanisterId::from(Principal::from_text("bhuiy-ciaaa-aaaad-abwea-cai").unwrap());
+
+    let wasm_bin_path = std::path::PathBuf::from(std::env::var("PIC_WASM_BIN").unwrap());
+    let wasm_bin = std::fs::read(wasm_bin_path).unwrap();
+    pic.reinstall_canister(canister_id, wasm_bin, vec![], None)
+        .unwrap();
+
+    let reply = call_counter_canister(&pic, canister_id, "write");
+    assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
+    let reply = call_counter_canister(&pic, canister_id, "read");
+    assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
+
+    /*
+    // We take a snapshot (it is recommended to only take a snapshot of a stopped canister).
+    pic.stop_canister(canister_id, None).unwrap();
+    let first_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+    eprintln!("snapshot id = {:?}", first_snapshot.id);
+    */
+    let snapshot_id = vec![0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 96, 13, 136, 1, 1];
+    pic.load_canister_snapshot(canister_id, None, snapshot_id);
+    pic.start_canister(canister_id, None).unwrap();
+
+    // We verify that the snapshot was successfully loaded.
+    let reply = call_counter_canister(&pic, canister_id, "read");
+    assert_eq!(reply, 1_u32.to_le_bytes().to_vec());
+    let reply = call_counter_canister(&pic, canister_id, "write");
+    assert_eq!(reply, 3_u32.to_le_bytes().to_vec());
 }
 
 #[test]
