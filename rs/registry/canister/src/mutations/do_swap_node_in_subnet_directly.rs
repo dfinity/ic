@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn feature_enabled_for_caller() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut registry = Registry::new();
+        let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
@@ -557,7 +557,7 @@ mod tests {
     fn feature_enabled_for_subnet() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
 
-        let mut registry = Registry::new();
+        let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
@@ -784,7 +784,7 @@ mod tests {
     #[test]
     fn e2e_valid_swap() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut registry = Registry::new();
+        let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
