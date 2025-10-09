@@ -106,12 +106,18 @@ impl KnownNeuron {
         }
 
         // Check that the name is not already used by another known neuron
-        if neuron_store.contains_known_neuron_name(&known_neuron_data.name) {
+        // Allow registration if:
+        // - No existing known neuron has this name (None), OR
+        // - An existing known neuron has this name but it's the same neuron ID (clobbering OK)
+        if let Some(existing_neuron_id) =
+            neuron_store.known_neuron_id_by_name(&known_neuron_data.name)
+            && existing_neuron_id != *neuron_id
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "The name '{}' already belongs to a known neuron",
-                    known_neuron_data.name
+                    "The name '{}' already belongs to a different known neuron with ID {}",
+                    known_neuron_data.name, existing_neuron_id.id
                 ),
             ));
         }

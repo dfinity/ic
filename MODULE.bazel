@@ -855,6 +855,23 @@ filegroup(
 )
 
 http_archive(
+    name = "bitcoin_core_linux_aarch64",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "cb35e250ae9d0328aa90e7aad0b877ed692597420a1092e8ab1a5dd756209722",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-aarch64-linux-gnu.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-aarch64-linux-gnu.tar.gz",
+    ],
+)
+
+http_archive(
     name = "bitcoin_core_darwin_x86",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
