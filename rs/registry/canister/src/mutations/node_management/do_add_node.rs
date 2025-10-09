@@ -1072,7 +1072,6 @@ mod tests {
             rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
             ipv6: Some("bar".to_string()),
             max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
-            ..Default::default()
         };
 
         registry.maybe_apply_mutation_internal(vec![insert(
