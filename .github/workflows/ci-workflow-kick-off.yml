@@ -1,4 +1,4 @@
-name: CI Workflow Kick Off
+name: CI Kick Off
 
 on:
   pull_request:
