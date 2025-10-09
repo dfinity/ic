@@ -10,6 +10,7 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
 # 2025-09-05: Proposal 138372
 
 http://dashboard.internetcomputer.org/proposal/138372
