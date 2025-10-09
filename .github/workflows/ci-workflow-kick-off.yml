@@ -22,4 +22,4 @@ jobs:
     secrets: inherit
     if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
     with:
-      commit-sha: ${{ github.event.pull_request.head.sha }} || ${{ inputs.commit-sha }}
+      commit-sha: ${{ github.event.pull_request.head.sha || inputs.commit-sha }}
