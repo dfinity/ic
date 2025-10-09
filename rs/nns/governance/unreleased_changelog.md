@@ -11,6 +11,7 @@ on the process that this file is part of, see
 
 * Record votes by known neurons before clearing ballots.
 * Allow updating known neuron through RegisterKnownNeuron without having to change its name.
+* Introduces two new proposals called `PauseCanisterMigrations` and `UnpauseCanisterMigrations`.
 
 ## Changed
 
