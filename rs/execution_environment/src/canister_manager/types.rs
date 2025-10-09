@@ -1124,7 +1124,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CallerNotAuthorized => Self::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!("The caller is not authorized to call this method."),
+                "The caller is not authorized to call this method.".to_string(),
             ),
         }
     }
