@@ -500,7 +500,7 @@ impl IDkgPreSignerImpl {
                             ) else {
                                 return Some(IDkgChangeAction::HandleInvalid(
                                     id.clone(),
-                                    format!("Failed to translate transcript_params_ref: {}", support),
+                                    format!("Failed to translate transcript_params_ref: {support}"),
                                 ));
                             };
 
@@ -522,7 +522,7 @@ impl IDkgPreSignerImpl {
                                 if !signers.insert(signer) {
                                     return Some(IDkgChangeAction::HandleInvalid(
                                         id,
-                                        format!("Duplicate dealing support in unvalidated batch: {:?}", msg),
+                                        format!("Duplicate dealing support in unvalidated batch: {msg:?}"),
                                     ));
                                 }
                             }
@@ -536,8 +536,7 @@ impl IDkgPreSignerImpl {
                                 .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             warn!(
                                 self.log,
-                                "validate_dealing_support(): Missing hash, invalid dealer: {:?}",
-                                support
+                                "validate_dealing_support(): Missing hash, invalid dealer: {support:?}",
                             );
                             return Some(IDkgChangeAction::RemoveUnvalidated(id));
                         }
@@ -560,8 +559,7 @@ impl IDkgPreSignerImpl {
                                 .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
                             warn!(
                                 self.log,
-                                "validate_dealing_support(): Missing hash, meta data mismatch: {:?}",
-                                support
+                                "validate_dealing_support(): Missing hash, meta data mismatch: {support:?}",
                             );
                             return Some(IDkgChangeAction::RemoveUnvalidated(id));
                         }
