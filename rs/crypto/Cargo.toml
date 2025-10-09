@@ -144,3 +144,7 @@ harness = false
 [[bench]]
 name = "vetkd"
 harness = false
+
+[[bench]]
+name = "vault_call_patterns"
+harness = false

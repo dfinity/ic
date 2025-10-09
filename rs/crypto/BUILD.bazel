@@ -278,3 +278,13 @@ rust_bench(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
+
+rust_bench(
+    name = "vault_call_patterns_bench",
+    testonly = True,
+    srcs = ["benches/vault_call_patterns.rs"],
+    aliases = ALIASES,
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
