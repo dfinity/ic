@@ -846,13 +846,11 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
         "append_blocks.process_balance_changes",
         move || match block.transaction.operation {
             Operation::Burn {
-                from,
-                amount,
-                fee: _,
-                ..
+                from, amount, fee, ..
             } => {
                 let mut amount_with_fee = amount;
-                if let Some(fee) = block.effective_fee {
+                let effective_fee = block.effective_fee.or(fee);
+                if let Some(fee) = effective_fee {
                     amount_with_fee = amount.checked_add(&fee).unwrap_or_else(|| {
                         trap(format!(
                             "token amount overflow while indexing block {block_index}"
@@ -865,9 +863,10 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 }
                 debit(block_index, from, amount_with_fee);
             }
-            Operation::Mint { to, amount, fee: _ } => {
+            Operation::Mint { to, amount, fee } => {
                 let mut amount_without_fee = amount;
-                if let Some(fee) = block.effective_fee {
+                let effective_fee = block.effective_fee.or(fee);
+                if let Some(fee) = effective_fee {
                     amount_without_fee = amount.checked_sub(&fee).unwrap_or_else(|| {
                         trap(format!(
                             "token amount underflow while indexing block {block_index}"
