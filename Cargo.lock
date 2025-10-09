@@ -22,18 +22,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "abnf_to_pest"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "939d59666dd9a7964a3a5312b9d24c9c107630752ee64f2dd5038189a23fe331"
-dependencies = [
- "abnf",
- "indexmap 1.9.3",
- "itertools 0.10.5",
- "pretty 0.11.3",
-]
-
-[[package]]
 name = "actix-codec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
