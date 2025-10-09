@@ -16,7 +16,6 @@ runs:
         # Ignore externally-managed-environment pip error, install packages system-wide.
         PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
         cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
-        cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
         source "${NVM_DIR}/nvm.sh"
         nvm install ${DEFAULT_NODE_VERSION}
         nvm install ${OISY_NODE_VERSION}
@@ -25,7 +24,6 @@ runs:
         npm --version
       env:
         CARGO_AUDIT_VERSION: "0.21.0"
-        CARGO_WASMPACK_VERSION: "0.12.1"
         DEFAULT_NODE_VERSION: "20"
         OISY_NODE_VERSION: "22.12.0"
     - name: Run Dependency Scan Nightly
