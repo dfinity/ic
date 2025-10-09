@@ -299,6 +299,7 @@ mod tests {
     use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
     use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
     use ic_types::{NodeId, PrincipalId, SubnetId};
+    use itertools::Itertools;
 
     use crate::{
         common::test_helpers::{
@@ -779,6 +780,18 @@ mod tests {
             registry.swap_nodes_inner(payload, operator_id, after_provider_duration_elapsed);
 
         assert!(response.is_ok());
+
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+
+        let members = subnet_record
+            .membership
+            .iter()
+            .map(|n| NodeId::new(PrincipalId::try_from(n).unwrap()))
+            .collect_vec();
+
+        // Here at the end the old node should be back in because of double swap
+        assert!(members.contains(&old_node_id));
+        assert!(!members.contains(&new_node_id));
     }
 
     #[test]
@@ -825,6 +838,15 @@ mod tests {
             "Expected OK response but got: {response:?}"
         );
 
-        //TODO(DRE-548): Add assertions that the swap has been made
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+
+        let members = subnet_record
+            .membership
+            .iter()
+            .map(|n| NodeId::new(PrincipalId::try_from(n).unwrap()))
+            .collect_vec();
+
+        assert!(members.contains(&new_node_id));
+        assert!(!members.contains(&old_node_id));
     }
 }
