@@ -785,6 +785,7 @@ pub struct Snapshot {
     pub state: Arc<ReplicatedState>,
 }
 
+/// Access into the state scratchpad for uploading incomplete state.
 pub struct IncompleteStateReader {
     root_hash: CryptoHashOfState,
     meta_manifest: MetaManifest,
@@ -823,6 +824,7 @@ pub struct StateSyncRefs {
     /// can take chunks from the cache instead of fetching them from other nodes
     /// when possible.
     cache: Arc<parking_lot::RwLock<StateSyncCache>>,
+    /// Incomplete state scratchpad for uploading chunks from incomplete state.
     incomplete_state_readers: Arc<parking_lot::RwLock<BTreeMap<Height, IncompleteStateReader>>>,
 }
 

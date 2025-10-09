@@ -848,6 +848,7 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
+        state_sync_refs: &StateSyncRefs,
     ) -> bool {
         let _timer = metrics
             .state_sync_metrics
@@ -859,6 +860,11 @@ impl IncompleteState {
             log,
             "state sync: start to make a checkpoint from the scratchpad"
         );
+
+        state_sync_refs
+            .incomplete_state_readers
+            .write()
+            .remove(&height);
 
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
@@ -1418,6 +1424,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             &self.root,
                             self.height,
                             &self.state_layout,
+                            &self.state_sync_refs,
                         ) {
                             self.state = DownloadState::Complete;
                             return Ok(());
@@ -1634,6 +1641,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         &self.root,
                         self.height,
                         &self.state_layout,
+                        &self.state_sync_refs,
                     ) {
                         self.state = DownloadState::Complete;
                         return Ok(());
