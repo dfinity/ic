@@ -123,7 +123,7 @@ jobs:
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
       - name: Re-trigger workflow
-        if: ${{ failure() || success() }} # steps.lock-generate.outputs.new_commit == 'true'
+        if: ${{ failure() && steps.lock-generate.outputs.new_commit == 'true' }}
         uses: peter-evans/repository-dispatch@v4
         with:
           event-type: rerun_workflow
