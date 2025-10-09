@@ -7,6 +7,8 @@ use std::{
 use candid::CandidType;
 use ic_nervous_system_rate_limits::{InMemoryRateLimiter, RateLimiterConfig, Reservation};
 use ic_nervous_system_time_helpers::now_system_time;
+use ic_registry_keys::make_subnet_record_key;
+use ic_registry_transport::upsert;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -122,7 +124,7 @@ impl Registry {
 
         // Check if the payload is valid by itself.
         payload.validate()?;
-        let (old_node_id, _new_node_id) =
+        let (old_node_id, new_node_id) =
             (payload.old_node_id.unwrap(), payload.new_node_id.unwrap());
 
         //Check if the feature is allowed on the target subnet and for the caller
@@ -133,7 +135,7 @@ impl Registry {
         let reservation =
             SWAP_LIMITER.with_borrow_mut(|limiter| limiter.try_reserve(caller, subnet_id, now))?;
 
-        //TODO(DRE-548): Implement the swapping functionality
+        self.swap_nodes_in_subnet(subnet_id, old_node_id, new_node_id)?;
 
         SWAP_LIMITER.with_borrow_mut(|limiter| limiter.commit(reservation, now));
         Ok(())
@@ -163,6 +165,37 @@ impl Registry {
         if !is_node_swapping_enabled_on_subnet(subnet_id) {
             return Err(SwapError::FeatureDisabledOnSubnet { subnet_id });
         }
+
+        Ok(())
+    }
+
+    fn swap_nodes_in_subnet(
+        &mut self,
+        subnet_id: SubnetId,
+        old_node_id: PrincipalId,
+        new_node_id: PrincipalId,
+    ) -> Result<(), SwapError> {
+        let mut subnet = self.get_subnet_or_panic(subnet_id);
+        let subnet_size_before = subnet.membership.len();
+        subnet.membership.retain(|node| {
+            let node_id = PrincipalId::try_from(node).unwrap();
+
+            node_id != old_node_id
+        });
+        subnet.membership.push(new_node_id.to_vec());
+        let subnet_size_after = subnet.membership.len();
+
+        // Ensure subnet size stays consistent
+        if subnet_size_before != subnet_size_after {
+            return Err(SwapError::SubnetSizeMismatch { subnet_id });
+        }
+
+        let subnet_mutations = vec![upsert(
+            make_subnet_record_key(subnet_id).as_bytes(),
+            subnet.encode_to_vec(),
+        )];
+
+        self.maybe_apply_mutation_internal(subnet_mutations);
 
         Ok(())
     }
@@ -202,6 +235,9 @@ pub enum SwapError {
         subnet_id: SubnetId,
         caller: PrincipalId,
     },
+    SubnetSizeMismatch {
+        subnet_id: SubnetId,
+    },
 }
 
 impl Display for SwapError {
@@ -226,6 +262,9 @@ impl Display for SwapError {
                 ),
                 SwapError::ProviderRateLimitedOnSubnet { subnet_id, caller } => format!(
                     "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hours. Try again later."
+                ),
+                SwapError::SubnetSizeMismatch { subnet_id } => format!(
+                    "Subnet {subnet_id} changed size after performing the swap which shouldn't happen"
                 ),
             }
         )
