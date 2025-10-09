@@ -127,6 +127,7 @@ jobs:
   generate-config-fixtures:
     name: Generate Config Fixtures
     runs-on: ubuntu-latest
+    container: *container-setup
     timeout-minutes: 10
     if: ${{ github.event_name != 'merge_group' }}
     env:
@@ -138,6 +139,7 @@ jobs:
         with:
           filters: |
             generate-config-fixtures:
+              - '.github/workflows/ci-pr-only.yml'
               - 'rs/ic_os/config_types/**'
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
