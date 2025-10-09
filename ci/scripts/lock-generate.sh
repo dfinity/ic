@@ -13,6 +13,7 @@ cargo update --workspace
 # Stage files and check if anything changed
 git add Cargo.lock Cargo.Bazel.*.lock
 git status
+echo "new_commit=true" >> $GITHUB_OUTPUT
 if ! git diff --cached --quiet; then
     # If this is running from a pull request then update the Cargo.lock file in the PR
     # automatically.
@@ -22,8 +23,6 @@ if ! git diff --cached --quiet; then
         git config --global user.name "IDX GitHub Automation"
         git commit -m "Automatically updated Cargo*.lock"
         git push
-
-        echo "new_commit=true" >> $GITHUB_OUTPUT
     fi
 
     # Because the lockfiles need updating, fail the PR
