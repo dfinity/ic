@@ -141,6 +141,11 @@ impl VirtualMachine {
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
     ) -> Result<Self> {
+        // Check if a domain with the same name already exists and, if so, try to destroy it
+        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).context(
+            "Unable to create new domain while existing domain '{vm_domain_name}' exists.",
+        )?;
+
         let mut retries = 3;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
@@ -148,7 +153,7 @@ impl VirtualMachine {
                 Ok(domain) => break domain,
                 Err(e) if retries > 0 => {
                     eprintln!("Domain creation failed, retrying: {e}");
-                    Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                    let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     retries -= 1;
                     continue;
                 }
@@ -164,17 +169,17 @@ impl VirtualMachine {
         })
     }
 
-    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
-        println!("Attempting to destroy existing '{vm_domain_name}' domain");
+    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) -> Result<()> {
         if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
-            if let Err(e) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
-                eprintln!("Failed to destroy existing domain: {e}");
-            } else {
-                println!("Successfully destroyed existing domain");
-            }
+            println!("Attempting to destroy existing '{vm_domain_name}' domain");
+            existing_domain
+                .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
+                .context("Failed to destroy existing domain")?;
+            println!("Successfully destroyed existing domain");
         } else {
             println!("No existing domain found to destroy");
         }
+        Ok(())
     }
 
     /// Checks if the virtual machine is currently running
