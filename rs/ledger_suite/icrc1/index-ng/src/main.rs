@@ -686,14 +686,10 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, ()> {
     append_icrc3_blocks(res.blocks)?;
     let num_blocks = with_blocks(|blocks| blocks.len());
     match num_blocks.checked_sub(previous_num_blocks) {
-        None => {
-            let error = format!(
-                "The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state",
-                num_blocks, previous_num_blocks
-            );
-            stop_timer_with_error(error);
-            Err(())
-        }
+        None => panic!(
+            "The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state",
+            num_blocks, previous_num_blocks
+        ),
         Some(new_blocks_indexed) => Ok(new_blocks_indexed),
     }
 }
