@@ -135,7 +135,7 @@ impl Registry {
         let reservation =
             SWAP_LIMITER.with_borrow_mut(|limiter| limiter.try_reserve(caller, subnet_id, now))?;
 
-        self.validate_business_logic(old_node_id, new_node_id, caller)?;
+        self.validate_node_swap(old_node_id, new_node_id, caller)?;
         self.swap_nodes_in_subnet(subnet_id, old_node_id, new_node_id)?;
 
         SWAP_LIMITER.with_borrow_mut(|limiter| limiter.commit(reservation, now));
@@ -170,7 +170,7 @@ impl Registry {
         Ok(())
     }
 
-    fn validate_business_logic(
+    fn validate_node_swap(
         &self,
         old_node_id: PrincipalId,
         new_node_id: PrincipalId,
@@ -201,12 +201,21 @@ impl Registry {
         }
 
         // Ensure that both of the nodes are owned by the same operator
-        // and that the operator is the caller
         let old_operator = PrincipalId::try_from(old_node.node_operator_id).unwrap();
         let new_operator = PrincipalId::try_from(new_node.node_operator_id).unwrap();
 
-        if old_operator != caller || new_operator != caller {
+        if old_operator != new_operator {
             return Err(SwapError::NodesOwnedByDifferentOperators);
+        }
+
+        // Ensure that the caller is the actual node operator of the nodes.
+        // Since the before check passed we can check for either one of the
+        // operators, new or old.
+        if new_operator != caller {
+            return Err(SwapError::CallerOperatorMismatch {
+                caller,
+                operator: new_operator,
+            });
         }
 
         Ok(())
@@ -289,6 +298,10 @@ pub enum SwapError {
         node_id: PrincipalId,
         subnet_id: SubnetId,
     },
+    CallerOperatorMismatch {
+        caller: PrincipalId,
+        operator: PrincipalId,
+    },
 }
 
 impl Display for SwapError {
@@ -322,6 +335,9 @@ impl Display for SwapError {
                 SwapError::UnknownNode { node_id } => format!("Node {node_id} doesn't exist"),
                 SwapError::NewNodeAssigned { node_id, subnet_id } => format!(
                     "New node {node_id} is a member of subnet {subnet_id} and cannot be used for direct swapping"
+                ),
+                SwapError::CallerOperatorMismatch { caller, operator } => format!(
+                    "Caller {caller} isn't an operator of the specified nodes. Expected operator {operator}"
                 ),
             }
         )
@@ -882,7 +898,10 @@ mod tests {
             .swap_nodes_inner(payload, different_caller, now_system_time())
             .expect_err("Should error out");
 
-        let expected_err = SwapError::NodesOwnedByDifferentOperators;
+        let expected_err = SwapError::CallerOperatorMismatch {
+            caller: different_caller,
+            operator: operator_id,
+        };
         assert_eq!(
             response, expected_err,
             "Expected error {expected_err:?} but got error: {response:?}"
