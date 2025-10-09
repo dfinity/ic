@@ -555,18 +555,19 @@ mod tests {
         mutations
     }
 
-    #[test]
-    fn feature_enabled_for_caller() {
-        let _temp_enable_feat = temporarily_enable_node_swapping();
+    fn get_new_node_and_keys() -> (NodeId, ValidNodePublicKeys) {
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let keys = generate_node_keys_once(&config, None).unwrap();
+
+        (keys.node_id(), keys)
+    }
+
+    fn setup_registry_for_test() -> (NodeId, NodeId, SubnetId, PrincipalId, Registry) {
         let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let old_node_id = old_node_keys.node_id();
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let new_node_id = new_node_keys.node_id();
+        let (old_node_id, old_node_keys) = get_new_node_and_keys();
+        let (new_node_id, new_node_keys) = get_new_node_and_keys();
         let operator_id = PrincipalId::new_user_test_id(1);
 
         let mutations = get_mutations_from_node_information(&[
@@ -585,6 +586,15 @@ mod tests {
         ]);
         registry.apply_mutations_for_test(mutations);
 
+        (old_node_id, new_node_id, subnet_id, operator_id, registry)
+    }
+
+    #[test]
+    fn feature_enabled_for_caller() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+
+        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
+            setup_registry_for_test();
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
@@ -615,32 +625,8 @@ mod tests {
     fn feature_enabled_for_subnet() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
 
-        let mut registry = invariant_compliant_registry(0);
-
-        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let old_node_id = old_node_keys.node_id();
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let new_node_id = new_node_keys.node_id();
-        let operator_id = PrincipalId::new_user_test_id(1);
-
-        let mutations = get_mutations_from_node_information(&[
-            NodeInformation {
-                node_id: old_node_id,
-                subnet_id: Some(subnet_id),
-                operator: operator_id,
-                valid_pks: old_node_keys,
-            },
-            NodeInformation {
-                node_id: new_node_id,
-                subnet_id: None,
-                operator: operator_id,
-                valid_pks: new_node_keys,
-            },
-        ]);
-        registry.apply_mutations_for_test(mutations);
+        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
+            setup_registry_for_test();
 
         test_set_swapping_whitelisted_callers(vec![operator_id]);
 
@@ -755,35 +741,10 @@ mod tests {
     #[test]
     fn rate_limits_e2e_respected() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut registry = invariant_compliant_registry(0);
-
-        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let old_node_id = old_node_keys.node_id();
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let new_node_id = new_node_keys.node_id();
-        let operator_id = PrincipalId::new_user_test_id(1);
+        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
+            setup_registry_for_test();
 
         let now = now_system_time();
-
-        let mutations = get_mutations_from_node_information(&[
-            NodeInformation {
-                node_id: old_node_id,
-                subnet_id: Some(subnet_id),
-                operator: operator_id,
-                valid_pks: old_node_keys,
-            },
-            NodeInformation {
-                node_id: new_node_id,
-                subnet_id: None,
-                operator: operator_id,
-                valid_pks: new_node_keys,
-            },
-        ]);
-        registry.apply_mutations_for_test(mutations);
-
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
             new_node_id: Some(new_node_id.get()),
@@ -799,9 +760,11 @@ mod tests {
         );
 
         // Swap nodes again in payload because the swap was performed
+        let (old_node_id, new_node_id) = (new_node_id, old_node_id);
+
         let payload = SwapNodeInSubnetDirectlyPayload {
-            old_node_id: Some(new_node_id.get()),
-            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
         };
 
         // Make an additional call which should fail because of the subnet limit
@@ -847,6 +810,8 @@ mod tests {
             .collect_vec();
 
         // Here at the end the old node should be back in because of double swap
+        let (old_node_id, new_node_id) = (new_node_id, old_node_id);
+
         assert!(members.contains(&old_node_id));
         assert!(!members.contains(&new_node_id));
     }
@@ -857,12 +822,8 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let old_node_id = old_node_keys.node_id();
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let new_node_id = new_node_keys.node_id();
+        let (old_node_id, old_node_keys) = get_new_node_and_keys();
+        let (new_node_id, new_node_keys) = get_new_node_and_keys();
         let operator_id_1 = PrincipalId::new_user_test_id(1);
         let operator_id_2 = PrincipalId::new_user_test_id(2);
 
@@ -904,32 +865,8 @@ mod tests {
     #[test]
     fn e2e_valid_swap() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut registry = invariant_compliant_registry(0);
-
-        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let old_node_id = old_node_keys.node_id();
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
-        let new_node_id = new_node_keys.node_id();
-        let operator_id = PrincipalId::new_user_test_id(1);
-
-        let mutations = get_mutations_from_node_information(&[
-            NodeInformation {
-                node_id: old_node_id,
-                subnet_id: Some(subnet_id),
-                operator: operator_id,
-                valid_pks: old_node_keys,
-            },
-            NodeInformation {
-                node_id: new_node_id,
-                subnet_id: None,
-                operator: operator_id,
-                valid_pks: new_node_keys,
-            },
-        ]);
-        registry.apply_mutations_for_test(mutations);
+        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
+            setup_registry_for_test();
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
