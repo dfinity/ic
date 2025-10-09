@@ -393,7 +393,7 @@ impl IDkgPreSignerImpl {
         // Collect all unvalidated dealing support shares into a vector to be processed in parallel.
         // The vector is then evenly split between threads of the thread pool. Shares in the vector
         // are sorted by the IDkgTranscriptId. Therefore, this increases the chance of shares for the
-        // same dealing ending up in the same thread, which reduced the number of superfluous shares
+        // same dealing ending up in the same thread, which reduces the number of superfluous shares
         // being validated due to race conditions.
         let unvalidated_supports: Vec<_> = idkg_pool.unvalidated().dealing_support().collect();
         self.thread_pool.install(|| {
@@ -515,7 +515,7 @@ impl IDkgPreSignerImpl {
                                 // Although we already checked the cache for duplicate shares above,
                                 // it could happen that a different thread validated a share for the
                                 // same (signer_id, transcript_id, dealer_id, dealing_hash) in the meantime,
-                                // after released the read lock. Therefore, we acquire the write lock here
+                                // after we released the read lock. Therefore, we acquire the write lock here
                                 // to check again with exclusive access.
                                 let mut valid_dealing_supports = self.validated_dealing_supports.write().unwrap();
                                 let signers = valid_dealing_supports.entry(key).or_default();
