@@ -572,13 +572,19 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             node.get_ip_addr()
         );
 
-        let session = disable_ssh_access_to_node(&node, SSH_USERNAME, &admin_auth).unwrap();
+        let session =
+            disable_ssh_access_to_node(&logger, &node, SSH_USERNAME, &admin_auth).unwrap();
 
         admin_ssh_sessions.insert(node.node_id, session);
     }
     // Ensure we can still SSH into admin nodes
     for node in admin_nodes {
-        wait_until_authentication_is_granted(&node.get_ip_addr(), SSH_USERNAME, &admin_auth);
+        wait_until_authentication_is_granted(
+            &logger,
+            &node.get_ip_addr(),
+            SSH_USERNAME,
+            &admin_auth,
+        );
     }
 
     if cfg.local_recovery {

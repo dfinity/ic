@@ -390,6 +390,11 @@ impl IDkgPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
+        // Collect all unvalidated dealing support shares into a vector to be processed in parallel.
+        // The vector is then evenly split between threads of the thread pool. Shares in the vector
+        // are sorted by the IDkgTranscriptId. Therefore, this increases the chance of shares for the
+        // same dealing ending up in the same thread, which reduced the number of superfluous shares
+        // being validated due to race conditions.
         let unvalidated_supports: Vec<_> = idkg_pool.unvalidated().dealing_support().collect();
         self.thread_pool.install(|| {
             unvalidated_supports.into_par_iter().filter_map(|(id, support)| {
@@ -421,7 +426,7 @@ impl IDkgPreSignerImpl {
                     Action::Process(transcript_params_ref) => {
                         let signer = support.sig_share.signer;
                         // Dedup dealing support by checking whether a previous (transcript_id, dealer_id,
-                        // dealing_hash) was already signed by the signer
+                        // dealing_hash) was already signed by the signer according to the cache.
                         let key = IDkgValidatedDealingSupportIdentifier::from(&support);
                         {
                             let valid_dealing_supports = self.validated_dealing_supports.read().unwrap();
@@ -507,6 +512,11 @@ impl IDkgPreSignerImpl {
                                 idkg_pool.stats(),
                             );
                             if let Some(IDkgChangeAction::MoveToValidated(msg)) = &action {
+                                // Although we already checked the cache for duplicate shares above,
+                                // it could happen that a different thread validated a share for the
+                                // same (signer_id, transcript_id, dealer_id, dealing_hash) in the meantime,
+                                // after released the read lock. Therefore, we acquire the write lock here
+                                // to check again with exclusive access.
                                 let mut valid_dealing_supports = self.validated_dealing_supports.write().unwrap();
                                 let signers = valid_dealing_supports.entry(key).or_default();
                                 if !signers.insert(signer) {
@@ -519,10 +529,11 @@ impl IDkgPreSignerImpl {
                             return action;
                         }
 
-                        // Else: the dealing being supported is not found.
+                        // Else: We don't have the dealing being supported.
                         // If the dealer_id in the share is invalid, drop it.
                         if !transcript_params_ref.dealers.contains(&support.dealer_id) {
-                            self.metrics.pre_sign_errors_inc("missing_hash_invalid_dealer");
+                            self.metrics
+                                .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             warn!(
                                 self.log,
                                 "validate_dealing_support(): Missing hash, invalid dealer: {support}",
@@ -544,7 +555,8 @@ impl IDkgPreSignerImpl {
                             }
                         }
                         if dealing_hash_mismatch {
-                            self.metrics.pre_sign_errors_inc("missing_hash_meta_data_mismatch");
+                            self.metrics
+                                .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
                             warn!(
                                 self.log,
                                 "validate_dealing_support(): Missing hash, meta data mismatch: {support}",
@@ -2447,8 +2459,12 @@ mod tests {
                 let block_reader = block_reader.clone().with_fail_to_resolve();
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
+                // Resolving the transcript params for id_2 fails, so both supports are handled invalid
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
                 assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
+                // The share for id_3 is deferred since we don't have the dealing yet, meaning
+                // we don't attempt to resolve the references.
+                // The share for id_4 is dropped since the transcript is not requested.
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
                 assert!(pre_signer.validated_dealing_supports().is_empty());
