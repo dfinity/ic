@@ -32,6 +32,7 @@ use ic_types::{
     time::current_time,
 };
 use num_traits::ops::saturating::SaturatingSub;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -60,6 +61,16 @@ pub(crate) fn subnet_records_for_registry_version(
     })
 }
 
+/// Builds a rayon thread pool with the given number of threads.
+fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
+}
+
 /// A consensus subcomponent that is responsible for creating block proposals.
 pub struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
@@ -74,6 +85,7 @@ pub struct BlockMaker {
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
     pub(crate) log: ReplicaLogger,
+    thread_pool: Arc<ThreadPool>,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.
@@ -110,6 +122,7 @@ impl BlockMaker {
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
             idkg_payload_metrics: IDkgPayloadMetrics::new(metrics_registry),
+            thread_pool: build_thread_pool(8),
             stable_registry_version_age,
         }
     }
@@ -363,6 +376,7 @@ impl BlockMaker {
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
                                 &*self.crypto,
+                                self.thread_pool.as_ref(),
                                 pool,
                                 self.idkg_pool.clone(),
                                 &*self.state_manager,

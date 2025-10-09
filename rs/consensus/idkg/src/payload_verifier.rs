@@ -461,6 +461,7 @@ fn validate_data_payload(
         &block_reader,
         &builder,
         &builder,
+        thread_pool,
         state_manager,
         registry_client,
         None,
