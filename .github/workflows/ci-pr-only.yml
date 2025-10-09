@@ -5,6 +5,8 @@ on:
   merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
+  repository_dispatch:
+    types: [rerun_workflow]
 
 concurrency:
   # only triggered on PR, so head_ref will always be set
@@ -120,9 +122,14 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
-      - name: Debug
+      - name: Re-trigger workflow
         if: ${{ failure() && steps.lock-generate.outputs.new_commit == 'true' }}
-        run: echo "new_commit=${{ steps.lock-generate.outputs.new_commit }}"
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type":"rerun_workflow", "client_payload": {"reason": "manual trigger"}}'
 
   generate-config-fixtures:
     name: Generate Config Fixtures
