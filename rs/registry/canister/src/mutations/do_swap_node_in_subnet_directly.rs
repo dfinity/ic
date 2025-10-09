@@ -291,28 +291,37 @@ mod tests {
 
     use std::{collections::BTreeMap, time::Duration};
 
+    use ic_config::crypto::CryptoConfig;
+    use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_nervous_system_time_helpers::now_system_time;
+    use ic_protobuf::registry::node::v1::ConnectionEndpoint;
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
-    use ic_registry_keys::{
-        make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    };
+    use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
     use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
     use ic_types::{NodeId, PrincipalId, SubnetId};
 
     use crate::{
-        common::test_helpers::get_invariant_compliant_subnet_record,
+        common::test_helpers::{
+            get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        },
         flags::{
             temporarily_disable_node_swapping, temporarily_enable_node_swapping,
             temporary_overrides::{
                 test_set_swapping_enabled_subnets, test_set_swapping_whitelisted_callers,
             },
         },
-        mutations::do_swap_node_in_subnet_directly::{
-            PROVIDER_CAPACITY_INTERVAL, SUBNET_CAPACITY_INTERVAL, SwapError,
-            SwapNodeInSubnetDirectlyPayload, SwapRateLimiter,
+        mutations::{
+            do_swap_node_in_subnet_directly::{
+                PROVIDER_CAPACITY_INTERVAL, SUBNET_CAPACITY_INTERVAL, SwapError,
+                SwapNodeInSubnetDirectlyPayload, SwapRateLimiter,
+            },
+            node_management::common::make_add_node_registry_mutations,
         },
         registry::Registry,
     };
+    use ic_crypto_node_key_generation::generate_node_keys_once;
+    use ic_nns_test_utils::registry::create_subnet_threshold_signing_pubkey_and_cup_mutations;
+    use ic_protobuf::registry::subnet::v1::SubnetType;
     use prost::Message;
 
     fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
@@ -414,6 +423,7 @@ mod tests {
         node_id: NodeId,
         subnet_id: Option<SubnetId>,
         operator: PrincipalId,
+        valid_pks: ValidNodePublicKeys,
     }
 
     fn get_mutations_from_node_information(
@@ -423,26 +433,57 @@ mod tests {
 
         let mut subnets = BTreeMap::new();
 
-        for node in node_information {
+        for (index, node) in node_information.into_iter().enumerate() {
             if let Some(subnet) = node.subnet_id {
-                subnets.entry(subnet).or_insert(vec![]).push(node.node_id);
+                subnets
+                    .entry(subnet)
+                    .or_insert(vec![])
+                    .push(node.valid_pks.clone());
             }
 
-            mutations.push(upsert(
-                make_node_record_key(node.node_id),
+            // Some endpoints may come from `invariant_compliant_registry`
+            let index = 200 - index;
+            let ip_addr = format!("128.0.{index}.1");
+            let xnet_connection_endpoint = ConnectionEndpoint {
+                ip_addr: ip_addr.clone(),
+                port: 1234,
+            };
+            let http_connection_endpoint = ConnectionEndpoint {
+                ip_addr,
+                port: 4321,
+            };
+
+            let node_mutations = make_add_node_registry_mutations(
+                node.node_id,
                 NodeRecord {
                     node_operator_id: node.operator.to_vec(),
+                    xnet: Some(xnet_connection_endpoint),
+                    http: Some(http_connection_endpoint),
                     ..Default::default()
-                }
-                .encode_to_vec(),
-            ));
+                },
+                node.valid_pks.clone(),
+            );
+            mutations.extend(node_mutations);
         }
 
         for (subnet, nodes) in &subnets {
+            let node_ids: Vec<_> = nodes.iter().map(|n| n.node_id()).collect();
+            let mut subnet_record = get_invariant_compliant_subnet_record(node_ids.clone());
+            subnet_record.subnet_type = i32::from(SubnetType::System);
+
             mutations.push(upsert(
                 make_subnet_record_key(*subnet),
-                get_invariant_compliant_subnet_record(nodes.to_vec()).encode_to_vec(),
+                subnet_record.encode_to_vec(),
             ));
+
+            let relevant_nodes = nodes
+                .into_iter()
+                .map(|n| (n.node_id(), n.dkg_dealing_encryption_key().clone()))
+                .collect();
+            let threshold_and_cup_mutations =
+                create_subnet_threshold_signing_pubkey_and_cup_mutations(*subnet, &relevant_nodes);
+
+            mutations.extend(threshold_and_cup_mutations);
         }
 
         mutations.push(upsert(
@@ -462,8 +503,12 @@ mod tests {
         let mut registry = Registry::new();
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let old_node_id = old_node_keys.node_id();
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let new_node_id = new_node_keys.node_id();
         let operator_id = PrincipalId::new_user_test_id(1);
 
         let mutations = get_mutations_from_node_information(&[
@@ -471,11 +516,13 @@ mod tests {
                 node_id: old_node_id,
                 subnet_id: Some(subnet_id),
                 operator: operator_id,
+                valid_pks: old_node_keys,
             },
             NodeInformation {
                 node_id: new_node_id,
                 subnet_id: None,
                 operator: operator_id,
+                valid_pks: new_node_keys,
             },
         ]);
         registry.apply_mutations_for_test(mutations);
@@ -513,8 +560,12 @@ mod tests {
         let mut registry = Registry::new();
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let old_node_id = old_node_keys.node_id();
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let new_node_id = new_node_keys.node_id();
         let operator_id = PrincipalId::new_user_test_id(1);
 
         let mutations = get_mutations_from_node_information(&[
@@ -522,11 +573,13 @@ mod tests {
                 node_id: old_node_id,
                 subnet_id: Some(subnet_id),
                 operator: operator_id,
+                valid_pks: old_node_keys,
             },
             NodeInformation {
                 node_id: new_node_id,
                 subnet_id: None,
                 operator: operator_id,
+                valid_pks: new_node_keys,
             },
         ]);
         registry.apply_mutations_for_test(mutations);
@@ -644,11 +697,15 @@ mod tests {
     #[test]
     fn rate_limits_e2e_respected() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut registry = Registry::new();
+        let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let old_node_id = old_node_keys.node_id();
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let new_node_id = new_node_keys.node_id();
         let operator_id = PrincipalId::new_user_test_id(1);
 
         let now = now_system_time();
@@ -658,11 +715,13 @@ mod tests {
                 node_id: old_node_id,
                 subnet_id: Some(subnet_id),
                 operator: operator_id,
+                valid_pks: old_node_keys,
             },
             NodeInformation {
                 node_id: new_node_id,
                 subnet_id: None,
                 operator: operator_id,
+                valid_pks: new_node_keys,
             },
         ]);
         registry.apply_mutations_for_test(mutations);
@@ -680,6 +739,12 @@ mod tests {
             response.is_ok(),
             "Expected OK response but got: {response:?}"
         );
+
+        // Swap nodes again in payload because the swap was performed
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(new_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+        };
 
         // Make an additional call which should fail because of the subnet limit
         let before_duration_elapsed = now
@@ -722,8 +787,12 @@ mod tests {
         let mut registry = Registry::new();
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let old_node_id = old_node_keys.node_id();
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let new_node_id = new_node_keys.node_id();
         let operator_id = PrincipalId::new_user_test_id(1);
 
         let mutations = get_mutations_from_node_information(&[
@@ -731,11 +800,13 @@ mod tests {
                 node_id: old_node_id,
                 subnet_id: Some(subnet_id),
                 operator: operator_id,
+                valid_pks: old_node_keys,
             },
             NodeInformation {
                 node_id: new_node_id,
                 subnet_id: None,
                 operator: operator_id,
+                valid_pks: new_node_keys,
             },
         ]);
         registry.apply_mutations_for_test(mutations);
