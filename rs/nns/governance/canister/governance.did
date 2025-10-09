@@ -1365,7 +1365,7 @@ service : (Governance) -> {
     ) query;
   get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;
-  get_neuron_index: (GetNeuronIndexRequest) -> (GetNeuronIndexResponse) query;
+  get_neuron_index: (GetNeuronIndexRequest) -> (GetNeuronIndexResult) query;
   get_neuron_info : (nat64) -> (Result_5) query;
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_5,
