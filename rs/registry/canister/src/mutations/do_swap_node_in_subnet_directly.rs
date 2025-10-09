@@ -135,6 +135,7 @@ impl Registry {
         let reservation =
             SWAP_LIMITER.with_borrow_mut(|limiter| limiter.try_reserve(caller, subnet_id, now))?;
 
+        self.validate_business_logic(old_node_id, new_node_id, caller)?;
         self.swap_nodes_in_subnet(subnet_id, old_node_id, new_node_id)?;
 
         SWAP_LIMITER.with_borrow_mut(|limiter| limiter.commit(reservation, now));
@@ -164,6 +165,48 @@ impl Registry {
     fn swapping_allowed_on_subnet(subnet_id: SubnetId) -> Result<(), SwapError> {
         if !is_node_swapping_enabled_on_subnet(subnet_id) {
             return Err(SwapError::FeatureDisabledOnSubnet { subnet_id });
+        }
+
+        Ok(())
+    }
+
+    fn validate_business_logic(
+        &self,
+        old_node_id: PrincipalId,
+        new_node_id: PrincipalId,
+        caller: PrincipalId,
+    ) -> Result<(), SwapError> {
+        // Ensure that the nodes exist
+        let old_node_id = NodeId::new(old_node_id);
+        let new_node_id = NodeId::new(new_node_id);
+        let old_node = self.get_node(old_node_id).ok_or(SwapError::UnknownNode {
+            node_id: old_node_id.get(),
+        })?;
+        let new_node = self.get_node(new_node_id).ok_or(SwapError::UnknownNode {
+            node_id: new_node_id.get(),
+        })?;
+
+        // Ensure that the old node is a member in a subnet
+        // This is done before calling `validate_business_logic`
+
+        // Ensure that the new node is not a member of any subnets
+        let maybe_subnet_new_node =
+            find_subnet_for_node(&self, new_node_id, &self.get_subnet_list_record());
+
+        if let Some(subnet_id) = maybe_subnet_new_node {
+            return Err(SwapError::NewNodeAssigned {
+                node_id: new_node_id.get(),
+                subnet_id,
+            });
+        }
+
+        // Ensure that both of the nodes are owned by the same operator
+        // and that the operator is the caller
+        let old_operator = PrincipalId::try_from(old_node.node_operator_id).unwrap();
+        let new_operator = PrincipalId::try_from(new_node.node_operator_id).unwrap();
+
+        if old_operator != caller || new_operator != caller {
+            return Err(SwapError::NodesOwnedByDifferentOperators);
         }
 
         Ok(())
@@ -238,6 +281,14 @@ pub enum SwapError {
     SubnetSizeMismatch {
         subnet_id: SubnetId,
     },
+    NodesOwnedByDifferentOperators,
+    UnknownNode {
+        node_id: PrincipalId,
+    },
+    NewNodeAssigned {
+        node_id: PrincipalId,
+        subnet_id: SubnetId,
+    },
 }
 
 impl Display for SwapError {
@@ -265,6 +316,12 @@ impl Display for SwapError {
                 ),
                 SwapError::SubnetSizeMismatch { subnet_id } => format!(
                     "Subnet {subnet_id} changed size after performing the swap which shouldn't happen"
+                ),
+                SwapError::NodesOwnedByDifferentOperators =>
+                    format!("Both nodes must be owned by the same node operator"),
+                SwapError::UnknownNode { node_id } => format!("Node {node_id} doesn't exist"),
+                SwapError::NewNodeAssigned { node_id, subnet_id } => format!(
+                    "New node {node_id} is a member of subnet {subnet_id} and cannot be used for direct swapping"
                 ),
             }
         )
@@ -792,6 +849,56 @@ mod tests {
         // Here at the end the old node should be back in because of double swap
         assert!(members.contains(&old_node_id));
         assert!(!members.contains(&new_node_id));
+    }
+
+    #[test]
+    fn nodes_owned_by_different_operators() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let old_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let old_node_id = old_node_keys.node_id();
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let new_node_keys = generate_node_keys_once(&config, None).unwrap();
+        let new_node_id = new_node_keys.node_id();
+        let operator_id_1 = PrincipalId::new_user_test_id(1);
+        let operator_id_2 = PrincipalId::new_user_test_id(2);
+
+        let mutations = get_mutations_from_node_information(&[
+            NodeInformation {
+                node_id: old_node_id,
+                subnet_id: Some(subnet_id),
+                operator: operator_id_1,
+                valid_pks: old_node_keys,
+            },
+            NodeInformation {
+                node_id: new_node_id,
+                subnet_id: None,
+                operator: operator_id_2,
+                valid_pks: new_node_keys,
+            },
+        ]);
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        test_set_swapping_whitelisted_callers(vec![operator_id_1, operator_id_2]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
+
+        let response = registry
+            .swap_nodes_inner(payload, operator_id_1, now_system_time())
+            .expect_err("Should error out");
+
+        let expected_err = SwapError::NodesOwnedByDifferentOperators;
+        assert_eq!(
+            response, expected_err,
+            "Expected error {expected_err:?} but got error: {response:?}"
+        );
     }
 
     #[test]
