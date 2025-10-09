@@ -536,7 +536,7 @@ impl IDkgPreSignerImpl {
                                 .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             warn!(
                                 self.log,
-                                "validate_dealing_support(): Missing hash, invalid dealer: {support:?}",
+                                "validate_dealing_support(): Missing hash, invalid dealer: {support}",
                             );
                             return Some(IDkgChangeAction::RemoveUnvalidated(id));
                         }
