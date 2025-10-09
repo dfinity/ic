@@ -21,7 +21,7 @@ impl TryFrom<pb::Advert> for Advert {
         Ok(Advert {
             id: advert
                 .id
-                .map(|id| StateSyncArtifactId::from(id))
+                .map(StateSyncArtifactId::from)
                 .ok_or(ProxyDecodeError::MissingField("id"))?,
         })
     }
