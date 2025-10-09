@@ -2190,6 +2190,31 @@ pub struct KnownNeuron {
     pub id: Option<NeuronId>,
     pub known_neuron_data: Option<KnownNeuronData>,
 }
+/// Topic variants that can be followed by known neurons.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug,
+)]
+pub enum TopicToFollow {
+    CatchAll,
+    NeuronManagement,
+    ExchangeRate,
+    NetworkEconomics,
+    Governance,
+    NodeAdmin,
+    ParticipantManagement,
+    SubnetManagement,
+    Kyc,
+    NodeProviderRewards,
+    IcOsVersionDeployment,
+    IcOsVersionElection,
+    SnsAndCommunityFund,
+    ApiBoundaryNodeManagement,
+    SubnetRental,
+    ApplicationCanisterManagement,
+    ProtocolCanisterManagement,
+    ServiceNervousSystemManagement,
+}
+
 /// Known neurons have extra information (a name and optionally a description) that can be used to identify them.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
@@ -2197,6 +2222,7 @@ pub struct KnownNeuron {
 pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
+    pub committed_topics: Option<Vec<Option<TopicToFollow>>>,
     pub links: Option<Vec<String>>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.

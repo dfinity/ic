@@ -2169,6 +2169,8 @@ pub struct KnownNeuronData {
     pub description: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, repeated, tag = "3")]
     pub links: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(enumeration = "Topic", repeated, tag = "4")]
+    pub committed_topics: ::prost::alloc::vec::Vec<i32>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.
 #[derive(
