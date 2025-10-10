@@ -11,9 +11,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    CanisterChange, CanisterHttpResponsePayload, CanisterStatusResultV2, CanisterStatusType,
+    CanisterUpgradeOptions, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm,
+    SchnorrKeyId, VetKdCurve, VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -24,17 +24,18 @@ use ic_replicated_state::{
     ExportedFunctions, MessageMemoryUsage, NumWasmPages, PageIndex, PageMap,
     canister_state::execution_state::CustomSectionType,
 };
+use ic_state_machine_tests::StateMachine;
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, bytes_and_logging_cost, check_ingress_status,
-    cycles_reserved_for_app_and_verified_app_subnets, expect_canister_did_not_reply, get_reply,
-    wasm_compilation_cost, wat_compilation_cost,
+    cycles_reserved_for_app_and_verified_app_subnets, expect_canister_did_not_reply, get_reject,
+    get_reply, wasm_compilation_cost, wat_compilation_cost,
 };
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_histogram_vec_stats, fetch_int_counter, metric_vec,
 };
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
@@ -60,6 +61,15 @@ use std::time::Duration;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
+
+fn global_data(test: &mut ExecutionTest, canister_id: CanisterId) -> Vec<u8> {
+    let res = test.ingress(
+        canister_id,
+        "query",
+        wasm().get_global_data().append_and_reply().build(),
+    );
+    get_reply(res)
+}
 
 #[test]
 fn ic0_canister_status_works() {
@@ -2453,6 +2463,24 @@ fn ic0_msg_reject_code_works() {
 }
 
 #[test]
+fn ic0_msg_reject_code_is_zero_in_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().reply().build();
+    let caller = wasm()
+        .inter_update(
+            callee_id,
+            call_args()
+                .other_side(callee)
+                .on_reply(wasm().reject_code().int_to_blob().append_and_reply()),
+        )
+        .build();
+    let res = test.ingress(caller_id, "update", caller);
+    assert_eq!(get_reply(res), 0_u32.to_le_bytes());
+}
+
+#[test]
 fn ic0_msg_reject_code_is_not_available_outside_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
@@ -2742,6 +2770,86 @@ fn ic0_subnet_self_copy_works() {
 }
 
 #[test]
+fn ic0_call_new_must_be_called_first() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+              (func $ic0_call_new
+                (param i32 i32)
+                (param $method_name_src i32)    (param $method_name_len i32)
+                (param $reply_fun i32)          (param $reply_env i32)
+                (param $reject_fun i32)         (param $reject_env i32)
+            ))
+            (import "ic0" "call_data_append"
+                (func $ic0_call_data_append (param i32) (param i32)))
+            (import "ic0" "call_cycles_add"
+                (func $ic0_call_cycles_add (param $amount i64)))
+            (import "ic0" "call_on_cleanup"
+                (func $ic0_call_on_cleanup (param $fun i32) (param $env i32)))
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (func (export "canister_update append")
+                (call $ic0_call_data_append
+                    (i32.const 19) (i32.const 3))   ;; refers to "XYZ" on the heap
+            )
+            (func (export "canister_update cycles")
+                (call $ic0_call_cycles_add
+                    (i64.const 42))
+            )
+            (func (export "canister_update cleanup")
+                (call $ic0_call_on_cleanup
+                    (i32.const 55) (i32.const 66))  ;; fictive on_cleanup closure
+            )
+            (func (export "canister_update perform")
+                (drop (call $ic0_call_perform))
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    for (method, ic0_method) in [
+        ("append", "ic0.call_data_append"),
+        ("cycles", "ic0_call_cycles_add"),
+        ("cleanup", "ic0.call_on_cleanup"),
+        ("perform", "ic0.call_perform"),
+    ] {
+        let err = test.ingress(canister_id, method, vec![]).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+        assert!(err.description().contains(&format!(
+            "{} called when no call is under construction",
+            ic0_method
+        )));
+        assert_eq!(0, test.xnet_messages().len());
+    }
+}
+
+#[test]
+fn call_new_clears_unfinished_call() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let other_side = wasm().message_payload().append_and_reply().build();
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .call_new(canister_id, "update", CallArgs::default())
+            .call_data_append(b"foo")
+            .inter_update(
+                canister_id,
+                CallArgs::default()
+                    .other_side(other_side.clone())
+                    .on_reply(wasm().message_payload().append_and_reply().build()),
+            )
+            .build(),
+    );
+    let bytes = get_reply(res);
+    assert_eq!(bytes, other_side);
+}
+
+#[test]
 fn ic0_call_has_no_effect_on_trap() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -2816,6 +2924,42 @@ fn ic0_call_perform_has_no_effect_on_trap() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    assert_eq!(0, test.xnet_messages().len());
+}
+
+#[test]
+fn ic0_call_on_cleanup_traps_second_time() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+              (func $ic0_call_new
+                (param i32 i32)
+                (param $method_name_src i32)    (param $method_name_len i32)
+                (param $reply_fun i32)          (param $reply_env i32)
+                (param $reject_fun i32)         (param $reject_env i32)
+            ))
+            (import "ic0" "call_on_cleanup"
+                (func $ic0_call_on_cleanup (param $fun i32) (param $env i32)))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44))  ;; fictive on_reject closure
+                (call $ic0_call_on_cleanup
+                    (i32.const 55) (i32.const 66))  ;; fictive on_cleanup closure
+                (call $ic0_call_on_cleanup
+                    (i32.const 55) (i32.const 66))  ;; fictive on_cleanup closure
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(err.description().contains("ic0.call_on_cleanup can be called at most once between `ic0.call_new` and `ic0.call_perform`"));
     assert_eq!(0, test.xnet_messages().len());
 }
 
@@ -9971,7 +10115,7 @@ fn replicated_query_does_not_commit_memory_changes() {
         }
     };
 
-    // Replicated update commits memory changes.
+    // Replicated update called as ingress message commits memory changes.
     test.ingress(
         canister_id,
         "update",
@@ -9980,14 +10124,42 @@ fn replicated_query_does_not_commit_memory_changes() {
     .unwrap();
     assert_eq!(global_data(&mut test), b"FOO");
 
-    // Replicated query does not commit memory changes.
+    // Replicated update called as inter-canister call commits memory changes.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_update(
+                canister_id,
+                CallArgs::default().other_side(wasm().set_global_data(b"BAR").reply().build()),
+            )
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(global_data(&mut test), b"BAR");
+
+    // Replicated query called as ingress message does not commit memory changes.
     test.ingress(
         canister_id,
         "query",
-        wasm().set_global_data(b"BAR").reply().build(),
+        wasm().set_global_data(b"FOO").reply().build(),
     )
     .unwrap();
-    assert_eq!(global_data(&mut test), b"FOO");
+    assert_eq!(global_data(&mut test), b"BAR");
+
+    // Replicated query called as inter-canister call does not commit memory changes.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_query(
+                canister_id,
+                CallArgs::default().other_side(wasm().set_global_data(b"FOO").reply().build()),
+            )
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(global_data(&mut test), b"BAR");
 }
 
 #[test]
@@ -10106,4 +10278,427 @@ fn mix_stable_memory_apis() {
         wasm().stable_read(0, 4).append_and_reply().build(),
     );
     assert_eq!(get_reply(res), data);
+}
+
+#[test]
+fn call_from_query_method_traps() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let call_args = wasm()
+        .inter_query(
+            canister_id,
+            CallArgs::default().other_side(wasm().reply().build()),
+        )
+        .build();
+
+    // Inter-canister call from query method traps in query call.
+    let err = test
+        .non_replicated_query(canister_id, "query", call_args.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+
+    // Inter-canister call from query method traps in update call as ingress message.
+    let err = test
+        .ingress(canister_id, "query", call_args.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+
+    // Inter-canister call from query method traps in update call as inter-canister call.
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_query(
+                canister_id,
+                CallArgs::default().other_side(call_args.clone()),
+            )
+            .build(),
+    );
+    assert_eq!(get_reject(res).as_bytes(), 5_u32.to_le_bytes());
+
+    // Sanity check: Inter-canister call from update method succeeds in update call as inter-canister call.
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_update(
+                canister_id,
+                CallArgs::default().other_side(call_args.clone()),
+            )
+            .build(),
+    );
+    assert_eq!(get_reply(res), Vec::<u8>::new());
+}
+
+#[test]
+fn invalid_inter_canister_callee() {
+    // `ExecutionTest` cannot be used here since
+    // it does not handle requests to callees not belonging to the same subnet.
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    let call_args = CallArgs::default().other_side(wasm().reply().build());
+
+    // Inter-canister call to malformed principal fails with reject code 3.
+    let res = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().inter_update("foo", call_args.clone()).build(),
+    );
+    assert_eq!(get_reject(res).as_bytes(), 3_u32.to_le_bytes());
+
+    // Inter-canister call to user principal fails with reject code 3.
+    let res = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_update(user_test_id(0).get(), call_args.clone())
+            .build(),
+    );
+    assert_eq!(get_reject(res).as_bytes(), 3_u32.to_le_bytes());
+
+    // Sanity check: Inter-canister call to a valid callee succeeds.
+    let res = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().inter_update(canister_id, call_args.clone()).build(),
+    );
+    assert_eq!(get_reply(res), Vec::<u8>::new());
+}
+
+#[test]
+fn invalid_inter_canister_method_name() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let call_args = |method_name| {
+        wasm()
+            .call_simple(
+                canister_id,
+                method_name,
+                CallArgs::default().other_side(wasm().reply().build()),
+            )
+            .build()
+    };
+
+    // Inter-canister call to non-existing method name fails with reject code 5.
+    let res = test.ingress(canister_id, "update", call_args("bar"));
+    assert_eq!(get_reject(res).as_bytes(), 5_u32.to_le_bytes());
+
+    // Sanity check: Inter-canister call to existing method name succeeds.
+    let res = test.ingress(canister_id, "update", call_args("query"));
+    assert_eq!(get_reply(res), Vec::<u8>::new());
+}
+
+#[test]
+fn inter_canister_method_type_and_callee_matrix() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller = test.universal_canister().unwrap();
+    let callee = test.universal_canister().unwrap();
+
+    let call_args = |canister_id, method_name| {
+        wasm()
+            .call_simple(
+                canister_id,
+                method_name,
+                CallArgs::default().other_side(wasm().reply().build()),
+            )
+            .build()
+    };
+
+    // Inter-canister call to update/query method works in both self-call and call to another canister.
+    for canister_id in [caller, callee] {
+        for method_name in ["update", "query"] {
+            let res = test.ingress(canister_id, "update", call_args(canister_id, method_name));
+            assert_eq!(get_reply(res), Vec::<u8>::new());
+        }
+    }
+}
+
+#[test]
+fn unreplied_inter_canister_call() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Inter-canister call that does not reply fails with reject code 5.
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_update(
+                canister_id,
+                CallArgs::default().other_side(wasm().build()).on_reject(
+                    wasm()
+                        .reject_code()
+                        .int_to_blob()
+                        .reply_data_append()
+                        .reject_message()
+                        .append_and_reply()
+                        .build(),
+                ),
+            )
+            .build(),
+    );
+    assert_eq!(
+        get_reply(res),
+        [5_u32.to_le_bytes().as_slice(), b"No response"].concat()
+    );
+}
+
+#[test]
+fn multiple_replies_in_inter_canister_call() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Inter-canister call that does not reply fails with reject code 5.
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_update(
+                canister_id,
+                CallArgs::default()
+                    .other_side(wasm().reply().reply().build())
+                    .on_reject(
+                        wasm()
+                            .reject_code()
+                            .int_to_blob()
+                            .reply_data_append()
+                            .reject_message()
+                            .append_and_reply()
+                            .build(),
+                    ),
+            )
+            .build(),
+    );
+    let bytes = get_reply(res);
+    assert_eq!(bytes[..4], 5_u32.to_le_bytes());
+    assert!(
+        String::from_utf8(bytes[4..].to_vec())
+            .unwrap()
+            .contains("the call is already replied")
+    );
+}
+
+#[test]
+fn reply_in_entry_point_and_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_global_data(b"FOO")
+            .reply_data(b"replying in entry point")
+            .inter_update(
+                canister_id,
+                CallArgs::default()
+                    .other_side(wasm().reply().build())
+                    .on_reply(
+                        wasm()
+                            .set_global_data(b"BAR")
+                            .reply_data(b"replying in callback")
+                            .build(),
+                    ),
+            )
+            .build(),
+    );
+    let bytes = get_reply(res);
+    assert_eq!(bytes, b"replying in entry point");
+
+    // Make sure the callback was executed by stopping and starting the canister.
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    let res = test.canister_status(canister_id);
+    let canister_status = Decode!(&get_reply(res), CanisterStatusResultV2).unwrap();
+    assert_eq!(canister_status.status(), CanisterStatusType::Stopped);
+    test.start_canister(canister_id).unwrap();
+
+    // The callback trapped (due to replying an already replied call context)
+    // and thus global data did not change.
+    assert_eq!(global_data(&mut test, canister_id), b"FOO");
+}
+
+#[test]
+fn reply_data_append_really_appends() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .push_bytes(b"reply consisting of")
+            .reply_data_append()
+            .push_bytes(b" multiple ")
+            .reply_data_append()
+            .push_bytes(b"parts")
+            .reply_data_append()
+            .reply()
+            .build(),
+    );
+    let bytes = get_reply(res);
+    assert_eq!(bytes, b"reply consisting of multiple parts");
+}
+
+#[test]
+fn reply_data_append_in_entry_point_and_reply_in_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .push_bytes(b"replying in entry point")
+            .reply_data_append()
+            .inter_update(
+                canister_id,
+                CallArgs::default()
+                    .other_side(wasm().reply().build())
+                    .on_reply(
+                        wasm()
+                            .push_bytes(b"replying in callback")
+                            .reply_data_append()
+                            .reply()
+                            .build(),
+                    ),
+            )
+            .build(),
+    );
+    let bytes = get_reply(res);
+    // The reply in the entry point is ignored since it was not finalized by `ic0.msg_reply`.
+    assert_eq!(bytes, b"replying in callback");
+}
+
+#[test]
+fn inter_canister_call_cleanup() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Entry point sets global data to "FOO", cleanup callback (if executed) resets global data to "BAR".
+    let run = |test: &mut ExecutionTest,
+               other_side: Vec<u8>,
+               on_reply: Option<Vec<u8>>,
+               on_reject: Option<Vec<u8>>| {
+        let mut call_args = CallArgs::default()
+            .other_side(other_side)
+            .on_cleanup(wasm().set_global_data(b"BAR"));
+        if let Some(on_reply) = on_reply {
+            call_args = call_args.on_reply(on_reply);
+        }
+        if let Some(on_reject) = on_reject {
+            call_args = call_args.on_reject(on_reject);
+        }
+        test.ingress(
+            canister_id,
+            "update",
+            wasm()
+                .set_global_data(b"FOO")
+                .inter_update(canister_id, call_args)
+                .build(),
+        )
+    };
+
+    let reply_on_other_side = wasm().reply_data(b"replying on other side").build();
+    let trap_on_other_side = wasm().trap_with_blob(b"trapping on other side").build();
+    let trap_in_reply = wasm().trap_with_blob(b"trapping in reply callback").build();
+    let trap_in_reject = wasm()
+        .trap_with_blob(b"trapping in reject callback")
+        .build();
+    let forward_reply = wasm().message_payload().append_and_reply().build();
+    let forward_reject = wasm().reject_message().append_and_reply().build();
+
+    // Inter-canister call cleanup is executed if reply callback traps.
+    let err = run(
+        &mut test,
+        reply_on_other_side.clone(),
+        Some(trap_in_reply),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err.description().contains("trapping in reply callback"));
+    assert_eq!(global_data(&mut test, canister_id), b"BAR");
+
+    // Inter-canister call cleanup is not executed if reply callback succeeds.
+    let res = run(
+        &mut test,
+        reply_on_other_side.clone(),
+        Some(forward_reply),
+        None,
+    );
+    assert_eq!(get_reply(res), b"replying on other side");
+    assert_eq!(global_data(&mut test, canister_id), b"FOO");
+
+    // Inter-canister call cleanup is executed if reject callback traps.
+    let err = run(
+        &mut test,
+        trap_on_other_side.clone(),
+        None,
+        Some(trap_in_reject),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err.description().contains("trapping in reject callback"));
+    assert_eq!(global_data(&mut test, canister_id), b"BAR");
+
+    // Inter-canister call cleanup is not executed if reject callback succeeds.
+    let res = run(
+        &mut test,
+        trap_on_other_side.clone(),
+        None,
+        Some(forward_reject),
+    );
+    assert!(
+        String::from_utf8(get_reply(res))
+            .unwrap()
+            .contains("trapping on other side")
+    );
+    assert_eq!(global_data(&mut test, canister_id), b"FOO");
+}
+
+#[test]
+fn parallel_callbacks() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let run = |test: &mut ExecutionTest, first_callback: Vec<u8>, second_callback: Vec<u8>| {
+        test.ingress(
+            canister_id,
+            "update",
+            wasm()
+                .inter_update(
+                    canister_id,
+                    CallArgs::default()
+                        .other_side(wasm().reply_data(b"first reply").build())
+                        .on_reply(first_callback),
+                )
+                .inter_update(
+                    canister_id,
+                    CallArgs::default()
+                        .other_side(wasm().reply_data(b"second reply").build())
+                        .on_reply(second_callback),
+                )
+                .build(),
+        )
+    };
+
+    let trap_in_first = wasm().trap_with_blob(b"trap in first callback").build();
+    let trap_in_second = wasm().trap_with_blob(b"trap in second callback").build();
+    let forward_reply = wasm().message_payload().append_and_reply().build();
+
+    let res = run(&mut test, trap_in_first.clone(), forward_reply.clone());
+    assert_eq!(get_reply(res), b"second reply");
+
+    let res = run(&mut test, forward_reply.clone(), trap_in_second.clone());
+    assert_eq!(get_reply(res), b"first reply");
+
+    let err = run(&mut test, trap_in_first.clone(), trap_in_second.clone()).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err.description().contains("trap in second callback"));
 }
