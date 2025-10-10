@@ -1228,6 +1228,12 @@ impl StateManagerImpl {
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
+
+        let _timer = metrics
+            .api_call_duration
+            .with_label_values(&["new"])
+            .start_timer();
+
         info!(
             log,
             "Using path '{}' to manage local state",
