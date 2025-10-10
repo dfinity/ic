@@ -10,9 +10,9 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{CallbackId, Request, RequestOrResponse, NO_DEADLINE},
-    time::{CoarseTime, UNIX_EPOCH},
     Time,
+    messages::{CallbackId, NO_DEADLINE, Request, RequestOrResponse},
+    time::{CoarseTime, UNIX_EPOCH},
 };
 use std::sync::Arc;
 
@@ -124,9 +124,11 @@ fn running_canister_accepts_requests() {
 fn running_canister_accepts_responses() {
     let mut fixture = CanisterFixture::running();
     let callback_id = fixture.with_input_slot_reservation();
-    assert!(fixture
-        .push_input(default_input_response(callback_id))
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(default_input_response(callback_id))
+            .unwrap()
+    );
 }
 
 #[test]
@@ -145,9 +147,11 @@ fn stopping_canister_rejects_requests() {
 fn stopping_canister_accepts_responses() {
     let mut fixture = CanisterFixture::stopping();
     let callback_id = fixture.with_input_slot_reservation();
-    assert!(fixture
-        .push_input(default_input_response(callback_id))
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(default_input_response(callback_id))
+            .unwrap()
+    );
 }
 
 #[test]
@@ -235,23 +239,38 @@ fn validate_responses_against_callback_details() {
     let response = input_response_from(canister_c_id, callback_id_1);
     assert_eq!(
         fixture.push_input(response.clone()),
-        Err((StateError::NonMatchingResponse { err_str: format!(
-            "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
-            CANISTER_ID, canister_b_id, Time::from(NO_DEADLINE)
-        ), originator: response.receiver(), callback_id: callback_id_1, respondent: response.sender(), deadline: response.deadline()}, response)),
+        Err((
+            StateError::NonMatchingResponse {
+                err_str: format!(
+                    "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
+                    CANISTER_ID,
+                    canister_b_id,
+                    Time::from(NO_DEADLINE)
+                ),
+                originator: response.receiver(),
+                callback_id: callback_id_1,
+                respondent: response.sender(),
+                deadline: response.deadline()
+            },
+            response
+        )),
     );
 
     // Creating valid response from canister C to this canister.
     // Pushing the response in this canister's input queue is successful.
-    assert!(fixture
-        .push_input(input_response_from(canister_c_id, callback_id_2))
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(input_response_from(canister_c_id, callback_id_2))
+            .unwrap()
+    );
 
     // Creating valid response from canister B to this canister.
     // Pushing the response in this canister's input queue is successful.
-    assert!(fixture
-        .push_input(input_response_from(canister_b_id, callback_id_1))
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(input_response_from(canister_b_id, callback_id_1))
+            .unwrap()
+    );
 }
 
 #[test]

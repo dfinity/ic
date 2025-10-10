@@ -1,6 +1,12 @@
 [package]
 name = "guest_disk"
-edition = "2021"
+edition.workspace = true
+
+[lib]
+
+[[bin]]
+name = "guest_disk"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -14,6 +20,7 @@ ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
 nix = { workspace = true }
 rand = { workspace = true }
+sev = { workspace = true }
 tempfile = { workspace = true }
 
 [dev-dependencies]

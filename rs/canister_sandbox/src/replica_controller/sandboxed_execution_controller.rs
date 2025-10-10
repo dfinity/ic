@@ -9,25 +9,25 @@ use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, ExecutionStateChanges,
-    PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
+    CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
+    WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages, wasm_execution_error,
 };
 use ic_embedders::{
-    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
+    CompilationCache, CompilationResult, WasmExecutionInput, wasm_utils::WasmImportsDetails,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, InstanceStats};
 use ic_interfaces_state_manager::StateReader;
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
-use ic_logger::{error, info, ReplicaLogger};
-use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
 use ic_replicated_state::{
-    page_map::allocated_pages_count, EmbedderCache, ExecutionState, ExportedFunctions, Memory,
-    PageMap, ReplicatedState,
+    EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
+    page_map::allocated_pages_count,
 };
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -42,8 +42,8 @@ use std::convert::TryInto;
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::sync::mpsc::Receiver;
 use std::sync::Weak;
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -140,7 +140,9 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_instructions_left_error: IntCounter,
     // Instance stats
     accessed_pages: HistogramVec,
+    accessed_wasm_pages: HistogramVec,
     dirty_pages: HistogramVec,
+    dirty_wasm_pages: HistogramVec,
     read_before_write_count: HistogramVec,
     direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
@@ -323,15 +325,29 @@ impl SandboxedExecutionMetrics {
             // Instance stats
             accessed_pages: metrics_registry.histogram_vec(
                 "sandboxed_execution_accessed_pages",
-                "Number of pages accessed by type of memory (wasm, stable) \
+                "Number of OS pages accessed by type of memory (wasm, stable) \
                         and api type.",
                 // 1 page, 2 pages, …, 2^21 (8GiB worth of) pages
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
             ),
+            accessed_wasm_pages: metrics_registry.histogram_vec(
+                "sandboxed_execution_accessed_wasm_pages",
+                "Number of Wasm pages accessed by type of memory (wasm, stable) \
+                        and api type.",
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
             dirty_pages: metrics_registry.histogram_vec(
                 "sandboxed_execution_dirty_pages",
-                "Number of pages modified (dirtied) by type of memory (wasm, stable) \
+                "Number of OS pages modified (dirtied) by type of memory (wasm, stable) \
+                    and api type.",
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
+            dirty_wasm_pages: metrics_registry.histogram_vec(
+                "sandboxed_execution_dirty_wasm_pages",
+                "Number of Wasm pages modified (dirtied) by type of memory (wasm, stable) \
                     and api type.",
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
@@ -412,10 +428,16 @@ impl SandboxedExecutionMetrics {
     fn observe_instance_stats(&self, instance_stats: &InstanceStats, api_type_label: &str) {
         self.accessed_pages
             .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_accessed_pages as f64);
+            .observe(instance_stats.wasm_accessed_os_pages_count as f64);
+        self.accessed_wasm_pages
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_accessed_wasm_pages_count as f64);
         self.dirty_pages
             .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_dirty_pages as f64);
+            .observe(instance_stats.wasm_dirty_os_pages_count as f64);
+        self.dirty_wasm_pages
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_dirty_wasm_pages_count as f64);
         self.read_before_write_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_read_before_write_count as f64);
@@ -681,8 +703,13 @@ impl ExecutionTracingState {
         let function_name = self.format_function_name();
         let instructions = self.instructions;
         let duration_ms = duration.as_millis();
-        info!(log, "Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms.");
-        eprintln!("Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms.");
+        info!(
+            log,
+            "Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms."
+        );
+        eprintln!(
+            "Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms."
+        );
     }
 
     fn format_function_name(&self) -> String {
@@ -755,7 +782,7 @@ impl PausedWasmExecution for PausedSandboxExecution {
             .register_execution_with_id(self.exec_id, move |exec_id, result| {
                 sandbox_process
                     .history
-                    .record(format!("Completion(exec_id={})", exec_id));
+                    .record(format!("Completion(exec_id={exec_id})"));
                 tx.send(result).unwrap();
             });
 
@@ -945,7 +972,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     if let Some(sandbox_process) = sandbox_process_weakref.upgrade() {
                         sandbox_process
                             .history
-                            .record(format!("Completion(exec_id={})", exec_id));
+                            .record(format!("Completion(exec_id={exec_id})"));
                     }
                     tx.send(result).unwrap();
                 });
@@ -1088,9 +1115,8 @@ impl WasmExecutor for SandboxedExecutionController {
                                 compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
 
                             sandbox_process.history.record(format!(
-                                "CreateExecutionState(wasm_id={}, \
-                                        next_wasm_memory_id={})",
-                                wasm_id, next_wasm_memory_id
+                                "CreateExecutionState(wasm_id={wasm_id}, \
+                                        next_wasm_memory_id={next_wasm_memory_id})"
                             ));
                             let sandbox_result = sandbox_process
                                 .sandbox_service
@@ -1137,9 +1163,8 @@ impl WasmExecutor for SandboxedExecutionController {
                         .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
                         .start_timer();
                     sandbox_process.history.record(format!(
-                        "CreateExecutionState(wasm_id={}, \
-                                next_wasm_memory_id={})",
-                        wasm_id, next_wasm_memory_id
+                        "CreateExecutionState(wasm_id={wasm_id}, \
+                                next_wasm_memory_id={next_wasm_memory_id})"
                     ));
                     let sandbox_result = sandbox_process
                         .sandbox_service
@@ -1666,7 +1691,11 @@ impl SandboxedExecutionController {
             self.metrics
                 .sandboxed_execution_instructions_left_error
                 .inc();
-            error!(self.logger, "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.", canister_id)
+            error!(
+                self.logger,
+                "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.",
+                canister_id
+            )
         }
 
         let canister_state_changes = self.update_execution_state(
@@ -1803,22 +1832,23 @@ fn open_wasm(
     log: &ReplicaLogger,
 ) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
-    if let Some(cache) = embedder_cache.as_ref() {
-        if let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>() {
-            match opened_wasm {
-                Ok(opened_wasm) => {
-                    if let Some(cached_sandbox_process) = opened_wasm.sandbox_process.upgrade() {
-                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
-                        assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
-                        return Ok((opened_wasm.wasm_id, None));
-                    } else {
-                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
-                    }
+    if let Some(cache) = embedder_cache.as_ref()
+        && let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>()
+    {
+        match opened_wasm {
+            Ok(opened_wasm) => match opened_wasm.sandbox_process.upgrade() {
+                Some(cached_sandbox_process) => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
+                    assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
+                    return Ok((opened_wasm.wasm_id, None));
                 }
-                Err(err) => {
-                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
-                    return Err(err.clone());
+                _ => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
                 }
+            },
+            Err(err) => {
+                metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
+                return Err(err.clone());
             }
         }
     }
@@ -1879,7 +1909,7 @@ fn open_wasm(
             observe_metrics(metrics, &serialized_module.imports_details);
             sandbox_process
                 .history
-                .record(format!("OpenWasm(wasm_id={})", wasm_id));
+                .record(format!("OpenWasm(wasm_id={wasm_id})"));
             // The IPC message may be sent later on a background thread
             // and it's possible this entry has been dropped from the
             // cache in the mean time. In order to keep the file
@@ -1906,12 +1936,12 @@ fn open_remote_memory(
     memory: &Memory,
 ) -> SandboxMemoryHandle {
     let mut guard = memory.sandbox_memory.lock().unwrap();
-    if let SandboxMemory::Synced(id) = &*guard {
-        if let Some(pid) = id.get_sandbox_process_id() {
-            // There is a at most one sandbox process per canister at any time.
-            assert_eq!(pid, sandbox_process.pid as usize);
-            return id.clone();
-        }
+    if let SandboxMemory::Synced(id) = &*guard
+        && let Some(pid) = id.get_sandbox_process_id()
+    {
+        // There is a at most one sandbox process per canister at any time.
+        assert_eq!(pid, sandbox_process.pid as usize);
+        return id.clone();
     }
 
     // Here we have two cases:
@@ -1929,7 +1959,7 @@ fn open_remote_memory(
     let memory_id = MemoryId::new();
     sandbox_process
         .history
-        .record(format!("OpenMemory(memory_id={})", memory_id));
+        .record(format!("OpenMemory(memory_id={memory_id})"));
     sandbox_process
         .sandbox_service
         .open_memory(protocol::sbxsvc::OpenMemoryRequest {
@@ -2123,13 +2153,11 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
     match output.code() {
         // Do nothing when the Sandbox Launcher process terminates normally.
         Some(0) => {}
-        Some(code) => panic!(
-            "Error from launcher process, pid {} exited with status code: {}",
-            pid, code
-        ),
+        Some(code) => {
+            panic!("Error from launcher process, pid {pid} exited with status code: {code}")
+        }
         None => panic!(
-            "Error from launcher process, pid {} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message.",
-            pid
+            "Error from launcher process, pid {pid} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message."
         ),
     }
 }
@@ -2185,7 +2213,7 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
     use rstest::rstest;
-    use slog::{o, Drain};
+    use slog::{Drain, o};
     use tempfile::TempDir;
 
     #[test]
@@ -2283,8 +2311,7 @@ mod tests {
             logs = fs::read_to_string(&log_path).unwrap();
         }
         assert!(logs.contains(&format!(
-            "History for canister {} with pid {}: CreateExecutionState",
-            canister_id, sandbox_pid
+            "History for canister {canister_id} with pid {sandbox_pid}: CreateExecutionState"
         )));
     }
 

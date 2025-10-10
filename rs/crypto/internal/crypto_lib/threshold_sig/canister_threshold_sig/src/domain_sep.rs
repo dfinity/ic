@@ -1,4 +1,4 @@
-use crate::{idkg::mega::MEGaCiphertextType, EccCurveType, IdkgProtocolAlgorithm};
+use crate::{EccCurveType, IdkgProtocolAlgorithm, idkg::mega::MEGaCiphertextType};
 
 /// Domain Separator identification
 ///

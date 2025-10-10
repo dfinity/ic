@@ -1,4 +1,5 @@
 mod bitcoin;
+mod canister_logs;
 mod canister_manager;
 mod canister_settings;
 pub mod execution;
@@ -16,13 +17,13 @@ pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
-    as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
-    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
+    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
+    RoundInstructions, RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
@@ -35,8 +36,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
 use ic_types::{
-    messages::{CallContextId, MessageId},
     Height, SubnetId,
+    messages::{CallContextId, MessageId},
 };
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
@@ -86,6 +87,7 @@ pub struct ExecutionServices {
     pub https_outcalls_service: QueryExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
+    pub cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
 impl ExecutionServices {
@@ -97,14 +99,22 @@ impl ExecutionServices {
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        scheduler_config: SchedulerConfig,
         config: Config,
-        cycles_account_manager: Arc<CyclesAccountManager>,
+        subnet_config: SubnetConfig,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
         temp_dir: &Path,
     ) -> ExecutionServices {
+        let scheduler_config = subnet_config.scheduler_config;
+
+        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
+            scheduler_config.max_instructions_per_message,
+            own_subnet_type,
+            own_subnet_id,
+            subnet_config.cycles_account_manager_config,
+        ));
+
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
             metrics_registry,
@@ -214,6 +224,7 @@ impl ExecutionServices {
             https_outcalls_service,
             scheduler,
             query_stats_payload_builder,
+            cycles_account_manager,
         }
     }
 
@@ -226,6 +237,7 @@ impl ExecutionServices {
         Box<dyn IngressHistoryReader>,
         QueryExecutionService,
         Box<dyn Scheduler<State = ReplicatedState>>,
+        Arc<CyclesAccountManager>,
     ) {
         (
             self.ingress_filter,
@@ -233,6 +245,7 @@ impl ExecutionServices {
             self.ingress_history_reader,
             self.query_execution_service,
             self.scheduler,
+            self.cycles_account_manager,
         )
     }
 }

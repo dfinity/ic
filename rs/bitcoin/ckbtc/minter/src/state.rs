@@ -25,8 +25,8 @@ use crate::reimbursement::{
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
-    address::BitcoinAddress, compute_min_withdrawal_amount, ECDSAPublicKey, GetUtxosCache, Network,
-    Timestamp, WithdrawalFee,
+    ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
+    compute_min_withdrawal_amount,
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
@@ -632,7 +632,7 @@ impl CkBtcMinterState {
         target: Option<Account>,
     ) -> Vec<BtcRetrievalStatusV2> {
         let target_account = target.unwrap_or(Account {
-            owner: ic_cdk::caller(),
+            owner: ic_cdk::api::msg_caller(),
             subaccount: None,
         });
 
@@ -749,20 +749,17 @@ impl CkBtcMinterState {
             return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.first() {
-            if self.max_time_in_queue_nanos < now.saturating_sub(req.received_at) {
-                return true;
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.first()
+            && self.max_time_in_queue_nanos < now.saturating_sub(req.received_at)
+        {
+            return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.last() {
-            if let Some(last_submission_time) = self.last_transaction_submission_time_ns {
-                if self.max_time_in_queue_nanos
-                    < req.received_at.saturating_sub(last_submission_time)
-                {
-                    return true;
-                }
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.last()
+            && let Some(last_submission_time) = self.last_transaction_submission_time_ns
+            && self.max_time_in_queue_nanos < req.received_at.saturating_sub(last_submission_time)
+        {
+            return true;
         }
 
         false
@@ -844,9 +841,8 @@ impl CkBtcMinterState {
         {
             self.stuck_transactions.swap_remove(pos)
         } else {
-            ic_cdk::trap(&format!(
-                "Attempted to finalized a non-existent transaction {}",
-                txid
+            ic_cdk::trap(format!(
+                "Attempted to finalized a non-existent transaction {txid}"
             ));
         };
 
@@ -1332,9 +1328,8 @@ impl CkBtcMinterState {
 
         if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
             panic!(
-                "BUG: Cannot reimburse withdrawal request {} since there is a transaction for that withdrawal with status: {:?}",
-                ledger_burn_index,
-                tx_status)
+                "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a transaction for that withdrawal with status: {tx_status:?}"
+            )
         }
 
         for submitted_tx in self
@@ -1348,9 +1343,8 @@ impl CkBtcMinterState {
                 .any(|req| req.block_index == ledger_burn_index)
             {
                 panic!(
-                    "BUG: Cannot reimburse withdrawal request {} since there is a submitted transaction for that withdrawal: {:?}",
-                    ledger_burn_index,
-                    submitted_tx);
+                    "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a submitted transaction for that withdrawal: {submitted_tx:?}"
+                );
             }
         }
         self.pending_withdrawal_reimbursements
@@ -1589,10 +1583,7 @@ impl CkBtcMinterState {
             .pending_withdrawal_reimbursements
             .remove(&burn_index)
             .unwrap_or_else(|| {
-                panic!(
-                    "BUG: missing pending reimbursement of withdrawal {}.",
-                    burn_index
-                )
+                panic!("BUG: missing pending reimbursement of withdrawal {burn_index}.")
             });
         let reimbursed = ReimbursedWithdrawal {
             account: reimbursement.account,
@@ -1604,8 +1595,7 @@ impl CkBtcMinterState {
             self.reimbursed_withdrawals
                 .insert(burn_index, Ok(reimbursed)),
             None,
-            "BUG: Reimbursement of withdrawal {:?} was already completed!",
-            reimbursement
+            "BUG: Reimbursement of withdrawal {reimbursement:?} was already completed!"
         );
     }
 }

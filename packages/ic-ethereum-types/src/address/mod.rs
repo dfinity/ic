@@ -81,8 +81,7 @@ impl TryFrom<&[u8; 32]> for Address {
         let (leading_zeroes, address_bytes) = value.split_at(12);
         if !leading_zeroes.iter().all(|leading_zero| *leading_zero == 0) {
             return Err(format!(
-                "address has leading non-zero bytes: {:?}",
-                leading_zeroes
+                "address has leading non-zero bytes: {leading_zeroes:?}"
             ));
         }
         Ok(Address::new(
@@ -111,14 +110,14 @@ impl FromStr for Address {
         }
         let mut bytes = [0u8; 20];
         hex::decode_to_slice(&s[2..], &mut bytes)
-            .map_err(|e| format!("address is not hex: {}", e))?;
+            .map_err(|e| format!("address is not hex: {e}"))?;
         Ok(Self(bytes))
     }
 }
 
 impl fmt::Debug for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 

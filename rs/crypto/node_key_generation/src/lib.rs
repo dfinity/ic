@@ -68,7 +68,7 @@ pub fn generate_idkg_dealing_encryption_keys(
             CspCreateMEGaKeyError::TransientInternalError { internal_error } => {
                 IDkgDealingEncryptionKeysGenerationError::TransientInternalError(internal_error)
             }
-            _ => IDkgDealingEncryptionKeysGenerationError::InternalError(format!("{}", e)),
+            _ => IDkgDealingEncryptionKeysGenerationError::InternalError(format!("{e}")),
         })?;
     Ok(ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto(pubkey))
 }
@@ -158,13 +158,13 @@ fn generate_node_keys_once_internal(
                 ValidatePksAndSksError::TransientInternalError(transient_error) => {
                     NodeKeyGenerationError::TransientInternalError(transient_error)
                 }
-                _ => panic!("Node contains inconsistent key material: {:?}", error),
+                _ => panic!("Node contains inconsistent key material: {error:?}"),
             })
         }
         Err(ValidatePksAndSksError::TransientInternalError(transient_error)) => Err(
             NodeKeyGenerationError::TransientInternalError(transient_error),
         ),
-        Err(error) => panic!("Node contains inconsistent key material: {:?}", error),
+        Err(error) => panic!("Node contains inconsistent key material: {error:?}"),
     }
 }
 
@@ -175,7 +175,7 @@ fn generate_all_node_keys(vault: &dyn CspVault) {
     let _tls_certificate = generate_tls_keys(vault, node_id);
     let _dkg_dealing_encryption_public_key = generate_dkg_dealing_encryption_keys(vault, node_id);
     let _idkg_dealing_encryption_public_key = generate_idkg_dealing_encryption_keys(vault)
-        .unwrap_or_else(|e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e));
+        .unwrap_or_else(|e| panic!("Error generating I-DKG dealing encryption keys: {e:?}"));
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]

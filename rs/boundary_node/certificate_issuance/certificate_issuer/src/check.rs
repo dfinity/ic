@@ -4,7 +4,7 @@ use candid::Principal;
 use flate2::bufread::GzDecoder;
 use ic_agent::Agent;
 use ic_http_certification::{HttpRequest, HttpResponse};
-use ic_response_verification::{verify_request_response_pair, MIN_VERIFICATION_VERSION};
+use ic_response_verification::{MIN_VERIFICATION_VERSION, verify_request_response_pair};
 use ic_utils::{
     call::SyncCall,
     interfaces::http_request::{HeaderField, HttpRequestCanister},
@@ -77,7 +77,7 @@ impl Checker {
 impl Check for Checker {
     async fn check(&self, name: &str) -> Result<Principal, CheckError> {
         // Phase 1 - Ensure NO existing TXT challenge record exists
-        let txt_src = format!("_acme-challenge.{}.", name);
+        let txt_src = format!("_acme-challenge.{name}.");
 
         match self.resolver.lookup(&txt_src, RecordType::TXT).await {
             Ok(lookup) => {
@@ -107,7 +107,7 @@ impl Check for Checker {
         }?;
 
         // Phase 2 - Ensure a challenge delegation CNAME record exists
-        let cname_src = format!("_acme-challenge.{}.", name);
+        let cname_src = format!("_acme-challenge.{name}.");
         let cname_dst = format!("_acme-challenge.{}.{}.", name, self.delegation_domain);
 
         self.resolver
@@ -132,7 +132,7 @@ impl Check for Checker {
             })?;
 
         // Phase 3 - Ensure a TXT record for a canister mapping exists
-        let txt_src = format!("_canister-id.{}.", name);
+        let txt_src = format!("_canister-id.{name}.");
 
         let canister_id = self
             .resolver

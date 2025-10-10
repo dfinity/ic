@@ -1,13 +1,13 @@
 use crate::eth_logs::{
-    parse_principal_from_slice, EventSource, EventSourceError, LedgerSubaccount,
+    EventSource, EventSourceError, LedgerSubaccount, RECEIVED_ERC20_EVENT_TOPIC,
+    RECEIVED_ETH_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
     ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent, ReceivedEventError,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
-    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+    parse_principal_from_slice,
 };
 use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, Erc20Value, Wei};
 use candid::Principal;
-use evm_rpc_client::{Hex, Hex32, LogEntry};
+use evm_rpc_types::{Hex, Hex32, LogEntry};
 use ic_ethereum_types::Address;
 
 /// Parse an Ethereum log event into a `ReceivedEvent`.
@@ -231,7 +231,7 @@ fn parse_address(
 
     Address::try_from(array).map_err(|err| ReceivedEventError::InvalidEventSource {
         source: event_source,
-        error: EventSourceError::InvalidEvent(format!("Invalid address in log entry: {}", err)),
+        error: EventSourceError::InvalidEvent(format!("Invalid address in log entry: {err}")),
     })
 }
 

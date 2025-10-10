@@ -1,7 +1,7 @@
 use crate::{
     common::LOG_PREFIX,
     pb::v1::{
-        registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
+        ChangelogEntry, RegistryStableStorage, registry_stable_storage::Version as ReprVersion,
     },
     storage::{chunkify_composite_mutation_if_too_large, with_chunks},
 };
@@ -10,13 +10,13 @@ use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_canister_chunkify::dechunkify_registry_value;
 use ic_registry_transport::{
+    Error,
     pb::v1::{
-        high_capacity_registry_mutation, high_capacity_registry_value, registry_mutation::Type,
         HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryDelta,
         HighCapacityRegistryMutation, HighCapacityRegistryValue, RegistryAtomicMutateRequest,
-        RegistryMutation, RegistryValue,
+        RegistryMutation, RegistryValue, high_capacity_registry_mutation,
+        high_capacity_registry_value, registry_mutation::Type,
     },
-    Error,
 };
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
@@ -171,7 +171,7 @@ impl Registry {
         };
 
         let content = crate::storage::with_chunks(|chunks| chunks.get_chunk(&content_sha256))
-            .ok_or_else(|| format!("No chunk with SHA256 = {:X?}", content_sha256))?;
+            .ok_or_else(|| format!("No chunk with SHA256 = {content_sha256:X?}"))?;
 
         Ok(Chunk {
             content: Some(content),
@@ -281,10 +281,7 @@ impl Registry {
 
             // Convert to high_capacity_registry_value::Content.
             let mutation_type = Type::try_from(mutation_type).unwrap_or_else(|err| {
-                panic!(
-                    "Unable to convert mutation_type ({}): {}",
-                    mutation_type, err
-                );
+                panic!("Unable to convert mutation_type ({mutation_type}): {err}");
             });
             let content = if mutation_type.is_delete() {
                 high_capacity_registry_value::Content::DeletionMarker(true)
@@ -344,7 +341,7 @@ impl Registry {
                 } = new_mutation;
 
                 let mutation_type = Type::try_from(*mutation_type).map_err(|err| {
-                    Error::MalformedMessage(format!("Unable to convert mutation_type: {}", err,))
+                    Error::MalformedMessage(format!("Unable to convert mutation_type: {err}",))
                 })?;
                 let presence_requirement = mutation_type.presence_requirement();
 
@@ -384,7 +381,7 @@ impl Registry {
                 LOG_PREFIX,
                 errors
                     .iter()
-                    .map(|e| format!("{}", e))
+                    .map(|e| format!("{e}"))
                     .collect::<Vec::<String>>()
                     .join(", ")
             );
@@ -404,10 +401,6 @@ impl Registry {
                     encoded_mutation: bytes.clone(),
                 })
                 .collect(),
-
-            // This is part of a legacy format (from before mid 2021), and can
-            // safely be ignored from now on.
-            deltas: vec![],
         }
     }
 
@@ -429,8 +422,7 @@ impl Registry {
         let delta_size = version.as_ref().len() + bytes.len();
         if delta_size > MAX_REGISTRY_DELTAS_SIZE {
             panic!(
-                "{}Transaction rejected because delta would be too large: {} vs {}.",
-                LOG_PREFIX, delta_size, MAX_REGISTRY_DELTAS_SIZE
+                "{LOG_PREFIX}Transaction rejected because delta would be too large: {delta_size} vs {MAX_REGISTRY_DELTAS_SIZE}."
             );
         }
 
@@ -569,7 +561,7 @@ mod tests {
 
     /// Shorthand for asserting equality with the empty vector.
     macro_rules! assert_empty {
-        ($v:expr) => {
+        ($v:expr_2021) => {
             assert_eq!($v, vec![])
         };
     }
@@ -1062,8 +1054,8 @@ mod tests {
         {
             let mut val = Vec::<u8>::new();
             let p = 1.0 / (self.mean_length + 1.0);
-            while rng.gen::<f32>() > p {
-                val.push(rng.gen());
+            while rng.r#gen::<f32>() > p {
+                val.push(rng.r#gen());
             }
             val
         }
@@ -1100,9 +1092,9 @@ mod tests {
         let mut serializable_form = registry.serializable_form();
         // Remove half of the entries, but retain the first and the last entry.
         let initial_len = registry.changelog().iter().count();
-        serializable_form
-            .changelog
-            .retain(|entry| entry.version == 1 || rng.gen() || entry.version == initial_len as u64);
+        serializable_form.changelog.retain(|entry| {
+            entry.version == 1 || rng.r#gen() || entry.version == initial_len as u64
+        });
         let len_after_random_trim = serializable_form.changelog.len();
         assert!(len_after_random_trim < initial_len);
 
@@ -1138,10 +1130,12 @@ mod tests {
 
         // We should have one changelog entry.
         assert_eq!(1, registry.changelog().iter().count());
-        assert!(registry
-            .changelog()
-            .get(EncodedVersion::from(version).as_ref())
-            .is_some());
+        assert!(
+            registry
+                .changelog()
+                .get(EncodedVersion::from(version).as_ref())
+                .is_some()
+        );
     }
 
     #[test]
@@ -1190,7 +1184,7 @@ mod tests {
             .map(|i| {
                 let i = i % (u8::MAX as u64 + 1);
                 HighCapacityRegistryMutation {
-                    key: format!("key_{}", i).into_bytes(),
+                    key: format!("key_{i}").into_bytes(),
                     mutation_type: registry_mutation::Type::Insert as i32,
                     content: Some(high_capacity_registry_mutation::Content::Value(vec![
                         i as u8;
@@ -1384,7 +1378,7 @@ mod tests {
         // Add a chunkable non-singleton composite mutation.
         let mutations = (0_u64..100)
             .map(|i| {
-                let key = format!("also_gets_chunked_{}", i);
+                let key = format!("also_gets_chunked_{i}");
                 let i = (i % (u8::MAX as u64 + 1)) as u8;
                 insert(key, vec![i; 14_000])
             })
@@ -1470,13 +1464,13 @@ mod tests {
             .collect();
         // First let's insert them all to avoid having to deal with insert v. update
         let mut registry = Registry::new();
-        let gen = RandomByteVectorGenerator {
+        let r#gen = RandomByteVectorGenerator {
             mean_length: mean_value_length,
         };
         for k in &keys {
             apply_mutations_skip_invariant_checks(
                 &mut registry,
-                vec![insert(k.as_bytes(), gen.sample(&mut rng))],
+                vec![insert(k.as_bytes(), r#gen.sample(&mut rng))],
             );
         }
         // Now let's do some mutations.
@@ -1488,7 +1482,7 @@ mod tests {
                 &mut registry,
                 vec![update(
                     &keys[key_index_distr.sample(&mut rng)],
-                    gen.sample(&mut rng),
+                    r#gen.sample(&mut rng),
                 )],
             );
         }
@@ -1589,20 +1583,19 @@ Average length of the values: {} (desired: {})",
 
         // Step 1.2.1: Verify original_registry.store.
         let store = &original_registry.store;
-        assert_eq!(store.len(), 1, "{:#?}", store);
+        assert_eq!(store.len(), 1, "{store:#?}");
         let history: &VecDeque<HighCapacityRegistryValue> =
             store.get(&b"this is key".to_vec()).unwrap();
-        assert_eq!(history.len(), 1, "{:#?}", history);
+        assert_eq!(history.len(), 1, "{history:#?}");
         let registry_value = history.front().unwrap();
         let large_value_chunk_keys = match registry_value.content.as_ref().unwrap() {
             high_capacity_registry_value::Content::LargeValueChunkKeys(ok) => ok.clone(),
-            _ => panic!("{:#?}", registry_value),
+            _ => panic!("{registry_value:#?}"),
         };
         assert_eq!(
             large_value_chunk_keys.chunk_content_sha256s.len(),
             3,
-            "{:#?}",
-            large_value_chunk_keys
+            "{large_value_chunk_keys:#?}"
         );
         let reconstituted_monolithic_blob_from_store =
             with_chunks(|chunks| dechunkify(&large_value_chunk_keys, chunks));
@@ -1636,8 +1629,7 @@ Average length of the values: {} (desired: {})",
         assert_eq!(
             changelog.iter().collect::<Vec<_>>().len(),
             1,
-            "{:#?}",
-            changelog
+            "{changelog:#?}"
         );
 
         let composite_mutation = HighCapacityRegistryAtomicMutateRequest::decode(
@@ -1649,17 +1641,16 @@ Average length of the values: {} (desired: {})",
         .unwrap();
 
         let mutations = &composite_mutation.mutations;
-        assert_eq!(mutations.len(), 1, "{:#?}", composite_mutation);
+        assert_eq!(mutations.len(), 1, "{composite_mutation:#?}");
         let prime_mutation = mutations.first().unwrap();
         let large_value_chunk_keys = match &prime_mutation.content {
             Some(high_capacity_registry_mutation::Content::LargeValueChunkKeys(ok)) => ok,
-            _ => panic!("{:#?}", prime_mutation),
+            _ => panic!("{prime_mutation:#?}"),
         };
         assert_eq!(
             large_value_chunk_keys.chunk_content_sha256s.len(),
             3,
-            "{:?}",
-            large_value_chunk_keys
+            "{large_value_chunk_keys:?}"
         );
         let reconstituted_monolithic_blob =
             with_chunks(|chunks| dechunkify(large_value_chunk_keys, chunks));

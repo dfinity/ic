@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{get_dependency_path, SshSession};
+use ic_system_test_driver::driver::test_env_api::{SshSession, get_dependency_path};
 use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::systest;
 use slog::info;

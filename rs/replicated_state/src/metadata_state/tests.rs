@@ -6,14 +6,14 @@ use crate::metadata_state::subnet_call_context_manager::{
 };
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
+    generate_key_transcript, setup_unmasked_random_params,
 };
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, IC_00,
+    EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
@@ -21,27 +21,27 @@ use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
-        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
-        SUBNET_1, SUBNET_2,
+        SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id,
+        subnet_test_id, user_test_id,
     },
     messages::{RequestBuilder, ResponseBuilder},
     xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
 use ic_types::{
+    Cycles, ExecutionRound, Height,
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
-    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
-        canister_threshold_sig::{
-            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
-            SchnorrPreSignatureTranscript,
-        },
         AlgorithmId,
+        canister_threshold_sig::{
+            SchnorrPreSignatureTranscript,
+            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
+        },
     },
     ingress::WasmResult,
-    messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
+    messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata},
     time::CoarseTime,
-    Cycles, ExecutionRound, Height,
 };
 use ic_types::{canister_http::Transform, time::current_time};
 use lazy_static::lazy_static;
@@ -430,16 +430,11 @@ fn system_metadata_split() {
     const CANISTER_1: CanisterId = CanisterId::from_u64(1);
     const CANISTER_2: CanisterId = CanisterId::from_u64(2);
 
-    // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
-    // `IC_00`; and respectively `SUBNET_A`.
+    // Ingress history with 3 Received messages, addressed to canisters 1 and 2;
+    // and `IC_00` (i.e., `SUBNET_A`).
     let mut ingress_history = IngressHistoryState::new();
     let time = UNIX_EPOCH;
-    let receivers = [
-        CANISTER_1.get(),
-        CANISTER_2.get(),
-        IC_00.get(),
-        SUBNET_A.get(),
-    ];
+    let receivers = [CANISTER_1.get(), CANISTER_2.get(), IC_00.get()];
     for (i, receiver) in receivers.into_iter().enumerate().rev() {
         ingress_history.insert(
             message_test_id(i as u64),
@@ -458,7 +453,7 @@ fn system_metadata_split() {
     // `CANISTER_1` remains on `SUBNET_A`.
     let is_canister_on_subnet_a = |canister_id: CanisterId| canister_id == CANISTER_1;
     // All ingress messages except the one addressed to `CANISTER_2` (including the
-    // ones for `IC_00` and `SUBNET_A`) should remain on `SUBNET_A` after the split.
+    // ones for `IC_00`, i.e., `SUBNET_A`) should remain on `SUBNET_A` after the split.
     let is_receiver_on_subnet_a = |canister_id: CanisterId| canister_id != CANISTER_2;
     // Only ingress messages for `CANISTER_2` should be retained on `SUBNET_B`.
     let is_canister_on_subnet_b = |canister_id: CanisterId| canister_id == CANISTER_2;
@@ -1496,6 +1491,40 @@ fn stream_discard_messages_before_returns_expected_messages() {
 }
 
 #[test]
+fn stream_discard_messages_before_returns_expected_refunds() {
+    // A stream with 3 refund messages at indices 30..=32.
+    let mut messages = StreamIndexedQueue::with_begin(30.into());
+    let refund30 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(1_000_000)));
+    let refund31 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(2_000_000)));
+    let refund32 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(3_000_000)));
+    messages.push(StreamMessage::Refund(refund30.clone()));
+    messages.push(StreamMessage::Refund(refund31.clone()));
+    messages.push(StreamMessage::Refund(refund32.clone()));
+    let mut stream = Stream::new(messages, 42.into());
+
+    // Discard messages before index 32, rejecting refund @31.
+    let reject_signal = RejectSignal::new(RejectReason::CanisterMigrating, 31.into());
+    let slice_reject_signals: VecDeque<RejectSignal> = vec![reject_signal.clone()].into();
+    let slice_signals_end = 32.into();
+
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    // Expect refund @32 to remain in the stream, refund @31 to be rejected.
+    let mut expected_messages = StreamIndexedQueue::with_begin(32.into());
+    expected_messages.push(StreamMessage::Refund(refund32.clone()));
+    let expected_stream = Stream::new(expected_messages, 42.into());
+    assert_eq!(expected_stream, stream);
+    assert_eq!(
+        vec![(
+            RejectReason::CanisterMigrating,
+            StreamMessage::Refund(refund31)
+        )],
+        rejected_messages
+    );
+}
+
+#[test]
 fn stream_discard_messages_before_removes_no_messages() {
     let mut stream = generate_stream(
         MessageConfig {
@@ -1703,6 +1732,9 @@ fn stream_roundtrip_encoding() {
         }
         .into(),
     );
+
+    // Push an anonymous refund.
+    messages.push(Refund::anonymous(*LOCAL_CANISTER, Cycles::from(3_456_789_u128)).into());
 
     let mut stream = Stream::with_signals(
         messages,
@@ -1981,10 +2013,12 @@ fn blockmaker_metrics_time_series_check_observe_works() {
     );
 
     // Check `metrics_since()` returns nothing for a time after the last observation.
-    assert!(metrics
-        .metrics_since(later_batch_time + Duration::from_secs(365 * 24 * 3600))
-        .next()
-        .is_none());
+    assert!(
+        metrics
+            .metrics_since(later_batch_time + Duration::from_secs(365 * 24 * 3600))
+            .next()
+            .is_none()
+    );
 
     // Check `observe()` does nothing with a batch time before the last obseration.
     let metrics_before = metrics.clone();
@@ -2050,9 +2084,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (1, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     // Check `test_id_2` was observed in the running stats.
     assert_eq!(
         metrics.running_stats(),
@@ -2088,9 +2124,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (2, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     // `test_id_1` should be pruned from the running stats.
     assert_eq!(
         metrics.running_stats(),
@@ -2152,9 +2190,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (4, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     assert_eq!(
         metrics.running_stats(),
         Some((

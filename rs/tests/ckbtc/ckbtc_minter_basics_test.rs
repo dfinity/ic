@@ -17,8 +17,9 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys, ADDRESS_LENGTH,
+    ADDRESS_LENGTH, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup, create_canister,
+    install_bitcoin_canister, install_btc_checker, install_ledger, install_minter, subnet_app,
+    subnet_sys,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
@@ -209,6 +210,8 @@ async fn test_update_balance(agent: &CkBtcMinterAgent) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_ckbtc_addresses))
         .add_test(systest!(test_ckbtc_minter_agent))

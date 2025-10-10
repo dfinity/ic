@@ -1,7 +1,7 @@
 [package]
 name = "grub"
 version = "1.0.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 ic-sys = { path = "../../sys" }

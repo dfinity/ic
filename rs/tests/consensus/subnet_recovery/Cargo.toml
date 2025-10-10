@@ -38,10 +38,6 @@ name = "ic-systest-sr-nns-failover-nodes-test"
 path = "sr_nns_failover_nodes_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-nns-same-nodes"
-path = "sr_nns_same_nodes_test.rs"
-
-[[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
 path = "sr_app_same_nodes_test.rs"
 

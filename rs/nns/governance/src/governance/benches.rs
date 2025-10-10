@@ -4,19 +4,19 @@ use crate::pb::v1::{Motion, VotingPowerEconomics};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
-        test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
-        MAX_NUMBER_OF_NEURONS,
+        Governance, MAX_NUMBER_OF_NEURONS,
+        test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{
-        install_code::CanisterInstallMode, proposal::Action, Ballot, BallotInfo,
-        CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode, KnownNeuron,
-        ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
+        KnownNeuron, ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        install_code::CanisterInstallMode, proposal::Action,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
@@ -421,7 +421,7 @@ fn cascading_vote_stable_everything() -> BenchResult {
 }
 
 #[bench(raw)]
-fn single_vote_all_stable() -> BenchResult {
+fn single_vote_all() -> BenchResult {
     cast_vote_cascade_helper(
         SetUpStrategy::SingleVote { num_neurons: 151 },
         Topic::NetworkEconomics,
@@ -429,7 +429,7 @@ fn single_vote_all_stable() -> BenchResult {
 }
 
 #[bench(raw)]
-fn centralized_following_all_stable() -> BenchResult {
+fn centralized_following_all() -> BenchResult {
     cast_vote_cascade_helper(
         SetUpStrategy::Centralized { num_neurons: 151 },
         Topic::NetworkEconomics,
@@ -459,7 +459,6 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 ),
-                false,
             )
             .unwrap();
     }
@@ -552,9 +551,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     bench_fn(|| {
@@ -563,7 +560,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
 }
 
 #[bench(raw)]
-fn list_neurons_stable() -> BenchResult {
+fn list_neurons() -> BenchResult {
     let mut governance = Governance::new(
         Default::default(),
         Arc::new(MockEnvironment::new(Default::default(), 0)),
@@ -580,7 +577,7 @@ fn list_neurons_stable() -> BenchResult {
             hashmap! {}, // get the default followees
         );
         neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
-        governance.add_neuron(id, neuron, false).unwrap();
+        governance.add_neuron(id, neuron).unwrap();
     }
 
     let request = api::ListNeurons {
@@ -599,7 +596,7 @@ fn list_neurons_stable() -> BenchResult {
 }
 
 #[bench(raw)]
-fn list_neurons_by_subaccount_stable() -> BenchResult {
+fn list_neurons_by_subaccount() -> BenchResult {
     let num_neurons = 100;
     let neurons = (1..=num_neurons)
         .map(|id| {
@@ -630,9 +627,7 @@ fn list_neurons_by_subaccount_stable() -> BenchResult {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     let request = api::ListNeurons {
@@ -685,7 +680,6 @@ fn list_proposals_benchmark() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 ),
-                false,
             )
             .unwrap();
     }
@@ -744,15 +738,15 @@ fn list_proposals() -> BenchResult {
 
 /// Used for benchmarking compilation/instrumentation/execution changes in the
 /// embedders crate.
-#[export_name = "canister_update update_empty"]
+#[unsafe(export_name = "canister_update update_empty")]
 fn update_empty() {
-    ic_cdk::api::call::reply_raw(&[]);
+    ic_cdk::api::msg_reply([]);
 }
 
 /// Used for benchmarking compilation/instrumentation/execution changes in the
 /// embedders crate.
-#[export_name = "canister_query go"]
+#[unsafe(export_name = "canister_query go")]
 fn go() {
-    let _ = list_neurons_stable();
-    ic_cdk::api::call::reply_raw(&[]);
+    let _ = list_neurons();
+    ic_cdk::api::msg_reply([]);
 }

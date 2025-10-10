@@ -1,4 +1,5 @@
 use crate::{
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NUM_HOT_KEYS_PER_NEURON,
@@ -6,15 +7,13 @@ use crate::{
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        self as pb,
+        self as pb, AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError,
+        KnownNeuronData, MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
+        Vote, VotingPowerEconomics,
         abridged_neuron::DissolveState,
         governance_error::ErrorType,
-        manage_neuron::{configure::Operation, Configure},
-        AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError, KnownNeuronData,
-        MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Vote,
-        VotingPowerEconomics,
+        manage_neuron::{Configure, configure::Operation},
     },
-    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
@@ -47,7 +46,7 @@ impl TryFrom<i32> for Visibility {
         } else if src == Visibility::Public as i32 {
             Ok(Visibility::Public)
         } else {
-            Err(format!("Invalid visibility code: {:?}.", src,))
+            Err(format!("Invalid visibility code: {src:?}.",))
         }
     }
 }
@@ -708,8 +707,7 @@ impl Neuron {
                     Err(GovernanceError::new_with_message(
                         ErrorType::NotAuthorized,
                         format!(
-                            "Caller '{:?}' must be the controller or hotkey of the neuron to join or leave the neuron fund.",
-                            caller,
+                            "Caller '{caller:?}' must be the controller or hotkey of the neuron to join or leave the neuron fund.",
                         ),
                     ))
                 }
@@ -723,9 +721,7 @@ impl Neuron {
                     Err(GovernanceError::new_with_message(
                         ErrorType::NotAuthorized,
                         format!(
-                            "Caller '{:?}' must be the controller of the neuron to perform this operation:\n{:#?}",
-                            caller,
-                            configure,
+                            "Caller '{caller:?}' must be the controller of the neuron to perform this operation:\n{configure:#?}",
                         ),
                     ))
                 }
@@ -775,7 +771,7 @@ impl Neuron {
                 if current_dd > desired_dd {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
-                        "Can't set a dissolve delay that is smaller than the current dissolve delay."
+                        "Can't set a dissolve delay that is smaller than the current dissolve delay.",
                     ));
                 }
 
@@ -837,6 +833,7 @@ impl Neuron {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
         requester: PrincipalId,
+        multi_query: bool,
     ) -> NeuronInfo {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
@@ -857,6 +854,13 @@ impl Neuron {
         let visibility = Some(self.visibility() as i32);
         let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
         let potential_voting_power = self.potential_voting_power(now_seconds);
+        let known_neuron_data = if multi_query {
+            None
+        } else {
+            self.known_neuron_data
+                .clone()
+                .map(api::KnownNeuronData::from)
+        };
 
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
@@ -867,10 +871,7 @@ impl Neuron {
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
-            known_neuron_data: self
-                .known_neuron_data
-                .clone()
-                .map(api::KnownNeuronData::from),
+            known_neuron_data,
             neuron_type: self.neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(
@@ -1089,7 +1090,6 @@ impl Neuron {
 
     /// Does NOT touch visiblity. If you want to go private, call set_visibility
     /// after calling this.
-    #[cfg(test)] // This can be used in production, but so far, it is not needed.
     pub(crate) fn clear_known_neuron_data(&mut self) {
         self.known_neuron_data = None;
     }
@@ -1265,6 +1265,7 @@ impl Neuron {
         self,
         now_seconds: u64,
         voting_power_economics: &VotingPowerEconomics,
+        multi_query: bool,
     ) -> api::Neuron {
         let visibility = Some(self.visibility() as i32);
         let deciding_voting_power =
@@ -1314,7 +1315,11 @@ impl Neuron {
             .map(api::BallotInfo::from)
             .collect();
         let transfer = transfer.map(api::NeuronStakeTransfer::from);
-        let known_neuron_data = known_neuron_data.map(api::KnownNeuronData::from);
+        let known_neuron_data = if multi_query {
+            None
+        } else {
+            known_neuron_data.map(api::KnownNeuronData::from)
+        };
 
         let followees = followees
             .into_iter()
@@ -1461,7 +1466,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             recent_ballots_next_entry_index: recent_ballots_next_entry_index
                 .map(|x| {
                     u32::try_from(x).map_err(|e| NeuronStoreError::InvalidData {
-                        reason: format!("Failed to convert recent_ballots_next_entry_index: {}", e),
+                        reason: format!("Failed to convert recent_ballots_next_entry_index: {e}"),
                     })
                 })
                 .transpose()?,
@@ -1624,7 +1629,7 @@ pub struct NeuronBuilder {
     transfer: Option<NeuronStakeTransfer>,
     #[cfg(any(test, feature = "canbench-rs"))]
     staked_maturity_e8s_equivalent: Option<u64>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     known_neuron_data: Option<KnownNeuronData>,
     #[cfg(test)]
     maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
@@ -1668,7 +1673,7 @@ impl NeuronBuilder {
             transfer: None,
             #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent: None,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             known_neuron_data: None,
             #[cfg(test)]
             maturity_disbursements_in_progress: Vec::new(),
@@ -1805,7 +1810,7 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_known_neuron_data(mut self, known_neuron_data: Option<KnownNeuronData>) -> Self {
         self.known_neuron_data = known_neuron_data;
         self.visibility = Visibility::Public;
@@ -1863,7 +1868,7 @@ impl NeuronBuilder {
             transfer,
             #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             known_neuron_data,
             visibility,
             voting_power_refreshed_timestamp_seconds,
@@ -1879,7 +1884,7 @@ impl NeuronBuilder {
 
         #[cfg(test)]
         let visibility = if known_neuron_data.is_some() {
-            assert_eq!(visibility, Visibility::Public, "{:?}", id);
+            assert_eq!(visibility, Visibility::Public, "{id:?}");
             Visibility::Public
         } else {
             visibility
@@ -1896,7 +1901,7 @@ impl NeuronBuilder {
         let transfer = None;
         #[cfg(not(any(test, feature = "canbench-rs")))]
         let staked_maturity_e8s_equivalent = None;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let known_neuron_data = None;
         #[cfg(not(test))]
         let maturity_disbursements_in_progress = Vec::new();

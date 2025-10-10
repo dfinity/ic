@@ -2,19 +2,19 @@ use ic_base_types::NodeId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgTranscript,
+    CspNiDkgTranscript, ni_dkg_groth20_bls12_381,
 };
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_test_utils_ni_dkg::initial_dkg_transcript_and_master_key;
 use ic_crypto_test_utils_ni_dkg::InitialNiDkgConfig;
+use ic_crypto_test_utils_ni_dkg::initial_dkg_transcript_and_master_key;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_utils_ni_dkg::extract_subnet_threshold_sig_public_key;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
-use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::RegistryVersion;
+use ic_types::crypto::CurrentNodePublicKeys;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types_test_utils::ids::SUBNET_1;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -76,7 +76,7 @@ mod extract_subnet_threshold_sig_public_key {
 mod extract_threshold_sig_public_key {
     use super::*;
     use ic_crypto_utils_ni_dkg::{
-        extract_threshold_sig_public_key, ThresholdPubKeyExtractionError,
+        ThresholdPubKeyExtractionError, extract_threshold_sig_public_key,
     };
     use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 

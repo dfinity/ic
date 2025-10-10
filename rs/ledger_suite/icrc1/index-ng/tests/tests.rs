@@ -1,21 +1,21 @@
 use crate::common::{
-    account, default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed, ARCHIVE_TRIGGER_THRESHOLD,
-    FEE, MAX_BLOCKS_FROM_ARCHIVE,
+    ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
+    index_ng_wasm, install_index_ng, install_ledger, ledger_get_all_blocks, ledger_wasm,
+    wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
-    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
+    GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
+    InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
 use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
 use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+    ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
 };
-use ic_rosetta_test_utils::test_http_request_decoding_quota;
+use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
@@ -344,7 +344,10 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
         // We use the hash because nat64 and nat are not equal
         // but ICRC-3 doesn't have nat64.
         if ledger_block.hash() != index_block.hash() {
-            panic!("Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}", index, ledger_block, index_block);
+            panic!(
+                "Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}",
+                index, ledger_block, index_block
+            );
         }
     }
 }
@@ -883,13 +886,15 @@ fn test_list_subaccounts() {
     );
 
     // List account_3.owner subaccounts when an existing starting subaccount is specified but no subaccount is in that range.
-    assert!(list_subaccounts(
-        env,
-        index_id,
-        PrincipalId(account_3.owner),
-        Some(*account(3, 1).effective_subaccount())
-    )
-    .is_empty());
+    assert!(
+        list_subaccounts(
+            env,
+            index_id,
+            PrincipalId(account_3.owner),
+            Some(*account(3, 1).effective_subaccount())
+        )
+        .is_empty()
+    );
 
     // List account_4.owner subaccounts should return the default subaccount
     // mapped to [0;32].
@@ -1265,5 +1270,194 @@ mod metrics {
             ledger_id,
             retrieve_blocks_from_ledger_interval_seconds: None,
         }))
+    }
+}
+
+#[cfg(not(feature = "icrc3_disabled"))]
+mod fees_in_burn_and_mint_blocks {
+    use super::*;
+    use crate::common::STARTING_CYCLES_PER_CANISTER;
+    use ic_icrc1_ledger::Tokens;
+    use ic_icrc1_test_utils::icrc3::BlockBuilder;
+    use ic_icrc3_test_ledger::AddBlockResult;
+    use ic_types::time::GENESIS;
+    use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+
+    #[test]
+    fn should_take_mint_block_fee_into_account() {
+        const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
+        const TEST_ACCOUNT_1: Account = Account {
+            owner: TEST_USER_1.0,
+            subaccount: None,
+        };
+        const FEE_COLLECTOR: PrincipalId = PrincipalId::new_user_test_id(2);
+        const FEE_COLLECTOR_ACCOUNT: Account = Account {
+            owner: FEE_COLLECTOR.0,
+            subaccount: None,
+        };
+
+        const MINT_AMOUNT: u64 = 10_000_000;
+        const MINT_FEE: u64 = 10_000;
+
+        let env = StateMachine::new();
+
+        let ledger_id = env
+            .install_canister_with_cycles(
+                test_ledger_wasm(),
+                Encode!(&()).unwrap(),
+                None,
+                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            )
+            .unwrap();
+
+        let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .with_fee(Tokens::from(MINT_FEE))
+            .with_fee_collector(FEE_COLLECTOR_ACCOUNT)
+            .mint(TEST_ACCOUNT_1, Tokens::from(MINT_AMOUNT))
+            .build();
+
+        let expected_balance = MINT_AMOUNT - MINT_FEE;
+
+        assert_eq!(
+            Nat::from(0u64),
+            add_block(&env, ledger_id, &mint)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let actual_user_balance =
+            icrc1_balance_of(&env, index_id, Account::from(Principal::from(TEST_USER_1)));
+
+        // Verify that the full mint amount, minus the fee, was credited to the user account.
+        assert_eq!(
+            actual_user_balance, expected_balance,
+            "Actual user balance does not match expected balance after mint block ({} vs {})",
+            actual_user_balance, expected_balance
+        );
+
+        let actual_fee_collector_balance = icrc1_balance_of(
+            &env,
+            index_id,
+            Account::from(Principal::from(FEE_COLLECTOR)),
+        );
+
+        // Verify that the mint fee was credited to the fee collector.
+        assert_eq!(
+            actual_fee_collector_balance, MINT_FEE,
+            "Actual fee collector balance does not match expected balance after mint block ({} vs {})",
+            actual_fee_collector_balance, MINT_FEE
+        );
+    }
+
+    #[test]
+    fn should_take_burn_block_fee_into_account() {
+        const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
+        const TEST_ACCOUNT_1: Account = Account {
+            owner: TEST_USER_1.0,
+            subaccount: None,
+        };
+        const FEE_COLLECTOR: PrincipalId = PrincipalId::new_user_test_id(2);
+        const FEE_COLLECTOR_ACCOUNT: Account = Account {
+            owner: FEE_COLLECTOR.0,
+            subaccount: None,
+        };
+
+        const MINT_AMOUNT: u64 = 10_000_000;
+        const BURN_AMOUNT: u64 = 100_000;
+        const BURN_FEE: u64 = 10_000;
+
+        let env = StateMachine::new();
+
+        let ledger_id = env
+            .install_canister_with_cycles(
+                test_ledger_wasm(),
+                Encode!(&()).unwrap(),
+                None,
+                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            )
+            .unwrap();
+
+        let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .with_fee_collector(FEE_COLLECTOR_ACCOUNT)
+            .mint(TEST_ACCOUNT_1, Tokens::from(MINT_AMOUNT))
+            .build();
+
+        let mut expected_balance = MINT_AMOUNT;
+
+        let burn = BlockBuilder::new(1, GENESIS.as_nanos_since_unix_epoch())
+            .with_fee(Tokens::from(BURN_FEE))
+            .with_fee_collector_block(0)
+            .burn(TEST_ACCOUNT_1, Tokens::from(BURN_AMOUNT))
+            .build();
+
+        expected_balance -= BURN_AMOUNT + BURN_FEE;
+
+        assert_eq!(
+            Nat::from(0u64),
+            add_block(&env, ledger_id, &mint)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+
+        assert_eq!(
+            Nat::from(1u64),
+            add_block(&env, ledger_id, &burn)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let actual_user_balance =
+            icrc1_balance_of(&env, index_id, Account::from(Principal::from(TEST_USER_1)));
+
+        // Verify that the burn fee was deducted from the user account.
+        assert_eq!(
+            actual_user_balance, expected_balance,
+            "Actual user balance does not match expected balance after burn block ({} vs {})",
+            actual_user_balance, expected_balance
+        );
+
+        let actual_fee_collector_balance = icrc1_balance_of(
+            &env,
+            index_id,
+            Account::from(Principal::from(FEE_COLLECTOR)),
+        );
+
+        // Verify that the burn fee was credited to the fee collector.
+        assert_eq!(
+            actual_fee_collector_balance, BURN_FEE,
+            "Actual fee collector balance does not match expected balance after burn block ({} vs {})",
+            actual_fee_collector_balance, BURN_FEE
+        );
+    }
+
+    fn add_block(
+        env: &StateMachine,
+        canister_id: CanisterId,
+        block: &ICRC3Value,
+    ) -> Result<Nat, String> {
+        Decode!(
+            &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
+                .expect("failed to add block")
+                .bytes(),
+            AddBlockResult
+        )
+        .expect("failed to decode add_block response")
+    }
+
+    fn test_ledger_wasm() -> Vec<u8> {
+        let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
+            "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",
+        );
+        std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
+            panic!(
+                "failed to load Wasm file from path {} (env var IC_ICRC3_TEST_LEDGER_WASM_PATH): {}",
+                ledger_wasm_path, e
+            )
+        })
     }
 }

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::pb::v1::{
     CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
     SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,

@@ -8,27 +8,27 @@ use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
-    MetricVec,
+    MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
+    nonzero_values,
 };
 use ic_test_utilities_state::{new_canister_state, register_callback};
 use ic_test_utilities_types::{
-    ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
+    ids::{SUBNET_27, SUBNET_42, canister_test_id, user_test_id},
     messages::RequestBuilder,
 };
 use ic_types::{
+    CanisterId, Cycles, SubnetId, Time,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
+        CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload, RejectContext,
+        Request, RequestOrResponse, Response, StreamMessage,
     },
     time::{CoarseTime, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, Cycles, SubnetId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -446,9 +446,7 @@ fn build_streams_impl_respects_limits(
 
         assert!(
             msg_count > expected_messages as usize,
-            "Invalid test setup: msg_count ({}) must be greater than routed_messages ({})",
-            msg_count,
-            expected_messages
+            "Invalid test setup: msg_count ({msg_count}) must be greater than routed_messages ({expected_messages})"
         );
 
         // Set up the provided_canister_states.
@@ -554,7 +552,7 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
                 &mut expected_state,
                 &msg,
                 RejectCode::DestinationInvalid,
-                format!("No route to canister {}", receiver),
+                format!("No route to canister {receiver}"),
             );
         }
 
@@ -606,6 +604,11 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
         ).unwrap());
+        provided_state
+            .metadata
+            .network_topology
+            .subnets
+            .insert(REMOTE_SUBNET, Default::default());
 
         // Set up the provided_canister_states.
         let provided_canister_states = canister_states_with_outputs(msgs.clone());
@@ -713,9 +716,7 @@ fn build_streams_with_best_effort_messages_impl(
                 .unwrap()
                 .messages()
                 .is_empty(),
-            "Local subnet type: {:?}, Remote subnet type: {:?}",
-            local_subnet_type,
-            remote_subnet_type,
+            "Local subnet type: {local_subnet_type:?}, Remote subnet type: {remote_subnet_type:?}",
         );
 
         // Remote best-effort request was routed.
@@ -726,9 +727,7 @@ fn build_streams_with_best_effort_messages_impl(
                 .unwrap()
                 .messages()
                 .is_empty(),
-            "Local subnet type: {:?}, Remote subnet type: {:?}",
-            local_subnet_type,
-            remote_subnet_type,
+            "Local subnet type: {local_subnet_type:?}, Remote subnet type: {remote_subnet_type:?}",
         );
 
         // No reject response was enqueued.
@@ -739,9 +738,7 @@ fn build_streams_with_best_effort_messages_impl(
             .pop_input();
         assert!(
             maybe_reject_response.is_none(),
-            "Local subnet type: {:?}, Remote subnet type: {:?}",
-            local_subnet_type,
-            remote_subnet_type,
+            "Local subnet type: {local_subnet_type:?}, Remote subnet type: {remote_subnet_type:?}",
         );
     });
 }
@@ -1013,7 +1010,7 @@ fn requests_into_queue_round_robin(
     requests: Vec<Request>,
     byte_limit: Option<u64>,
     time: Time,
-) -> StreamIndexedQueue<RequestOrResponse> {
+) -> StreamIndexedQueue<StreamMessage> {
     let mut queue = StreamIndexedQueue::with_begin(start);
 
     let mut request_map: BTreeMap<CanisterId, BTreeMap<CanisterId, VecDeque<Request>>> =
@@ -1041,12 +1038,12 @@ fn requests_into_queue_round_robin(
     while let Some((src, mut requests)) = request_ring.pop_front() {
         if let Some((dst, mut req_queue)) = requests.pop_front() {
             if let Some(request) = req_queue.pop_front() {
-                if let Some(limit) = byte_limit {
-                    if bytes_routed >= limit {
-                        break;
-                    }
+                if let Some(limit) = byte_limit
+                    && bytes_routed >= limit
+                {
+                    break;
                 }
-                let req: RequestOrResponse = request.into();
+                let req: StreamMessage = request.into();
                 bytes_routed += req.count_bytes() as u64;
                 queue.push(req);
                 requests.push_back((dst, req_queue));
@@ -1075,7 +1072,7 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
                     sender,
                     receiver,
                     CallbackId::from(next_callback_id),
-                    format!("req_{}_{}_{}", snd, rcv, i),
+                    format!("req_{snd}_{rcv}_{i}"),
                     payment,
                     NO_DEADLINE,
                 ));
@@ -1163,14 +1160,16 @@ fn consume_output_queues(state: &ReplicatedState) -> ReplicatedState {
 /// Pushes the message into the given canister's corresponding input queue.
 fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
     let mut subnet_available_memory = 1 << 30;
-    assert!(canister_state
-        .push_input(
-            msg,
-            &mut subnet_available_memory,
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap());
+    assert!(
+        canister_state
+            .push_input(
+                msg,
+                &mut subnet_available_memory,
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap()
+    );
 }
 
 /// Asserts that the values of the `METRIC_ROUTED_MESSAGES` metric
@@ -1188,7 +1187,7 @@ fn assert_routed_messages_eq(expected: MetricVec<u64>, metrics_registry: &Metric
 /// Retrieves the `METRIC_ROUTED_PAYLOAD_SIZES` histogram's count.
 fn fetch_routed_payload_count(metrics_registry: &MetricsRegistry) -> u64 {
     fetch_histogram_stats(metrics_registry, METRIC_ROUTED_PAYLOAD_SIZES)
-        .unwrap_or_else(|| panic!("Histogram not found: {}", METRIC_ROUTED_PAYLOAD_SIZES))
+        .unwrap_or_else(|| panic!("Histogram not found: {METRIC_ROUTED_PAYLOAD_SIZES}"))
         .count
 }
 

@@ -43,6 +43,8 @@ fn add_remove_neuron() {
     neuron.set_known_neuron_data(KnownNeuronData {
         name: "known neuron data".to_string(),
         description: None,
+        links: vec![],
+        committed_topics: vec![],
     });
     let account_id =
         AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(neuron.subaccount()));
@@ -171,8 +173,10 @@ fn create_model_neuron_builder(id: u64) -> NeuronBuilder {
         }
     })
     .with_known_neuron_data(Some(KnownNeuronData {
-        name: format!("known neuron data {}", id),
+        name: format!("known neuron data {id}"),
         description: None,
+        links: vec![],
+        committed_topics: vec![],
     }))
 }
 
@@ -469,6 +473,8 @@ fn update_neuron_add_known_neuron() {
     new_neuron.set_known_neuron_data(KnownNeuronData {
         name: "known neuron data".to_string(),
         description: None,
+        links: vec![],
+        committed_topics: vec![],
     });
     assert_eq!(indexes.update_neuron(&old_neuron, &new_neuron), Ok(()));
 
@@ -487,6 +493,8 @@ fn update_neuron_remove_known_neuron() {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: "known neuron data".to_string(),
             description: None,
+            links: vec![],
+            committed_topics: vec![],
         }))
         .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
@@ -514,32 +522,48 @@ fn update_neuron_update_known_neuron_name() {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: "known neuron data".to_string(),
             description: None,
+            links: vec![],
+            committed_topics: vec![],
         }))
         .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: before updating, make sure the neuron can be looked up by the known neuron name.
-    assert!(indexes
-        .known_neuron()
-        .contains_known_neuron_name("known neuron data"));
-    assert!(!indexes
-        .known_neuron()
-        .contains_known_neuron_name("different known neuron data"));
+    assert_eq!(
+        indexes
+            .known_neuron()
+            .known_neuron_id_by_name("known neuron data"),
+        Some(old_neuron.id())
+    );
+    assert_eq!(
+        indexes
+            .known_neuron()
+            .known_neuron_id_by_name("different known neuron data"),
+        None
+    );
 
     // Step 3: make a new neuron with different known neuron name and update the neuron.
     let mut new_neuron = old_neuron.clone();
     new_neuron.set_known_neuron_data(KnownNeuronData {
         name: "different known neuron data".to_string(),
         description: None,
+        links: vec![],
+        committed_topics: vec![],
     });
     assert_eq!(indexes.update_neuron(&old_neuron, &new_neuron), Ok(()));
 
     // Step 4: the neuron can no longer be looked up by the old known neuron name, but can be by the
     // new one.
-    assert!(!indexes
-        .known_neuron()
-        .contains_known_neuron_name("known neuron data"));
-    assert!(indexes
-        .known_neuron()
-        .contains_known_neuron_name("different known neuron data"));
+    assert_eq!(
+        indexes
+            .known_neuron()
+            .known_neuron_id_by_name("known neuron data"),
+        None
+    );
+    assert_eq!(
+        indexes
+            .known_neuron()
+            .known_neuron_id_by_name("different known neuron data"),
+        Some(new_neuron.id())
+    );
 }

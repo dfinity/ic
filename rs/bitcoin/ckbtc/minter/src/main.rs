@@ -9,9 +9,9 @@ use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
-    read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
+    BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2, read_state,
 };
-use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
+use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::retrieve_btc::{
     RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
     RetrieveBtcWithApprovalError,
@@ -21,11 +21,11 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
+use ic_ckbtc_minter::{IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
     state::eventlog::{EventType, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
-use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
@@ -35,7 +35,7 @@ fn init(args: MinterArg) {
     match args {
         MinterArg::Init(args) => {
             storage::record_event(EventType::Init(args.clone()), &IC_CANISTER_RUNTIME);
-            lifecycle::init::init(args);
+            lifecycle::init::init(args, &IC_CANISTER_RUNTIME);
             setup_tasks();
 
             #[cfg(feature = "self_check")]
@@ -70,7 +70,7 @@ fn check_invariants() -> Result<(), String> {
 
         let events: Vec<_> = storage::events().collect();
         let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
-            .unwrap_or_else(|e| panic!("failed to replay log {:?}: {:?}", events, e));
+            .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
 
         recovered_state.check_invariants()?;
 
@@ -104,17 +104,22 @@ fn check_postcondition<T>(t: T) -> T {
 }
 
 fn check_anonymous_caller() {
-    if ic_cdk::caller() == Principal::anonymous() {
+    if ic_cdk::api::msg_caller() == Principal::anonymous() {
         panic!("anonymous caller not allowed")
     }
 }
 
-#[export_name = "canister_global_timer"]
+#[unsafe(export_name = "canister_global_timer")]
 fn timer() {
-    #[cfg(feature = "self_check")]
-    ok_or_die(check_invariants());
+    // ic_ckbtc_minter::timer invokes ic_cdk::spawn
+    // which must be wrapped in in_executor_context
+    // as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        #[cfg(feature = "self_check")]
+        ok_or_die(check_invariants());
 
-    ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
+        ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
+    });
 }
 
 #[post_upgrade]
@@ -126,7 +131,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
             MinterArg::Init(_) => panic!("expected Option<UpgradeArgs> got InitArgs."),
         };
     }
-    lifecycle::upgrade::post_upgrade(upgrade_arg);
+    lifecycle::upgrade::post_upgrade(upgrade_arg, &IC_CANISTER_RUNTIME);
     setup_tasks();
 }
 
@@ -144,7 +149,7 @@ async fn get_withdrawal_account() -> Account {
 #[update]
 async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     check_anonymous_caller();
-    check_postcondition(updates::retrieve_btc::retrieve_btc(args).await)
+    check_postcondition(updates::retrieve_btc::retrieve_btc(args, &IC_CANISTER_RUNTIME).await)
 }
 
 #[update]
@@ -152,7 +157,9 @@ async fn retrieve_btc_with_approval(
     args: RetrieveBtcWithApprovalArgs,
 ) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
     check_anonymous_caller();
-    check_postcondition(updates::retrieve_btc::retrieve_btc_with_approval(args).await)
+    check_postcondition(
+        updates::retrieve_btc::retrieve_btc_with_approval(args, &IC_CANISTER_RUNTIME).await,
+    )
 }
 
 #[query]
@@ -174,7 +181,7 @@ fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrieva
 fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
     read_state(|s| {
         s.known_utxos_for_account(&Account {
-            owner: args.owner.unwrap_or(ic_cdk::caller()),
+            owner: args.owner.unwrap_or(ic_cdk::api::msg_caller()),
             subaccount: args.subaccount,
         })
     })
@@ -187,15 +194,12 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
-    ic_cdk::api::management_canister::main::canister_status(
-        ic_cdk::api::management_canister::main::CanisterIdRecord {
-            canister_id: ic_cdk::id(),
-        },
-    )
+async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
+    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+        canister_id: ic_cdk::api::canister_self(),
+    })
     .await
     .expect("failed to fetch canister status")
-    .0
 }
 
 #[cfg(feature = "self_check")]
@@ -204,36 +208,6 @@ async fn upload_events(events: Vec<Event>) {
     for event in events {
         storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
     }
-}
-
-#[cfg(feature = "self_check")]
-#[update]
-async fn reimburse_pending_withdrawal(ledger_burn_index: u64) {
-    use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
-    let pending_withdrawal_request = ic_ckbtc_minter::state::read_state(|s| {
-        let requests: Vec<_> = s
-            .pending_retrieve_btc_requests
-            .iter()
-            .filter(|req| req.block_index == ledger_burn_index)
-            .collect();
-        assert_eq!(requests.len(), 1);
-        requests[0].clone()
-    });
-    ic_ckbtc_minter::state::mutate_state(|s| {
-        ic_ckbtc_minter::state::audit::reimburse_withdrawal(
-            s,
-            ledger_burn_index,
-            pending_withdrawal_request.amount,
-            pending_withdrawal_request.reimbursement_account.unwrap(),
-            WithdrawalReimbursementReason::InvalidTransaction(
-                InvalidTransactionError::TooManyInputs {
-                    num_inputs: 2 * ic_ckbtc_minter::MAX_NUM_INPUTS_IN_TRANSACTION,
-                    max_num_inputs: ic_ckbtc_minter::MAX_NUM_INPUTS_IN_TRANSACTION,
-                },
-            ),
-            &IC_CANISTER_RUNTIME,
-        )
-    })
 }
 
 #[query]
@@ -279,7 +253,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -292,7 +266,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         .with_body_and_content_length(
                             "failed to parse the 'account_to_utxos_start' parameter",
                         )
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -311,7 +285,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 Err(_) => {
                     return HttpResponseBuilder::bad_request()
                         .with_body_and_content_length("failed to parse the 'time' parameter")
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -376,7 +350,7 @@ fn main() {}
 /// Checks the real candid interface against the one declared in the did file
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     fn source_to_str(source: &CandidSource) -> String {
         match source {
@@ -392,14 +366,13 @@ fn check_candid_interface_compatibility() {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
-                    "{} is not compatible with {}!\n\n\
-            {}:\n\
-            {}\n\n\
-            {}:\n\
-            {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
+                    "{new_name} is not compatible with {old_name}!\n\n\
+            {new_name}:\n\
+            {new_str}\n\n\
+            {old_name}:\n\
+            {old_str}\n"
                 );
-                panic!("{:?}", e);
+                panic!("{e:?}");
             }
         }
     }

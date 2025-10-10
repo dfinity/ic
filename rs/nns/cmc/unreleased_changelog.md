@@ -9,9 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+- Added `environment_variables` to canister settings for `create_canister` and `notify_create_canister`
 
-The CMC's `set_authorized_subnetwork_list` method is now also callable by the Subnet Rental Canister, in addition to the NNS Governance Canister.
+## Changed
 
 ## Deprecated
 

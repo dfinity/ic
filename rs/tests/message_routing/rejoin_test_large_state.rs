@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-const DKG_INTERVAL: u64 = 499;
+const DKG_INTERVAL: u64 = 99;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -112,6 +112,8 @@ fn setup(env: TestEnv, config: Config) {
                     )),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_unit_delay(Duration::from_millis(200))
+                .with_initial_notary_delay(Duration::from_millis(200))
                 .add_nodes(config.nodes_count),
         )
         .setup_and_start(&env)

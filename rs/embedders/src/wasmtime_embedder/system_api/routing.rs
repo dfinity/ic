@@ -4,18 +4,19 @@ use std::str::FromStr;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    ReshareChainKeyArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    CanisterMetadataRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
+    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, ReshareChainKeyArgs,
+    SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -45,7 +46,6 @@ fn route_canister_id(
     network_topology: &NetworkTopology,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     network_topology
-        .routing_table
         .route(canister_id.get())
         .map(|subnet_id| subnet_id.get())
         .ok_or(ResolveDestinationError::SubnetNotFound(canister_id, method))
@@ -59,6 +59,7 @@ pub(super) fn resolve_destination(
     payload: &[u8],
     own_subnet: SubnetId,
     caller: CanisterId,
+    is_composite_query: bool,
     logger: &ReplicaLogger,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     // Figure out the destination subnet based on the method and the payload.
@@ -113,6 +114,11 @@ pub(super) fn resolve_destination(
             let args = CanisterInfoRequest::decode(payload)?;
             let canister_id = args.canister_id();
             route_canister_id(canister_id, Ic00Method::CanisterInfo, network_topology)
+        }
+        Ok(Ic00Method::CanisterMetadata) => {
+            let args = CanisterMetadataRequest::decode(payload)?;
+            let canister_id = args.canister_id();
+            route_canister_id(canister_id, Ic00Method::CanisterMetadata, network_topology)
         }
         Ok(Ic00Method::UninstallCode) => {
             let args = UninstallCodeArgs::decode(payload)?;
@@ -189,13 +195,18 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
-            Err(ResolveDestinationError::UserError(UserError::new(
-                ic_error_types::ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} API is only accessible to end users in non-replicated mode",
-                    Ic00Method::FetchCanisterLogs
-                ),
-            )))
+            if is_composite_query {
+                Err(ResolveDestinationError::UserError(UserError::new(
+                    ic_error_types::ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "{} API cannot be called from a composite query",
+                        Ic00Method::FetchCanisterLogs
+                    ),
+                )))
+            } else {
+                let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
+                route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
+            }
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;
@@ -380,8 +391,7 @@ fn route_chain_key_message(
     match requested_subnet {
         Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
             None => Err(ResolveDestinationError::ChainKeyError(format!(
-                "Requested threshold key {} from unknown subnet {}",
-                key_id, subnet_id
+                "Requested threshold key {key_id} from unknown subnet {subnet_id}"
             ))),
             Some(subnet_topology) => {
                 if subnet_topology.chain_keys_held.contains(key_id) {
@@ -394,8 +404,7 @@ fn route_chain_key_message(
                                 Ok((*subnet_id).get())
                             } else {
                                 Err(ResolveDestinationError::ChainKeyError(format!(
-                                    "Subnet {} is not enabled to use threshold key {}",
-                                    subnet_id, key_id,
+                                    "Subnet {subnet_id} is not enabled to use threshold key {key_id}",
                                 )))
                             }
                         }
@@ -422,8 +431,7 @@ fn route_chain_key_message(
                 ChainKeySubnetKind::HoldsEnabledKey => {
                     let keys = format_keys(network_topology.chain_key_enabled_subnets.keys());
                     Err(ResolveDestinationError::ChainKeyError(format!(
-                        "Requested unknown or disabled threshold key: {}, existing enabled keys: {}",
-                        key_id, keys
+                        "Requested unknown or disabled threshold key: {key_id}, existing enabled keys: {keys}"
                     )))
                 }
                 ChainKeySubnetKind::OnlyHoldsKey => {
@@ -436,8 +444,7 @@ fn route_chain_key_message(
                     }
                     let keys = format_keys(keys.iter());
                     Err(ResolveDestinationError::ChainKeyError(format!(
-                        "Requested unknown threshold key: {}, existing keys: {}",
-                        key_id, keys
+                        "Requested unknown threshold key: {key_id}, existing keys: {keys}"
                     )))
                 }
             }
@@ -654,6 +661,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(1)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -677,6 +685,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -707,6 +716,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -738,6 +748,7 @@ mod tests {
                         &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                         subnet_test_id(2),
                         canister_test_id(1),
+                        false,
                         &logger,
                     )
                     .unwrap_err(),
@@ -769,6 +780,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -811,6 +823,7 @@ mod tests {
                     &payload,
                     subnet_test_id(1),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -845,6 +858,7 @@ mod tests {
                 &payload,
                 subnet_test_id(1),
                 canister_test_id(1),
+                false,
                 &logger,
             )
             .unwrap_err(),
@@ -886,6 +900,7 @@ mod tests {
                     &payload,
                     subnet_test_id(1),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -909,6 +924,7 @@ mod tests {
                     &reshare_chain_key_request(key_id, subnet_test_id(0)),
                     subnet_test_id(1),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -955,10 +971,7 @@ mod tests {
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
-                    format!(
-                        "Subnet {} is not enabled to use threshold key {}",
-                        subnet_id, key_id,
-                    )
+                    format!("Subnet {subnet_id} is not enabled to use threshold key {key_id}",)
                 ),
                 _ => panic!("Unexpected result."),
             };
@@ -1006,7 +1019,9 @@ mod tests {
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
-                    format!("Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",)
+                    format!(
+                        "Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",
+                    )
                 ),
                 _ => panic!("Unexpected result."),
             };

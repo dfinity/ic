@@ -1,5 +1,5 @@
-use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
+use crossbeam_channel::{Sender, unbounded};
+use ic_base_types::{CanisterId, SnapshotId, subnet_id_try_from_protobuf};
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
@@ -7,30 +7,30 @@ use ic_replicated_state::canister_snapshots::{
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
-use ic_replicated_state::page_map::{storage::validate, PageAllocatorFileDescriptor};
+use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
+    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
     canister_state::execution_state::{SandboxMemory, WasmBinary, WasmExecutionMode},
     page_map::PageMap,
-    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    error::LayoutError, try_mmap_wasm_file, AccessPolicy, CanisterLayout, CanisterSnapshotBits,
-    CanisterStateBits, CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
+    AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
+    PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
 use std::collections::{BTreeMap, HashSet};
-use std::convert::{identity, TryFrom};
+use std::convert::{TryFrom, identity};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, PageMapToFlush, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
-    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, CheckpointError, CheckpointMetrics,
+    NUMBER_OF_CHECKPOINT_THREADS, PageMapToFlush, TipRequest,
 };
 
 #[cfg(test)]
@@ -62,7 +62,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     {
         let _timer = metrics
             .make_checkpoint_step_duration
-            .with_label_values(&["flush_page_map_deltas"])
+            .with_label_values(&["flush_page_map_deltas_preprocessing"])
             .start_timer();
         flush_canister_snapshots_and_page_maps(&mut state, height, tip_channel);
     }
@@ -84,7 +84,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     {
         let _timer = metrics
             .make_checkpoint_step_duration
-            .with_label_values(&["tip_to_checkpoint"])
+            .with_label_values(&["wait_for_tip_to_checkpoint"])
             .start_timer();
         #[allow(clippy::disallowed_methods)]
         let (send, recv) = unbounded();
@@ -537,7 +537,7 @@ impl CheckpointLoader {
         let on_disk_canister_ids = self
             .checkpoint_layout
             .canister_ids()
-            .map_err(|err| format!("Canister Validation: failed to load canister ids: {}", err))?;
+            .map_err(|err| format!("Canister Validation: failed to load canister ids: {err}"))?;
         let ref_canister_ids: Vec<_> = ref_canister_states.keys().copied().collect();
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
@@ -553,8 +553,7 @@ impl CheckpointLoader {
             )
             .map_err(|err| {
                 format!(
-                    "Failed to load canister state for validation for key #{}: {}",
-                    canister_id, err
+                    "Failed to load canister state for validation for key #{canister_id}: {err}"
                 )
             })?
             .0
@@ -607,10 +606,7 @@ impl CheckpointLoader {
         ref_canister_snapshots: &CanisterSnapshots,
     ) -> Result<(), String> {
         let mut on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
-            format!(
-                "Snapshot validation: failed to load list of snapshot ids: {}",
-                err
-            )
+            format!("Snapshot validation: failed to load list of snapshot ids: {err}")
         })?;
         let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots.iter().map(|x| *x.0).collect();
         on_disk_snapshot_ids.sort();
@@ -625,10 +621,7 @@ impl CheckpointLoader {
                 Arc::clone(&self.fd_factory),
             )
             .map_err(|err| {
-                format!(
-                    "Failed to load canister snapshot {} for validation: {}",
-                    snapshot_id, err
-                )
+                format!("Failed to load canister snapshot {snapshot_id} for validation: {err}")
             })?
             .0
             .validate_eq(
@@ -720,7 +713,7 @@ fn validate_eq_checkpoint_internal(
     checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
     checkpoint_loader
         .load_system_metadata()
-        .map_err(|err| format!("Failed to load system metadata: {}", err))?
+        .map_err(|err| format!("Failed to load system metadata: {err}"))?
         .validate_eq(metadata)?;
     if !metadata.unflushed_checkpoint_ops.is_empty() {
         return Err("Metadata has unflushed changes after checkpoint".to_string());
@@ -774,7 +767,7 @@ pub fn load_canister_state(
     let canister_state_bits: CanisterStateBits =
         CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
             into_checkpoint_error(
-                format!("canister_states[{}]::canister_state_bits", canister_id),
+                format!("canister_states[{canister_id}]::canister_state_bits"),
                 err,
             )
         })?;
@@ -844,7 +837,7 @@ pub fn load_canister_state(
     ))
     .map_err(|err| {
         into_checkpoint_error(
-            format!("canister_states[{}]::system_state::queues", canister_id),
+            format!("canister_states[{canister_id}]::system_state::queues"),
             err,
         )
     })?;
@@ -957,7 +950,7 @@ pub fn load_snapshot(
     )
     .map_err(|err| {
         into_checkpoint_error(
-            format!("canister_snapshot[{}]::canister_snapshot_bits", snapshot_id),
+            format!("canister_snapshot[{snapshot_id}]::canister_snapshot_bits"),
             err,
         )
     })?;

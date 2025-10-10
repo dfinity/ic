@@ -97,7 +97,7 @@ impl TryFrom<&PublicKeyProto> for CspFsEncryptionPop {
         serde_cbor::from_slice::<CspFsEncryptionPop>(proof_bytes).map_err(|e| {
             CspFsEncryptionPopFromPublicKeyProtoError::MalformedPop {
                 pop_bytes: proof_bytes.clone(),
-                internal_error: format!("{}", e),
+                internal_error: format!("{e}"),
             }
         })
     }
@@ -144,8 +144,8 @@ impl fmt::Display for CspFsEncryptionPopFromPublicKeyProtoError {
 pub mod groth20_bls12_381 {
     //! The forward secure encryption keys used in Groth20.
 
-    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     use crate::NodeIndex;
+    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     use serde::{Deserialize, Serialize};
     use std::convert::TryFrom;
 

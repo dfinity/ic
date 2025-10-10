@@ -50,13 +50,13 @@ fn hsm_helper(command: &str) -> Response {
 }
 
 fn create_hsm_xml_file() -> Result<NamedTempFile, String> {
-    let hsm_info = get_hsm_info().map_err(|err| format!("Could not get hsm info: {}", err))?;
+    let hsm_info = get_hsm_info().map_err(|err| format!("Could not get hsm info: {err}"))?;
 
-    println!("HSM found: {}", hsm_info);
+    println!("HSM found: {hsm_info}");
 
     let xml: String = get_hsm_xml_string(&hsm_info);
 
-    write_to_temp_file(&xml).map_err(|err| format!("Could not write to temp file: {}", err))
+    write_to_temp_file(&xml).map_err(|err| format!("Could not write to temp file: {err}"))
 }
 
 fn get_hsm_info() -> Result<HSMInfo, Error> {
@@ -114,7 +114,7 @@ fn get_hsm_xml_string(hsm_info: &HSMInfo) -> String {
 }
 
 fn write_to_temp_file(content: &str) -> Result<NamedTempFile, Error> {
-    let mut file: NamedTempFile = NamedTempFile::new()?;
+    let mut file: NamedTempFile = NamedTempFile::with_prefix("hsm")?;
     file.write_all(content.as_bytes())?;
     Ok(file)
 }

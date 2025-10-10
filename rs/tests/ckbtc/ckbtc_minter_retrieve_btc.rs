@@ -1,12 +1,11 @@
 use anyhow::Result;
-use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
-    state::{eventlog::EventType, Mode, RetrieveBtcRequest},
+    state::{Mode, RetrieveBtcRequest, eventlog::EventType},
     updates::{
         get_withdrawal_account::compute_subaccount,
         retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
@@ -20,17 +19,17 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, RETRIEVE_BTC_MIN_AMOUNT, TIMEOUT_PER_TEST,
+    TRANSFER_FEE, ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker,
+    install_ledger, install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
-        assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
-        generate_blocks, get_btc_address, get_btc_client, update_balance,
-        upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
+        BTC_BLOCK_REWARD, assert_account_balance, assert_burn_transaction, assert_mint_transaction,
+        generate_blocks, get_btc_address, get_rpc_client, update_balance,
+        upgrade_canister_with_args, wait_for_bitcoin_balance,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, RETRIEVE_BTC_MIN_AMOUNT, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -43,21 +42,16 @@ pub fn test_retrieve_btc(env: TestEnv) {
     let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
-    let btc_rpc = get_btc_client(&env);
-    ensure_wallet(&btc_rpc, &logger);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
-    let default_btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 10 first block to reach the min confirmations of the minter canister.
     debug!(
         &logger,
-        "Generating 10 blocks to default address: {}",
-        &default_btc_address.to_string()
+        "Generating 10 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(10, &default_btc_address)
+        .generate_to_address(10, default_btc_address)
         .unwrap();
 
     block_on(async {
@@ -141,7 +135,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got: {:?}", update_result);
+                panic!("expected to have one minted utxo, got: {update_result:?}");
             }
         }
 
@@ -205,8 +199,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
                 e,
                 EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest { block_index: 4, .. })
             )),
-            "missing accepted_retrieve_btc_request event in the log: {:?}",
-            events
+            "missing accepted_retrieve_btc_request event in the log: {events:?}"
         );
 
         info!(&logger, "Call retrieve_btc with insufficient funds");
@@ -263,6 +256,8 @@ pub fn test_retrieve_btc(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_retrieve_btc))
         .execute_from_args()?;

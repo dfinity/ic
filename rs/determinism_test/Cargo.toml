@@ -1,10 +1,10 @@
 [package]
-name = "ic-determinism-test"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-determinism-test"
+version.workspace = true
 
 [dependencies]
 ic-config = { path = "../config" }
@@ -29,4 +29,5 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }
+
 wat = { workspace = true }

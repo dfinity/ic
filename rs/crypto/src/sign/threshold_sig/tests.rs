@@ -10,17 +10,17 @@ use ic_crypto_internal_threshold_sig_bls12381::types::{
     CombinedSignatureBytes, IndividualSignatureBytes,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_types::Height;
+use ic_types::SubnetId;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
 use ic_types::crypto::{CombinedThresholdSig, SignableMock, ThresholdSigShare};
-use ic_types::Height;
-use ic_types::SubnetId;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_1};
 use sign::tests::REG_V1;
 
@@ -511,8 +511,7 @@ mod verify_threshold_sig_share {
             verification_result.unwrap_err(),
             CryptoError::InvalidArgument {
                 message: format!(
-                    "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-                    NI_DKG_ID_1, NODE_ID
+                    "There is no node index for dkg id \"{NI_DKG_ID_1:?}\" and node id \"{NODE_ID}\" in the transcript data."
                 )
             }
         );
@@ -835,8 +834,7 @@ mod combine_threshold_sig_shares {
             result.unwrap_err(),
             CryptoError::InvalidArgument {
                 message: format!(
-                    "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-                    NI_DKG_ID_1, NODE_1
+                    "There is no node index for dkg id \"{NI_DKG_ID_1:?}\" and node id \"{NODE_1}\" in the transcript data."
                 )
             }
         );
@@ -1168,18 +1166,18 @@ mod verify_threshold_sig_combined {
 
 mod verify_combined_threshold_sig_by_public_key {
     use super::*;
-    use crate::sign::tests::{registry_returning_none, REG_V1, SUBNET_ID};
+    use crate::sign::tests::{REG_V1, SUBNET_ID, registry_returning_none};
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-        ni_dkg_groth20_bls12_381, CspNiDkgTranscript,
+        CspNiDkgTranscript, ni_dkg_groth20_bls12_381,
     };
     use ic_crypto_test_utils::set_of;
     use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
     use ic_types::NumberOfNodes;
+    use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
+    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 
     #[test]
     fn should_call_csp_with_correct_params() {

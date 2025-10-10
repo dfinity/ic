@@ -33,15 +33,16 @@ mod tests;
 
 use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve, HashToField};
 use itertools::multiunzip;
-use pairing::group::{ff::Field, Group};
+use pairing::group::{Group, ff::Field};
 use paste::paste;
 use rand::{CryptoRng, Rng, RngCore};
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 macro_rules! ctoption_ok_or {
-    ($val:expr, $err:expr) => {
+    ($val:expr_2021, $err:expr_2021) => {
         if bool::from($val.is_some()) {
             Ok(Self::new($val.unwrap()))
         } else {
@@ -69,10 +70,7 @@ pub enum PairingInvalidScalar {
 pub struct Scalar {
     value: ic_bls12_381::Scalar,
 }
-
-lazy_static::lazy_static! {
-    static ref SCALAR_ZERO: Scalar = Scalar::new(ic_bls12_381::Scalar::zero());
-}
+static SCALAR_ZERO: LazyLock<Scalar> = LazyLock::new(|| Scalar::new(ic_bls12_381::Scalar::zero()));
 
 impl Ord for Scalar {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -201,7 +199,7 @@ impl Scalar {
 
         // We can't use fill_bytes here because that results in incompatible output.
         for i in 0..64 {
-            bytes[i] = rng.gen::<u8>();
+            bytes[i] = rng.r#gen::<u8>();
         }
 
         let mut rbuf = [0u8; 64];
@@ -266,6 +264,53 @@ impl Scalar {
         let inv = self.value.invert();
         if bool::from(inv.is_some()) {
             Some(Self::new(inv.unwrap()))
+        } else {
+            None
+        }
+    }
+
+    /// Return the multiplicative inverse of the various scalar if each inverse exists
+    pub fn batch_inverse_vartime(values: &[Self]) -> Option<Vec<Self>> {
+        if values.is_empty() {
+            return Some(vec![]);
+        }
+
+        let n = values.len();
+        let mut accum = Scalar::one();
+        let mut products = Vec::with_capacity(n);
+
+        /*
+         * This uses Montgomery's Trick to compute many inversions using just a
+         * single field inversion. This is worthwhile because field inversions
+         * are quite expensive (for BLS12-381, an inversion costs approximately 52
+         * field multiplications plus 255 field squarings)
+         *
+         * The basic idea here (for n=2) is taking advantage of the fact that if
+         * x and y both have inverses then so does x*y, and (x*y)^-1 * x = y^-1
+         * and (x*y)^-1 * y = x^-1
+         *
+         * This is described in more detail in various texts such as
+         *  - <https://eprint.iacr.org/2008/199.pdf> section 2
+         *  - "Guide to Elliptic Curve Cryptography" Algorithm 2.26
+         */
+
+        for v in values {
+            accum *= v;
+            products.push(accum.clone());
+        }
+
+        if let Some(mut inv) = accum.inverse() {
+            let mut result = Vec::with_capacity(n);
+
+            for i in (1..n).rev() {
+                result.push(&inv * &products[i - 1]);
+                inv *= &values[i];
+            }
+
+            result.push(inv);
+            result.reverse();
+
+            Some(result)
         } else {
             None
         }
@@ -795,11 +840,9 @@ declare_addsub_ops_for!(Scalar);
 declare_mul_scalar_ops_for!(Scalar);
 
 macro_rules! define_affine_and_projective_types {
-    ( $affine:ident, $projective:ident, $size:expr ) => {
+    ( $affine:ident, $projective:ident, $size:expr_2021 ) => {
         paste! {
-            lazy_static::lazy_static! {
-                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new_with_precomputation(ic_bls12_381::$affine::generator());
-            }
+            static [<$affine:upper _GENERATOR>] : LazyLock<$affine> = LazyLock::new(|| $affine::new_with_precomputation(ic_bls12_381::$affine::generator()));
         }
 
         paste! {
@@ -1215,9 +1258,7 @@ macro_rules! define_affine_and_projective_types {
         }
 
         paste! {
-            lazy_static::lazy_static! {
-                static ref [<$projective:upper _GENERATOR>] : $projective = $projective::new(ic_bls12_381::$projective::generator());
-            }
+            static [<$projective:upper _GENERATOR>] : LazyLock<$projective> = LazyLock::new(|| $projective::new(ic_bls12_381::$projective::generator()));
         }
 
         /// An element of the group in projective form
@@ -1448,7 +1489,7 @@ macro_rules! define_affine_and_projective_types {
 
 // declare the impl for the mul2 table struct
 macro_rules! declare_mul2_table_impl {
-    ($projective:ty, $tbl_typ:ident, $window:expr) => {
+    ($projective:ty, $tbl_typ:ident, $window:expr_2021) => {
         /// Table for storing linear combinations of two points.
         /// It is stored as a vector to reduce the amount of indirection for accessing cells.
         /// A table can be computed by calling the `compute_mul2_tbl` function of the corresponding
@@ -1524,7 +1565,7 @@ macro_rules! declare_mul2_table_impl {
 }
 
 macro_rules! declare_compute_mul2_table_inline {
-    ($projective:ty, $tbl_typ:ident, $window_size:expr, $x:expr, $y:expr) => {{
+    ($projective:ty, $tbl_typ:ident, $window_size:expr_2021, $x:expr_2021, $y:expr_2021) => {{
         // Configurable window size: can be in 1..=8
         type Window = WindowInfo<$window_size>;
 
@@ -1569,7 +1610,7 @@ macro_rules! declare_compute_mul2_table_inline {
 }
 
 macro_rules! declare_mul2_impl_for {
-    ( $projective:ty, $tbl_typ:ident, $small_window_size:expr, $big_window_size:expr ) => {
+    ( $projective:ty, $tbl_typ:ident, $small_window_size:expr_2021, $big_window_size:expr_2021 ) => {
         paste! {
             /// Contains a small precomputed table with linear combinations of two points that
             /// can be used for faster mul2 computation. This table is called small because its
@@ -1640,7 +1681,7 @@ macro_rules! declare_mul2_impl_for {
 * of additions for w=4 is typically smaller than for w=3.
 */
 macro_rules! declare_muln_vartime_dispatch_for {
-    ( $typ:ty, $naive_cutoff:expr, $w3_cutoff:expr ) => {
+    ( $typ:ty, $naive_cutoff:expr_2021, $w3_cutoff:expr_2021 ) => {
         impl $typ {
             /// Multiscalar multiplication using Pippenger's algorithm
             ///
@@ -1684,7 +1725,7 @@ macro_rules! declare_muln_vartime_dispatch_for {
 }
 
 macro_rules! declare_muln_vartime_impls_for {
-    ( $typ:ty, $window:expr ) => {
+    ( $typ:ty, $window:expr_2021 ) => {
         impl $typ {
             paste! {
                 fn [< muln_vartime_window_ $window >] (points: &[Self], scalars: &[Scalar]) -> Self {
@@ -1738,7 +1779,7 @@ macro_rules! declare_muln_vartime_impls_for {
             }
         }
     };
-    ( $typ:ty, $window:expr, $($windows:expr),+ ) => {
+    ( $typ:ty, $window:expr_2021, $($windows:expr_2021),+ ) => {
         declare_muln_vartime_impls_for!($typ, $window);
         declare_muln_vartime_impls_for!($typ, $($windows),+ );
     }
@@ -1810,7 +1851,7 @@ macro_rules! declare_muln_vartime_affine_impl_for {
 }
 
 macro_rules! declare_windowed_scalar_mul_ops_for {
-    ( $typ:ty, $window:expr ) => {
+    ( $typ:ty, $window:expr_2021 ) => {
         impl $typ {
             pub(crate) fn windowed_mul(&self, scalar: &Scalar) -> Self {
                 // Configurable window size: can be in 1..=8
@@ -1953,9 +1994,7 @@ pub struct Gt {
     value: ic_bls12_381::Gt,
 }
 
-lazy_static::lazy_static! {
-    static ref GT_GENERATOR : Gt = Gt::new(ic_bls12_381::Gt::generator());
-}
+static GT_GENERATOR: LazyLock<Gt> = LazyLock::new(|| Gt::new(ic_bls12_381::Gt::generator()));
 
 impl Gt {
     /// The size in bytes of this type
@@ -2110,10 +2149,9 @@ pub struct G2Prepared {
     value: ic_bls12_381::G2Prepared,
 }
 
-lazy_static::lazy_static! {
-    static ref G2PREPARED_G : G2Prepared = G2Affine::generator().into();
-    static ref G2PREPARED_NEG_G : G2Prepared = G2Affine::generator().neg().into();
-}
+static G2PREPARED_G: LazyLock<G2Prepared> = LazyLock::new(|| G2Affine::generator().into());
+static G2PREPARED_NEG_G: LazyLock<G2Prepared> =
+    LazyLock::new(|| G2Affine::generator().neg().into());
 
 impl G2Prepared {
     /// Create a new G2Prepared from the inner type

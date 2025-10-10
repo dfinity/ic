@@ -112,15 +112,17 @@ The Internet Computer provides a robust system for verifying the build reproduci
 
 To verify an IC OS Version Election proposal:
 
+IMPORTANT: Always use versioned repro-check URLs (replace `{COMMIT_ID}` with the actual commit hash) instead of `master` to ensure compatibility between the repro-check script and the build system for that specific commit.
+
 [source,bash]
 ----
 # Verify by proposal number
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
     python3 - -p <proposal_number>
 
 # Verify by git commit
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit>
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID}
 ----
 
 === Component-Specific Verification
@@ -130,16 +132,16 @@ You can verify specific components individually:
 [source,bash]
 ----
 # Verify GuestOS only
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit> --guestos
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --guestos
 
 # Verify HostOS only
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit> --hostos
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --hostos
 
 # Verify SetupOS only
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit> --setupos
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --setupos
 ----
 
 == Contributing

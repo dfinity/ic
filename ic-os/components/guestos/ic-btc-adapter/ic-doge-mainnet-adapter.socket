@@ -1,0 +1,16 @@
+[Unit]
+Description=Socket for IC Dogecoin Mainnet Adapter Service Provider
+
+[Socket]
+# The order specified here defines the order in which the
+# process receives the sockets. 'socket' will be passed as FD(3) 
+# 'metrics' will be passed as FD(4) to canister http service.
+# https://www.freedesktop.org/software/systemd/man/systemd.socket.html
+ListenStream=/run/ic-node/dogecoin-mainnet-adapter/socket
+ListenStream=/run/ic-node/dogecoin-mainnet-adapter/metrics
+SocketUser=ic-replica
+SocketGroup=ic-replica
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

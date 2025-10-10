@@ -1,10 +1,10 @@
 use candid::types::{
-    subtype::{subtype_with_config, OptReport},
     Type,
+    subtype::{OptReport, subtype_with_config},
 };
 use candid_parser::{
     parse_idl_args,
-    utils::{instantiate_candid, CandidSource},
+    utils::{CandidSource, instantiate_candid},
 };
 
 fn fmt_type_vec(types: &[Type]) -> String {

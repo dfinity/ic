@@ -1,41 +1,172 @@
+use crate::common::frontend_canister;
 use candid::{CandidType, Encode, Nat, Principal};
+use cycles_minting_canister::{
+    IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse, SubnetTypesToSubnetsResponse,
+};
+use flate2::read::GzDecoder;
+use ic_base_types::PrincipalId;
+use ic_nns_governance_api::{
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
+    InstallCodeRequest, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, Neuron, ProposalActionRequest,
+    claim_or_refresh_neuron_from_account_response::Result as ClaimNeuronResult,
+    neuron::DissolveState,
+};
+use ic_sns_wasm::pb::v1::{GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use pocket_ic::common::rest::{ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, SubnetSpec};
-use pocket_ic::{
-    start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
-    StartServerParams,
+use pocket_ic::common::rest::{
+    ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig, InstanceConfig,
+    InstanceHttpGatewayConfig, SubnetSpec,
 };
+use pocket_ic::{
+    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, start_server, update_candid,
+    update_candid_as,
+};
+use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
 use reqwest::StatusCode;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::time::Duration;
 use tempfile::TempDir;
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
+
+mod common;
 
 fn test_canister_wasm() -> Vec<u8> {
     let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
     std::fs::read(wasm_path).unwrap()
 }
 
+// Ungzips `data`, if possible, and returns `data` otherwise.
+fn decode_gzipped_bytes(data: Vec<u8>) -> Vec<u8> {
+    let mut decoder = GzDecoder::new(&data[..]);
+
+    let mut ungzipped = Vec::new();
+    if decoder.read_to_end(&mut ungzipped).is_ok() {
+        ungzipped
+    } else {
+        data
+    }
+}
+
+fn all_icp_features() -> IcpFeatures {
+    IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ii: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
+    }
+}
+
 #[test]
-fn with_all_icp_features() {
-    let _pic = PocketIcBuilder::new().with_all_icp_features().build();
+#[should_panic(
+    expected = "The `nns_ui` feature requires an HTTP gateway to be created via `http_gateway_config`."
+)]
+fn nns_ui_requires_http_gateway() {
+    let _pic = PocketIcBuilder::new()
+        .with_icp_features(all_icp_features())
+        .build();
+}
+
+#[test]
+#[should_panic(
+    expected = "The `nns_ui` feature requires the `cycles_minting` feature to be enabled, too."
+)]
+fn nns_ui_requires_other_icp_features() {
+    let instance_http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let icp_features = IcpFeatures {
+        nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new()
+        .with_icp_features(icp_features)
+        .with_auto_progress()
+        .with_http_gateway(instance_http_gateway_config)
+        .build();
+}
+
+#[test]
+fn test_ii_nns_ui() {
+    let instance_http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(all_icp_features())
+        .with_auto_progress()
+        .with_http_gateway(instance_http_gateway_config)
+        .build();
+
+    // A basic smoke test.
+    let nns_dapp_canister_id = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
+    let nns_dapp_title = "Network Nervous System";
+    let internet_identity_canister_id =
+        Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+    let internet_identity_title = "Internet Identity";
+    for (canister_id, expected_title) in [
+        (nns_dapp_canister_id.to_string(), nns_dapp_title),
+        (
+            internet_identity_canister_id.to_string(),
+            internet_identity_title,
+        ),
+    ] {
+        let (client, url) =
+            frontend_canister(&pic, Principal::from_text(canister_id).unwrap(), false, "/");
+        let resp = client.get(url).send().unwrap();
+        let body = String::from_utf8(decode_gzipped_bytes(resp.bytes().unwrap().to_vec())).unwrap();
+        assert!(body.contains(&format!("<title>{}</title>", expected_title)));
+    }
+}
+
+#[test]
+fn test_no_canister_http_without_auto_progress() {
+    let instance_http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(all_icp_features())
+        .with_http_gateway(instance_http_gateway_config)
+        .build();
+
+    // No canister http outcalls should be made
+    // (because we did not enable auto progress when creating the PocketIC instance
+    // and system canisters should be configured to make no canister http outcalls
+    // in this case).
+    // We advance time and execute a few more rounds in case they were only made on timers.
+    for _ in 0..10 {
+        pic.advance_time(Duration::from_secs(1));
+        pic.tick();
+    }
+    assert!(pic.get_canister_http().is_empty());
 }
 
 #[test]
 fn test_sns() {
-    #[derive(CandidType)]
-    struct EmptyArg {}
-
-    #[derive(CandidType, Deserialize)]
-    struct GetSnsSubnetIdsResponse {
-        sns_subnet_ids: Vec<Principal>,
-    }
-
-    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+    let icp_features = IcpFeatures {
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(icp_features)
+        .build();
 
     // Test that the SNS subnet ID has been set properly.
     let sns_wasm_canister_id = Principal::from_text("qaa6y-5yaaa-aaaaa-aaafa-cai").unwrap();
@@ -43,12 +174,15 @@ fn test_sns() {
         &pic,
         sns_wasm_canister_id,
         "get_sns_subnet_ids",
-        (EmptyArg {},),
+        (GetSnsSubnetIdsRequest {},),
     )
     .unwrap()
     .0
     .sns_subnet_ids;
-    assert_eq!(sns_subnet_ids, vec![pic.topology().get_sns().unwrap()]);
+    assert_eq!(
+        sns_subnet_ids,
+        vec![PrincipalId(pic.topology().get_sns().unwrap())]
+    );
 
     // Test that all SNS canister types have been uploaded (we don't check the actual WASM in this test).
     let latest_sns_version_pretty = update_candid::<_, (Vec<(String, String)>,)>(
@@ -82,191 +216,12 @@ fn test_sns() {
             .0;
     let pic_time_seconds = pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
     assert!(health_status.contains(&format!(
-        "The last partial update was at: {}.  Last update cycle started at {}",
-        pic_time_seconds, pic_time_seconds
+        "The last partial update was at: {pic_time_seconds}.  Last update cycle started at {pic_time_seconds}"
     )));
 }
 
 #[test]
 fn test_nns_governance() {
-    #[derive(CandidType)]
-    struct ClaimOrRefreshNeuronFromAccount {
-        controller: Option<Principal>,
-        memo: u64,
-    }
-
-    #[derive(CandidType, Deserialize, Debug)]
-    struct GovernanceError {
-        error_message: String,
-        error_type: i32,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct NeuronId {
-        id: u64,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    enum NeuronResult {
-        NeuronId(NeuronId),
-        Error(GovernanceError),
-    }
-
-    impl NeuronResult {
-        fn id(self) -> NeuronId {
-            match self {
-                NeuronResult::NeuronId(neuron_id) => neuron_id,
-                NeuronResult::Error(governance_error) => {
-                    panic!("Unexpected error: {:?}", governance_error)
-                }
-            }
-        }
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct ClaimOrRefreshNeuronFromAccountResponse {
-        result: Option<NeuronResult>,
-    }
-
-    #[derive(CandidType, Deserialize, Debug)]
-    struct ProposalId {
-        id: u64,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct BallotInfo {
-        vote: u32,
-        proposal_id: Option<ProposalId>,
-    }
-
-    #[derive(CandidType, Deserialize, Debug, PartialEq, Clone)]
-    enum DissolveState {
-        DissolveDelaySeconds(u64),
-        WhenDissolvedTimestampSeconds(u64),
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct Followees {
-        followees: Vec<NeuronId>,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct NeuronStakeTransfer {
-        to_subaccount: Vec<u8>,
-        neuron_stake_e8s: u64,
-        from: Option<Principal>,
-        memo: u64,
-        from_subaccount: Vec<u8>,
-        transfer_timestamp: u64,
-        block_height: u64,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct KnownNeuronData {
-        name: String,
-        description: Option<String>,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct GovernanceAccount {
-        owner: Option<Principal>,
-        subaccount: Option<Vec<u8>>,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct GovernanceAccountIdentifier {
-        hash: Vec<u8>,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct MaturityDisbursement {
-        amount_e8s: Option<u64>,
-        timestamp_of_disbursement_seconds: Option<u64>,
-        finalize_disbursement_timestamp_seconds: Option<u64>,
-        account_to_disburse_to: Option<GovernanceAccount>,
-        account_identifier_to_disburse_to: Option<GovernanceAccountIdentifier>,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct Neuron {
-        id: Option<NeuronId>,
-        staked_maturity_e8s_equivalent: Option<u64>,
-        controller: Option<Principal>,
-        recent_ballots: Vec<BallotInfo>,
-        kyc_verified: bool,
-        neuron_type: Option<i32>,
-        not_for_profit: bool,
-        maturity_e8s_equivalent: u64,
-        cached_neuron_stake_e8s: u64,
-        created_timestamp_seconds: u64,
-        auto_stake_maturity: Option<bool>,
-        aging_since_timestamp_seconds: u64,
-        hot_keys: Vec<Principal>,
-        account: Vec<u8>,
-        joined_community_fund_timestamp_seconds: Option<u64>,
-        dissolve_state: Option<DissolveState>,
-        followees: Vec<(i32, Followees)>,
-        neuron_fees_e8s: u64,
-        visibility: Option<i32>,
-        transfer: Option<NeuronStakeTransfer>,
-        known_neuron_data: Option<KnownNeuronData>,
-        spawn_at_timestamp_seconds: Option<u64>,
-        voting_power_refreshed_timestamp_seconds: Option<u64>,
-        deciding_voting_power: Option<u64>,
-        potential_voting_power: Option<u64>,
-        maturity_disbursements_in_progress: Option<Vec<MaturityDisbursement>>,
-    }
-
-    #[derive(CandidType)]
-    struct InstallCodeRequest {
-        arg: Option<Vec<u8>>,
-        wasm_module: Option<Vec<u8>>,
-        skip_stopping_before_installing: Option<bool>,
-        canister_id: Option<Principal>,
-        install_mode: Option<i32>,
-    }
-
-    #[derive(CandidType)]
-    enum ProposalActionRequest {
-        InstallCode(InstallCodeRequest),
-    }
-
-    #[derive(CandidType)]
-    struct MakeProposalRequest {
-        url: String,
-        title: Option<String>,
-        action: Option<ProposalActionRequest>,
-        summary: String,
-    }
-
-    #[derive(CandidType)]
-    enum ManageNeuronCommandRequest {
-        MakeProposal(MakeProposalRequest),
-    }
-
-    #[derive(CandidType)]
-    struct ManageNeuronRequest {
-        id: Option<NeuronId>,
-        command: Option<ManageNeuronCommandRequest>,
-    }
-
-    #[derive(CandidType, Deserialize, Debug)]
-    struct MakeProposalResponse {
-        message: Option<String>,
-        proposal_id: Option<ProposalId>,
-    }
-
-    #[derive(CandidType, Deserialize, Debug)]
-    enum CommandResponse {
-        MakeProposal(MakeProposalResponse),
-        Error(GovernanceError),
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct ManageNeuronResponse {
-        command: Option<CommandResponse>,
-    }
-
     fn compute_neuron_domain_subaccount_bytes(
         controller: Principal,
         domain: &[u8],
@@ -281,7 +236,14 @@ fn test_nns_governance() {
         hasher.finalize().to_vec().try_into().unwrap()
     }
 
-    let pic = PocketIcBuilder::new().with_all_icp_features().build();
+    let icp_features = IcpFeatures {
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(icp_features)
+        .build();
 
     let user_id = Principal::from_slice(&[42; 29]); // arbitrary test user id
     let icp_ledger_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
@@ -324,10 +286,10 @@ fn test_nns_governance() {
 
     // Claim the neuron.
     let claim_neuron_arg = ClaimOrRefreshNeuronFromAccount {
-        controller: Some(user_id),
+        controller: Some(PrincipalId(user_id)),
         memo: nonce,
     };
-    let neuron_id = update_candid_as::<_, (ClaimOrRefreshNeuronFromAccountResponse,)>(
+    let res = update_candid_as::<_, (ClaimOrRefreshNeuronFromAccountResponse,)>(
         &pic,
         governance_id,
         user_id,
@@ -337,8 +299,11 @@ fn test_nns_governance() {
     .unwrap()
     .0
     .result
-    .unwrap()
-    .id();
+    .unwrap();
+    let neuron_id = match res {
+        ClaimNeuronResult::NeuronId(neuron_id) => neuron_id,
+        ClaimNeuronResult::Error(error) => panic!("Unexpected error: {}", error),
+    };
 
     // Check neuron info.
     let mut neuron = update_candid_as::<_, (Result<Neuron, GovernanceError>,)>(
@@ -405,7 +370,7 @@ fn test_nns_governance() {
         arg: Some(Encode!(&()).unwrap()),
         wasm_module: Some(test_canister_wasm()),
         skip_stopping_before_installing: None,
-        canister_id: Some(canister_id),
+        canister_id: Some(PrincipalId(canister_id)),
         install_mode: Some(1), // Install
     };
     let proposal_action = ProposalActionRequest::InstallCode(install_code);
@@ -415,9 +380,10 @@ fn test_nns_governance() {
         action: Some(proposal_action),
         summary: "".to_string(),
     };
-    let command = ManageNeuronCommandRequest::MakeProposal(proposal);
+    let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal));
     let manage_neuron_request = ManageNeuronRequest {
         id: Some(neuron_id),
+        neuron_id_or_subaccount: None,
         command: Some(command),
     };
     update_candid_as::<_, (ManageNeuronResponse,)>(
@@ -445,63 +411,87 @@ fn test_nns_governance() {
 
 #[test]
 fn test_icp_ledger() {
-    #[derive(CandidType)]
-    struct AccountBalanceArgs {
-        account: Vec<u8>,
-    }
-
-    #[derive(CandidType, Deserialize)]
-    struct Tokens {
-        e8s: u64,
-    }
-
-    let pic = PocketIcBuilder::new().with_all_icp_features().build();
-
-    let test_account_hex = "5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087";
-    let test_account = hex::decode(test_account_hex).unwrap();
-
-    // Check balance via ICP ledger.
-    let icp_ledger_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
-    let account_balance_args = AccountBalanceArgs {
-        account: test_account,
+    let icp_features = IcpFeatures {
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
     };
-    let balance = update_candid::<_, (Tokens,)>(
-        &pic,
-        icp_ledger_id,
-        "account_balance",
-        (account_balance_args,),
-    )
-    .unwrap()
-    .0
-    .e8s;
-    const E8S_PER_ICP: u64 = 100_000_000;
-    assert_eq!(balance, 1_000_000_000 * E8S_PER_ICP);
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(icp_features)
+        .build();
+    let user_id = Principal::from_slice(&[42; 29]); // arbitrary test user id
 
-    // The ICP index only syncs with the ICP ledger after 1s from its deployment.
-    pic.advance_time(Duration::from_secs(1));
-    pic.tick();
-
-    // Check balance via ICP index.
+    let icp_ledger_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
     let icp_index_id = Principal::from_text("qhbym-qaaaa-aaaaa-aaafq-cai").unwrap();
-    let balance = update_candid::<_, (u64,)>(
-        &pic,
-        icp_index_id,
-        "get_account_identifier_balance",
-        (test_account_hex,),
-    )
-    .unwrap()
-    .0;
-    assert_eq!(balance, 1_000_000_000 * E8S_PER_ICP);
+
+    let check_balance = |owner: Principal, expected_balance| {
+        // Check balance via ICP ledger.
+        let account = Account {
+            owner,
+            subaccount: None,
+        };
+        let balance =
+            update_candid::<_, (Nat,)>(&pic, icp_ledger_id, "icrc1_balance_of", (account,))
+                .unwrap()
+                .0;
+        assert_eq!(balance, expected_balance);
+
+        // The ICP index only syncs with the ICP ledger at least every two seconds.
+        pic.advance_time(Duration::from_secs(2));
+        pic.tick();
+
+        // Check balance via ICP index.
+        let balance =
+            update_candid::<_, (u64,)>(&pic, icp_index_id, "icrc1_balance_of", (account,))
+                .unwrap()
+                .0;
+        assert_eq!(balance, expected_balance);
+    };
+
+    // The following fixed principal has a high ICP balance in test environments.
+    let rich_principal =
+        Principal::from_text("hpikg-6exdt-jn33w-ndty3-fc7jc-tl2lr-buih3-cs3y7-tftkp-sfp62-gqe")
+            .unwrap();
+
+    let mut user_balance = 0;
+    for owner in [Principal::anonymous(), rich_principal] {
+        const E8S_PER_ICP: u64 = 100_000_000;
+        let expected_balance = 1_000_000_000 * E8S_PER_ICP;
+        check_balance(owner, expected_balance);
+
+        // transfer 1 ICP to an account controlled by `user_id`
+        let user_account = Account {
+            owner: user_id,
+            subaccount: None,
+        };
+        let fee_e8s = 10_000_u64;
+        let amount_e8s = 100_000_000_u64; // 1 ICP
+        let transfer_arg = TransferArg {
+            from_subaccount: None,
+            to: user_account,
+            fee: Some(fee_e8s.into()),
+            created_at_time: None,
+            memo: None,
+            amount: amount_e8s.into(),
+        };
+        update_candid_as::<_, (Result<Nat, TransferError>,)>(
+            &pic,
+            icp_ledger_id,
+            owner,
+            "icrc1_transfer",
+            (transfer_arg,),
+        )
+        .unwrap()
+        .0
+        .unwrap();
+
+        check_balance(owner, expected_balance - amount_e8s - fee_e8s);
+        user_balance += amount_e8s;
+        check_balance(user_id, user_balance);
+    }
 }
 
 #[test]
 fn test_cycles_ledger() {
-    #[derive(CandidType, Clone)]
-    struct Icrc1BalanceArgs {
-        owner: Principal,
-        subaccount: Option<Vec<u8>>,
-    }
-
     #[derive(CandidType)]
     struct WithdrawArgs {
         from_subaccount: Option<Subaccount>,
@@ -521,8 +511,12 @@ fn test_cycles_ledger() {
     let test_identity = Principal::from_slice(&[42; 29]);
     let cycles_ledger_id = Principal::from_text("um5iw-rqaaa-aaaaq-qaaba-cai").unwrap();
 
+    let icp_features = IcpFeatures {
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
-        .with_all_icp_features()
+        .with_icp_features(icp_features)
         .with_application_subnet()
         .build();
 
@@ -535,20 +529,18 @@ fn test_cycles_ledger() {
     pic.add_cycles(canister_id, init_cycles);
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
-    let check_balance = |expected_ledger_balance: u128, expected_index_balance: u128| {
+    let check_balance = |owner: Principal,
+                         expected_ledger_balance: u128,
+                         expected_index_balance: u128| {
         // Check balance via cycles ledger.
-        let icrc1_balance_args = Icrc1BalanceArgs {
-            owner: test_identity,
+        let account = Account {
+            owner,
             subaccount: None,
         };
-        let balance = update_candid::<_, (Nat,)>(
-            &pic,
-            cycles_ledger_id,
-            "icrc1_balance_of",
-            (icrc1_balance_args.clone(),),
-        )
-        .unwrap()
-        .0;
+        let balance =
+            update_candid::<_, (Nat,)>(&pic, cycles_ledger_id, "icrc1_balance_of", (account,))
+                .unwrap()
+                .0;
         assert_eq!(balance, expected_ledger_balance);
 
         // The cycles ledger index only syncs with the cycles ledger once per second.
@@ -561,28 +553,29 @@ fn test_cycles_ledger() {
             &pic,
             cycles_ledger_index_id,
             "icrc1_balance_of",
-            (icrc1_balance_args,),
+            (account,),
         )
         .unwrap()
         .0;
-        assert_eq!(balance, expected_index_balance);
+        // TODO: Once https://github.com/dfinity/ic/pull/6508 is on mainnet we can remove
+        // `expected_index_balance` param and only compare against `expected_ledger_balance`.
+        assert!(balance == expected_index_balance || balance == expected_ledger_balance);
     };
     let check_cycles = |expected: u128| {
         let actual = pic.cycle_balance(canister_id);
-        // Allow the actual ICP cycles balance to be less than the expected cycles balance by 10B cycles due to resource consumption.
+        // Allow the actual ICP cycles balance to be less than the expected cycles balance by 10B cycles
+        // due to resource consumption and cycles ledger fees.
         assert!(
-            expected <= actual + 10 * B && actual <= expected,
-            "actual: {}; expected: {}",
-            actual,
-            expected
+            expected <= actual.saturating_add(10 * B) && actual <= expected,
+            "actual: {actual}; expected: {expected}"
         );
     };
 
-    check_balance(0, 0);
+    check_balance(test_identity, 0, 0);
     check_cycles(init_cycles);
 
     // Deposit cycles to the cycles ledger.
-    let cycles = u128::MAX / 4;
+    let cycles = init_cycles / 2;
     let cycles_nat: Nat = cycles.into();
     update_candid::<_, ()>(
         &pic,
@@ -593,7 +586,11 @@ fn test_cycles_ledger() {
     .unwrap();
 
     // The fee has been deducted from the deposit.
-    check_balance(cycles - CYCLES_LEDGER_FEE, cycles - CYCLES_LEDGER_FEE);
+    check_balance(
+        test_identity,
+        cycles - CYCLES_LEDGER_FEE,
+        cycles - CYCLES_LEDGER_FEE,
+    );
     check_cycles(init_cycles - cycles);
 
     // Withdraw cycles from the cycles ledger.
@@ -618,14 +615,34 @@ fn test_cycles_ledger() {
 
     // The cycles ledger index reports a wrong balance due to a bug in the interaction between the cycles ledger and its index
     // (this bug is independent of PocketIC and to be fixed separately).
-    check_balance(0, CYCLES_LEDGER_FEE);
+    check_balance(test_identity, 0, CYCLES_LEDGER_FEE);
     check_cycles(init_cycles);
-}
 
-#[derive(CandidType, Deserialize)]
-struct IcpXdrConversionRate {
-    timestamp_seconds: u64,
-    xdr_permyriad_per_icp: u64,
+    // Withdraw cycles from the anonymous account on the cycles ledger.
+    let anonymous_balance = u128::MAX / 2; // hard-coded in PocketIC server
+    check_balance(Principal::anonymous(), anonymous_balance, anonymous_balance);
+    let amount = anonymous_balance - CYCLES_LEDGER_FEE;
+    let withdraw_args = WithdrawArgs {
+        from_subaccount: None,
+        to: canister_id,
+        created_at_time: None,
+        amount: amount.into(),
+    };
+    update_candid_as::<_, (Result<Nat, WithdrawError>,)>(
+        &pic,
+        cycles_ledger_id,
+        Principal::anonymous(),
+        "withdraw",
+        (withdraw_args,),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+
+    // The cycles ledger index reports a wrong balance due to a bug in the interaction between the cycles ledger and its index
+    // (this bug is independent of PocketIC and to be fixed separately).
+    check_balance(Principal::anonymous(), 0, CYCLES_LEDGER_FEE);
+    check_cycles(init_cycles + anonymous_balance);
 }
 
 enum ExchangeRateMode {
@@ -634,19 +651,12 @@ enum ExchangeRateMode {
 }
 
 fn get_icp_exchange_rate(pic: &PocketIc, mode: ExchangeRateMode) -> IcpXdrConversionRate {
-    #[derive(CandidType, Deserialize)]
-    struct IcpXdrConversionRateResponse {
-        data: IcpXdrConversionRate,
-        hash_tree: Vec<u8>,
-        certificate: Vec<u8>,
-    }
-
     let cmc_id = Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap();
     let method_name = match mode {
         ExchangeRateMode::Recent => "get_icp_xdr_conversion_rate",
         ExchangeRateMode::Average => "get_average_icp_xdr_conversion_rate",
     };
-    update_candid::<_, (IcpXdrConversionRateResponse,)>(pic, cmc_id, method_name, ())
+    update_candid::<_, (IcpXdrConversionRateCertifiedResponse,)>(pic, cmc_id, method_name, ())
         .unwrap()
         .0
         .data
@@ -660,11 +670,6 @@ fn get_authorized_subnets(pic: &PocketIc) -> Vec<Principal> {
 }
 
 fn get_subnet_types(pic: &PocketIc) -> BTreeMap<String, Vec<Principal>> {
-    #[derive(CandidType, Deserialize)]
-    pub struct SubnetTypesToSubnetsResponse {
-        pub data: BTreeMap<String, Vec<Principal>>,
-    }
-
     let cmc_id = Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap();
     update_candid::<_, (SubnetTypesToSubnetsResponse,)>(
         pic,
@@ -675,6 +680,17 @@ fn get_subnet_types(pic: &PocketIc) -> BTreeMap<String, Vec<Principal>> {
     .unwrap()
     .0
     .data
+    .into_iter()
+    .map(|(subnet_type, subnet_ids)| {
+        (
+            subnet_type,
+            subnet_ids
+                .iter()
+                .map(|subnet_id| subnet_id.get().0)
+                .collect(),
+        )
+    })
+    .collect()
 }
 
 fn check_cmc_state(pic: &PocketIc, expect_fiduciary: bool) {
@@ -714,9 +730,13 @@ fn check_cmc_state(pic: &PocketIc, expect_fiduciary: bool) {
 
 #[test]
 fn test_cmc_fiduciary_subnet() {
+    let icp_features = IcpFeatures {
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
         .with_fiduciary_subnet()
-        .with_all_icp_features()
+        .with_icp_features(icp_features)
         .build();
 
     check_cmc_state(&pic, true);
@@ -724,9 +744,13 @@ fn test_cmc_fiduciary_subnet() {
 
 #[test]
 fn test_cmc_fiduciary_subnet_creation() {
+    let icp_features = IcpFeatures {
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_all_icp_features()
+        .with_icp_features(icp_features)
         .build();
 
     check_cmc_state(&pic, false);
@@ -738,11 +762,15 @@ fn test_cmc_fiduciary_subnet_creation() {
 
 #[test]
 fn test_cmc_state() {
+    let icp_features = IcpFeatures {
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let state = PocketIcState::new();
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_fiduciary_subnet()
-        .with_all_icp_features()
+        .with_icp_features(icp_features)
         .with_state(state)
         .build();
 
@@ -832,22 +860,13 @@ fn registry_after_instance_restart() {
 }
 
 fn get_subnet_from_registry(pic: &PocketIc, canister_id: Principal) -> Principal {
-    #[derive(CandidType)]
-    pub struct GetSubnetForCanisterRequest {
-        pub principal: Option<Principal>,
-    }
-    #[derive(CandidType, Deserialize)]
-    pub struct SubnetForCanister {
-        pub subnet_id: Option<Principal>,
-    }
-
     let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
     update_candid::<_, (Result<SubnetForCanister, String>,)>(
         pic,
         registry_canister_id,
         "get_subnet_for_canister",
         (GetSubnetForCanisterRequest {
-            principal: Some(canister_id),
+            principal: Some(PrincipalId(canister_id)),
         },),
     )
     .unwrap()
@@ -855,14 +874,19 @@ fn get_subnet_from_registry(pic: &PocketIc, canister_id: Principal) -> Principal
     .unwrap()
     .subnet_id
     .unwrap()
+    .0
 }
 
 #[test]
 fn read_registry() {
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let state = PocketIcState::new();
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_all_icp_features()
+        .with_icp_features(icp_features)
         .with_state(state)
         .build();
 
@@ -929,7 +953,7 @@ fn with_all_icp_features_and_nns_state() {
         .into();
 
     let _pic = PocketIcBuilder::new()
-        .with_all_icp_features()
+        .with_icp_features(all_icp_features())
         .with_nns_state(state_dir_path_buf)
         .build();
 }
@@ -951,12 +975,14 @@ async fn with_all_icp_features_and_nns_subnet_state() {
             nns: Some(SubnetSpec::default().with_state_dir(state_dir_path_buf)),
             ..Default::default()
         },
+        http_gateway_config: None,
         state_dir: None,
-        nonmainnet_features: false,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
-        icp_features: Some(IcpFeatures::all_icp_features()),
-        allow_incomplete_state: None,
+        icp_features: Some(all_icp_features()),
+        incomplete_state: None,
+        initial_time: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

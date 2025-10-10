@@ -21,7 +21,6 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
 k256 = { workspace = true }
-lazy_static = { workspace = true }
 p256 = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true }
@@ -57,6 +56,10 @@ harness = false
 
 [[bench]]
 name = "zk"
+harness = false
+
+[[bench]]
+name = "scalar"
 harness = false
 
 [[bench]]

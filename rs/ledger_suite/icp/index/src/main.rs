@@ -1,4 +1,5 @@
-use candid::{candid_method, Principal};
+#![allow(deprecated)]
+use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::caller;
@@ -14,19 +15,19 @@ use ic_icp_index::{
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
-use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::StableBTreeMap;
+use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl, Storable,
+    DefaultMemoryImpl, Storable, cell::Cell as StableCell, log::Log as StableLog,
+    memory_manager::MemoryManager, storable::Bound,
 };
 use icp_ledger::{
     AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
-    GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    GetEncodedBlocksResult, MAX_BLOCKS_PER_REQUEST, Operation, QueryEncodedBlocksResponse,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::{ScopeGuard, guard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -55,9 +56,8 @@ type BlockLog = StableLog<Vec<u8>, VM, VM>;
 type AccountIdentifierBlockIdsMapKey = ([u8; 28], Reverse<u64>);
 type AccountIdentifierBlockIdsMap = StableBTreeMap<AccountIdentifierBlockIdsMapKey, (), VM>;
 
-// The second element of this tuple is the account represented
-// as principal of type Blob<29> and the effective subaccount
-type AccountIdentifierDataMapKey = (AccountIdentifierDataType, [u8; 28]);
+type AccountIdentifierBytes = [u8; 28];
+type AccountIdentifierDataMapKey = (AccountIdentifierDataType, AccountIdentifierBytes);
 type AccountIdentifierDataMap = StableBTreeMap<AccountIdentifierDataMapKey, u64, VM>;
 
 thread_local! {
@@ -112,17 +112,17 @@ impl Default for State {
 }
 
 impl Storable for State {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         })
     }
 
@@ -144,7 +144,7 @@ impl Storable for AccountIdentifierDataType {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         if bytes.len() != 1 {
-            ic_cdk::api::trap(&format!(
+            ic_cdk::api::trap(format!(
                 "Expected a single byte for AccountDataType but found {}",
                 bytes.len()
             ));
@@ -152,7 +152,7 @@ impl Storable for AccountIdentifierDataType {
         if bytes[0] == 0x00 {
             Self::Balance
         } else {
-            ic_cdk::api::trap(&format!("Unknown AccountDataType {}", bytes[0]));
+            ic_cdk::api::trap(format!("Unknown AccountDataType {}", bytes[0]));
         }
     }
 
@@ -177,7 +177,7 @@ fn mutate_state(f: impl FnOnce(&mut State)) {
             borrowed.set(state)
         })
         .unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         });
 }
 
@@ -233,7 +233,6 @@ fn balance_key(account_identifier: AccountIdentifier) -> (AccountIdentifierDataT
 }
 
 #[init]
-#[candid_method(init)]
 fn init(init_arg: InitArg) {
     // stable memory initialization
     mutate_state(|state| {
@@ -258,7 +257,7 @@ async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse
     let (res,): (QueryEncodedBlocksResponse,) =
         ic_cdk::call(ledger_id, "query_encoded_blocks", (req,))
             .await
-            .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+            .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
     Ok(res)
 }
 
@@ -275,19 +274,18 @@ async fn get_blocks_from_archive(
         (req,),
     )
     .await
-    .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+    .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
     let blocks = blocks_res.map_err(|err| match err {
         icp_ledger::GetBlocksError::BadFirstBlockIndex {
             requested_index,
             first_valid_index,
         } => format!(
-            "First provided index is not valid: Requested Index:{} | First valid index: {}",
-            requested_index, first_valid_index
+            "First provided index is not valid: Requested Index:{requested_index} | First valid index: {first_valid_index}"
         ),
         icp_ledger::GetBlocksError::Other {
             error_code,
             error_message,
-        } => format!("code: {:#?} message: {}", error_code, error_message),
+        } => format!("code: {error_code:#?} message: {error_message}"),
     })?;
     Ok(blocks)
 }
@@ -394,9 +392,9 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
     for block in new_blocks {
         // append the encoded block to the block log
         with_blocks(|blocks| {
-            blocks.append(&block.0).map_err(|msg| {
-                format!("could append the encoded block to the block log: {:?}", msg)
-            })
+            blocks
+                .append(&block.0)
+                .map_err(|msg| format!("could append the encoded block to the block log: {msg:?}"))
         })?;
 
         let decoded_block = decode_encoded_block(block_index, block)?;
@@ -441,8 +439,9 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
 fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if balance < amount {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount))
+            ic_cdk::trap(format!(
+                "Block {block_index} caused an overflow for account_identifier {account_identifier} when calculating balance {balance} + amount {amount}"
+            ))
         }
         balance - amount
     });
@@ -451,8 +450,9 @@ fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount:
 fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if u64::MAX - balance < amount {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount))
+            ic_cdk::trap(format!(
+                "Block {block_index} caused an overflow for account_identifier {account_identifier} when calculating balance {balance} + amount {amount}"
+            ))
         }
         balance + amount
     });
@@ -461,8 +461,7 @@ fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount
 fn decode_encoded_block(block_index: BlockIndex, block: EncodedBlock) -> Result<Block, String> {
     Block::decode(block).map_err(|e| {
         format!(
-            "[decode_encoded_block]: Unable to decode encoded block at index {}. Error: {}",
-            block_index, e
+            "[decode_encoded_block]: Unable to decode encoded block at index {block_index}. Error: {e}"
         )
     })
 }
@@ -484,7 +483,6 @@ fn account_identifier_block_ids_key(
 }
 
 #[query]
-#[candid_method(query)]
 fn ledger_id() -> Principal {
     with_state(|state| state.ledger_id)
 }
@@ -501,8 +499,7 @@ fn get_block_range_from_stable_memory(
         for i in start..limit {
             res.push(EncodedBlock::from_vec(blocks.get(i).ok_or_else(|| {
                 format!(
-                    "[get_block_range_from_stable_memory]: Cannot find index {} in icp ledger index canister storage",
-                    i
+                    "[get_block_range_from_stable_memory]: Cannot find index {i} in icp ledger index canister storage"
                 )
             })?));
         }
@@ -526,7 +523,7 @@ fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex>
                     .iter_upper_bound(&last_key)
                     .take_while(|(k, _)| k.0 == account_identifier.hash)
                     .next()
-                    .map(|(key, _)| key.1 .0)
+                    .map(|(key, _)| key.1.0)
             })
     })
 }
@@ -573,7 +570,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
 }
 
 #[query]
-#[candid_method(query)]
 fn get_blocks(
     req: icrc_ledger_types::icrc3::blocks::GetBlocksRequest,
 ) -> ic_icp_index::GetBlocksResponse {
@@ -591,7 +587,6 @@ fn get_blocks(
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_identifier_transactions(
     arg: GetAccountIdentifierTransactionsArgs,
 ) -> GetAccountIdentifierTransactionsResult {
@@ -608,24 +603,23 @@ fn get_account_identifier_transactions(
             .range(key..)
             // old txs of the requested account_identifier and skip the start index
             .take_while(|(k, _)| k.0 == key.0)
-            .filter(|(k, _)| k.1 .0 < start)
+            .filter(|(k, _)| k.1.0 < start)
             .take(length)
-            .map(|(k, _)| k.1 .0)
+            .map(|(k, _)| k.1.0)
             .collect::<Vec<BlockIndex>>()
     });
     for id in indices {
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
-                ic_cdk::api::trap(&format!(
-                    "Block {} not found in the block log, account_identifier blocks map is corrupted!",
-                    id
+                ic_cdk::api::trap(format!(
+                    "Block {id} not found in the block log, account_identifier blocks map is corrupted!"
                 ));
             })
         });
         let settled_transaction = SettledTransaction::from(decode_encoded_block(id, EncodedBlock::from(block))
             .unwrap_or_else(|_| {
-                ic_cdk::api::trap(&format!(
-                    "Block {} not found in the block log, account_identifier blocks map is corrupted!",id))
+                ic_cdk::api::trap(format!(
+                    "Block {id} not found in the block log, account_identifier blocks map is corrupted!"))
             }));
         let transaction_with_idx = SettledTransactionWithId {
             id,
@@ -643,7 +637,6 @@ fn get_account_identifier_transactions(
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
         account_identifier: AccountIdentifier::from(arg.account),
@@ -659,8 +652,10 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
     })
 }
 
-#[candid_method(query)]
-#[query(decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -673,7 +668,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -707,20 +702,27 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     }
 }
 
+// Manually add a dummy method so that the Candid interface can be properly generated:
+//   `http_request: (HttpRequest) -> (HttpResponse) query;`
+// Without this dummy method, it will be `http_request: (blob) -> (HttpResponse) query;`
+// because of the `decode_with` option used above.
+#[::candid::candid_method(query, rename = "http_request")]
+#[allow(unused_variables)]
+fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
+    panic!("candid dummy function called")
+}
+
 #[query]
-#[candid_method(query)]
 fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 {
     get_balance(account_identifier)
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> u64 {
     get_balance(AccountIdentifier::from(account))
 }
 
 #[query]
-#[candid_method(query)]
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len());
     Status { num_blocks_synced }
@@ -738,7 +740,7 @@ fn test_account_identifier_data_type_storable() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     candid::export_service!();
 

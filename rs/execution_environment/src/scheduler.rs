@@ -1,8 +1,8 @@
 use crate::{
     canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
     execution_environment::{
-        as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
-        ExecutionEnvironment, RoundInstructions, RoundLimits,
+        ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
+        as_num_instructions, as_round_instructions, execute_canister,
     },
     ic00_permissions::Ic00MethodPermissions,
     metrics::MeasurementScope,
@@ -21,29 +21,29 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
-use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{
     CanisterStatusType, MasterPublicKeyId, Method as Ic00Method,
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    ReplicatedState,
     canister_state::{
-        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+        NextExecution, execution_state::NextScheduledMethod, system_state::CyclesUseCase,
     },
     num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
-    ReplicatedState,
 };
 use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES,
+    MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness,
+    ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
-    MAX_WASM_MEMORY_IN_BYTES,
+    messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
 };
-use ic_types::{nominal_cycles::NominalCycles, NumMessages};
+use ic_types::{NumMessages, nominal_cycles::NominalCycles};
 use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_rational::Ratio;
 use prometheus::Histogram;
@@ -206,7 +206,7 @@ impl SchedulerImpl {
                 None => continue,
                 Some(canister) => match canister.next_execution() {
                     NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
-                        continue
+                        continue;
                     }
                     NextExecution::ContinueInstallCode => {}
                 },
@@ -487,7 +487,8 @@ impl SchedulerImpl {
             }
 
             // Update subnet available memory before taking out the canisters.
-            round_limits.subnet_available_memory = self.exec_env.subnet_available_memory(&state);
+            round_limits.subnet_available_memory =
+                self.exec_env.scaled_subnet_available_memory(&state);
             let mut canisters = state.take_canister_states();
             round_schedule.charge_idle_canisters(
                 &mut canisters,
@@ -715,18 +716,8 @@ impl SchedulerImpl {
             .map(|_| Default::default())
             .collect();
 
-        // Distribute subnet available memory equally between the threads.
-        let round_limits_per_thread = RoundLimits {
-            instructions: round_limits.instructions,
-            subnet_available_memory: (round_limits.subnet_available_memory
-                / self.config.scheduler_cores as i64),
-            // This is a soft cap, it is unnecessary to strictly divide the pool among
-            // the threads. If it is exceeded, canisters can still rely on their guaranteed
-            // callback quota.
-            subnet_available_callbacks: round_limits.subnet_available_callbacks,
-            compute_allocation_used: round_limits.compute_allocation_used,
-        };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
+        let round_limits_per_thread = round_limits.clone();
         thread_pool.scoped(|scope| {
             // Zip together the input and the output of each thread.
             // The input is a vector of canisters.
@@ -901,6 +892,7 @@ impl SchedulerImpl {
 
     /// Charge canisters for their resource allocation and usage. Canisters
     /// that did not manage to pay are uninstalled.
+    /// This function is expected to be called at the end of a round.
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
@@ -946,6 +938,7 @@ impl SchedulerImpl {
                     all_rejects.push(uninstall_canister(
                         &self.log,
                         canister,
+                        None, /* we're at the end of a round so no need to update round limits */
                         state_time,
                         AddCanisterChangeToHistory::No,
                         Arc::clone(&self.fd_factory),
@@ -1355,7 +1348,7 @@ impl Scheduler for SchedulerImpl {
                 subnet_instructions: as_round_instructions(
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
-                subnet_available_memory: self.exec_env.subnet_available_memory(&state),
+                subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }
@@ -1552,7 +1545,7 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_balance = Cycles::zero();
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
-                let mut total_canister_memory_usage = NumBytes::new(0);
+                let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics
@@ -1579,15 +1572,21 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
-                    // TODO(EXC-1722): remove after migrating to v2.
-                    self.metrics
-                        .canister_log_memory_usage
-                        .observe(canister.system_state.canister_log.used_space() as f64);
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(canister.system_state.canister_log.used_space() as f64);
+                    self.metrics
+                        .canister_log_memory_usage_v3
+                        .observe(canister.system_state.canister_log.used_space() as f64);
+                    for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
+                        self.metrics
+                            .canister_log_delta_memory_usage
+                            .observe(memory_usage as f64);
+                    }
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
-                    total_canister_memory_usage += canister.memory_usage();
+                    total_canister_memory_allocated_bytes += canister
+                        .memory_allocation()
+                        .allocated_bytes(canister.memory_usage());
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
 
@@ -1621,20 +1620,20 @@ impl Scheduler for SchedulerImpl {
                 // }
 
                 // Check replicated state invariants still hold after the round execution.
-                // We allow `total_canister_memory_usage` to exceed the subnet memory capacity
+                // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
                 // by `total_canister_history_memory_usage` because the canister history
                 // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-                if total_canister_memory_usage
+                if total_canister_memory_allocated_bytes
                     > self.exec_env.subnet_memory_capacity() + total_canister_history_memory_usage
                 {
                     self.metrics.subnet_memory_usage_invariant.inc();
                     warn!(
                         round_log,
-                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Total canister memory allocated bytes {} exceeded subnet memory capacity {}",
                         SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
                         current_round,
                         state.time(),
-                        total_canister_memory_usage,
+                        total_canister_memory_allocated_bytes,
                         self.exec_env.subnet_memory_capacity()
                     );
                 }
@@ -2274,6 +2273,7 @@ fn get_instructions_limits_for_subnet_message(
         Ok(method) => match method {
             CanisterStatus
             | CanisterInfo
+            | CanisterMetadata
             | CreateCanister
             | DeleteCanister
             | DepositCycles

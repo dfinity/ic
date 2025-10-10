@@ -28,11 +28,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{block_on, MessageCanister},
+    util::{MessageCanister, block_on},
 };
 use ic_types::{ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -44,12 +44,12 @@ pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60)
 pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();
 
-    let target_version = get_guestos_update_img_version().expect("target IC version");
+    let target_version = get_guestos_update_img_version();
 
     // Bless target version
-    let sha256 = get_guestos_update_img_sha256().unwrap();
-    let upgrade_url = get_guestos_update_img_url().unwrap();
-    let guest_launch_measurements = get_guestos_launch_measurements().unwrap();
+    let sha256 = get_guestos_update_img_sha256();
+    let upgrade_url = get_guestos_update_img_url();
+    let guest_launch_measurements = get_guestos_launch_measurements();
     block_on(bless_replica_version(
         nns_node,
         &target_version,
@@ -310,7 +310,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
     const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
-    let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
+    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
 
     let ssh_session = node
         .block_on_ssh_session()

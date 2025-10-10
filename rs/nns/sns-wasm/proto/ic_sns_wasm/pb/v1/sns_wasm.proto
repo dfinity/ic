@@ -90,6 +90,8 @@ message SnsWasmError {
 message AddWasmRequest {
   SnsWasm wasm = 1;
   bytes hash = 2;
+  // If true, the latest version will not be updated.
+  optional bool skip_update_latest_version = 3;
 }
 
 // The response from add_wasm, which is either Ok or Error.

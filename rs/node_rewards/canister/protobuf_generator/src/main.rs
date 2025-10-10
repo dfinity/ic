@@ -1,4 +1,4 @@
-use ic_node_rewards_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_node_rewards_protobuf_generator::{ProtoPaths, generate_prost_files};
 use std::path::PathBuf;
 
 fn main() {
@@ -9,6 +9,7 @@ fn main() {
     let out = manifest_dir.join("../src/gen");
     let node_rewards_proto = manifest_dir.join("../proto");
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
+    let node_proto = manifest_dir.join("../../../protobuf");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -23,6 +24,7 @@ fn main() {
         ProtoPaths {
             node_rewards: &node_rewards_proto,
             base_types: &base_types_proto,
+            node_proto: &node_proto,
         },
         out.as_ref(),
     );

@@ -1,8 +1,8 @@
 use crate::io::retry_if_busy;
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use devicemapper::{
-    devnode_to_devno, DevId, Device, DmName, DmOptions, LinearDevTargetParams,
-    LinearDevTargetTable, LinearTargetParams, TargetLine, TargetTable, DM,
+    DM, DevId, Device, DmName, DmOptions, LinearDevTargetParams, LinearDevTargetTable,
+    LinearTargetParams, TargetLine, TargetTable, devnode_to_devno,
 };
 use loopdev::LoopDevice;
 use nix::ioctl_read;
@@ -148,8 +148,8 @@ pub struct TempDevice {
 
 impl TempDevice {
     pub fn new(len: Sectors) -> Result<Self> {
-        let temp_file =
-            NamedTempFile::new().context("Could not create temporary file for COW device")?;
+        let temp_file = NamedTempFile::with_prefix("temp_device")
+            .context("Could not create temporary file for COW device")?;
 
         temp_file
             .as_file()

@@ -2,9 +2,9 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
-    Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
+    CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
@@ -12,8 +12,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
-    as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
-    IngressHistoryWriterImpl, RoundLimits,
+    CompilationCostHandling, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
+    RoundLimits, as_round_instructions,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
@@ -31,14 +31,14 @@ use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, NO_DEADLINE},
+    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+    messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
-    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::{convert::TryFrom, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles128()`
@@ -56,11 +56,12 @@ pub enum Wasm64 {
 }
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
 }
 
 /// Pieces needed to execute a benchmark.
@@ -111,8 +112,7 @@ where
         .1
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
-    canister_state.system_state.memory_allocation =
-        MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(0));
     canister_state.system_state.freeze_threshold = 0.into();
 
     // Create call context and callback
@@ -254,16 +254,12 @@ where
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
-    let mut embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            wasm64: FlagStatus::Enabled,
-            ..FeatureFlags::default()
-        },
+
+    let embedders_config = EmbeddersConfig {
+        // Set up larger heap, of 8GB for the Wasm64 feature.
+        max_wasm64_memory_size: NumBytes::from(8 * 1024 * 1024 * 1024),
         ..EmbeddersConfig::default()
     };
-
-    // Set up larger heap, of 8GB for the Wasm64 feature.
-    embedders_config.max_wasm64_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
 
     let config = Config {
         embedders_config,

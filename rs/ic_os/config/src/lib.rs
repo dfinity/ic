@@ -1,10 +1,10 @@
-pub mod generate_testnet_config;
+pub mod guestos;
 pub mod hostos;
 pub mod setupos;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::Path;
 
@@ -19,6 +19,8 @@ pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.
 pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
 pub static DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config-guestos.json";
 pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/run/config/config.json";
+pub static DEFAULT_BOOTSTRAP_TAR_PATH: &str = "/mnt/config/ic-bootstrap.tar";
+pub static DEFAULT_IC_JSON5_OUTPUT_PATH: &str = "/run/ic-node/config/ic.json5";
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
@@ -66,7 +68,7 @@ mod tests {
             mgmt_mac: "ec:2a:72:31:a2:0c".parse().unwrap(),
             deployment_environment: DeploymentEnvironment::Mainnet,
             logging: Logging::default(),
-            use_nns_public_key: true,
+            use_nns_public_key: false,
             nns_urls: vec!["http://localhost".parse().unwrap()],
             use_node_operator_private_key: true,
             enable_trusted_execution_environment: true,
@@ -112,6 +114,7 @@ mod tests {
                 peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1").unwrap()),
             },
             trusted_execution_environment_config: None,
+            recovery_config: None,
         };
 
         fn serialize_and_deserialize<T>(config: &T)
@@ -163,7 +166,7 @@ mod tests {
                 "elasticsearch_hosts": "elasticsearch.testnet.dfinity.network:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
-            "use_nns_public_key": true,
+            "use_nns_public_key": false,
             "nns_urls": [
                 "http://localhost"
             ],
@@ -189,6 +192,7 @@ mod tests {
                 "malicious_behavior": null,
                 "query_stats_epoch_length": 1000,
                 "bitcoind_addr": "127.0.0.1:8333",
+                "dogecoind_addr": "127.0.0.1:22556",
                 "jaeger_addr": "127.0.0.1:6831",
                 "socks_proxy": "127.0.0.1:1080",
                 "hostname": "my-node",
@@ -221,7 +225,7 @@ mod tests {
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {},
-            "use_nns_public_key": true,
+            "use_nns_public_key": false,
             "nns_urls": [
                 "http://localhost"
             ],
@@ -241,6 +245,7 @@ mod tests {
                 "malicious_behavior": null,
                 "query_stats_epoch_length": 1000,
                 "bitcoind_addr": "127.0.0.1:8333",
+                "dogecoind_addr": "127.0.0.1:22556",
                 "jaeger_addr": "127.0.0.1:6831",
                 "socks_proxy": "127.0.0.1:1080",
                 "hostname": "my-node",

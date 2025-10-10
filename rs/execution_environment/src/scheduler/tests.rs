@@ -1,21 +1,17 @@
 use super::{
-    test_utilities::{ingress, instructions, SchedulerTest, SchedulerTestBuilder, TestInstallCode},
+    test_utilities::{SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions},
     *,
 };
 #[cfg(test)]
 use crate::scheduler::test_utilities::{on_response, other_side};
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic00::{
-    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
-};
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::STOP_CANISTER_TIMEOUT_DURATION,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
@@ -32,24 +28,27 @@ use ic_replicated_state::{
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
-    fetch_int_gauge, fetch_int_gauge_vec, metric_vec, HistogramStats,
+    HistogramStats, fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
+    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
     batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::IngressStatus,
     messages::{
-        CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
-        StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
+        CallbackId, CanisterMessageOrTask, CanisterTask, MAX_RESPONSE_COUNT_BYTES, Payload,
+        RejectContext, StopCanisterCallId, StopCanisterContext,
     },
     methods::SystemMethod,
-    time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH},
-    ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
+    time::{CoarseTime, UNIX_EPOCH, expiry_time_from_now},
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
+use ic00::{
+    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
+};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
@@ -767,7 +766,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Runs a test with the given `available_memory` (expected to be limited to 2
     // requests plus epsilon). Checks that the limit is enforced on application
     // subnets and ignored on system subnets.
-    let run_test = |subnet_available_memory: SubnetAvailableMemory, subnet_type| {
+    let run_test = |guaranteed_response_message_memory, subnet_type| {
         let mut test = SchedulerTestBuilder::new()
             .with_scheduler_config(SchedulerConfig {
                 scheduler_cores: 2,
@@ -780,7 +779,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 ..SchedulerConfig::application_subnet()
             })
             .with_subnet_guaranteed_response_message_memory(
-                subnet_available_memory.get_guaranteed_response_message_memory() as u64,
+                guaranteed_response_message_memory as u64,
             )
             .with_subnet_type(subnet_type)
             .build();
@@ -841,13 +840,13 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Subnet has memory for 4 outbound requests and 2 inbound requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 0),
+        MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10,
         SubnetType::Application,
     );
 
     // On system subnets limits will not be enforced for local messages, so running with 0 available
     // memory should also lead to inducting messages on local subnet.
-    run_test(SubnetAvailableMemory::new(0, 0, 0), SubnetType::System);
+    run_test(0, SubnetType::System);
 }
 
 /// Verifies that the [`SchedulerConfig::instruction_overhead_per_execution`] puts
@@ -1399,12 +1398,13 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .get(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Uninstall canister due to `out_of_cycles`.
     test.set_time(
@@ -1430,12 +1430,13 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 }
 
 #[test]
@@ -1460,12 +1461,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
@@ -1509,12 +1511,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .get(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Uninstall canister.
     let args: UninstallCodeArgs = UninstallCodeArgs::new(canister_id, None);
@@ -1526,12 +1529,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         InputQueueType::LocalSubnet,
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 
     // Trigger canister `out_of_cycles`.
     test.set_time(
@@ -1557,12 +1561,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 }
 
 #[test]
@@ -3019,7 +3024,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
 
 #[test]
 fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
-    use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+    use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 
     let test = StateMachineBuilder::new().build();
 
@@ -4603,9 +4608,7 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     let total_executed_messages: u64 = total_executed_instructions / instructions_per_message.get();
     assert!(
         minimum_executed_messages <= total_executed_messages,
-        "Executed {} messages but expected at least {}.",
-        total_executed_messages,
-        minimum_executed_messages,
+        "Executed {total_executed_messages} messages but expected at least {minimum_executed_messages}.",
     );
 }
 
@@ -5637,11 +5640,13 @@ fn test_is_next_method_added_to_task_queue() {
     let may_schedule_global_timer = false;
 
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
-    assert!(!test
-        .canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .has_input());
+    assert!(
+        !test
+            .canister_state_mut(canister)
+            .system_state
+            .queues_mut()
+            .has_input()
+    );
 
     for _ in 0..3 {
         // The timer did not reach the deadline and the canister does not have
@@ -5675,11 +5680,12 @@ fn test_is_next_method_added_to_task_queue() {
             expiry_time: expiry_time_from_now(),
         });
 
-    assert!(test
-        .canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .has_input());
+    assert!(
+        test.canister_state_mut(canister)
+            .system_state
+            .queues_mut()
+            .has_input()
+    );
 
     while test
         .canister_state_mut(canister)
@@ -5699,11 +5705,12 @@ fn test_is_next_method_added_to_task_queue() {
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
-    assert!(test
-        .canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .is_empty());
+    assert!(
+        test.canister_state_mut(canister)
+            .system_state
+            .task_queue
+            .is_empty()
+    );
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
@@ -5804,11 +5811,11 @@ fn test_is_next_method_added_to_task_queue() {
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
-    EcdsaKeyId::from_str(&format!("Secp256k1:key_{:?}", id)).unwrap()
+    EcdsaKeyId::from_str(&format!("Secp256k1:key_{id:?}")).unwrap()
 }
 
 pub(crate) fn make_schnorr_key_id(id: u64) -> SchnorrKeyId {
-    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{:?}", id)).unwrap()
+    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{id:?}")).unwrap()
 }
 
 fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
@@ -5916,9 +5923,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
 
         let stashes = test.state().pre_signature_stashes();
         assert_eq!(stashes.len(), 1);
-        assert!(stashes[&master_key_id]
-            .pre_signatures
-            .contains_key(&pre_sig_id),);
+        assert!(
+            stashes[&master_key_id]
+                .pre_signatures
+                .contains_key(&pre_sig_id),
+        );
     }
 
     inject_ecdsa_signing_request(&mut test, &key_id);
@@ -6094,9 +6103,11 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
             let stashes = test.state().pre_signature_stashes();
             assert_eq!(stashes.len(), 2);
             assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
-            assert!(stashes[&master_key_ids[0]]
-                .pre_signatures
-                .contains_key(&PreSigId(1)));
+            assert!(
+                stashes[&master_key_ids[0]]
+                    .pre_signatures
+                    .contains_key(&PreSigId(1))
+            );
             assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
         }
     }

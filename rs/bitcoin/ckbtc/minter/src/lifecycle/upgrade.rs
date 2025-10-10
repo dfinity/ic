@@ -1,9 +1,9 @@
+use crate::CanisterRuntime;
 use crate::logs::P0;
-use crate::state::eventlog::{replay, EventType};
+use crate::state::eventlog::{EventType, replay};
 use crate::state::invariants::CheckInvariantsImpl;
-use crate::state::{replace_state, Mode};
+use crate::state::{Mode, replace_state};
 use crate::storage::{count_events, events, migrate_old_events_if_not_empty, record_event};
-use crate::IC_CANISTER_RUNTIME;
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
@@ -51,14 +51,14 @@ pub struct UpgradeArgs {
     pub get_utxos_cache_expiration_seconds: Option<u64>,
 }
 
-pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
+pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {
     if let Some(upgrade_args) = upgrade_args {
         log!(
             P0,
             "[upgrade]: updating configuration with {:?}",
             upgrade_args
         );
-        record_event(EventType::Upgrade(upgrade_args), &IC_CANISTER_RUNTIME);
+        record_event(EventType::Upgrade(upgrade_args), runtime);
     };
 
     let start = ic_cdk::api::instruction_counter();
@@ -69,10 +69,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
     log!(P0, "[upgrade]: replaying {} events", count_events());
 
     let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!(
-            "[upgrade]: failed to replay the event log: {:?}",
-            e
-        ))
+        ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
     });
 
     state.validate_config();

@@ -1,5 +1,5 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
-use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
 use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -8,19 +8,19 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
+        BlockPayload, DataPayload, Payload,
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
         dkg::DkgDataPayload,
-        BlockPayload, DataPayload, Payload,
     },
     crypto::{CryptoHash, Signed},
     messages::SignedIngress,
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     xnet::CertifiedStreamSlice,
-    CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
 };
 use proptest::prelude::*;
 use std::collections::BTreeMap;

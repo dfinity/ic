@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
-use ic_cdk::api::{data_certificate, set_certified_data};
-use ic_certified_map::{labeled, labeled_hash, AsHashTree, Hash as ICHash, RbTree};
+use ic_cdk::api::{certified_data_set, data_certificate};
+use ic_certified_map::{AsHashTree, Hash as ICHash, RbTree, labeled, labeled_hash};
 use serde::Serialize;
 use serde_cbor::Serializer;
 use sha2::{Digest, Sha256};
@@ -35,7 +35,7 @@ pub fn put(key: &str, value: &str) {
         labeled_hash(b"http_assets", &tree.root_hash())
     });
 
-    set_certified_data(&root_hash);
+    certified_data_set(root_hash);
 }
 
 pub fn pre_upgrade() -> Vec<(String, ICHash)> {

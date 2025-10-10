@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{CandidType, Nat};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};
@@ -7,6 +8,7 @@ use ic_management_canister_types_private::{
     // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
     BoundedControllers,
     CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    EnvironmentVariable,
     LogVisibilityV2,
 };
 
@@ -15,7 +17,7 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
-    AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount, Tokens,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire, NewType};
@@ -37,7 +39,7 @@ pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 I
 
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "ic0")]
-extern "C" {
+unsafe extern "C" {
     pub fn mint_cycles128(amount_high: u64, amount_low: u64, dst: usize);
 }
 
@@ -180,6 +182,7 @@ impl From<LogVisibilityV2> for LogVisibility {
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
 ///     wasm_memory_threshold: opt nat;
+///     environment_variables: opt vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettingsArgs {
@@ -191,6 +194,7 @@ pub struct CanisterSettingsArgs {
     pub log_visibility: Option<LogVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
+    pub environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
@@ -204,7 +208,7 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
-            environment_variables: None,
+            environment_variables: settings.environment_variables,
         }
     }
 }
@@ -220,6 +224,7 @@ impl From<Ic00CanisterSettingsArgs> for CanisterSettingsArgs {
             log_visibility: settings.log_visibility.map(LogVisibility::from),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
+            environment_variables: settings.environment_variables,
         }
     }
 }
@@ -323,16 +328,15 @@ impl std::fmt::Display for NotifyError {
             Self::Refunded {
                 reason,
                 block_index: Some(b),
-            } => write!(f, "The payment was refunded in block {}: {}", b, reason),
+            } => write!(f, "The payment was refunded in block {b}: {reason}"),
             Self::Refunded {
                 reason,
                 block_index: None,
-            } => write!(f, "The payment was refunded: {}", reason),
-            Self::InvalidTransaction(err) => write!(f, "Failed to verify transaction: {}", err),
+            } => write!(f, "The payment was refunded: {reason}"),
+            Self::InvalidTransaction(err) => write!(f, "Failed to verify transaction: {err}"),
             Self::TransactionTooOld(bh) => write!(
                 f,
-                "The payment is too old, you cannot notify blocks older than block {}",
-                bh
+                "The payment is too old, you cannot notify blocks older than block {bh}"
             ),
             Self::Processing => {
                 write!(f, "Another notification of this transaction is in progress")
@@ -342,8 +346,7 @@ impl std::fmt::Display for NotifyError {
                 error_message,
             } => write!(
                 f,
-                "Notification failed with code {}: {}",
-                error_code, error_message
+                "Notification failed with code {error_code}: {error_message}"
             ),
         }
     }
@@ -493,21 +496,18 @@ impl std::fmt::Display for UpdateSubnetTypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Duplicate(subnet_type) => {
-                write!(f, "Cannot add duplicate subnet type {}.", subnet_type)
+                write!(f, "Cannot add duplicate subnet type {subnet_type}.")
             }
             Self::TypeDoesNotExist(subnet_type) => {
                 write!(
                     f,
-                    "The subnet type provided {} does not exist and cannot be removed.",
-                    subnet_type
+                    "The subnet type provided {subnet_type} does not exist and cannot be removed."
                 )
             }
             Self::TypeHasAssignedSubnets((subnet_type, subnet_ids)) => {
                 write!(
                     f,
-                    "The subnet type provided {} has the following assigned subnets {:?} and cannot be removed.",
-                    subnet_type,
-                    subnet_ids
+                    "The subnet type provided {subnet_type} has the following assigned subnets {subnet_ids:?} and cannot be removed."
                 )
             }
         }
@@ -551,29 +551,25 @@ impl std::fmt::Display for ChangeSubnetTypeAssignmentError {
             Self::TypeDoesNotExist(subnet_type) => {
                 write!(
                     f,
-                    "Cannot add subnets to the subnet type {} as this subnet type does not exist.",
-                    subnet_type
+                    "Cannot add subnets to the subnet type {subnet_type} as this subnet type does not exist."
                 )
             }
             Self::SubnetsAreAssigned(subnets_with_type) => {
                 write!(
                     f,
-                    "Some of the provided subnets are already assigned to a type {:?}.",
-                    subnets_with_type
+                    "Some of the provided subnets are already assigned to a type {subnets_with_type:?}."
                 )
             }
             Self::SubnetsAreAuthorized(subnet_ids) => {
                 write!(
                     f,
-                    "The provided subnets {:?} are authorized for public access and cannot be assigned a type.",
-                    subnet_ids
+                    "The provided subnets {subnet_ids:?} are authorized for public access and cannot be assigned a type."
                 )
             }
             Self::SubnetsAreNotAssigned(subnets_with_type) => {
                 write!(
                     f,
-                    "The provided subnets are not assigned to a type {:?}.",
-                    subnets_with_type
+                    "The provided subnets are not assigned to a type {subnets_with_type:?}."
                 )
             }
         }

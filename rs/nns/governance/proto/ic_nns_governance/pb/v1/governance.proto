@@ -41,7 +41,8 @@ message UpdateNodeProvider {
 enum Topic {
   // The `Unspecified` topic is used as a fallback when
   // following. That is, if no followees are specified for a given
-  // topic, the followees for this topic are used instead.
+  // topic (other than the "Governance" and "SNS & Neurons' Fund" topics),
+  // the followees for this topic are used instead.
   TOPIC_UNSPECIFIED = 0;
   // A special topic by means of which a neuron can be managed by the
   // followees for this topic (in this case, there is no fallback to
@@ -86,7 +87,7 @@ enum Topic {
   TOPIC_SUBNET_MANAGEMENT = 7;
   // All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
   // Management or Service Nervous System Management).
-  TOPIC_NETWORK_CANISTER_MANAGEMENT = 8;
+  TOPIC_APPLICATION_CANISTER_MANAGEMENT = 8;
   // Proposals that update KYC information for regulatory purposes,
   // for example during the initial Genesis distribution of ICP in the
   // form of neurons.
@@ -676,6 +677,8 @@ message Proposal {
     RewardNodeProviders reward_node_providers = 19;
     // Register Known Neuron
     KnownNeuron register_known_neuron = 21;
+    // Deregister Known Neuron
+    DeregisterKnownNeuron deregister_known_neuron = 29;
     // Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
     SetSnsTokenSwapOpenTimeWindow set_sns_token_swap_open_time_window = 22 [deprecated = true];
     // Call the open method on an SNS swap canister.
@@ -800,6 +803,8 @@ message ManageNeuron {
   message Split {
     // The amount to split to the child neuron.
     uint64 amount_e8s = 1;
+    // The memo to use for the child neuron.
+    optional uint64 memo = 2;
   }
 
   // Merge another neuron into this neuron.
@@ -1663,6 +1668,13 @@ message KnownNeuron {
 message KnownNeuronData {
   string name = 1;
   optional string description = 2;
+  repeated string links = 3;
+  repeated Topic committed_topics = 4;
+}
+
+// Proposal action to deregister a known neuron by removing its name and description.
+message DeregisterKnownNeuron {
+  ic_nns_common.pb.v1.NeuronId id = 1;
 }
 
 // Proposal action to call the "open" method of an SNS token swap canister.
@@ -2120,22 +2132,6 @@ message Governance {
   // that it should finish before being called again.
   optional bool spawning_neurons = 19;
 
-  // Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
-  // proposal is in progress. We only want one of these to be happening at the same time,
-  // because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
-  // unique. In particular, the result of checking that the proposal currently being made
-  // would be unique is liable to becoming invalid during an .await.
-  //
-  // This is a temporary measure, because OSTS is part of the SNS flow that will
-  // be replaced by 1-proposal very soon.
-  message MakingSnsProposal {
-    ic_nns_common.pb.v1.NeuronId proposer_id = 1;
-    ic_base_types.pb.v1.PrincipalId caller = 2;
-    Proposal proposal = 3;
-  }
-
-  MakingSnsProposal making_sns_proposal = 20;
-
   // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
   optional XdrConversionRate xdr_conversion_rate = 26;
 
@@ -2145,6 +2141,9 @@ message Governance {
   // Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
   // source of randomness (from the platform)
   optional bytes rng_seed = 28;
+
+  // Map of proposal IDs to their topics for those garbage collected.
+  map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
 
   reserved 6;
   reserved "authz";
@@ -2168,6 +2167,10 @@ message Governance {
   // Reserved id for deprecated `neurons`
   reserved 1;
   reserved "neurons";
+
+  // Reserved id for deprecated `making_sns_proposal`
+  reserved 20;
+  reserved "making_sns_proposal";
 }
 
 message XdrConversionRate {

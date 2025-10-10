@@ -1,8 +1,8 @@
 use candid::Principal;
 use ic_stable_structures::{
+    DefaultMemoryImpl, StableBTreeMap, Storable,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::Bound,
-    DefaultMemoryImpl, StableBTreeMap, Storable,
 };
 use rate_limits_api::SchemaVersion;
 use serde::{Deserialize, Serialize};
@@ -57,7 +57,7 @@ pub struct StorableIncident {
 }
 
 impl Storable for StorableRuleId {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableRuleId serialization failed"))
     }
 
@@ -69,7 +69,7 @@ impl Storable for StorableRuleId {
 }
 
 impl Storable for StorableIncidentId {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableIncidentId serialization failed"))
     }
 
@@ -81,7 +81,7 @@ impl Storable for StorableIncidentId {
 }
 
 impl Storable for StorableConfig {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableConfig serialization failed"))
     }
 
@@ -93,7 +93,7 @@ impl Storable for StorableConfig {
 }
 
 impl Storable for StorableIncident {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableIncident serialization failed"))
     }
 
@@ -105,7 +105,7 @@ impl Storable for StorableIncident {
 }
 
 impl Storable for StorableRule {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableRule serialization failed"))
     }
 

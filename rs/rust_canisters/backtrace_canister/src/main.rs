@@ -7,7 +7,7 @@ use ic_cdk::update;
 /// This just allows us to make a non-trivial backtrace without needed to write
 /// out several functions each time.
 macro_rules! make_call_chain {
-    ( $name:ident, $x:expr ) => {
+    ( $name:ident, $x:expr_2021 ) => {
         mod $name {
             #[inline(never)]
             pub(super) fn outer() {
@@ -48,7 +48,7 @@ make_call_chain!(ic0_trap, {
 });
 
 make_call_chain!(stable_oob, {
-    ic_cdk::api::stable::stable_write(1_000 * 1_000, "foo".as_bytes());
+    ic_cdk::stable::stable_write(1_000 * 1_000, "foo".as_bytes());
 });
 
 // When run on native this prints the candid service definition of this

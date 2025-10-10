@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-15: Proposal 137916
+
+http://dashboard.internetcomputer.org/proposal/137916
+
+## Fixed
+
+- A lock was added to `change_canister` to prevent two simultaneous upgrade operations from being executed  
+  at the same time. The second upgrade will now fail immediately instead of attempting to run, which prevents
+  dangerous edge cases where the canister is restarted by one operation while being upgraded by another.
+
+
 # 2025-08-01: Proposal 137685
 
 http://dashboard.internetcomputer.org/proposal/137685

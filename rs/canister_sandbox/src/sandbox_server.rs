@@ -129,12 +129,11 @@ mod tests {
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::{
-        wasm_utils,
+        SerializedModuleBytes, WasmtimeEmbedder, wasm_utils,
         wasmtime_embedder::system_api::{
-            sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
             ApiType, ExecutionParameters, InstructionLimits,
+            sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         },
-        SerializedModuleBytes, WasmtimeEmbedder,
     };
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -146,12 +145,12 @@ mod tests {
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
         batch::CanisterCyclesCostSchedule,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         time::Time,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     };
     use ic_wasm_types::BinaryEncodedWasm;
     use mockall::*;
@@ -266,7 +265,7 @@ mod tests {
             canister_current_memory_usage: NumBytes::new(0),
             canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 i64::MAX / 2,
                 i64::MAX / 2,
                 i64::MAX / 2,
@@ -298,7 +297,7 @@ mod tests {
             canister_current_memory_usage: NumBytes::new(0),
             canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 i64::MAX / 2,
                 i64::MAX / 2,
                 i64::MAX / 2,
@@ -342,10 +341,13 @@ mod tests {
         pub fn get(&self) -> T {
             let mut guard = self.item.lock().unwrap();
             loop {
-                if let Some(item) = (*guard).take() {
-                    break item;
-                } else {
-                    guard = self.cond.wait(guard).unwrap();
+                match (*guard).take() {
+                    Some(item) => {
+                        break item;
+                    }
+                    _ => {
+                        guard = self.cond.wait(guard).unwrap();
+                    }
                 }
             }
         }
@@ -1381,7 +1383,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert!(rep.0.is_ok(), "{:?}", rep);
+        assert!(rep.0.is_ok(), "{rep:?}");
 
         let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);

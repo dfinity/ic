@@ -2,10 +2,6 @@ use strum_macros::{EnumCount, EnumIter};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumCount, EnumIter)]
 pub enum CertificationVersion {
-    /// Added `flags` to `StreamHeader`. Defined `StreamHeaderFlagBits::ResponsesOnly` flag.
-    V17 = 17,
-    /// Added `deadline` fields to `Request` and `Response`.
-    V18 = 18,
     /// Defined `reject_signals`, a struct containing 7 flavors of reject signals.
     /// Deprecated `reject_signals_deltas`.
     V19 = 19,
@@ -13,6 +9,8 @@ pub enum CertificationVersion {
     V20 = 20,
     /// Add `canister_ranges` subtree to the certified state.
     V21 = 21,
+    /// Switch from `RequestOrResponse` to `StreamMessage`, adding `refund` variant.
+    V22 = 22,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -50,13 +48,13 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version lower than
 /// this.
-pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V17;
+pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
 /// Maximum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V21;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V22;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.

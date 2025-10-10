@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime};
 
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 
 use crate::driver::action_graph::ActionGraph;
 use crate::driver::event::TaskId;
@@ -51,13 +51,15 @@ impl TaskScheduler {
                     Node::Running { active: 0, .. } => {
                         // stop this task if it is still running
                         if let Some(task_id) = maybe_task_id {
-                            let (th, _node_handle) =
-                                if let Some(item) = self.running_tasks.remove(&task_id) {
+                            let (th, _node_handle) = match self.running_tasks.remove(&task_id) {
+                                Some(item) => {
                                     Self::record_time(&mut self.end_times, &task_id);
                                     item
-                                } else {
+                                }
+                                _ => {
                                     continue;
-                                };
+                                }
+                            };
                             // debug!(log, "ag: Stopping node {:?} task {}", &node, &task_id);
                             th.cancel();
 
@@ -70,29 +72,31 @@ impl TaskScheduler {
                         }
                     }
                     Node::Running { .. } => {
-                        if let Some(task_id) = maybe_task_id {
-                            if !self.running_tasks.contains_key(&task_id) {
-                                // debug!(log, "ag: Starting node: {:?}, task: {}", &node, &task_id);
-                                let task = self.scheduled_tasks.get(&task_id).unwrap();
-                                let tx = event_tx.clone();
-                                let cb = move |result: TaskResult| {
-                                    tx.send(result).expect("Failed to send message.")
-                                };
-                                let th = task.spawn(Box::new(cb));
-                                Self::record_time(&mut self.start_times, &task_id);
-                                self.running_tasks.insert(task_id, (th, node_index));
-                            }
+                        if let Some(task_id) = maybe_task_id
+                            && !self.running_tasks.contains_key(&task_id)
+                        {
+                            // debug!(log, "ag: Starting node: {:?}, task: {}", &node, &task_id);
+                            let task = self.scheduled_tasks.get(&task_id).unwrap();
+                            let tx = event_tx.clone();
+                            let cb = move |result: TaskResult| {
+                                tx.send(result).expect("Failed to send message.")
+                            };
+                            let th = task.spawn(Box::new(cb));
+                            Self::record_time(&mut self.start_times, &task_id);
+                            self.running_tasks.insert(task_id, (th, node_index));
                         }
                     }
                     Node::Failed { .. } => {
                         if let Some(task_id) = maybe_task_id {
-                            let (th, _node_handle) =
-                                if let Some(item) = self.running_tasks.remove(&task_id) {
+                            let (th, _node_handle) = match self.running_tasks.remove(&task_id) {
+                                Some(item) => {
                                     Self::record_time(&mut self.end_times, &task_id);
                                     item
-                                } else {
+                                }
+                                _ => {
                                     continue;
-                                };
+                                }
+                            };
                             // debug!(log, "ag: Failing node {:?} task {}", &node, &task_id);
                             th.cancel();
                         }

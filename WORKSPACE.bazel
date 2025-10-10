@@ -4,7 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
-load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
+load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_LATEST", "MAINNET_LATEST_HOSTOS", "MAINNET_NNS", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
@@ -127,13 +127,8 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-ydWjnLPhzqys6Y8Z8J1hxLVQNLw0pWW9z3zYDrTEEq8=",
-    patch_args = ["-p1"],
-    patches = [
-        "//bazel:rules_rust_san.patch",
-        "//bazel:rules_rust_env.patch",
-    ],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.62.0/rules_rust-0.62.0.tar.gz"],
+    integrity = "sha256-2GH766nwQzOgrmnkSO6D1pF/JC3bt/41xo/CEqarpUY=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.64.0/rules_rust-0.64.0.tar.gz"],
 )
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
@@ -147,13 +142,21 @@ rust_analyzer_dependencies()
 crate_universe_dependencies()
 
 rust_register_toolchains(
-    edition = "2021",
+    edition = "2024",
+    extra_rustc_flags = {
+        # We need to use lld on aarch64-linux because the default gold linker runs into the following bug when linking pocket-ic-server:
+        # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
+        "aarch64-unknown-linux-gnu": [
+            "-C",
+            "link-arg=-fuse-ld=lld",
+        ],
+    },
     strip_level = {"x86_64-unknown-linux-gnu": {
         "dbg": "none",
         "fastbuild": "none",
         "opt": "none",
     }},
-    versions = ["1.88.0"],
+    versions = ["1.89.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
@@ -214,28 +217,6 @@ load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
 
 rosetta_cli_repository(name = "rosetta-cli")
 
-# Closure compiler for JavaScript
-http_archive(
-    name = "io_bazel_rules_closure",
-    sha256 = "a3bef45d4d052adfd7b0146efdfe55989753adbb66e1f4fa4fa8c4f9df4f8196",
-    strip_prefix = "rules_closure-4326045ee6c941f12518a2ad5ad990504cf3df9d",
-    urls = [
-        "https://github.com/bazelbuild/rules_closure/archive/4326045ee6c941f12518a2ad5ad990504cf3df9d.zip",
-    ],
-)
-
-load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
-
-# we instruct rules_closure to omit some dependencies that we already
-# pull via MODULE.bazel
-rules_closure_dependencies(
-    omit_com_google_protobuf = True,
-    omit_rules_java = True,
-    omit_rules_proto = True,
-)
-
-rules_closure_toolchains()
-
 # rclone binary for upload_artifacts
 load("//bazel:rclone.bzl", "rclone_repository")
 
@@ -286,45 +267,18 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 
 idl_to_json(name = "idl2json")
 
-mainnet_icos_images()
-
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
-new_local_repository(
-    name = "libsystemd",
-    build_file_content = """
-cc_import(
-    name = "libsystemd-internal",
-    hdrs = glob(["include/systemd/*.h"]),
-    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
-    system_provided = True,
-    visibility = ["//visibility:private"],
+# Mainnet ICOS image support
+get_mainnet_setupos_images(
+    versions = {
+        "mainnet_latest_setupos_disk_image": MAINNET_LATEST_HOSTOS,
+    },
 )
 
-# Use an extra cc_library to hide the depth of the include folder
-cc_library(
-    name = "libsystemd",
-    includes = ["include"],
-    deps = ["libsystemd-internal"],
-    visibility = ["//visibility:public"],
-)
-""",
-    path = "/usr",
-)
-
-# Use libvirt from the host environment
-# Used for managing virtual machines programmatically.
-new_local_repository(
-    name = "libvirt",
-    build_file_content = """
-cc_import(
-    name = "libvirt",
-    hdrs = glob(["include/libvirt/*.h"]),
-    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
-    visibility = ["//visibility:public"],
-)
-""",
-    path = "/usr",
+get_mainnet_guestos_images(
+    extract_guestos = "//rs/ic_os/build_tools/partition_tools:extract-guestos",
+    versions = {
+        "mainnet_latest_guest_img": MAINNET_LATEST,
+        "mainnet_nns_guest_img": MAINNET_NNS,
+        "mainnet_app_guest_img": MAINNET_APP,
+    },
 )

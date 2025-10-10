@@ -32,20 +32,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
             },
         ))],
-        # The upgrade to rust-1.86.0 in https://github.com/dfinity/ic/commit/d1dc4c2dc813c70611425749551c5ac40c8d5e40
-        # was initially reverted since it caused the `//rs/pocket_ic_server:...` and `//packages/pocket-ic:...` tests
-        # to fail on x86_64-apple-darwin.
-        #
-        # We have now debugged this failure and it turns out this is due to a bug in the apple linker that causes bad
-        # code to be generated for the `hyper` HTTP client crate used in both the pocket-ic library and server.
-        # (Full context [here](https://github.com/rust-lang/rust/issues/140686#issuecomment-2869525604)).
-        # LLVM has a [workaround](https://github.com/rust-lang/llvm-project/pull/181) that they merged and
-        # rustc will integrate it soon.
-        #
-        # Until then, it appears that the bug is only triggered when building with the default `opt-level=2`.
-        # Until we’ve upgraded to the newest rustc (for which we’ll probably need to wait for a new rules_rust version)
-        # we will build the `hyper` crate with `opt-level=0` (I tried `opt-level=1` but that results in the same failure).
-        "hyper": [crate.annotation(rustc_flags = crate.select([], {"x86_64-apple-darwin": ["-C", "opt-level=0"]}))],
         "openssl-sys": [crate.annotation(
             build_script_data = [
                 "@openssl//:gen_dir",
@@ -305,7 +291,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                version = "^0.32.5",
+                git = "https://github.com/dfinity/rust-dogecoin",
+                rev = "cda2b5ec270017c82abd6ef2e71b7fe583a133fd",
                 features = [
                     "default",
                     "rand",
@@ -320,12 +307,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "rand",
                     "use-serde",
                 ],
-            ),
-            "bitcoincore-rpc": crate.spec(
-                version = "^0.19.0",
-            ),
-            "bitcoind": crate.spec(
-                version = "^0.32.0",
             ),
             "bitflags": crate.spec(
                 version = "^1.2.1",
@@ -370,13 +351,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.15",
+                version = "^0.2.1",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.15",
+                version = "^0.2.1",
             ),
             "candid": crate.spec(
-                version = "^0.10.13",
+                version = "^0.10.17",
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
@@ -449,6 +430,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "convert_case": crate.spec(
                 version = "^0.6.0",
             ),
+            "raw-cpuid": crate.spec(
+                version = "11.5",
+            ),
             "crc32fast": crate.spec(
                 version = "^1.2.0",
             ),
@@ -491,6 +475,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "der": crate.spec(
                 version = "0.7",
                 default_features = False,
+                features = ["derive"],
             ),
             "derive-new": crate.spec(
                 version = "^0.7.0",
@@ -662,21 +647,19 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2.0",
             ),
             "ic-canister-sig-creation": crate.spec(
-                git = "https://github.com/dfinity/ic-canister-sig-creation",
-                rev = "7f9e931954637526295269155881207f6c832d6d",
+                version = "^1.3.0",
             ),
             "ic-cbor": crate.spec(
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.17.2",
+                version = "^0.18.7",
             ),
-            "ic-cdk-next": crate.spec(
-                package = "ic-cdk",
-                version = "^0.18.0-alpha.2",
+            "ic-cdk-executor": crate.spec(
+                version = "^1.0.2",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.2",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -720,6 +703,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ic-stable-structures": crate.spec(
                 version = "^0.6.8",
             ),
+            "ic-stable-structures-next": crate.spec(
+                package = "ic-stable-structures",
+                version = "^0.7.0",
+            ),
             "icrc1-test-env": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",
                 rev = ICRC_1_REV,
@@ -746,8 +733,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "ic-vetkeys": crate.spec(
-                git = "https://github.com/dfinity/vetkeys",
-                rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f",
+                version = "^0.4.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",
@@ -793,6 +779,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "itertools": crate.spec(
                 version = "^0.12.0",
+            ),
+            "jsonrpc": crate.spec(
+                version = "^0.18.0",
+                features = [
+                    "minreq_http",
+                ],
             ),
             "json-patch": crate.spec(
                 version = "^0.2.6",
@@ -955,6 +947,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "num_cpus": crate.spec(
                 version = "^1.16.0",
             ),
+            "object": crate.spec(
+                version = "^0.37.3",
+            ),
             "once_cell": crate.spec(
                 version = "^1.8",
             ),
@@ -991,6 +986,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "ecdsa",
                     "pem",
                     "pkcs8",
+                ],
+                default_features = False,
+            ),
+            "p384": crate.spec(
+                version = "0.13",
+                features = [
+                    "ecdsa",
+                    "pem",
                 ],
                 default_features = False,
             ),
@@ -1165,7 +1168,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "rsa": crate.spec(
                 version = "^0.9.6",
-                features = ["sha2"],
+                features = ["sha2", "getrandom"],
             ),
             "rstest": crate.spec(
                 version = "^0.19.0",
@@ -1190,7 +1193,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.1.0",
             ),
             "rust-ini": crate.spec(
-                version = "^0.21.2",
+                version = "^0.21.1",
             ),
             "rustls": crate.spec(
                 version = "^0.23.18",
@@ -1199,6 +1202,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "ring",
                     "std",
                     "brotli",
+                    "tls12",
                 ],
             ),
             "rustls-pemfile": crate.spec(
@@ -1224,6 +1228,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "scraper": crate.spec(
                 version = "^0.17.1",
+            ),
+            "scrypt": crate.spec(
+                version = "^0.11.0",
+                default_features = False,
             ),
             "secp256k1": crate.spec(
                 version = "^0.22",
@@ -1481,6 +1489,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "tower-http": crate.spec(
                 version = "^0.6.4",
                 features = [
+                    "add-extension",
                     "cors",
                     "limit",
                     "trace",
@@ -1518,7 +1527,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2",
             ),
             "tracing-subscriber": crate.spec(
-                version = "^0.3.19",
+                version = "^0.3.20",
                 features = [
                     "env-filter",
                     "fmt",
@@ -1556,6 +1565,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "walkdir": crate.spec(
                 version = "^2.3.1",
+            ),
+            "walrus": crate.spec(
+                version = "^0.23.3",
             ),
             "warp": crate.spec(
                 version = "^0.3.7",
