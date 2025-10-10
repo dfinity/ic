@@ -12,6 +12,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+- Added rate limiting to certain registry operations.
+
 ## Deprecated
 
 ## Removed
