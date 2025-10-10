@@ -6662,7 +6662,7 @@ fn install_two_universal_canisters(
     const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
     // Create a canister on each of the two subnets.
 
-    // Skip 16 canister IDs so that env1 is the NNS, canister_id1 will have the migration canister ID.
+    // Skip 16 canister IDs so that if env1 is the NNS, canister_id1 will have the migration canister ID.
     let mut canister_id1 = CanisterId::from_u64(0);
     for _ in 0..18 {
         canister_id1 = env1
