@@ -145,7 +145,6 @@ members = [
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
     "rs/ethereum/cketh/test_utils",
-    "rs/ethereum/evm-rpc-client",
     "rs/ethereum/ledger-suite-orchestrator",
     "rs/ethereum/ledger-suite-orchestrator/test_utils",
     "rs/execution_environment",
@@ -596,7 +595,7 @@ assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
-async-trait = "0.1.83"
+async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
@@ -643,7 +642,7 @@ ed25519-dalek = { version = "2.1.1", features = [
     "hazmat",
 ] }
 ethnum = { version = "1.3.2", features = ["serde"] }
-evm_rpc_types = { version = "2.0.0" }
+evm_rpc_types = { git = "https://github.com/dfinity/evm-rpc-canister", rev = "2a5f7b73ce91faf5cce08726f03b979fe166efff" }
 flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"

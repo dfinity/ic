@@ -824,9 +824,9 @@ checksum = "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
 
 [[package]]
 name = "async-trait"
-version = "0.1.83"
+version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "721cae7de5c34fbb2acd27e21e6d2cf7b886dce0c27388d46c4e6c47ea4318dd"
+checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3558,6 +3558,7 @@ dependencies = [
  "escargot",
  "ethers-core",
  "ethnum",
+ "evm_rpc_client",
  "evm_rpc_types",
  "exec",
  "eyre",
@@ -4453,10 +4454,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "evm_rpc_client"
+version = "1.4.0"
+source = "git+https://github.com/dfinity/evm-rpc-canister?rev=2a5f7b73ce91faf5cce08726f03b979fe166efff#2a5f7b73ce91faf5cce08726f03b979fe166efff"
+dependencies = [
+ "async-trait",
+ "candid",
+ "evm_rpc_types",
+ "ic-cdk",
+ "ic-error-types",
+ "serde",
+ "serde_json",
+ "strum 0.27.1",
+]
+
+[[package]]
 name = "evm_rpc_types"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c9ed339a043ac9c0031bffdd89155d34b3d76f169a92eee16a3d5a5a8ca1bfc"
+version = "2.1.0"
+source = "git+https://github.com/dfinity/evm-rpc-canister?rev=2a5f7b73ce91faf5cce08726f03b979fe166efff#2a5f7b73ce91faf5cce08726f03b979fe166efff"
 dependencies = [
  "candid",
  "canlog",

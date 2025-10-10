@@ -242,7 +242,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.3.6",
             ),
             "async-trait": crate.spec(
-                version = "^0.1.83",
+                version = "^0.1.89",
             ),
             "axum": crate.spec(
                 version = "^0.8.4",
@@ -513,8 +513,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.3.2",
                 features = ["serde"],
             ),
+            "evm_rpc_client": crate.spec(
+                git = "https://github.com/dfinity/evm-rpc-canister",
+                rev = "2a5f7b73ce91faf5cce08726f03b979fe166efff",
+                default_features = False,
+            ),
             "evm_rpc_types": crate.spec(
-                version = "^2.0.0",
+                git = "https://github.com/dfinity/evm-rpc-canister",
+                rev = "2a5f7b73ce91faf5cce08726f03b979fe166efff",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
