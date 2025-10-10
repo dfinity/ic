@@ -12,6 +12,7 @@ Coverage::
 end::catalog[] */
 
 use anyhow::Result;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::ssh_access::{
     AuthMean, assert_authentication_fails, assert_authentication_works,
     fail_to_update_subnet_record, fail_updating_ssh_keys_for_all_unassigned_nodes,
@@ -27,8 +28,7 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, NnsInstallationBuilder,
-            SubnetSnapshot, TopologySnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, SubnetSnapshot, TopologySnapshot,
         },
     },
     util::{block_on, get_app_subnet_and_node, get_nns_node},
@@ -42,6 +42,8 @@ fn setup(env: TestEnv) {
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 fn topology_entities(
@@ -107,10 +109,6 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     let logger = env.logger();
     let (nns_node, app_node, _unassigned_node, app_subnet) =
         topology_entities(env.topology_snapshot());
-
-    NnsInstallationBuilder::new()
-        .install(&nns_node, &env)
-        .expect("NNS canisters not installed");
 
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
