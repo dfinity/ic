@@ -368,8 +368,7 @@ fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
 
 fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let logger = env.logger();
-    let topology = env.topology_snapshot();
-    let (nns_node, app_node, _, app_subnet) = topology_entities(topology.clone());
+    let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
@@ -383,7 +382,6 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
         Some(vec![backup_public_key]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
-    let topology = block_on(topology.block_for_newer_registry_version()).unwrap();
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
