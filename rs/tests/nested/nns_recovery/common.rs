@@ -427,7 +427,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // If we fix the DFINITY-owned node like the other NPs, we include it in the nodes to fix. If we
     // do not, it has already been fixed as part of the recovery tool. We thus fix 2f other nodes to
     // reach 2f+1 in total.
-    let (dfinity_owned_host, rest): (Vec<NestedVm>, Vec<NestedVm>) = env
+    let (dfinity_owned_host, other_hosts): (Vec<NestedVm>, Vec<NestedVm>) = env
         .get_all_nested_vms()
         .unwrap()
         .iter()
@@ -435,17 +435,17 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .partition(|vm| {
             vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
         });
-    let mut vms_to_fix = rest
+    let mut hosts_to_fix = other_hosts
         .choose_multiple(&mut rand::thread_rng(), 2 * f)
         .collect::<Vec<_>>();
     if cfg.fix_dfinity_owned_node_like_np {
-        vms_to_fix.push(dfinity_owned_host.first().unwrap());
+        hosts_to_fix.push(dfinity_owned_host.first().unwrap());
     }
 
     info!(
         logger,
         "Simulate node provider action on {} nodes{}",
-        vms_to_fix.len(),
+        hosts_to_fix.len(),
         if cfg.fix_dfinity_owned_node_like_np {
             ", including the DFINITY-owned node"
         } else {
@@ -455,7 +455,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     block_on(async {
         let mut handles = JoinSet::new();
 
-        for vm in vms_to_fix {
+        for vm in hosts_to_fix {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
