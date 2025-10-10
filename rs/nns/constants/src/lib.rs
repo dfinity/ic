@@ -33,13 +33,18 @@ pub const ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 14;
 pub const ICP_LEDGER_ARCHIVE_3_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 15;
 pub const NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 16;
 pub const MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 17;
-// Exchange Rate, Cycles Ledger (Index) Canisters are deployed to the II subnet.
+
+// Canisters belonging to the II subnet, whose ID begins with zur34.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x2100001;
 pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x2100002;
 pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x2100003;
-// Bitcoin canisters are deployed to the `w4rem` subnet
+
+// Canisters belonging to the Bitcoin subnet, whose ID begins with w4rem.
 pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00001;
 pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x1a00004;
+// Dogecoin.
+pub const DOGECOIN_CANISTER_INDEX: u64 = 0x1a00007;
+
 // SNS Aggregator canister is deployed to the `x33ed` (SNS) subnet.
 pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 
@@ -137,12 +142,16 @@ pub const CYCLES_LEDGER_CANISTER_ID: CanisterId =
 /// 0x2_100_003 (34_603_011): ul4oc-4iaaa-aaaaq-qaabq-cai
 pub const CYCLES_LEDGER_INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(CYCLES_LEDGER_INDEX_CANISTER_INDEX);
+
 /// 0x1_a00_001 (27_262_977): g4xu7-jiaaa-aaaan-aaaaq-cai
 pub const BITCOIN_TESTNET_CANISTER_ID: CanisterId =
     CanisterId::from_u64(BITCOIN_TESTNET_CANISTER_INDEX);
 /// 0x1_a00_004 (27_262_980): ghsi2-tqaaa-aaaan-aaaca-cai
 pub const BITCOIN_MAINNET_CANISTER_ID: CanisterId =
     CanisterId::from_u64(BITCOIN_MAINNET_CANISTER_INDEX);
+// 0x1_a00_007 (27262983) : gordg-fyaaa-aaaan-aaadq-cai
+pub const DOGECOIN_CANISTER_ID: CanisterId = CanisterId::from_u64(DOGECOIN_CANISTER_INDEX);
+
 /// 0x2_000_010 (33_554_448): 3r4gx-wqaaa-aaaaq-aaaia-cai
 pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
     CanisterId::from_u64(SNS_AGGREGATOR_CANISTER_INDEX);
@@ -173,7 +182,7 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
     &MIGRATION_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 20] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 21] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -194,6 +203,7 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 20] = [
     &CYCLES_LEDGER_CANISTER_ID,
     &CYCLES_LEDGER_INDEX_CANISTER_ID,
     &MIGRATION_CANISTER_ID,
+    &DOGECOIN_CANISTER_ID,
 ];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
