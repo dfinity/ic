@@ -435,17 +435,17 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .partition(|vm| {
             vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
         });
-    let mut nodes_to_fix = rest
+    let mut vms_to_fix = rest
         .choose_multiple(&mut rand::thread_rng(), 2 * f)
         .collect::<Vec<_>>();
     if cfg.fix_dfinity_owned_node_like_np {
-        nodes_to_fix.push(dfinity_owned_host.first().unwrap());
+        vms_to_fix.push(dfinity_owned_host.first().unwrap());
     }
 
     info!(
         logger,
         "Simulate node provider action on {} nodes{}",
-        nodes_to_fix.len(),
+        vms_to_fix.len(),
         if cfg.fix_dfinity_owned_node_like_np {
             ", including the DFINITY-owned node"
         } else {
@@ -455,17 +455,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     block_on(async {
         let mut handles = JoinSet::new();
 
-        for vm in env
-            .get_all_nested_vms()
-            .unwrap()
-            .iter()
-            .filter(|&vm| {
-                vm.get_nested_network().unwrap().guest_ip != dfinity_owned_node.get_ip_addr()
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-            .choose_multiple(&mut rand::thread_rng(), 2 * f)
-        {
+        for vm in vms_to_fix {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
