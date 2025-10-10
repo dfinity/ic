@@ -1293,7 +1293,7 @@ fn canister_with_memory_allocation_does_not_fail_when_growing_stable_memory() {
 }
 
 #[test]
-fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
+fn canister_with_memory_allocation_can_grow_wasm_memory_above_allocation() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -1310,6 +1310,8 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
             (func $update
+                ;; The grow operation should succeed and
+                ;; return the previous size of Wasm memory.
                 (if (i32.ne (memory.grow (i32.const 400)) (i32.const 1))
                   (then (unreachable))
                 )
@@ -1333,12 +1335,12 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
         INITIAL_CYCLES_BALANCE,
     );
 
-    let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+    let res = env.execute_ingress(a_id, "update", vec![]);
+    assert_replied(res);
 }
 
 #[test]
-fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm64() {
+fn canister_with_memory_allocation_can_grow_wasm_memory_above_allocation_wasm64() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let embedders_config = ic_config::embedders::Config::default();
     let env = StateMachine::new_with_config(StateMachineConfig::new(
@@ -1357,6 +1359,8 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i64 i64)))
             (func $update
+                ;; The grow operation should succeed and
+                ;; return the previous size of Wasm memory.
                 (if (i64.ne (memory.grow (i64.const 400)) (i64.const 1))
                   (then (unreachable))
                 )
@@ -1380,8 +1384,8 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm
         INITIAL_CYCLES_BALANCE,
     );
 
-    let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+    let res = env.execute_ingress(a_id, "update", vec![]);
+    assert_replied(res);
 }
 
 #[test]
