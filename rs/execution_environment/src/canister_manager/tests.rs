@@ -9,7 +9,6 @@ use crate::{
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
-    util::MIGRATION_CANISTER_ID,
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
