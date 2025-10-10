@@ -20,17 +20,17 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "random_traffic_test",
+    name = "messaging_test",
     srcs = ["src/lib.rs"],
-    crate_name = "random_traffic_test",
+    crate_name = "messaging_test",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_canister(
-    name = "random-traffic-test-canister",
+    name = "messaging-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":random-traffic-canister.did",
-    deps = DEPENDENCIES + [":random_traffic_test"],
+    service_file = ":messaging-test-canister.did",
+    deps = DEPENDENCIES + [":messaging_test"],
 )
