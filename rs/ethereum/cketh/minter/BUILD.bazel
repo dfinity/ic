@@ -1,5 +1,4 @@
 load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
-load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
@@ -232,33 +231,5 @@ rust_ic_test_suite(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
-    ],
-)
-
-closure_js_library(
-    name = "principal_to_bytes",
-    srcs = ["templates/principal_to_bytes.js"],
-    # We don't automatically build this because the build is unreliable.
-    tags = ["manual"],
-    # the test doesn't need to run on macOS; just linux is enough
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-closure_js_test(
-    name = "principal_to_bytes_test",
-    srcs = ["tests/principal_to_bytes_test.js"],
-    # We don't automatically build this because the build is unreliable.
-    tags = ["manual"],
-    # the test doesn't need to run on macOS; just linux is enough
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-    deps = [
-        # Keep sorted.
-        ":principal_to_bytes",
-        "@com_google_javascript_closure_library//closure/goog/testing:asserts",
-        "@com_google_javascript_closure_library//closure/goog/testing:jsunit",
     ],
 )
