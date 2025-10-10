@@ -9,7 +9,10 @@ use ic_interfaces_state_manager::{
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{
+    ReplicatedState,
+    page_map::{PageAllocatorFileDescriptor, TestPageAllocatorFileDescriptorImpl},
+};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
@@ -28,6 +31,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, VecDeque};
+use std::path::Path;
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -53,9 +57,10 @@ impl Snapshot {
 pub struct FakeStateManager {
     states: Arc<RwLock<Vec<Snapshot>>>,
     tip: Arc<RwLock<Option<(Height, ReplicatedState)>>>,
-    _tempdir: Arc<tempfile::TempDir>,
+    tempdir: Arc<tempfile::TempDir>,
     /// Size 1 by default (no op).
     pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl Default for FakeStateManager {
@@ -84,9 +89,18 @@ impl FakeStateManager {
                 height,
                 ReplicatedState::new(subnet_test_id(169), SubnetType::Application),
             )))),
-            _tempdir: Arc::new(tmpdir),
+            tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
+            fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         }
+    }
+
+    pub fn tmp(&self) -> &Path {
+        self.tempdir.path()
+    }
+
+    pub fn get_fd_factory(&self) -> Arc<dyn PageAllocatorFileDescriptor> {
+        Arc::clone(&self.fd_factory)
     }
 }
 

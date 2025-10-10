@@ -16,9 +16,9 @@ use ic_embedders::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, Hypervisor,
-    IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions,
-    RoundLimits, RoundSchedule, execute_canister,
+    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
+    ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics, InternalHttpQueryHandler,
+    RoundInstructions, RoundLimits, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -80,7 +80,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     os::unix::prelude::FileExt,
-    path::Path,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -264,7 +263,7 @@ pub struct ExecutionTest {
     replica_version: ReplicaVersion,
 
     // The actual implementation.
-    exec_env: ExecutionEnvironment,
+    exec_env: Arc<ExecutionEnvironment>,
     query_handler: InternalHttpQueryHandler,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics_registry: MetricsRegistry,
@@ -281,8 +280,8 @@ impl ExecutionTest {
         self.exec_env.hypervisor_for_testing()
     }
 
-    pub fn execution_environment(&self) -> &ExecutionEnvironment {
-        &self.exec_env
+    pub fn execution_environment(&self) -> Arc<ExecutionEnvironment> {
+        Arc::clone(&self.exec_env)
     }
 
     pub fn dirty_heap_page_overhead(&self) -> u64 {
@@ -1842,7 +1841,6 @@ impl Default for ExecutionTestBuilder {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Enabled,
-                allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
             subnet_config,
@@ -2230,20 +2228,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_resource_saturation_scaling(mut self, scaling: usize) -> Self {
         self.subnet_config.scheduler_config.scheduler_cores = scaling;
-        if scaling == 1 {
-            self.subnet_config
-                .scheduler_config
-                .max_instructions_per_slice = self
-                .subnet_config
-                .scheduler_config
-                .max_instructions_per_message;
-            self.subnet_config
-                .scheduler_config
-                .max_instructions_per_install_code_slice = self
-                .subnet_config
-                .scheduler_config
-                .max_instructions_per_install_code;
-        }
         self
     }
 
@@ -2466,16 +2450,6 @@ impl ExecutionTestBuilder {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            self.subnet_config
-                .scheduler_config
-                .max_instructions_per_message,
-            self.subnet_type,
-            self.own_subnet_id,
-            self.subnet_config.cycles_account_manager_config,
-        ));
-        let config = self.execution_config.clone();
-
         let dirty_page_overhead = match self.subnet_type {
             SubnetType::Application => SchedulerConfig::application_subnet().dirty_page_overhead,
             SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
@@ -2484,81 +2458,38 @@ impl ExecutionTestBuilder {
             }
         };
 
-        let dirty_heap_page_overhead = match config.embedders_config.metering_type {
+        let dirty_heap_page_overhead = match self.execution_config.embedders_config.metering_type {
             MeteringType::New => dirty_page_overhead.get(),
             _ => 0,
         };
 
-        let hypervisor = Hypervisor::new(
-            config.clone(),
-            &metrics_registry,
-            self.own_subnet_id,
-            self.log.clone(),
-            Arc::clone(&cycles_account_manager),
-            dirty_page_overhead,
-            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            Arc::new(FakeStateManager::new()),
-            Path::new("/tmp"),
-        );
-        if self.precompiled_universal_canister {
-            hypervisor.compilation_cache_insert_for_testing(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
-                bincode::deserialize(&UNIVERSAL_CANISTER_SERIALIZED_MODULE)
-                    .expect("Failed to deserialize universal canister module"),
-            )
-        }
-        let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
-        let state_reader = Arc::new(FakeStateManager::new());
-        let ingress_history_writer = IngressHistoryWriterImpl::new(
-            config.clone(),
+        let state_manager = Arc::new(FakeStateManager::new());
+
+        let execution_services = ExecutionServicesForTesting::setup_execution(
             self.log.clone(),
-            &metrics_registry,
-            completed_execution_messages_tx,
-            state_reader,
-        );
-        let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
-            Arc::new(ingress_history_writer);
-        let exec_env = ExecutionEnvironment::new(
-            self.log.clone(),
-            Arc::clone(&hypervisor),
-            Arc::clone(&ingress_history_writer),
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            RoundSchedule::compute_capacity_percent(
-                self.subnet_config.scheduler_config.scheduler_cores,
-            ),
-            config.clone(),
-            Arc::clone(&cycles_account_manager),
-            self.subnet_config.scheduler_config.scheduler_cores,
-            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            self.subnet_config.scheduler_config.heap_delta_rate_limit,
-            self.subnet_config
-                .scheduler_config
-                .upload_wasm_chunk_instructions,
-            self.subnet_config
-                .scheduler_config
-                .canister_snapshot_baseline_instructions,
-            self.subnet_config
-                .scheduler_config
-                .canister_snapshot_data_baseline_instructions,
+            self.execution_config.clone(),
+            self.subnet_config.clone(),
+            state_manager.clone(),
+            state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
+            state_manager.tmp(),
+            None,
         );
-        let (query_stats_collector, _) =
-            ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
 
-        let query_handler = InternalHttpQueryHandler::new(
-            self.log.clone(),
-            hypervisor,
-            self.subnet_type,
-            config.clone(),
-            &metrics_registry,
-            self.subnet_config
-                .scheduler_config
-                .max_instructions_per_message_without_dts,
-            Arc::clone(&cycles_account_manager),
-            query_stats_collector,
-        );
+        if self.precompiled_universal_canister {
+            execution_services
+                .execution_environment
+                .compilation_cache_insert_for_testing(
+                    UNIVERSAL_CANISTER_WASM.to_vec(),
+                    bincode::deserialize(&UNIVERSAL_CANISTER_SERIALIZED_MODULE)
+                        .expect("Failed to deserialize universal canister module"),
+                )
+        }
+
         state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         ExecutionTest {
@@ -2597,7 +2528,7 @@ impl ExecutionTestBuilder {
                     .scheduler_config
                     .max_instructions_per_install_code_slice,
             ),
-            ingress_memory_capacity: config.ingress_history_memory_capacity,
+            ingress_memory_capacity: self.execution_config.ingress_history_memory_capacity,
             instruction_limit_without_dts: self
                 .subnet_config
                 .scheduler_config
@@ -2606,11 +2537,11 @@ impl ExecutionTestBuilder {
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),
             caller_canister_id: self.caller_canister_id,
-            exec_env,
-            query_handler,
-            cycles_account_manager,
+            exec_env: execution_services.execution_environment,
+            query_handler: execution_services.query_execution_service,
+            cycles_account_manager: execution_services.cycles_account_manager,
             metrics_registry,
-            ingress_history_writer,
+            ingress_history_writer: execution_services.ingress_history_writer,
             manual_execution: self.manual_execution,
             chain_key_data: ChainKeyData {
                 master_public_keys: chain_key_subnet_public_keys,

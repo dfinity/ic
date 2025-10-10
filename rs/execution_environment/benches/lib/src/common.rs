@@ -6,24 +6,21 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
 };
-use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_config::subnet_config::SubnetConfig;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
-    CompilationCostHandling, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
-    RoundLimits, as_round_instructions,
+    CompilationCostHandling, ExecutionEnvironment, ExecutionServicesForTesting, RoundLimits,
+    as_round_instructions,
 };
-use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
+use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
@@ -37,7 +34,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles128()`
@@ -243,12 +240,6 @@ where
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;
     let subnet_configs = SubnetConfig::new(own_subnet_type);
-    let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-        subnet_configs.scheduler_config.max_instructions_per_message,
-        own_subnet_type,
-        own_subnet_id,
-        subnet_configs.cycles_account_manager_config,
-    ));
 
     let embedders_config = EmbeddersConfig {
         // Set up larger heap, of 8GB for the Wasm64 feature.
@@ -261,52 +252,24 @@ where
         ..Default::default()
     };
 
-    let metrics_registry = MetricsRegistry::new();
-    let hypervisor = Arc::new(Hypervisor::new(
-        config.clone(),
-        &metrics_registry,
-        own_subnet_id,
-        log.clone(),
-        Arc::clone(&cycles_account_manager),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        Arc::new(FakeStateManager::new()),
-        Path::new("/tmp"),
-    ));
-
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
-    let state_reader = Arc::new(FakeStateManager::new());
-    let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
-        Arc::new(IngressHistoryWriterImpl::new(
-            config.clone(),
-            log.clone(),
-            &metrics_registry,
-            completed_execution_messages_tx,
-            state_reader,
-        ));
-    let exec_env = ExecutionEnvironment::new(
-        log,
-        hypervisor,
-        Arc::clone(&ingress_history_writer),
+    let metrics_registry = MetricsRegistry::new();
+    let state_manager = Arc::new(FakeStateManager::new());
+
+    let execution_services = ExecutionServicesForTesting::setup_execution(
+        log.clone(),
         &metrics_registry,
         own_subnet_id,
         own_subnet_type,
-        100,
-        config,
-        cycles_account_manager,
-        SchedulerConfig::application_subnet().scheduler_cores,
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        subnet_configs.scheduler_config.heap_delta_rate_limit,
-        subnet_configs
-            .scheduler_config
-            .upload_wasm_chunk_instructions,
-        subnet_configs
-            .scheduler_config
-            .canister_snapshot_baseline_instructions,
-        subnet_configs
-            .scheduler_config
-            .canister_snapshot_data_baseline_instructions,
+        config.clone(),
+        subnet_configs.clone(),
+        state_manager.clone(),
+        state_manager.get_fd_factory(),
+        completed_execution_messages_tx,
+        state_manager.tmp(),
+        None,
     );
+
     for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(
             c,
@@ -315,7 +278,7 @@ where
             wat,
             *expected_ops,
             routine,
-            &exec_env,
+            &execution_services.execution_environment,
         );
     }
 }
