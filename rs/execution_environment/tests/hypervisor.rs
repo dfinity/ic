@@ -10411,20 +10411,24 @@ fn inter_canister_method_type_and_callee_matrix() {
 
     let call_args = |canister_id, method_name| {
         wasm()
-            .call_simple(
-                canister_id,
-                method_name,
-                CallArgs::default()
-                    .other_side(wasm().reply_data(b"replying on other side").build()),
-            )
+            .call_simple(canister_id, method_name, CallArgs::default())
             .build()
     };
 
     // Inter-canister call to update/query method works in both self-call and call to another canister.
     for canister_id in [caller, callee] {
         for method_name in ["update", "query"] {
-            let res = test.ingress(canister_id, "update", call_args(canister_id, method_name));
-            assert_eq!(get_reply(res), b"replying on other side");
+            let res = test.ingress(caller, "update", call_args(canister_id, method_name));
+            assert_eq!(
+                get_reply(res),
+                [
+                    b"Hello ",
+                    caller.get().as_slice(),
+                    b" this is ",
+                    canister_id.get().as_slice()
+                ]
+                .concat()
+            );
         }
     }
 }
