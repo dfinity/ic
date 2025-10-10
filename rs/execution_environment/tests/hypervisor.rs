@@ -57,6 +57,7 @@ use rstest::rstest;
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::time::Duration;
+use wirm::wasmparser;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
