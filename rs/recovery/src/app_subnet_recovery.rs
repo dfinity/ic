@@ -137,7 +137,7 @@ pub struct AppSubnetRecoveryArgs {
     pub download_method: Option<DataLocation>,
 
     /// Number of checkpoints to download. The default is 1, which should be enough in most cases.
-    /// This parameter can be increased in the edge case that the node's latest checkpoint is
+    /// This parameter can be increased in the edge case where the node's latest checkpoint is
     /// higher than the latest CUP height and we should download older checkpoints in that case.
     #[clap(long)]
     pub nb_checkpoints: Option<usize>,
