@@ -9,8 +9,8 @@ use evm_rpc_types::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, FeeHistory, FeeHistoryArgs, GetLogsArgs,
     GetLogsRpcConfig as EvmGetLogsRpcConfig, GetTransactionCountArgs as EvmGetTransactionCountArgs,
     Hex20, HttpOutcallError, LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
-    RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
-    SendRawTransactionStatus, TransactionReceipt, ValidationError,
+    RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
+    RpcServices as EvmRpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
