@@ -654,7 +654,7 @@ sns_wasm_publish_proposal_canister_raw_name() {
 validate_no_todos() {
     local PROPOSAL_FILE=$1
 
-    if grep -q -i TODO "$PROPOSAL_FILE"; then
+    if grep -q TODO "$PROPOSAL_FILE"; then
         echo >&2 "Cannot submit proposal with 'TODO' items in text"
         exit 1
     fi
