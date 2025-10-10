@@ -511,7 +511,7 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
     use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
     use rcgen::{CertificateParams, KeyPair};
