@@ -62,6 +62,7 @@ use std::time::Duration;
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 
+/// Retrieves the global data of the universal canister.
 fn global_data(test: &mut ExecutionTest, canister_id: CanisterId) -> Vec<u8> {
     let res = test.ingress(
         canister_id,
@@ -2830,6 +2831,13 @@ fn call_new_clears_unfinished_call() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
+    // We make an inter-canister call that replies with its input payload
+    // and this reply is proxied to the caller:
+    // this way, we can learn the actual input payload of the inter-canister call.
+    // Before making the inter-canister call, we start building a call using `ic0.call_new`
+    // and `ic0.call_data_append`, but do not finalize the call using `ic0.call_perform`.
+    // The subsequent `ic0.call_new` when making the actual inter-canister call
+    // clears the unfinished call.
     let other_side = wasm().message_payload().append_and_reply().build();
     let res = test.ingress(
         canister_id,
@@ -10453,7 +10461,7 @@ fn multiple_replies_in_inter_canister_call() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    // Inter-canister call that does not reply fails with reject code 5.
+    // Inter-canister call that replies multiple times in the same message fails with reject code 5.
     let res = test.ingress(
         canister_id,
         "update",
@@ -10692,12 +10700,15 @@ fn parallel_callbacks() {
     let trap_in_second = wasm().trap_with_blob(b"trap in second callback").build();
     let forward_reply = wasm().message_payload().append_and_reply().build();
 
+    // Trapping only in the first callback results in the second reply being returned to the caller.
     let res = run(&mut test, trap_in_first.clone(), forward_reply.clone());
     assert_eq!(get_reply(res), b"second reply");
 
+    // Trapping only in the second callback results in the first reply being returned to the caller.
     let res = run(&mut test, forward_reply.clone(), trap_in_second.clone());
     assert_eq!(get_reply(res), b"first reply");
 
+    // Trapping in both callbacks results in the second trap message being returned to the caller.
     let err = run(&mut test, trap_in_first.clone(), trap_in_second.clone()).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert!(err.description().contains("trap in second callback"));
