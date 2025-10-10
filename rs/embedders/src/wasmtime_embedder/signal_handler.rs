@@ -82,7 +82,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         });
 
         // We handle SIGSEGV from the Wasm module heap ourselves.
-        if memory_tracker.area().is_within(si_addr) {
+        if memory_tracker.area().contains(si_addr) {
             // Returns true if the signal has been handled by our handler which indicates
             // that the instance should continue.
             memory_tracker.handle_sigsegv(access_kind, si_addr)
