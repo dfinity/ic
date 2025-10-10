@@ -10296,7 +10296,7 @@ fn call_from_query_method_traps() {
     let call_args = wasm()
         .inter_query(
             canister_id,
-            CallArgs::default().other_side(wasm().reply().build()),
+            CallArgs::default().other_side(wasm().reply_data(b"replying on other side").build()),
         )
         .build();
 
@@ -10336,7 +10336,7 @@ fn call_from_query_method_traps() {
             )
             .build(),
     );
-    assert_eq!(get_reply(res), Vec::<u8>::new());
+    assert_eq!(get_reply(res), b"replying on other side");
 }
 
 #[test]
@@ -10348,7 +10348,8 @@ fn invalid_inter_canister_callee() {
         .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
         .unwrap();
 
-    let call_args = CallArgs::default().other_side(wasm().reply().build());
+    let call_args =
+        CallArgs::default().other_side(wasm().reply_data(b"replying on other side").build());
 
     // Inter-canister call to malformed principal fails with reject code 3.
     let res = env.execute_ingress(
@@ -10374,7 +10375,7 @@ fn invalid_inter_canister_callee() {
         "update",
         wasm().inter_update(canister_id, call_args.clone()).build(),
     );
-    assert_eq!(get_reply(res), Vec::<u8>::new());
+    assert_eq!(get_reply(res), b"replying on other side");
 }
 
 #[test]
@@ -10387,7 +10388,8 @@ fn invalid_inter_canister_method_name() {
             .call_simple(
                 canister_id,
                 method_name,
-                CallArgs::default().other_side(wasm().reply().build()),
+                CallArgs::default()
+                    .other_side(wasm().reply_data(b"replying on other side").build()),
             )
             .build()
     };
@@ -10398,7 +10400,7 @@ fn invalid_inter_canister_method_name() {
 
     // Sanity check: Inter-canister call to existing method name succeeds.
     let res = test.ingress(canister_id, "update", call_args("query"));
-    assert_eq!(get_reply(res), Vec::<u8>::new());
+    assert_eq!(get_reply(res), b"replying on other side");
 }
 
 #[test]
@@ -10412,7 +10414,8 @@ fn inter_canister_method_type_and_callee_matrix() {
             .call_simple(
                 canister_id,
                 method_name,
-                CallArgs::default().other_side(wasm().reply().build()),
+                CallArgs::default()
+                    .other_side(wasm().reply_data(b"replying on other side").build()),
             )
             .build()
     };
@@ -10421,7 +10424,7 @@ fn inter_canister_method_type_and_callee_matrix() {
     for canister_id in [caller, callee] {
         for method_name in ["update", "query"] {
             let res = test.ingress(canister_id, "update", call_args(canister_id, method_name));
-            assert_eq!(get_reply(res), Vec::<u8>::new());
+            assert_eq!(get_reply(res), b"replying on other side");
         }
     }
 }
