@@ -159,6 +159,7 @@ impl Registry {
             public_ipv4_config: ipv4_intf_config,
             domain,
             node_reward_type,
+            ssh_node_state_write_access: vec![],
         };
 
         // 8. Insert node, public keys, and crypto keys
