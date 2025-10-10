@@ -135,7 +135,7 @@ fn bitcoin_integration_test() {
     update_candid::<_, (String,)>(
         &pic,
         bitcoin_example_canister_id,
-        "send_from_p2pkh",
+        "send_from_p2pkh_address",
         (send_request,),
     )
     .unwrap();
