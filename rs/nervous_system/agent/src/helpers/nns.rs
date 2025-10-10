@@ -166,13 +166,14 @@ pub async fn add_wasm_via_nns_proposal<
     agent: &C,
     neuron_id: NeuronId,
     wasm: SnsWasm,
+    skip_update_latest_version: bool,
 ) -> Result<ProposalInfo, String> {
     let hash = wasm.sha256_hash();
     let canister_type = wasm.canister_type;
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
         wasm: Some(wasm),
-        skip_update_latest_version: Some(false),
+        skip_update_latest_version: Some(skip_update_latest_version),
     };
 
     let proposal = MakeProposalRequest {

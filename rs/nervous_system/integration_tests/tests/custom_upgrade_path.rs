@@ -321,9 +321,7 @@ async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: 
         &pocket_ic_agent,
         nns_neuron_id,
         custom_path,
-        Some(CanisterId::unchecked_from_principal(
-            sns.governance.canister_id,
-        )),
+        Some(sns.governance.canister_id),
         DUMMY_URL_FOR_PROPOSALS,
     )
     .await

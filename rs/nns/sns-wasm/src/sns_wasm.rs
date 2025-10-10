@@ -410,6 +410,10 @@ where
             hash,
             skip_update_latest_version,
         } = add_wasm_payload;
+        println!(
+            "skip_update_latest_version = {:?}",
+            skip_update_latest_version
+        );
         let wasm = wasm.expect("Wasm is required");
 
         let sns_canister_type = match wasm.checked_sns_canister_type() {
@@ -427,7 +431,6 @@ where
         };
 
         let hash = vec_to_hash(hash).expect("Hash provided was not 32 bytes (i.e. [u8;32])");
-
         let skip_update_latest_version = skip_update_latest_version.unwrap_or(false);
 
         if hash != wasm.sha256_hash() {

@@ -1,12 +1,13 @@
 #![allow(deprecated)]
 use async_trait::async_trait;
-use candid::candid_method;
+use candid::{Encode, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_cdk::{api::time, println};
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
     management_canister_client::ManagementCanisterClientImpl,
@@ -21,6 +22,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_root::pb::v1::{RegisterExtensionRequest, RegisterExtensionResponse};
 use ic_sns_root::{
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, LedgerCanisterClient,
@@ -458,6 +460,125 @@ fn init_timers() {
         }
         saved_timer_id.replace(new_timer_id);
     });
+
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        ic_cdk::spawn(install_index_canister())
+    });
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct GetWasmRequest {
+    hash: Vec<u8>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct GetWasmResponse {
+    wasm: Option<SnsWasm>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct SnsWasm {
+    wasm: Vec<u8>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+pub enum IndexArg {
+    Init(InitArg),
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+pub struct InitArg {
+    pub ledger_id: PrincipalId,
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct GetRunningSnsVersionRequest {}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct GetRunningSnsVersionResponse {
+    deployed_version: Option<Version>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+struct Version {
+    index_wasm_hash: Vec<u8>,
+}
+
+async fn install_index_canister() {
+    let result = try_install_index_canister().await;
+    if let Err(e) = result {
+        log!(ERROR, "Error installing index canister: {}", e);
+    }
+}
+
+fn get_canister_id(principal_id: Option<PrincipalId>, label: &str) -> Result<CanisterId, String> {
+    let principal_id = principal_id.ok_or(format!("No canister id for {label} provided"))?;
+    CanisterId::try_from_principal_id(principal_id)
+        .map_err(|e| format!("Error getting canister id for {label}: {e}"))
+}
+
+async fn try_install_index_canister() -> Result<(), String> {
+    let (governance_canister_id, ledger_canister_id, index_canister_id) =
+        STATE.with_borrow(|state| -> Result<_, String> {
+            let governance_canister_id =
+                get_canister_id(state.governance_canister_id, "Governance")?;
+            let ledger_canister_id = get_canister_id(state.ledger_canister_id, "Ledger")?;
+            let index_canister_id = get_canister_id(state.index_canister_id, "Index")?;
+            Ok((
+                governance_canister_id,
+                ledger_canister_id,
+                index_canister_id,
+            ))
+        })?;
+
+    let request = GetRunningSnsVersionRequest {};
+    let (response,): (GetRunningSnsVersionResponse,) = CanisterRuntime::call_with_cleanup(
+        governance_canister_id,
+        "get_running_sns_version",
+        (request,),
+    )
+    .await
+    .map_err(|(code, message)| format!("Error getting running sns version: {code}: {message}"))?;
+    let index_wasm_hash = response
+        .deployed_version
+        .ok_or("Deployed version not found")?
+        .index_wasm_hash;
+
+    // Get the Wasm from SNS-WASM canister.
+    let request = GetWasmRequest {
+        hash: index_wasm_hash,
+    };
+    let (response,): (GetWasmResponse,) =
+        CanisterRuntime::call_with_cleanup(SNS_WASM_CANISTER_ID, "get_wasm", (request,))
+            .await
+            .map_err(|(code, message)| format!("Error getting wasm: {code}: {message}"))?;
+    let wasm_module = response.wasm.ok_or("Wasm not found")?.wasm;
+
+    // Prepare the init args.
+    let args = Some(IndexArg::Init(InitArg {
+        ledger_id: ledger_canister_id.get(),
+    }));
+    let args = Encode!(&args).map_err(|e| format!("Error encoding args: {}", e))?;
+
+    // Prepare the change canister request.
+    let change_canister_request = ChangeCanisterRequest {
+        canister_id: index_canister_id,
+        wasm_module,
+        arg: args,
+        mode: CanisterInstallMode::Install,
+        // No need to stop before installing as the canister is uninstalled, and also because the
+        // mode is install, so even if the canister is running, it's safe as the install will simply
+        // fail.
+        stop_before_installing: false,
+        chunked_canister_wasm: None,
+    };
+
+    // Perform the change.
+    ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(
+        change_canister_request,
+    )
+    .await
+    .map_err(|e| format!("Error changing canister: {}", e))
 }
 
 #[update]

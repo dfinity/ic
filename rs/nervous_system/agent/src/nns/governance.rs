@@ -1,6 +1,7 @@
-use crate::CallCanisters;
+use crate::helpers::nns::propose_and_wait;
 use crate::nns::governance::requests::{GetNetworkEconomicsParameters, GetProposalInfo};
-use ic_base_types::CanisterId;
+use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
+use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{
@@ -107,16 +108,15 @@ pub async fn add_sns_wasm<C: CallCanisters>(
     make_proposal(agent, neuron_id, proposal).await
 }
 
-pub async fn insert_sns_wasm_upgrade_path_entries<C: CallCanisters>(
+pub async fn insert_sns_wasm_upgrade_path_entries<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     neuron_id: NeuronId,
     upgrade_path: Vec<SnsUpgrade>,
-    sns_governance_canister_id: Option<CanisterId>,
+    sns_governance_canister_id: Option<PrincipalId>,
     url: &str,
-) -> Result<ProposalId, C::Error> {
-    let sns_governance_canister_id =
-        sns_governance_canister_id.map(|canister_id| canister_id.get());
-
+) -> Result<ProposalInfo, String> {
     // TODO: Use a more descriptive rendering of `upgrade_path`.
     let upgrade_path_summary_str = format!("with {} steps", upgrade_path.len());
 
@@ -145,7 +145,7 @@ pub async fn insert_sns_wasm_upgrade_path_entries<C: CallCanisters>(
         )),
     };
 
-    make_proposal(agent, neuron_id, proposal).await
+    propose_and_wait(agent, neuron_id, proposal).await
 }
 
 pub async fn list_neurons<C: CallCanisters>(
