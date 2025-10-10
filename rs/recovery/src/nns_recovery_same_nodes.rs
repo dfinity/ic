@@ -83,7 +83,8 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
 
-    /// IP address of the node used to poll for the recovery CUP
+    /// IP address of the node used to upload the recovery CUP and registry local store to and poll
+    /// for the CUP
     #[clap(long)]
     pub wait_for_cup_node: Option<IpAddr>,
 
@@ -173,10 +174,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
-            StepType::StopReplica
-            | StepType::DownloadState
-            | StepType::UploadState
-            | StepType::UploadCUPAndRegistry => {
+            StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
                 if self.params.admin_access_location.is_none() {
                     self.params.admin_access_location = read_optional_data_location(
                         &self.logger,
@@ -246,16 +244,23 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::WaitForCUP => {
+            StepType::UploadCUPAndRegistry => {
                 if self.params.wait_for_cup_node.is_none() {
-                    if let Some(DataLocation::Remote(ip)) = self.params.admin_access_location {
-                        self.params.wait_for_cup_node = Some(ip);
-                    } else {
-                        self.params.wait_for_cup_node = read_optional(
+                    self.params.wait_for_cup_node = if let Some(DataLocation::Remote(ip)) =
+                        self.params.admin_access_location
+                    {
+                        consent_given(
                             &self.logger,
-                            "Enter IP of the node to be polled for the recovery CUP:",
-                        );
-                    }
+                            &format!(
+                                "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
+                            ),
+                            ).then_some(ip)
+                    } else {
+                        read_optional(
+                            &self.logger,
+                            "If you would like to recover the admin node now, i.e. upload the CUP and registry local store to it, enter its IP address:",
+                        )
+                    };
                 }
             }
 
@@ -393,11 +398,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::UploadCUPAndRegistry => {
-                if let Some(method) = self.params.admin_access_location {
-                    let node_ip = match method {
-                        DataLocation::Remote(ip) => ip,
-                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
-                    };
+                if let Some(node_ip) = self.params.wait_for_cup_node {
                     Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)

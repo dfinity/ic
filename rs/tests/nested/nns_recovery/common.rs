@@ -78,6 +78,7 @@ pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
     pub add_and_bless_upgrade_version: bool,
+    pub fix_dfinity_owned_node_like_np: bool,
 }
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
@@ -382,7 +383,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
-        wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
+        wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
+            .then_some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
@@ -422,9 +424,30 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     )
     .unwrap();
 
-    // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
-    // trigger the recovery on 2f other nodes.
-    info!(logger, "Simulate node provider action on 2f nodes");
+    // If we fix the DFINITY-owned node like the other NPs, we include it in the nodes to fix. If we
+    // do not, it has already been fixed as part of the recovery tool. We thus fix 2f other nodes to
+    // reach 2f+1 in total.
+    let (dfinity_owned_host, rest): (Vec<NestedVm>, Vec<NestedVm>) =
+        env.get_all_nested_vms().unwrap().iter().partition(|vm| {
+            vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
+        });
+    let mut nodes_to_fix = rest
+        .choose_multiple(&mut rand::thread_rng(), 2 * f)
+        .collect::<Vec<_>>();
+    if cfg.fix_dfinity_owned_node_like_np {
+        nodes_to_fix = nodes_to_fix.push(dfinity_owned_host.first().unwrap());
+    }
+
+    info!(
+        logger,
+        "Simulate node provider action on {} nodes{}",
+        nodes_to_fix.len()
+        if cfg.fix_dfinity_owned_node_like_np {
+            ", including the DFINITY-owned node"
+        } else {
+            ""
+        }
+    );
     block_on(async {
         let mut handles = JoinSet::new();
 
