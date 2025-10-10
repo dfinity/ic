@@ -6,7 +6,6 @@ message Advert {
   StateSyncId id = 1;
 }
 
-
 message StateSyncId {
   uint64 height = 1;
   bytes hash = 2;
