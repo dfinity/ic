@@ -156,7 +156,14 @@ impl VirtualMachine {
                 }
                 Err(e) if retries > 0 => {
                     eprintln!("Domain creation failed, retrying: {e}");
-                    let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                    // TODO: Monitor if this code path is ever triggered - remove if unused
+                    if Domain::lookup_by_name(libvirt_connect, vm_domain_name).is_ok() {
+                        eprintln!(
+                            "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
+                            vm_domain_name
+                        );
+                        let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                    }
                     retries -= 1;
                     continue;
                 }
