@@ -92,7 +92,7 @@ system_test_nns(
     name = "ssh_access_to_nodes_test",
     tags = [
         "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
+        # "long_test",  # since it takes longer than 5 minutes.
     ],
     deps = [
         # Keep sorted.
