@@ -489,6 +489,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_reservation(0)
             .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_resource_saturation_scaling(1)
             .build();
 
         // Create canister.
@@ -552,6 +553,7 @@ fn canister_snapshot_reserves_cycles_difference() {
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_reservation(0)
             .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let canister_id = test
@@ -646,6 +648,7 @@ fn take_canister_snapshot_fails_subnet_memory_exceeded() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let mut canisters = vec![];
@@ -687,6 +690,7 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let mut canisters = vec![];
@@ -798,6 +802,7 @@ fn take_canister_snapshot_increases_heap_delta() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(1)
         .build();
 
     // Create canister.
@@ -834,6 +839,7 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let initial_heap_delta_estimate = test.state().metadata.heap_delta_estimate;
@@ -897,6 +903,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(1)
         .build();
 
     // Create canister.
@@ -1499,6 +1506,7 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let initial_heap_delta_estimate = test.state().metadata.heap_delta_estimate;

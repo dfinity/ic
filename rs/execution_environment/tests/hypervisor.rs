@@ -7890,6 +7890,7 @@ fn stable_memory_grow_reserves_cycles() {
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_threshold(THRESHOLD as i64)
             .with_subnet_memory_reservation(0)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let canister_id = test
@@ -7980,6 +7981,7 @@ fn wasm_memory_grow_reserves_cycles() {
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_threshold(THRESHOLD as i64)
             .with_subnet_memory_reservation(0)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let wat = r#"
@@ -8060,6 +8062,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .with_subnet_memory_reservation(0)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let wat = r#"
@@ -8193,13 +8196,13 @@ fn resource_saturation_scaling_works_in_regular_execution() {
     const SCALING: u64 = 4;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory((SCALING * CAPACITY) as i64)
+        .with_subnet_memory_threshold((SCALING * THRESHOLD) as i64)
         .with_subnet_memory_reservation(0)
         .with_resource_saturation_scaling(SCALING as usize)
         .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD / SCALING))
+    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
         .unwrap();
 
     let wat = r#"
@@ -8246,11 +8249,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
         reserved_cycles,
         test.cycles_account_manager().storage_reservation_cycles(
             memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(
-                subnet_memory_usage / SCALING,
-                THRESHOLD / SCALING,
-                CAPACITY / SCALING
-            ),
+            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
             test.subnet_size(),
             CanisterCyclesCostSchedule::Normal,
         )
