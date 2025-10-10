@@ -7737,6 +7737,7 @@ fn stable_memory_grow_reserves_cycles() {
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_threshold(THRESHOLD as i64)
             .with_subnet_memory_reservation(0)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let canister_id = test
@@ -7827,6 +7828,7 @@ fn wasm_memory_grow_reserves_cycles() {
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_threshold(THRESHOLD as i64)
             .with_subnet_memory_reservation(0)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let wat = r#"
@@ -7907,6 +7909,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .with_subnet_memory_reservation(0)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let wat = r#"

@@ -489,6 +489,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_reservation(0)
             .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_resource_saturation_scaling(1)
             .build();
 
         // Create canister.
@@ -552,6 +553,7 @@ fn canister_snapshot_reserves_cycles_difference() {
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_reservation(0)
             .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let canister_id = test

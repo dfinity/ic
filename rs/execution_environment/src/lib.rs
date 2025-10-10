@@ -108,6 +108,20 @@ impl ExecutionServices {
     ) -> ExecutionServices {
         let scheduler_config = subnet_config.scheduler_config;
 
+        // On a single core scheduler, DTS must be disabled.
+        if scheduler_config.scheduler_cores == 1 {
+            assert_eq!(
+                scheduler_config.max_instructions_per_message,
+                scheduler_config.max_instructions_per_slice,
+                "On a single core scheduler, DTS must be disabled by setting max_instructions_per_message == max_instructions_per_slice"
+            );
+            assert_eq!(
+                scheduler_config.max_instructions_per_install_code,
+                scheduler_config.max_instructions_per_install_code_slice,
+                "On a single core scheduler, DTS must be disabled by setting max_instructions_per_install_code == max_instructions_per_install_code_slice"
+            );
+        }
+
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             scheduler_config.max_instructions_per_message,
             own_subnet_type,
