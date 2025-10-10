@@ -1376,6 +1376,46 @@ type TopicToFollow = variant {
   ServiceNervousSystemManagement;
 };
 
+type ListNeuronVotesRequest = record {
+  // The neuron id for which the voting history will be returned. Currently, the voting history is
+  // only recorded for known neurons.
+  neuron_id : opt NeuronId;
+  // Only fetch the voting history for proposal whose id `< before_proposal`. This can be used as a
+  // pagination token - pass the minimum proposal id as `before_proposal` for the next page.
+  before_proposal : opt ProposalId;
+  // The maximum number of votes to fetch. The maximum number allowed is 500, and 500 will be used
+  // if is set as either null or > 500.
+  limit : opt nat64;
+};
+
+type ListNeuronVotesResponse = variant {
+  Ok : record {
+    votes : opt vec NeuronVote;
+    // All the proposals before this id is "finalized", which means if a proposal before this id
+    // does not exist in the votes, it will never appear in the voting history, either because the
+    // neuron is not eligible to vote on the proposal, or the neuron is not a known neuron at the
+    // time of the proposal creation. Therefore, if a client syncs the entire voting history of a
+    // certain neuron and store `all_finalized_before_proposal`, it doesn't need to start from
+    // scratch the next time - it can stop as soon as they have seen any votes 
+    // `< all_finalized_before_proposal`.
+    all_finalized_before_proposal : opt ProposalId;
+  };
+  Err : GovernanceError;
+};
+
+type NeuronVote = record {
+  proposal_id : opt ProposalId;
+  // The vote of the neuron on the specific proposal id.
+  vote : opt Vote;
+};
+
+type Vote = variant {
+  // Abstentions are recorded as Unspecified.
+  Unspecified;
+  Yes;
+  No;
+};
+
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
@@ -1413,6 +1453,7 @@ service : (Governance) -> {
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
+  list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,

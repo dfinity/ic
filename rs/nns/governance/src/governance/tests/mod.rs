@@ -1840,13 +1840,25 @@ fn test_record_known_neuron_abstentions() {
 
     with_voting_history_store(|voting_history| {
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 1 }),
+            voting_history.list_neuron_votes(NeuronId { id: 1 }, None, Some(100)),
             vec![(ProposalId { id: 1 }, Vote::Unspecified)]
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 2 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 3 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 2 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 3 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 4 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 5 }, None, Some(100)),
+            vec![]
+        );
     });
 
     record_known_neuron_abstentions(
@@ -1861,15 +1873,24 @@ fn test_record_known_neuron_abstentions() {
 
     with_voting_history_store(|voting_history| {
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 1 }),
+            voting_history.list_neuron_votes(NeuronId { id: 1 }, None, Some(100)),
             vec![(ProposalId { id: 1 }, Vote::Unspecified),]
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 2 }), vec![]);
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 3 }),
+            voting_history.list_neuron_votes(NeuronId { id: 2 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 3 }, None, Some(100)),
             vec![(ProposalId { id: 2 }, Vote::Unspecified)]
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 4 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 5 }, None, Some(100)),
+            vec![]
+        );
     });
 }

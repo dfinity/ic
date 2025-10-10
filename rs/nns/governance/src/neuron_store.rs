@@ -815,6 +815,13 @@ impl NeuronStore {
         })
     }
 
+    /// Returns if the neuron is a known neuron.
+    pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
+        with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store.is_known_neuron(neuron_id)
+        })
+    }
+
     /// Returns the neuron ids that are ready to finalize maturity disbursement.
     pub fn get_neuron_ids_ready_to_finalize_maturity_disbursement(
         &self,
