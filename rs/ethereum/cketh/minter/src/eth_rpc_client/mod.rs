@@ -5,7 +5,7 @@ use crate::numeric::TransactionCount;
 use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::EvmRpcClient;
-use evm_rpc_client::{
+use evm_rpc_types::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, FeeHistory, FeeHistoryArgs, GetLogsArgs,
     GetLogsRpcConfig as EvmGetLogsRpcConfig, GetTransactionCountArgs as EvmGetTransactionCountArgs,
     Hex20, HttpOutcallError, IcRuntime, LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
