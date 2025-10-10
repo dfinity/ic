@@ -8,8 +8,8 @@ Before=guestos.service
 [Service]
 Type=oneshot
 ExecStart=/opt/ic/bin/guestos-recovery-upgrader.sh
-StandardOutput=journal+console
-StandardError=journal+console
+StandardOutput=journal
+StandardError=journal
 RemainAfterExit=yes
 
 [Install]
