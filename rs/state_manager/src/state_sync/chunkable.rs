@@ -367,7 +367,7 @@ impl IncompleteState {
     /// Hardlink unchanged files from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn hardlink_files(
-        self: &IncompleteState,
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -630,7 +630,7 @@ impl IncompleteState {
     /// Copy reusable chunks from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_chunks(
-        self: &IncompleteState,
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -1117,8 +1117,7 @@ impl IncompleteState {
                 .sub(diff_script.zeros_chunks as i64);
 
             let mut thread_pool = self.thread_pool.lock().unwrap();
-            Self::hardlink_files(
-                self,
+            self.hardlink_files(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1131,8 +1130,7 @@ impl IncompleteState {
                 &mut fetch_chunks,
             );
 
-            Self::copy_chunks(
-                self,
+            self.copy_chunks(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,

@@ -4255,7 +4255,7 @@ fn can_recover_from_corruption_on_state_sync() {
             // Normally validation only occurs when base checkpoint height <= started_height
             // (i.e., after state manager restart), but we override this for testing purposes.
             //
-            // This test is to verify that the validation logic can dectect various types of corruption
+            // This test is to verify that the validation logic can detect various types of corruption
             // listed above. Note that we cannot simply trigger validation by restarting the state manager because
             // those types of corruption are not loadable and state manager would crash upon restart.
             //
