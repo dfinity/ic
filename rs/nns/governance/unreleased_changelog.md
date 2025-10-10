@@ -17,6 +17,9 @@ on the process that this file is part of, see
 * Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
   limit.
 
+* The Dogecoin canister (ID begins with gordg-) is considered a "protocol"
+  canister. This affects proposal topics.
+
 ## Deprecated
 
 * The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
