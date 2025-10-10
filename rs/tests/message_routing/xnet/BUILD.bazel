@@ -108,6 +108,7 @@ system_test_nns(
     tags = [
         "long_test",
     ],
+    uses_dev_mainnet = True,  # necessary for state injection
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
