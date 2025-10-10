@@ -272,7 +272,7 @@ pub enum MultiCallError<T> {
 
 pub type ReducedMultiCallResult<T> = Result<T, MultiCallError<T>>;
 
-trait ReductionStrategy<T> {
+pub trait ReductionStrategy<T> {
     fn reduce(&self, results: MultiCallResults<T>) -> ReducedMultiCallResult<T>;
 }
 
@@ -337,7 +337,7 @@ where
     }
 }
 
-trait ToReducedWithStrategy<T> {
+pub trait ToReducedWithStrategy<T> {
     fn reduce_with_strategy(self, strategy: impl ReductionStrategy<T>)
     -> ReducedMultiCallResult<T>;
 }
