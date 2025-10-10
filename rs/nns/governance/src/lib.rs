@@ -201,11 +201,9 @@ thread_local! {
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    static ENABLE_KNOWN_NEURON_VOTING_HISTORY: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+    static ENABLE_KNOWN_NEURON_VOTING_HISTORY: Cell<bool> = const { Cell::new(true) };
 
-    static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+    static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool> = const { Cell::new(true) };
 
     static ENABLE_COMPREHENSIVE_NEURON_LIST: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };

@@ -15,6 +15,8 @@ on the process that this file is part of, see
   `RegisterKnownNeuron` proposal.
 * Add an API to list neuron votes given a specific neuron id. In the short term it only works for
   known neurons as only known neuron votes are recorded.
+* Enable 2 features - (1) recording known enuron voting history and (2) proposal type to deregister
+  known neurons.
 
 ## Changed
 
