@@ -2843,7 +2843,7 @@ fn call_new_clears_unfinished_call() {
         canister_id,
         "update",
         wasm()
-            .call_new(canister_id, "update", CallArgs::default())
+            .call_new(canister_id, "bar", CallArgs::default())
             .call_data_append(b"foo")
             .inter_update(
                 canister_id,
