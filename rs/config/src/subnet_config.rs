@@ -461,6 +461,12 @@ pub struct CyclesAccountManagerConfig {
     /// The default value of the reserved balance limit for the case when the
     /// canister doesn't have it set in the settings.
     pub default_reserved_balance_limit: Cycles,
+
+    /// Base fee for fetching canister logs.
+    pub fetch_canister_logs_base_fee: Cycles,
+
+    /// Fee per byte for fetching canister logs.
+    pub fetch_canister_logs_per_byte_fee: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
@@ -497,6 +503,8 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::new(800),
             max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
+            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(800),
         }
     }
 
@@ -537,6 +545,8 @@ impl CyclesAccountManagerConfig {
             // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
+            fetch_canister_logs_base_fee: Cycles::new(0),
+            fetch_canister_logs_per_byte_fee: Cycles::new(0),
         }
     }
 
@@ -563,6 +573,8 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::zero(),
             max_storage_reservation_period: Duration::from_secs(u64::MAX),
             default_reserved_balance_limit: Cycles::zero(),
+            fetch_canister_logs_base_fee: Cycles::zero(),
+            fetch_canister_logs_per_byte_fee: Cycles::zero(),
         }
     }
 }
