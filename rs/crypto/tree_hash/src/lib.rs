@@ -345,7 +345,7 @@ pub fn lookup_path<'a>(
 pub enum LookupLowerBoundStatus<'a> {
     /// The actual key found, and its subtree.
     Found(&'a Label, &'a LabeledTree<Vec<u8>>),
-    /// `prefix` is not a valid path in the tree, or it does not contain futher labels below.
+    /// `prefix` is not a valid path in the tree, or it does not contain further labels below.
     PrefixNotFound,
     /// There are either no labels at `prefix` or they are all larger than `label`.
     LabelNotFound,

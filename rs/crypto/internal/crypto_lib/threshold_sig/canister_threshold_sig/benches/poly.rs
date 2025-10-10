@@ -88,11 +88,11 @@ fn poly_compute_lagrange(c: &mut Criterion) {
         group.warm_up_time(std::time::Duration::from_millis(100));
 
         for n in [13, 34, 40] {
-            let node_indicies = (0..n).collect::<Vec<NodeIndex>>();
+            let node_indices = (0..n).collect::<Vec<NodeIndex>>();
 
             group.bench_function(format!("setup/{n}"), |b| {
                 b.iter(|| {
-                    let _ = LagrangeCoefficients::at_zero(curve, &node_indicies);
+                    let _ = LagrangeCoefficients::at_zero(curve, &node_indices);
                 })
             });
         }
