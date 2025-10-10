@@ -129,12 +129,6 @@ pub async fn process_controllers_changed(
         });
     }
     let canister_version = source_status.version;
-    if canister_version > u64::MAX / 2 {
-        return ProcessingResult::FatalFailure(RequestState::Failed {
-            request,
-            reason: "Source version is too large.".to_string(),
-        });
-    }
 
     let ProcessingResult::Success(target_status) =
         canister_status(request.target, request.target_subnet).await
