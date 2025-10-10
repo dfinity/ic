@@ -1105,7 +1105,15 @@ mod random_ops {
         /// page tracking is enabled) - Prefetching tracker.
         #[test]
         fn random_ops_result_tracking_prefetching(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
-            run_random_ops_result_tracking(ops);
+            run_random_ops_result_tracking(ops, MissingPageHandlerKind::New);
+        }
+
+        /// Check that the region controlled by the signal handler behaves the
+        /// same as a regular slice with respect to reads/writes (when dirty
+        /// page tracking is enabled) - Deterministic tracker.
+        #[test]
+        fn random_ops_result_tracking_deterministic(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
+            run_random_ops_result_tracking(ops, MissingPageHandlerKind::Deterministic);
         }
 
         /// Check that the region controlled by the signal handler behaves the
@@ -1113,21 +1121,107 @@ mod random_ops {
         /// page tracking is disabled) - Prefetching tracker.
         #[test]
         fn random_ops_result_ignoring_prefetching(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
-            run_random_ops_result_ignoring(ops);
+            run_random_ops_result_ignoring(ops, MissingPageHandlerKind::New);
+        }
+
+        /// Check that the region controlled by the signal handler behaves the
+        /// same as a regular slice with respect to reads/writes (when dirty
+        /// page tracking is disabled) - Deterministic tracker.
+        #[test]
+        fn random_ops_result_ignoring_deterministic(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
+            run_random_ops_result_ignoring(ops, MissingPageHandlerKind::Deterministic);
         }
 
         /// Check that the tracker marks every accessed/dirty page as
         /// accessed/dirty when dirty page tracking is enabled - Prefetching tracker.
         #[test]
         fn random_ops_accessed_tracking_prefetching(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
-            run_random_ops_accessed_tracking(ops);
+            run_random_ops_accessed_tracking(ops, MissingPageHandlerKind::New);
+        }
+
+        /// Check that the tracker marks every accessed/dirty page as
+        /// accessed/dirty when dirty page tracking is enabled - Deterministic tracker.
+        #[test]
+        fn random_ops_accessed_tracking_deterministic(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
+            run_random_ops_accessed_tracking(ops, MissingPageHandlerKind::Deterministic);
         }
 
         /// Check that accessed pages are always marked as accessed when dirty
         /// page tracking is disabled - Prefetching tracker.
         #[test]
         fn random_ops_accessed_ignoring_prefetching(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
-            run_random_ops_accessed_ignoring(ops);
+            run_random_ops_accessed_ignoring(ops, MissingPageHandlerKind::New);
+        }
+
+        /// Check that accessed pages are always marked as accessed when dirty
+        /// page tracking is disabled - Deterministic tracker.
+        #[test]
+        fn random_ops_accessed_ignoring_deterministic(ops in prop::collection::vec(arb_op(PAGE_COUNT * PAGE_SIZE), 30)) {
+            run_random_ops_accessed_ignoring(ops, MissingPageHandlerKind::Deterministic);
         }
     }
+}
+
+#[rstest]
+fn deterministic_memory_tracker_correctly_count_access_and_dirty_pages(
+    #[values(DirtyPageTracking::Ignore, DirtyPageTracking::Track)]
+    dirty_page_tracking: DirtyPageTracking,
+    #[values(AccessKind::Read, AccessKind::Write)] first_access_kind: AccessKind,
+    #[values(0, 5, 16, 26, 33, 76)] page_index: u64,
+    #[values(AccessKind::Read, AccessKind::Write)] second_access_kind: AccessKind,
+    #[values(0, OS_PAGES_IN_WASM_PAGE, OS_PAGES_IN_WASM_PAGE * 2)] second_access_offset: usize,
+) {
+    if second_access_offset == 0
+        && (first_access_kind != AccessKind::Read
+            || second_access_kind != AccessKind::Write
+            || dirty_page_tracking != DirtyPageTracking::Track)
+    {
+        // We can access the same page twice only in the case of a write after a read.
+        return;
+    }
+
+    with_deterministic_setup(
+        50,
+        128,
+        (25..75).map(PageIndex::new).collect(),
+        dirty_page_tracking,
+        |tracker, _| {
+            assert_eq!(tracker.num_accessed_pages(), 0);
+
+            // First access.
+            sigsegv(&tracker, PageIndex::new(page_index), first_access_kind);
+            assert_eq!(tracker.num_accessed_pages(), OS_PAGES_IN_WASM_PAGE);
+            if first_access_kind == AccessKind::Write
+                && dirty_page_tracking == DirtyPageTracking::Track
+            {
+                assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_WASM_PAGE);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            } else {
+                assert_eq!(tracker.take_dirty_pages().len(), 0);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            }
+
+            // Second access.
+            sigsegv(
+                &tracker,
+                PageIndex::new(page_index + second_access_offset as u64),
+                second_access_kind,
+            );
+            assert_eq!(
+                tracker.num_accessed_pages(),
+                OS_PAGES_IN_WASM_PAGE * if second_access_offset == 0 { 1 } else { 2 }
+            );
+            if second_access_kind == AccessKind::Write
+                && dirty_page_tracking == DirtyPageTracking::Track
+            {
+                // As we took the previous dirty pages, we should see
+                // just one dirty page again.
+                assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_WASM_PAGE);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            } else {
+                assert_eq!(tracker.take_dirty_pages().len(), 0);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            }
+        },
+    );
 }

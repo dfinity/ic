@@ -3956,7 +3956,9 @@ fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
 
 #[test]
 fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = r#"
         (module
             (func (export "canister_update write")
@@ -4015,7 +4017,9 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
     #[case] inject_trap: &str,
     #[case] expected_error_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = format!(
         r#"
         (module
@@ -4056,7 +4060,9 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn query_stable_memory_metrics_are_recorded() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     // The following canister will touch 2 pages worth of stable memory.
     let wat = r#"
         (module
@@ -9618,7 +9624,9 @@ fn page_metrics_are_recorded(
     #[case] maybe_trap: &str,
     #[case] expected_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = format!(
         r#"
         (module

@@ -17,10 +17,13 @@ use std::{
     time::Duration,
 };
 
+mod conversions;
+mod deterministic;
 mod prefetching;
 #[cfg(test)]
 mod tests;
 
+use deterministic::DeterministicMemoryTracker;
 pub use prefetching::PrefetchingMemoryTracker;
 /// Only used for benchmarks.
 pub use prefetching::basic_signal_handler;
@@ -48,6 +51,20 @@ pub enum DirtyPageTracking {
 pub enum AccessKind {
     Read,
     Write,
+}
+
+/// Specifies the kind of handler for missing pages.
+#[derive(Clone, Copy)]
+pub enum MissingPageHandlerKind {
+    /// The legacy `old` handler, which does not prefetch pages or use
+    /// `AccessKind` information.
+    Old,
+    /// The `new` handler, which leverages `AccessKind` and prefetching
+    /// for improved performance.
+    New,
+    /// A handler that provides deterministic prefetching behavior
+    /// and works on all platforms.
+    Deterministic,
 }
 
 #[derive(Default)]
@@ -368,16 +385,29 @@ pub fn new(
     log: ReplicaLogger,
     dirty_page_tracking: DirtyPageTracking,
     page_map: PageMap,
+    missing_page_handler_kind: Option<MissingPageHandlerKind>,
     memory_limits: MemoryLimits,
 ) -> nix::Result<SigsegvMemoryTracker> {
-    Ok(Box::new(PrefetchingMemoryTracker::new(
-        start,
-        size,
-        log,
-        dirty_page_tracking,
-        page_map,
-        memory_limits,
-    )?))
+    match missing_page_handler_kind {
+        Some(MissingPageHandlerKind::Deterministic) => {
+            Ok(Box::new(DeterministicMemoryTracker::new(
+                start,
+                size,
+                log,
+                dirty_page_tracking,
+                page_map,
+                memory_limits,
+            )?))
+        }
+        _ => Ok(Box::new(PrefetchingMemoryTracker::new(
+            start,
+            size,
+            log,
+            dirty_page_tracking,
+            page_map,
+            memory_limits,
+        )?)),
+    }
 }
 
 /// Prints a help message on ENOMEM error.

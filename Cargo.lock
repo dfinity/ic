@@ -17962,8 +17962,10 @@ dependencies = [
  "libc",
  "memmap2",
  "nix 0.24.3",
+ "phantom_newtype",
  "proptest",
  "rayon",
+ "rstest",
  "slog",
  "tempfile",
 ]
