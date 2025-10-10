@@ -6653,7 +6653,8 @@ fn test_environment_variables() {
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
 /// in addition to both canisters being controlled by the anonymous principal.
-/// The first canister has the id of the migration canister such that it can call `rename_canister`.
+/// If the first state machine is has the NNS canister range, then the first canister has the id of
+/// the migration canister such that it can call `rename_canister`.
 fn install_two_universal_canisters(
     env1: &StateMachine,
     env2: &StateMachine,
