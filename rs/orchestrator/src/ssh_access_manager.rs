@@ -46,25 +46,14 @@ impl SshAccessManager {
     }
 
     /// Checks for changes in the keysets, and updates the node accordingly.
-    pub(crate) fn check_for_keyset_changes(&mut self) {
+    pub(crate) fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
         let registry_version = self.registry.get_latest_version();
         let last_applied_parameters = self.last_applied_parameters.read().unwrap();
-        if last_applied_parameters.registry_version == registry_version {
+        if last_applied_parameters.registry_version == registry_version
+            && last_applied_parameters.subnet_id == subnet_id
+        {
             return;
         }
-
-        let subnet_id = match self.registry.get_subnet_id(registry_version) {
-            Ok(id) => Some(id),
-            Err(OrchestratorError::NodeUnassignedError(_, _)) => None,
-            Err(error) => {
-                warn!(
-                    every_n_seconds => 300,
-                    self.logger,
-                    "Cannot retrieve the subnet id from the registry: {}", error
-                );
-                return;
-            }
-        };
         drop(last_applied_parameters);
         debug!(
             self.logger,

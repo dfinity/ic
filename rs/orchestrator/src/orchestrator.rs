@@ -528,6 +528,7 @@ impl Orchestrator {
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
+            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
@@ -535,7 +536,7 @@ impl Orchestrator {
         ) {
             loop {
                 // Check if new SSH keys need to be deployed
-                ssh_access_manager.check_for_keyset_changes();
+                ssh_access_manager.check_for_keyset_changes(*maybe_subnet_id.read().unwrap());
                 // Check and update the firewall rules
                 firewall.check_and_update();
                 // Check and update the network configuration
@@ -588,6 +589,7 @@ impl Orchestrator {
             self.task_tracker.spawn(
                 "ssh_key_firewall_rules_ipv4_config",
                 ssh_key_and_firewall_rules_and_ipv4_config_checks(
+                    Arc::clone(&self.subnet_id),
                     ssh,
                     firewall,
                     ipv4_configurator,
