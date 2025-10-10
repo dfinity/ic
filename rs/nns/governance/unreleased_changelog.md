@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 * Record votes by known neurons before clearing ballots.
 * Allow updating known neuron through RegisterKnownNeuron without having to change its name.
+* Added `committed_topics` to the `KnownNeuronData` that can be submitted as part of the
+  `RegisterKnownNeuron` proposal.
 
 ## Changed
 

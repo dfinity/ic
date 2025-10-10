@@ -32,12 +32,6 @@ Arguments:
     esac
 done
 
-function print_to_terminal() {
-    local message=$1
-
-    echo "${SCRIPT} ${message}" >/dev/tty1
-}
-
 function get_first_boot_state() {
     if [ -r ${FIRST_BOOT_FILE} ]; then
         FIRST_BOOT_STATE=$(cat ${FIRST_BOOT_FILE})
