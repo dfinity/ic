@@ -13,9 +13,10 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_consensus_system_test_utils::{
+    node::get_node_earliest_topology_version,
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        AuthMean, assert_authentication_fails, assert_authentication_works,
+        AuthMean, SshSession, assert_authentication_fails, assert_authentication_works,
         fail_to_update_subnet_record, fail_updating_ssh_keys_for_all_unassigned_nodes,
         generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
         get_updatesubnetpayload_with_keys, update_ssh_keys_for_all_unassigned_nodes,
@@ -28,21 +29,29 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::InternetComputer,
+        ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, SubnetSnapshot, TopologySnapshot,
+            HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeSnapshot,
+            SshSession as _, SubnetSnapshot, TopologySnapshot,
         },
     },
+    nns::remove_nodes_via_endpoint,
     systest,
     util::{block_on, get_app_subnet_and_node, get_nns_node},
 };
-use std::net::IpAddr;
+use ic_types::Height;
+use slog::info;
+use std::{net::IpAddr, time::Duration};
+
+const SSH_KEYS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
-        .add_fast_single_node_subnet(SubnetType::Application)
+        .add_subnet(
+            Subnet::fast(SubnetType::Application, 2).with_dkg_interval_length(Height::from(49)),
+        )
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -357,6 +366,146 @@ fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
     ));
 }
 
+fn node_does_not_remove_keys_on_restart(env: TestEnv) {
+    let logger = env.logger();
+    let topology = env.topology_snapshot();
+    let (nns_node, app_node, _, app_subnet) = topology_entities(topology.clone());
+
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
+
+    // Update the registry with two new pairs of keys.
+    let (readonly_private_key, readonly_public_key) = generate_key_strings();
+    let (backup_private_key, backup_public_key) = generate_key_strings();
+    let payload = get_updatesubnetpayload_with_keys(
+        app_subnet_id,
+        Some(vec![readonly_public_key]),
+        Some(vec![backup_public_key]),
+    );
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    let topology = block_on(topology.block_for_newer_registry_version()).unwrap();
+
+    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
+    let backup_mean = AuthMean::PrivateKey(backup_private_key);
+    // Orchestrator updates checks if there is a new version of the registry every
+    // 10 seconds. If so, it updates first the readonly and then the backup
+    // keys. If backup key can authenticate we know that the readonly keys are
+    // already updated too.
+    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+
+    // Restart the orchestrator
+    app_node
+        .block_on_bash_script("sudo systemctl restart ic-replica")
+        .unwrap();
+
+    // Make sure the node still accepts connections until the replica is healthy again.
+    const CHECK_INTERVAL: Duration = Duration::from_secs(2);
+    while !app_node.status_is_healthy().is_ok_and(|healthy| healthy) {
+        assert_authentication_works(&node_ip, "backup", &backup_mean);
+        assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+        std::thread::sleep(CHECK_INTERVAL);
+    }
+    // In the unlucky case where the replica became healthy so fast that the orchestrator did not
+    // even have the chance to update its keys (i.e. possibly remove), we check again for 10
+    // seconds.
+    for _ in 0..((SSH_KEYS_UPDATE_INTERVAL.as_secs() + 1) / CHECK_INTERVAL.as_secs()) {
+        assert_authentication_works(&node_ip, "backup", &backup_mean);
+        assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+        std::thread::sleep(CHECK_INTERVAL);
+    }
+}
+
+fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
+    let logger = env.logger();
+    let topology = env.topology_snapshot();
+    let (nns_node, app_node, _, app_subnet) = topology_entities(topology.clone());
+
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
+
+    // Update the registry with two new pairs of keys.
+    let (readonly_private_key, readonly_public_key) = generate_key_strings();
+    let (backup_private_key, backup_public_key) = generate_key_strings();
+    let payload = get_updatesubnetpayload_with_keys(
+        app_subnet_id,
+        Some(vec![readonly_public_key]),
+        Some(vec![backup_public_key]),
+    );
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    let topology = block_on(topology.block_for_newer_registry_version()).unwrap();
+
+    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
+    let backup_mean = AuthMean::PrivateKey(backup_private_key);
+    // Orchestrator updates checks if there is a new version of the registry every
+    // 10 seconds. If so, it updates first the readonly and then the backup
+    // keys. If backup key can authenticate we know that the readonly keys are
+    // already updated too.
+    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+
+    // Remove the node from the subnet
+    block_on(remove_nodes_via_endpoint(
+        nns_node.get_public_url(),
+        &[app_node.node_id],
+    ))
+    .expect("Failed to remove node from subnet");
+    let registry_version_without_node = block_on(topology.block_for_newer_registry_version())
+        .unwrap()
+        .get_registry_version();
+
+    // The node should keep its current keys until it completely leaves the subnet, i.e. until the
+    // oldest registry version in use is greater or equal to the version where the node was
+    // removed. In practice, this will be in one of the following DKG intervals.
+    loop {
+        // Once the node leaves the subnet, the orchestrator shuts down the replica, including the
+        // metrics endpoint, in which case the below call would be an Err. But if that is the case,
+        // and after waiting a bit more than 10 seconds below, then we should not be able to login
+        // and we should break out of the loop. And if we don't, then the `expect` afterwards will
+        // catch that.
+        let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
+
+        // We wait a bit more than the interval at which the orchestrator checks for new keys to
+        // give it the chance to do so and remove the keys.
+        std::thread::sleep(SSH_KEYS_UPDATE_INTERVAL + Duration::from_secs(1));
+
+        if SshSession::default()
+            .login(&node_ip, "backup", &backup_mean)
+            .is_err()
+        {
+            break;
+        }
+
+        let earliest_registry_version_in_use = maybe_earliest_registry_version_in_use.expect(
+            "The node kept access to the backup account even though it left the subnet. Indeed, \
+            the metrics endpoint is down, so the replica process must have been stopped.",
+        );
+
+        info!(
+            logger,
+            "Node's earliest registry version in use: {}. Registry version without the node: {}",
+            earliest_registry_version_in_use,
+            registry_version_without_node
+        );
+
+        assert!(
+            earliest_registry_version_in_use < registry_version_without_node,
+            "The node kept access to the backup account even though it should have detected by \
+            the oldest registry version in use that it left the subnet.",
+        );
+    }
+    // "readonly" access is removed first, so this must hold
+    assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
+
+    // Now that the node has removed its SSH access, it must be that the replica process has been
+    // stopped, so the metrics endpoints should be down.
+    let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
+    assert!(
+        maybe_earliest_registry_version_in_use.is_err(),
+        "The node removed access to the backup account before completely leaving the subnet"
+    );
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -373,6 +522,10 @@ fn main() -> Result<()> {
         .add_test(systest!(can_add_max_number_of_readonly_and_backup_keys))
         .add_test(systest!(
             cannot_add_more_than_max_number_of_readonly_or_backup_keys
+        ))
+        .add_test(systest!(node_does_not_remove_keys_on_restart))
+        .add_test(systest!(
+            node_keeps_keys_until_it_completely_leaves_its_subnet
         ))
         .execute_from_args()?;
 
