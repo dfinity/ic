@@ -527,8 +527,8 @@ pub struct CanisterHttpRequest {
     /// The context of the request which captures all the metadata about this request
     pub context: CanisterHttpRequestContext,
     /// The most up to date api boundary nodes address that should be used as a socks proxy in the case of a request to an IPv4 address.
-    /// The addresses should be sent in the following format: "socks5://[<ip>]:<port>", for example:
-    /// "socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080"
+    /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
+    /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
 }
 
@@ -711,23 +711,31 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMe
 }
 
 /// A signature share of of [`CanisterHttpResponseMetadata`].
-///
-/// This is the artifact that will actually be gossiped.
 pub type CanisterHttpResponseShare =
     Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
 
-impl IdentifiableArtifact for CanisterHttpResponseShare {
+/// Contains a share and optionally the full response.
+///
+/// This is the artifact that will actually be gossiped.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CanisterHttpResponseArtifact {
+    pub share: CanisterHttpResponseShare,
+    // The response should not be included in the case of fully replicated outcalls.
+    pub response: Option<CanisterHttpResponse>,
+}
+
+impl IdentifiableArtifact for CanisterHttpResponseArtifact {
     const NAME: &'static str = "canisterhttp";
     type Id = CanisterHttpResponseId;
     fn id(&self) -> Self::Id {
-        self.clone()
+        self.share.clone()
     }
 }
 
-impl PbArtifact for CanisterHttpResponseShare {
+impl PbArtifact for CanisterHttpResponseArtifact {
     type PbId = ic_protobuf::types::v1::CanisterHttpShare;
     type PbIdError = ProxyDecodeError;
-    type PbMessage = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbMessage = ic_protobuf::types::v1::CanisterHttpArtifact;
     type PbMessageError = ProxyDecodeError;
 }
 
