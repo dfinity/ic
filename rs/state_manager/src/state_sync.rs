@@ -20,6 +20,8 @@ pub struct StateSync {
     state_manager: Arc<StateManagerImpl>,
     state_sync_refs: StateSyncRefs,
     log: ReplicaLogger,
+    #[cfg(debug_assertions)]
+    pub test_force_validate: bool,
 }
 
 impl StateSync {
@@ -28,6 +30,8 @@ impl StateSync {
             state_manager,
             state_sync_refs: StateSyncRefs::new(log.clone()),
             log,
+            #[cfg(debug_assertions)]
+            test_force_validate: false,
         }
     }
 
@@ -41,7 +45,14 @@ impl StateSync {
             state_manager,
             state_sync_refs,
             log,
+            #[cfg(debug_assertions)]
+            test_force_validate: false,
         }
+    }
+
+    #[cfg(debug_assertions)]
+    fn is_test_force_validate(&self) -> bool {
+        self.test_force_validate
     }
 
     /// Returns requested state as a Chunkable artifact for StateSync.

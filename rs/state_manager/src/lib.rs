@@ -867,6 +867,8 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
+    /// The height at which this StateManager was started. Set once during initialization and never modified.
+    started_height: Height,
 }
 
 #[cfg(debug_assertions)]
@@ -1437,6 +1439,7 @@ impl StateManagerImpl {
                 ReplicatedState::new(own_subnet_id, own_subnet_type),
             ),
         };
+        let started_height = Height::new(latest_state_height.load(Ordering::Relaxed));
 
         let snapshots: VecDeque<Snapshot> = std::iter::once(initial_snapshot)
             .chain(
@@ -1527,6 +1530,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            started_height,
         }
     }
 
@@ -1541,6 +1545,11 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Returns the height at which this StateManager was started.
+    pub fn started_height(&self) -> Height {
+        self.started_height
     }
 
     /// Populate `num_page_maps_by_load_status` in the metrics with their actual
@@ -3848,6 +3857,21 @@ impl PageAllocatorFileDescriptorImpl {
 
 pub mod testing {
     use super::*;
+
+    /// Trait for test-only functionality on StateSync
+    pub trait StateSyncTesting {
+        /// Force validation to be enabled for testing purposes
+        fn set_test_force_validate(&mut self);
+    }
+
+    impl StateSyncTesting for crate::state_sync::StateSync {
+        fn set_test_force_validate(&mut self) {
+            #[cfg(debug_assertions)]
+            {
+                self.test_force_validate = true;
+            }
+        }
+    }
 
     pub trait StateManagerTesting {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
