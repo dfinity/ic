@@ -8,6 +8,8 @@ on the process that this file is part of, see
 
 ## Added
 
+- Added `registry_latest_version` as an exposed metric at http endpoint `/metrics`.
+
 ## Changed
 
 ## Deprecated

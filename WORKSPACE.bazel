@@ -4,7 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
-load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_LATEST", "MAINNET_LATEST_HOSTOS", "MAINNET_NNS", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
+load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
@@ -217,28 +217,6 @@ load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
 
 rosetta_cli_repository(name = "rosetta-cli")
 
-# Closure compiler for JavaScript
-http_archive(
-    name = "io_bazel_rules_closure",
-    sha256 = "a3bef45d4d052adfd7b0146efdfe55989753adbb66e1f4fa4fa8c4f9df4f8196",
-    strip_prefix = "rules_closure-4326045ee6c941f12518a2ad5ad990504cf3df9d",
-    urls = [
-        "https://github.com/bazelbuild/rules_closure/archive/4326045ee6c941f12518a2ad5ad990504cf3df9d.zip",
-    ],
-)
-
-load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
-
-# we instruct rules_closure to omit some dependencies that we already
-# pull via MODULE.bazel
-rules_closure_dependencies(
-    omit_com_google_protobuf = True,
-    omit_rules_java = True,
-    omit_rules_proto = True,
-)
-
-rules_closure_toolchains()
-
 # rclone binary for upload_artifacts
 load("//bazel:rclone.bzl", "rclone_repository")
 
@@ -290,58 +268,8 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 idl_to_json(name = "idl2json")
 
 # Mainnet ICOS image support
-get_mainnet_setupos_images(
-    versions = {
-        "mainnet_latest_setupos_disk_image": MAINNET_LATEST_HOSTOS,
-    },
-)
+get_mainnet_setupos_images()
 
 get_mainnet_guestos_images(
     extract_guestos = "//rs/ic_os/build_tools/partition_tools:extract-guestos",
-    versions = {
-        "mainnet_latest_guest_img": MAINNET_LATEST,
-        "mainnet_nns_guest_img": MAINNET_NNS,
-        "mainnet_app_guest_img": MAINNET_APP,
-    },
-)
-
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
-new_local_repository(
-    name = "libsystemd",
-    build_file_content = """
-cc_import(
-    name = "libsystemd-internal",
-    hdrs = glob(["include/systemd/*.h"]),
-    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
-    system_provided = True,
-    visibility = ["//visibility:private"],
-)
-
-# Use an extra cc_library to hide the depth of the include folder
-cc_library(
-    name = "libsystemd",
-    includes = ["include"],
-    deps = ["libsystemd-internal"],
-    visibility = ["//visibility:public"],
-)
-""",
-    path = "/usr",
-)
-
-# Use libvirt from the host environment
-# Used for managing virtual machines programmatically.
-new_local_repository(
-    name = "libvirt",
-    build_file_content = """
-cc_import(
-    name = "libvirt",
-    hdrs = glob(["include/libvirt/*.h"]),
-    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
-    visibility = ["//visibility:public"],
-)
-""",
-    path = "/usr",
 )
