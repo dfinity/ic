@@ -16,6 +16,7 @@ mod types;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
+use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
     RoundInstructions, RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
@@ -336,26 +337,54 @@ fn setup_execution_helper(
     let (query_stats_collector, query_stats_payload_builder) =
         ic_query_stats::init_query_stats(logger.clone(), &config, metrics_registry);
 
+    let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
+        config.subnet_memory_capacity,
+        config.default_provisional_cycles_balance,
+        config.default_freeze_threshold,
+        own_subnet_id,
+        own_subnet_type,
+        config.max_controllers,
+        compute_capacity,
+        config.rate_limiting_of_instructions,
+        config.allocatable_compute_capacity_in_percent,
+        config.rate_limiting_of_heap_delta,
+        scheduler_config.heap_delta_rate_limit,
+        scheduler_config.upload_wasm_chunk_instructions,
+        config.embedders_config.wasm_max_size,
+        scheduler_config.canister_snapshot_baseline_instructions,
+        scheduler_config.canister_snapshot_data_baseline_instructions,
+        config.default_wasm_memory_limit,
+        config.max_number_of_snapshots_per_canister,
+        config.max_environment_variables,
+        config.max_environment_variable_name_length,
+        config.max_environment_variable_value_length,
+    );
+    let canister_manager = Arc::new(CanisterManager::new(
+        Arc::clone(&hypervisor),
+        logger.clone(),
+        canister_manager_config,
+        Arc::clone(&cycles_account_manager),
+        Arc::clone(&ingress_history_writer) as Arc<_>,
+        Arc::clone(&fd_factory),
+        config.environment_variables,
+    ));
+
     let exec_env = Arc::new(ExecutionEnvironment::new(
         logger.clone(),
         Arc::clone(&hypervisor),
+        Arc::clone(&canister_manager),
         Arc::clone(&ingress_history_writer) as Arc<_>,
         metrics_registry,
         own_subnet_id,
         own_subnet_type,
-        compute_capacity,
         config.clone(),
         Arc::clone(&cycles_account_manager),
         scheduler_config.scheduler_cores,
-        Arc::clone(&fd_factory),
-        scheduler_config.heap_delta_rate_limit,
-        scheduler_config.upload_wasm_chunk_instructions,
-        scheduler_config.canister_snapshot_baseline_instructions,
-        scheduler_config.canister_snapshot_data_baseline_instructions,
     ));
     let sync_query_handler = InternalHttpQueryHandler::new(
         logger.clone(),
         hypervisor,
+        canister_manager,
         own_subnet_type,
         config.clone(),
         metrics_registry,

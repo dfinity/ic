@@ -10,6 +10,7 @@ mod tests;
 
 use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
+    CanisterManager,
     canister_logs::fetch_canister_logs,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
@@ -102,6 +103,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
+    canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
     config: Config,
     metrics: QueryHandlerMetrics,
@@ -115,6 +117,7 @@ impl InternalHttpQueryHandler {
     pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
+        canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -128,6 +131,7 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
+            canister_manager,
             own_subnet_type,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
@@ -206,8 +210,7 @@ impl InternalHttpQueryHandler {
                                 )
                             })?;
                     let since = Instant::now(); // Start logging execution time.
-                    let response = crate::canister_manager::get_canister_status(
-                        Arc::clone(&self.cycles_account_manager),
+                    let response = self.canister_manager.get_canister_status(
                         query.source(),
                         canister,
                         state
