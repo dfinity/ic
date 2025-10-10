@@ -114,8 +114,8 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
+use ic_test_utilities_crypto::CryptoReturningOk;
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
     fetch_int_gauge_vec,

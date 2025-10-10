@@ -43,7 +43,7 @@ use ic_replicated_state::{
     CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata,
     canister_snapshots::CanisterSnapshots,
 };
-use ic_test_utilities::crypto::{CryptoReturningOk, temp_crypto_component_with_fake_registry};
+use ic_test_utilities_crypto::{CryptoReturningOk, temp_crypto_component_with_fake_registry};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{

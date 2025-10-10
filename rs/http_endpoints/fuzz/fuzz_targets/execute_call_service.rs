@@ -13,7 +13,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
+use ic_test_utilities_crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{PrincipalId, messages::SignedIngress};
 use ic_validator_http_request_arbitrary::AnonymousContent;
