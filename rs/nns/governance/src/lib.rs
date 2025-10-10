@@ -212,6 +212,9 @@ thread_local! {
 
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_SET_SUBNET_OPERATIONAL_LEVEL: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -291,6 +294,20 @@ pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
+}
+
+pub fn is_set_subnet_operational_level_enabled() -> bool {
+    ENABLE_SET_SUBNET_OPERATIONAL_LEVEL.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_set_subnet_operational_level() -> Temporary {
+    Temporary::new(&ENABLE_SET_SUBNET_OPERATIONAL_LEVEL, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_set_subnet_operational_level() -> Temporary {
+    Temporary::new(&ENABLE_SET_SUBNET_OPERATIONAL_LEVEL, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
