@@ -11,6 +11,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/monitoring/logger",
+        "//rs/phantom_newtype",
         "//rs/replicated_state",
         "//rs/sys",
         "//rs/types/types",
@@ -27,6 +28,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:proptest",
+        "@crate_index//:rstest",
         "@crate_index//:tempfile",
     ],
 )

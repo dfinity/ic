@@ -9,6 +9,7 @@ use ic_sys::{PAGE_SIZE, PageBytes};
 use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
+use rstest::rstest;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -16,7 +17,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::{
-    AccessKind, DirtyPageTracking, MemoryTracker,
+    AccessKind, DirtyPageTracking, MemoryLimits, MemoryTracker,
+    conversions::OS_PAGES_IN_WASM_PAGE,
     prefetching::{PageBitmap, PrefetchingMemoryTracker, prefetching_signal_handler_available},
 };
 
@@ -77,12 +79,36 @@ fn setup(
         no_op_logger(),
         dirty_page_tracking,
         page_map.clone(),
+        MemoryLimits {
+            max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
+            max_accessed_pages: NumOsPages::new(memory_pages as u64),
+            max_dirty_pages: NumOsPages::new(memory_pages as u64),
+        },
     )
     .unwrap();
     (tracker, page_map, memory, vec)
 }
 
 fn with_setup<F>(
+    checkpoint_pages: usize,
+    memory_pages: usize,
+    page_delta: Vec<PageIndex>,
+    dirty_page_tracking: DirtyPageTracking,
+    f: F,
+) where
+    F: FnOnce(PrefetchingMemoryTracker, PageMap),
+{
+    let (tracker, page_map, _memory, _vec) = setup(
+        checkpoint_pages,
+        memory_pages,
+        page_delta,
+        dirty_page_tracking,
+    );
+    f(tracker, page_map);
+}
+
+/// TODO: Fix this.
+fn with_deterministic_setup<F>(
     checkpoint_pages: usize,
     memory_pages: usize,
     page_delta: Vec<PageIndex>,
@@ -1119,7 +1145,7 @@ mod random_ops {
                     }
                 },
                 |tracker: PrefetchingMemoryTracker| {
-                    let tracker_accessed = tracker.accessed_pages().borrow();
+                    let tracker_accessed = tracker.accessed_bitmap.borrow();
                     for page in accessed.borrow().iter() {
                         assert!(tracker_accessed.is_marked(PageIndex::new(*page as u64)));
                     }
@@ -1167,7 +1193,7 @@ mod random_ops {
                     }
                 },
                 |tracker: PrefetchingMemoryTracker| {
-                    let tracker_accessed = tracker.accessed_pages().borrow();
+                    let tracker_accessed = tracker.accessed_bitmap.borrow();
                     for page in accessed.borrow().iter() {
                         assert!(tracker_accessed.is_marked(PageIndex::new(*page as u64)));
                     }
@@ -1175,4 +1201,68 @@ mod random_ops {
             )
         }
     }
+}
+
+#[rstest]
+fn deterministic_memory_tracker_correctly_count_access_and_dirty_pages(
+    #[values(DirtyPageTracking::Ignore, DirtyPageTracking::Track)]
+    dirty_page_tracking: DirtyPageTracking,
+    #[values(AccessKind::Read, AccessKind::Write)] first_access_kind: AccessKind,
+    #[values(0, 5, 16, 26, 33, 76)] page_index: u64,
+    #[values(AccessKind::Read, AccessKind::Write)] second_access_kind: AccessKind,
+    #[values(0, OS_PAGES_IN_WASM_PAGE, OS_PAGES_IN_WASM_PAGE * 2)] second_access_offset: usize,
+) {
+    if second_access_offset == 0
+        && (first_access_kind != AccessKind::Read
+            || second_access_kind != AccessKind::Write
+            || dirty_page_tracking != DirtyPageTracking::Track)
+    {
+        // We can access the same page twice only in the case of a write after a read.
+        return;
+    }
+
+    with_deterministic_setup(
+        50,
+        128,
+        (25..75).map(PageIndex::new).collect(),
+        dirty_page_tracking,
+        |tracker, _| {
+            assert_eq!(tracker.num_accessed_pages(), 0);
+
+            // First access.
+            sigsegv(&tracker, PageIndex::new(page_index), first_access_kind);
+            assert_eq!(tracker.num_accessed_pages(), OS_PAGES_IN_WASM_PAGE);
+            if first_access_kind == AccessKind::Write
+                && dirty_page_tracking == DirtyPageTracking::Track
+            {
+                assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_WASM_PAGE);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            } else {
+                assert_eq!(tracker.take_dirty_pages().len(), 0);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            }
+
+            // Second access.
+            sigsegv(
+                &tracker,
+                PageIndex::new(page_index + second_access_offset as u64),
+                second_access_kind,
+            );
+            assert_eq!(
+                tracker.num_accessed_pages(),
+                OS_PAGES_IN_WASM_PAGE * if second_access_offset == 0 { 1 } else { 2 }
+            );
+            if second_access_kind == AccessKind::Write
+                && dirty_page_tracking == DirtyPageTracking::Track
+            {
+                // As we took the previous dirty pages, we should see
+                // just one dirty page again.
+                assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_WASM_PAGE);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            } else {
+                assert_eq!(tracker.take_dirty_pages().len(), 0);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            }
+        },
+    );
 }
