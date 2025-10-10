@@ -502,7 +502,7 @@ impl IncompleteState {
 
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && self.should_validate(false) {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -765,7 +765,7 @@ impl IncompleteState {
                                 );
 
                                 corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && self.should_validate(false) {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}.",
