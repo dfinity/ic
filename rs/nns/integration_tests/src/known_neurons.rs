@@ -331,6 +331,7 @@ fn test_known_neurons_voting_history() {
                 name: "NeuronOne".to_string(),
                 description: Some("First test neuron".to_string()),
                 links: Some(vec![]),
+                committed_topics: Some(vec![]),
             }),
         },
     );
