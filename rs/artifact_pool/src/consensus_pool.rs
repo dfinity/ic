@@ -1054,7 +1054,7 @@ mod tests {
     use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
     use ic_test_utilities_crypto::CryptoReturningOk;
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
