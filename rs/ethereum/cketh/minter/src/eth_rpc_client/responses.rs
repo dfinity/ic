@@ -1,6 +1,6 @@
 use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
-use evm_rpc_client::TransactionReceipt as EvmTransactionReceipt;
+use evm_rpc_types::TransactionReceipt as EvmTransactionReceipt;
 use minicbor::{Decode, Encode};
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};

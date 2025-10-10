@@ -19,6 +19,7 @@ askama = { workspace = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
 evm-rpc-client = { path = "../../evm-rpc-client" }
+evm_rpc_types = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 hex-literal = "0.4.1"
