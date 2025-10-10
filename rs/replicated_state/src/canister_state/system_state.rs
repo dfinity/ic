@@ -36,7 +36,7 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    PrincipalId, Time, default_log_memory_limit,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -331,6 +331,9 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
+    /// The capacity of the canister log in bytes.
+    pub log_memory_limit: NumBytes,
+
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
@@ -512,6 +515,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
+            log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -541,6 +545,7 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
+        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
@@ -571,6 +576,7 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
+            log_memory_limit,
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
@@ -2088,6 +2094,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
+            log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

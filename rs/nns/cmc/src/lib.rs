@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_management_canister_types_private::{
-    // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+    // TODO(NNS1-3249): remove temporary alias `Ic00CanisterSettingsArgs`.
     BoundedControllers,
     CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     EnvironmentVariable,
@@ -169,7 +169,7 @@ impl From<LogVisibilityV2> for LogVisibility {
     }
 }
 
-// TODO(EXC-1687): remove temporary copy of management canister types.
+// TODO(NNS1-3249): remove temporary copy of management canister types.
 // It was added to overcome dependency on `LogVisibility` while
 // management canister already migrated to `LogVisibilityV2`.
 /// Struct used for encoding/decoding
@@ -206,6 +206,7 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             freezing_threshold: settings.freezing_threshold,
             reserved_cycles_limit: settings.reserved_cycles_limit,
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
+            log_memory_limit: None, // TODO(EXC-2145): properly implement support for this field.
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
             environment_variables: settings.environment_variables,
