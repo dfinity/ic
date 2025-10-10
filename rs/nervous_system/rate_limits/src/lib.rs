@@ -311,7 +311,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
 
         // Get all reservations for this key to calculate current usage
         let reserved_capacity: u64 = reservations
-            .range((key.clone(), 0)..(key.clone(), u64::MAX))
+            .range((key.clone(), 0)..=(key.clone(), u64::MAX))
             .map(|(_, data)| data.capacity)
             .sum();
 

@@ -74,7 +74,7 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
 
         if let Err(e) = self.commit_used_capacity_for_node_operator_operation(now, reservation) {
-            std::println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
+            println!("{LOG_PREFIX}Error committing Rate Limit usage: {e}");
         }
 
         Ok(())

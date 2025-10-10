@@ -46,9 +46,9 @@ impl Registry {
         let node_operator_record_key = make_node_operator_record_key(node_operator_id).into_bytes();
         let node_operator_record_vec = &self
             .get(&node_operator_record_key, self.latest_version())
-            .ok_or(
-                format!("{LOG_PREFIX}Node Operator record with ID {node_operator_id} not found in the registry.")
-            )?
+            .ok_or(format!(
+                "Node Operator record with ID {node_operator_id} not found in the registry."
+            ))?
             .value;
 
         let mut node_operator_record =
@@ -151,7 +151,7 @@ mod tests {
             node_provider_id: Some(new_np_id),
         };
 
-        // Original should be able to change this.
+        // The original node provider should be able to change the node operator configuration.
         let caller = node_provider_id;
 
         registry
@@ -196,7 +196,7 @@ mod tests {
             node_provider_id: Some(node_provider_id),
         };
 
-        // Original should be able to change this.
+        // The original node provider should be able to change the node operator configuration.
         let caller = node_provider_id;
 
         let available = registry.get_available_node_provider_op_capacity(caller, now);
@@ -245,7 +245,7 @@ mod tests {
             .commit_used_capacity_for_node_provider_operation(now, reservation)
             .unwrap();
 
-        // Original should be able to change this.
+        // The original node provider should be able to change the node operator configuration.
         let caller = node_provider_id;
         let error = registry
             .do_update_node_operator_config_directly_(request, caller, now)

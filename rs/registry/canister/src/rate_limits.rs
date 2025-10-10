@@ -14,8 +14,6 @@ use std::{cell::RefCell, time::Duration};
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
-// Note, operations are weighted, so that some operations, such as adding a node, cost 20, while others
-// such as updating a single record, cost 1.
 const NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY: u64 = 20;
 const NODE_PROVIDER_MAX_SPIKE: u64 = NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY * 7;
 pub const NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
@@ -133,15 +131,18 @@ impl Registry {
         now: SystemTime,
         reservation: RateLimitReservation,
     ) -> Result<(), RateLimiterError> {
-        // Commit both reservations
-        with_node_operator_rate_limiter(|rate_limiter| {
+        // Commit both reservations, trying both even if one fails
+        let operator_result = with_node_operator_rate_limiter(|rate_limiter| {
             rate_limiter.commit(now, reservation.operator_reservation)
-        })?;
+        });
 
-        with_node_provider_rate_limiter(|rate_limiter| {
+        let provider_result = with_node_provider_rate_limiter(|rate_limiter| {
             rate_limiter.commit(now, reservation.provider_reservation)
-        })?;
+        });
 
+        // Return the first error if any, or Ok(()) if both succeeded
+        operator_result?;
+        provider_result?;
         Ok(())
     }
 
