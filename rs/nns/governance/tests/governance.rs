@@ -1866,8 +1866,6 @@ fn fixture_for_manage_neuron() -> api::Governance {
         .build()
 }
 
-// @todo currently, `fixture_for_manage_neuron` creates neurons with public visibility.
-// We should add tests for private neurons too.
 #[test]
 fn test_enforce_public_neuron() {
     // Step 1: Prepare the world.

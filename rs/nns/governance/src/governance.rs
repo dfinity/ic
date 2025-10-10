@@ -3415,12 +3415,7 @@ impl Governance {
         // (which are not changing) we only validate the new followees.
         let old_followees = topic_to_followees
             .get(&topic)
-            .map(|f| {
-                f.followees
-                    .iter()
-                    .map(|n| n)
-                    .collect::<HashSet<&NeuronId>>()
-            })
+            .map(|f| f.followees.iter().collect::<HashSet<&NeuronId>>())
             .unwrap_or_default();
 
         for followee in &new_followees.followees {
