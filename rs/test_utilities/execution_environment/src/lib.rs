@@ -1112,7 +1112,6 @@ impl ExecutionTest {
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
@@ -2086,11 +2085,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_deterministic_time_slicing_disabled(mut self) -> Self {
-        self.execution_config.deterministic_time_slicing = FlagStatus::Disabled;
-        self
-    }
-
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
         self
@@ -2553,7 +2547,6 @@ impl ExecutionTestBuilder {
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_message,
@@ -2562,7 +2555,6 @@ impl ExecutionTestBuilder {
                     .max_instructions_per_slice,
             ),
             install_code_instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_install_code,

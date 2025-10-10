@@ -125,8 +125,8 @@ mod tests {
         },
     };
     use ic_base_types::{NumSeconds, PrincipalId};
+    use ic_config::embedders::Config as EmbeddersConfig;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-    use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::{
         SerializedModuleBytes, WasmtimeEmbedder, wasm_utils,
@@ -168,7 +168,6 @@ mod tests {
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
             instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
                 NumInstructions::new(INSTRUCTION_LIMIT),
                 NumInstructions::new(INSTRUCTION_LIMIT),
             ),
@@ -1403,7 +1402,6 @@ mod tests {
             child_stable_memory_id,
         );
         exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
-            FlagStatus::Enabled,
             NumInstructions::new(100_000),
             // The slice should be big enough for any syscall to fit.
             NumInstructions::new(1_000),
@@ -1525,7 +1523,6 @@ mod tests {
             child_stable_memory_id,
         );
         exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
-            FlagStatus::Enabled,
             NumInstructions::new(100_000),
             // The slice should be big enough for any syscall to fit.
             NumInstructions::new(1_000),

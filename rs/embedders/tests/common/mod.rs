@@ -1,9 +1,7 @@
 use std::{convert::TryFrom, rc::Rc, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
-};
+use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
@@ -40,7 +38,6 @@ const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
             NumInstructions::from(5_000_000_000),
             NumInstructions::from(5_000_000_000),
         ),
