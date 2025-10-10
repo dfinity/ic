@@ -18,7 +18,7 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery upgrading the subnet without first blessing/eletcting the new replica version.
+. This test variant performs the recovery upgrading the subnet without first blessing/electing the new replica version.
 . It also fixes the DFINITY-owned node through the guestos-recovery-upgrader like the other Node Providers instead of through SSH with ic-recovery.
 
 end::catalog[] */
