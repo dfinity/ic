@@ -44,7 +44,7 @@ use ic_types::Height;
 use slog::info;
 use std::{net::IpAddr, time::Duration};
 
-const SSH_KEYS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
+const ORCHESTRATOR_TASK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -407,7 +407,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     // In the unlucky case where the replica became healthy so fast that the orchestrator did not
     // even have the chance to update its keys (i.e. possibly remove), we check again for 10
     // seconds.
-    for _ in 0..((SSH_KEYS_UPDATE_INTERVAL.as_secs() + 1) / CHECK_INTERVAL.as_secs()) {
+    for _ in 0..((ORCHESTRATOR_TASK_CHECK_INTERVAL.as_secs() + 1) / CHECK_INTERVAL.as_secs()) {
         assert_authentication_works(&node_ip, "backup", &backup_mean);
         assert_authentication_works(&node_ip, "readonly", &readonly_mean);
         std::thread::sleep(CHECK_INTERVAL);
@@ -463,9 +463,9 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
         // catch that.
         let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
 
-        // We wait a bit more than the interval at which the orchestrator checks for new keys to
-        // give it the chance to do so and remove the keys.
-        std::thread::sleep(SSH_KEYS_UPDATE_INTERVAL + Duration::from_secs(1));
+        // We wait for the orchestrator to 1) read the CUP and 2) check for new keys to give it the
+        // chance to remove the keys when finally leaving the subnet.
+        std::thread::sleep(2 * ORCHESTRATOR_TASK_CHECK_INTERVAL + Duration::from_secs(1));
 
         if SshSession::default()
             .login(&node_ip, "backup", &backup_mean)
