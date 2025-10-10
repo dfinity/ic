@@ -35,8 +35,8 @@ get_cmdline_var() {
 log_message() {
     local message="$1"
 
-    echo "$message" > /dev/tty1 2>/dev/null || true
-    echo "$message" > /dev/ttyS0 2>/dev/null || true
+    echo "$message" >/dev/tty1 2>/dev/null || true
+    echo "$message" >/dev/ttyS0 2>/dev/null || true
     logger -t guestos-recovery-upgrader "$message" 2>/dev/null || true
 }
 
