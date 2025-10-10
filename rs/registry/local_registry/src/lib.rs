@@ -110,6 +110,7 @@ impl LocalRegistry {
                 cl.last_mut().unwrap().push(KeyMutation {
                     key: r.key.clone(),
                     value: r.value.clone(),
+                    timestamp_nanoseconds: r.timestamp_nanoseconds,
                 });
                 cl
             });
