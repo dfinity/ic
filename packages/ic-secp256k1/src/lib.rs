@@ -732,6 +732,8 @@ pub enum PocketIcMasterPublicKeyId {
     /// Another test key
     EcdsaDfxTestKey,
     /// Another test key
+    ///
+    /// Note this is the same as the ECDSA key
     SchnorrDfxTestKey,
 }
 
@@ -781,6 +783,7 @@ impl PublicKey {
             }
             PocketIcMasterPublicKeyId::EcdsaTestKey1
             | PocketIcMasterPublicKeyId::SchnorrTestKey1 => {
+                // PocketIC uses the same key for ECDSA secp256k1 and BIP340 Schnorr
                 // Secret key is cb1eb3d67ff91be823715ee2f2af9c2b88252dacbf67f8d09c167c10e7deca7a
 
                 Self::deserialize_sec1(&hex!(
@@ -790,6 +793,7 @@ impl PublicKey {
             }
             PocketIcMasterPublicKeyId::EcdsaDfxTestKey
             | PocketIcMasterPublicKeyId::SchnorrDfxTestKey => {
+                // PocketIC uses the same key for ECDSA secp256k1 and BIP340 Schnorr
                 // Secret key is 2aff2be7e3e57007909036d08767bcc5e192717b59eeae19ead8eff9ee874a48
 
                 Self::deserialize_sec1(&hex!(
@@ -816,10 +820,10 @@ impl PublicKey {
         ))
     }
 
-    /// Derive a public key from the mainnet parameters
+    /// Derive a public key as is done on PocketIC
     ///
     /// This is an offline equivalent to the `ecdsa_public_key` or
-    /// `schnorr_public_key` management canister call
+    /// `schnorr_public_key` management canister call when running on PocketIC
     pub fn derive_pocketic_key(
         key_id: PocketIcMasterPublicKeyId,
         canister_id: &CanisterId,

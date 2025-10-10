@@ -492,7 +492,7 @@ pub enum MasterPublicKeyId {
     TestKey1,
 }
 
-/// An identifier for the mainnet production key
+/// An identifier for the hardcoded keys used in PocketIC
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum PocketIcMasterPublicKeyId {
     /// The PocketIC hardcoded key "key_1"
@@ -801,7 +801,7 @@ impl PublicKey {
 
     /// Return the public master keys used by PocketIC
     ///
-    /// Note that the secret keys for these public keys are known, and these keys are
+    /// Note that the secret keys for these public keys are known, and these keys
     /// should only be used for offline testing with PocketIC
     pub fn pocketic_key(key_id: PocketIcMasterPublicKeyId) -> Self {
         match key_id {
@@ -835,9 +835,10 @@ impl PublicKey {
         ))
     }
 
-    /// Derive a public key from the mainnet parameters
+    /// Derive a public key as is done on PocketIC
     ///
     /// This is an offline equivalent to the `schnorr_public_key` management canister call
+    /// when running on PocketIC
     pub fn derive_pocketic_key(
         key_id: PocketIcMasterPublicKeyId,
         canister_id: &CanisterId,
