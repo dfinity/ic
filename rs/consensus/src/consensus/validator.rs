@@ -1556,41 +1556,40 @@ impl Validator {
     /// of checking whether each share is signed by member(s) of the threshold
     /// group, and has a valid signature.
     fn validate_catch_up_package_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+        let summary_block = pool_reader.get_highest_finalized_summary_block();
         let catch_up_height = pool_reader.get_catch_up_height();
-        let max_height = match pool_reader
+
+        if summary_block.height <= catch_up_height {
+            return Mutations::default();
+        }
+
+        pool_reader
             .pool()
             .unvalidated()
             .catch_up_package_share()
-            .max_height()
-        {
-            Some(height) => height,
-            None => return Mutations::new(),
-        };
-        let range = HeightRange::new(catch_up_height.increment(), max_height);
-
-        let shares = pool_reader
-            .pool()
-            .unvalidated()
-            .catch_up_package_share()
-            .get_by_height_range(range);
-
-        shares
+            .get_by_height(summary_block.height)
             .filter_map(|share| {
                 debug_assert!(share.height() > catch_up_height);
+
                 if !share.check_integrity() {
                     return Some(ChangeAction::HandleInvalid(
                         share.into_message(),
                         "CatchUpPackageShare integrity check failed".to_string(),
                     ));
                 }
-                match self.validate_catch_up_share_content(pool_reader, &share.content) {
-                    Ok(block) => {
+
+                match self.validate_catch_up_share_content(
+                    pool_reader,
+                    &summary_block,
+                    &share.content,
+                ) {
+                    Ok(()) => {
                         let verification = self.verify_artifact(
                             pool_reader,
                             &Signed {
                                 content: CatchUpContent::from_share_content(
                                     share.content.clone(),
-                                    block,
+                                    summary_block.clone(),
                                 ),
                                 signature: share.signature.clone(),
                             },
@@ -1632,29 +1631,18 @@ impl Validator {
     fn validate_catch_up_share_content(
         &self,
         pool_reader: &PoolReader<'_>,
+        summary_block: &Block,
         share_content: &CatchUpShareContent,
-    ) -> Result<Block, ValidatorError> {
+    ) -> Result<(), ValidatorError> {
         let height = share_content.height();
-        let block = pool_reader
-            .get_finalized_block(height)
-            .ok_or(ValidationFailure::FinalizedBlockNotFound(height))?;
-        if ic_types::crypto::crypto_hash(&block) != share_content.block {
+        if ic_types::crypto::crypto_hash(summary_block) != share_content.block {
             warn!(
                 self.log,
                 "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}",
                 share_content,
-                block
+                summary_block
             );
             return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
-        }
-        if !block.payload.is_summary() {
-            warn!(
-                self.log,
-                "Block from received CatchUpShareContent is not a summary block: {:?} {:?}",
-                share_content,
-                block
-            );
-            return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
         }
 
         let beacon = pool_reader
@@ -1684,7 +1672,7 @@ impl Validator {
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
-        let summary = block.payload.as_ref().as_summary();
+        let summary = summary_block.payload.as_ref().as_summary();
         let registry_version = if summary.idkg.is_some() {
             // Should succeed as we already got the hash above
             let state = self
@@ -1707,7 +1695,7 @@ impl Validator {
             );
         }
 
-        Ok(block)
+        Ok(())
     }
 
     /// Return a `Mutations` of `EquivocationProof` artifacts. This consists
