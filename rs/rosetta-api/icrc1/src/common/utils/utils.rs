@@ -443,7 +443,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 None,
             ));
 
-            let mut idx = 2;
+            let mut idx = 1;
 
             if let Some(spender) = spender {
                 operations.push(rosetta_core::objects::Operation::new(
