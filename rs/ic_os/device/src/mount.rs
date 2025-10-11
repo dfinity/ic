@@ -179,8 +179,9 @@ impl<T: Unmount> Deref for MyUnmountDrop<T> {
 
 impl<T: Unmount> Drop for MyUnmountDrop<T> {
     fn drop(&mut self) {
-        let res = self.mount.unmount(UnmountFlags::empty());
-        println!("{res:?}");
+        if let Err(e) = self.mount.unmount(UnmountFlags::empty()) {
+            eprintln!("Error dropping mount: {e:?}");
+        }
     }
 }
 
