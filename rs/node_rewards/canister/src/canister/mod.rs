@@ -297,8 +297,16 @@ impl NodeRewardsCanister {
             from_day: request.day,
             to_day: request.day,
         };
-        let result = canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
-        Ok(DailyResults::from(result.daily_results))
+        let mut result =
+            canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
+
+        let day = NaiveDate::try_from(request.day)?;
+        let daily_results = result
+            .daily_results
+            .remove(&day)
+            .expect("Could not find daily results for the requested day");
+
+        Ok(DailyResults::from(daily_results))
     }
 }
 

@@ -35,7 +35,7 @@ pub enum NodeStatus {
     },
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub struct NodeResults {
+pub struct DailyNodeRewards {
     pub node_id: Option<PrincipalId>,
     pub node_reward_type: Option<String>,
     pub region: Option<String>,
@@ -54,7 +54,7 @@ pub struct BaseRewards {
     pub region: Option<String>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub struct BaseRewardsType3 {
+pub struct Type3BaseRewards {
     pub region: Option<String>,
     pub nodes_count: Option<u64>,
     pub avg_rewards_xdr_permyriad: Option<Decimal>,
@@ -62,14 +62,14 @@ pub struct BaseRewardsType3 {
     pub value_xdr_permyriad: Option<Decimal>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub struct NodeProviderRewards {
+pub struct DailyNodeProviderRewards {
     pub rewards_total_xdr_permyriad: Option<Decimal>,
     pub base_rewards: Vec<BaseRewards>,
-    pub base_rewards_type3: Vec<BaseRewardsType3>,
-    pub nodes_results: Vec<NodeResults>,
+    pub base_rewards_type3: Vec<Type3BaseRewards>,
+    pub nodes_results: Vec<DailyNodeRewards>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyResults {
     pub subnets_fr: BTreeMap<SubnetId, Decimal>,
-    pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
+    pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,
 }

@@ -1,6 +1,6 @@
 use crate::performance_based_algorithm::results::{
-    BaseRewards, BaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
-    NodeResults, NodeStatus, Percent, RewardsCalculatorResults, XDRPermyriad,
+    BaseRewards, DailyNodeProviderRewards, DailyNodeRewards, DailyResults, NodeMetricsDaily,
+    NodeStatus, Percent, RewardsCalculatorResults, Type3BaseRewards, XDRPermyriad,
 };
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
@@ -59,7 +59,7 @@ struct PerformanceMultiplierResults {
 #[derive(Default)]
 struct BaseRewardsResults {
     base_rewards: Vec<BaseRewards>,
-    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards_type3: Vec<Type3BaseRewards>,
     base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
 }
 
@@ -181,7 +181,7 @@ trait PerformanceBasedAlgorithm {
         rewards_table: &NodeRewardsTable,
         nodes_metrics_daily: &mut BTreeMap<NodeId, NodeMetricsDaily>,
         rewardable_nodes: Vec<RewardableNode>,
-    ) -> NodeProviderRewards {
+    ) -> DailyNodeProviderRewards {
         let mut provider_nodes_metrics_daily = BTreeMap::new();
         for node in &rewardable_nodes {
             if let Some(metrics) = nodes_metrics_daily.remove(&node.node_id) {
@@ -467,7 +467,7 @@ trait PerformanceBasedAlgorithm {
             .into_iter()
             .map(
                 |(region, (daily_rewards, nodes_count, avg_rewards, avg_coefficient))| {
-                    BaseRewardsType3 {
+                    Type3BaseRewards {
                         region,
                         nodes_count,
                         avg_rewards,
@@ -530,8 +530,8 @@ trait PerformanceBasedAlgorithm {
         mut base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
         mut adjusted_rewards: BTreeMap<NodeId, XDRPermyriad>,
         base_rewards: Vec<BaseRewards>,
-        base_rewards_type3: Vec<BaseRewardsType3>,
-    ) -> NodeProviderRewards {
+        base_rewards_type3: Vec<Type3BaseRewards>,
+    ) -> DailyNodeProviderRewards {
         let mut results_by_node = Vec::new();
         let mut rewards_total = Decimal::ZERO;
 
@@ -561,7 +561,7 @@ trait PerformanceBasedAlgorithm {
 
             rewards_total += adjusted_rewards_xdr_permyriad;
 
-            results_by_node.push(NodeResults {
+            results_by_node.push(DailyNodeRewards {
                 node_id: node.node_id,
                 node_reward_type: node.node_reward_type,
                 region: node.region,
@@ -574,10 +574,10 @@ trait PerformanceBasedAlgorithm {
             });
         }
 
-        NodeProviderRewards {
+        DailyNodeProviderRewards {
             rewards_total,
             base_rewards,
-            base_rewards_type3,
+            type3_base_rewards: base_rewards_type3,
             nodes_results: results_by_node,
         }
     }

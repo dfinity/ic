@@ -46,7 +46,7 @@ pub enum NodeStatus {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct NodeResults {
+pub struct DailyNodeRewards {
     /// Unique identifier of the node
     pub node_id: NodeId,
     /// NodeRewardType
@@ -69,6 +69,7 @@ pub struct NodeResults {
     pub adjusted_rewards: XDRPermyriad,
 }
 
+/// Base rewards for NON type 3 nodes.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct BaseRewards {
     /// NodeRewardType
@@ -81,8 +82,13 @@ pub struct BaseRewards {
     pub daily: XDRPermyriad,
 }
 
+/// Base rewards for a Type 3 node.
+///
+/// Type 3 nodes are defined [rs/protobuf/src/gen/registry/registry.node.v1.rs]
+/// For nodes which are type3 special logic is applied to compute base rewards.
+/// Check the documentation of the performance-based rewards algorithm for details.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct BaseRewardsType3 {
+pub struct Type3BaseRewards {
     /// Region for which the rewards are calculated
     pub region: Region,
     /// Number of nodes in the region
@@ -96,15 +102,15 @@ pub struct BaseRewardsType3 {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct NodeProviderRewards {
+pub struct DailyNodeProviderRewards {
     /// Total rewards across all nodes for this provider in XDR permyriad
     pub rewards_total: XDRPermyriad,
     /// Base rewards broken down by node type and region
     pub base_rewards: Vec<BaseRewards>,
     /// Base rewards broken down by "type 3" grouping (region aggregates)
-    pub base_rewards_type3: Vec<BaseRewardsType3>,
+    pub type3_base_rewards: Vec<Type3BaseRewards>,
     /// Results for each node managed by this provider
-    pub nodes_results: Vec<NodeResults>,
+    pub nodes_results: Vec<DailyNodeRewards>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -112,7 +118,7 @@ pub struct DailyResults {
     /// Failure rates for all subnets on this day
     pub subnets_fr: BTreeMap<SubnetId, Percent>,
     /// Rewards for all node providers on this day
-    pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
+    pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,
 }
 
 pub struct RewardsCalculatorResults {
