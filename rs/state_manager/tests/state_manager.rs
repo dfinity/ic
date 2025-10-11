@@ -39,8 +39,8 @@ use ic_state_manager::{
     state_sync::{
         StateSync,
         types::{
-            DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET,
-            META_MANIFEST_CHUNK, StateSyncMessage,
+            DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+            MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, StateSyncMessage,
         },
     },
     testing::StateManagerTesting,
@@ -473,7 +473,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                     hash: hash.get(),
                 };
                 let msg = src_state_sync
-                    .get(&id)
+                    .get_from_complete_state(&id)
                     .expect("failed to get state sync messages");
                 let chunkable =
                     set_fetch_state_and_start_state_sync(&dst_state_manager, &dst_state_sync, &id);
@@ -2396,8 +2396,8 @@ fn delivers_state_adverts_once() {
             hash: hash.get(),
         };
 
-        assert!(state_sync.get(&id).is_some());
-        assert!(state_sync.get(&id).is_some());
+        assert!(state_sync.get_from_complete_state(&id).is_some());
+        assert!(state_sync.get_from_complete_state(&id).is_some());
     });
 }
 
@@ -2431,7 +2431,7 @@ fn state_sync_message_contains_manifest() {
         };
 
         let msg = state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         // Expecting 1 file (system_metadata.pbuf), as we don't have canisters in the default state.
@@ -2553,7 +2553,7 @@ fn can_do_simple_state_sync_transfer() {
         let state = src_state_manager.get_latest_state().take();
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -2582,6 +2582,49 @@ fn can_do_simple_state_sync_transfer() {
 
             assert_error_counters(dst_metrics);
             assert_no_remaining_chunks(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn can_serve_chunks_from_incomplete_state() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash: hash.get(),
+        };
+
+        let msg = src_state_sync
+            .get_from_complete_state(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|_dst_metrics, dst_state_manager, dst_state_sync| {
+            let mut chunkable =
+                set_fetch_state_and_start_state_sync(&dst_state_manager, &dst_state_sync, &id);
+
+            // 0 chunk is canister.pbuf, which is in file group; chunks 1 and 2 are real
+            let omit: HashSet<ChunkId> =
+                maplit::hashset! {ChunkId::new(FILE_CHUNK_ID_OFFSET as u32 + 1)};
+            pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false).unwrap();
+            assert!(dst_state_manager.get_state_at(height(1)).is_err());
+            assert!(
+                dst_state_sync
+                    .chunk(&id, ChunkId::new(FILE_CHUNK_ID_OFFSET as u32 + 2))
+                    .is_some()
+            );
+            // Omited chunk is not served.
+            assert!(
+                dst_state_sync
+                    .chunk(&id, ChunkId::new(FILE_CHUNK_ID_OFFSET as u32 + 1))
+                    .is_none()
+            );
         })
     })
 }
@@ -2695,7 +2738,7 @@ fn test_start_and_cancel_state_sync() {
             assert!(!dst_state_sync.cancel_if_running(&id3));
 
             let msg = src_state_sync
-                .get(&id3)
+                .get_from_complete_state(&id3)
                 .expect("failed to get state sync messages");
 
             let omit: HashSet<ChunkId> =
@@ -2745,7 +2788,7 @@ fn state_sync_message_returns_none_for_invalid_chunk_requests() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         let normal_chunk_id_end_exclusive = msg.manifest.chunk_table.len() as u32 + 1;
@@ -2821,7 +2864,7 @@ fn can_state_sync_from_cache() {
         };
 
         let msg1 = src_state_sync
-            .get(&id1)
+            .get_from_complete_state(&id1)
             .expect("failed to get state sync messages");
 
         let (_height, state) = src_state_manager.take_tip();
@@ -2834,7 +2877,7 @@ fn can_state_sync_from_cache() {
         };
         let state2 = src_state_manager.get_latest_state().take();
         let msg2 = src_state_sync
-            .get(&id2)
+            .get_from_complete_state(&id2)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -2945,7 +2988,7 @@ fn can_state_sync_from_cache_alone() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         let state = src_state_manager.get_latest_state().take();
@@ -3080,7 +3123,7 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
         let state = src_state_manager.get_latest_state().take();
 
@@ -3260,7 +3303,7 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
             hash: hash_2.get(),
         };
         let msg_2 = src_state_sync
-            .get(&id_2)
+            .get_from_complete_state(&id_2)
             .expect("failed to get state sync message");
 
         let (_height, state) = src_state_manager.take_tip();
@@ -3271,7 +3314,7 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
             hash: hash_3.get(),
         };
         let msg_3 = src_state_sync
-            .get(&id_3)
+            .get_from_complete_state(&id_3)
             .expect("failed to get state sync message");
         let src_state = src_state_manager.get_latest_state().take();
 
@@ -3545,7 +3588,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
         let state = src_state_manager.get_latest_state().take();
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         let meta_manifest = build_meta_manifest(&msg.manifest);
@@ -3637,7 +3680,7 @@ fn state_sync_can_reject_invalid_chunks() {
         let state = src_state_manager.get_latest_state().take();
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         let meta_manifest = build_meta_manifest(&msg.manifest);
@@ -3747,7 +3790,7 @@ fn can_state_sync_into_existing_checkpoint() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -3799,7 +3842,7 @@ fn can_group_small_files_in_state_sync() {
         let state = src_state_manager.get_latest_state().take();
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         let num_files: usize = msg
@@ -3873,7 +3916,7 @@ fn can_commit_after_prev_state_is_gone() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -3946,7 +3989,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -3998,7 +4041,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             hash: hash.get(),
         };
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync message");
 
         assert_error_counters(src_metrics);
@@ -4045,7 +4088,7 @@ fn state_sync_doesnt_load_already_existing_cp() {
             hash: hash.get(),
         };
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync message");
 
         assert_error_counters(src_metrics);
@@ -4162,7 +4205,7 @@ fn can_recover_from_corruption_on_state_sync() {
             hash: hash_2.get(),
         };
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync message");
 
         assert_error_counters(src_metrics);
@@ -4580,7 +4623,7 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
             hash: hash_2.clone().get(),
         };
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync message");
 
         assert_error_counters(src_metrics);
@@ -4715,7 +4758,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -4797,7 +4840,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -4910,7 +4953,7 @@ fn can_commit_below_state_sync() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
@@ -4958,7 +5001,7 @@ fn can_state_sync_below_commit() {
         };
 
         let msg = src_state_sync
-            .get(&id)
+            .get_from_complete_state(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
