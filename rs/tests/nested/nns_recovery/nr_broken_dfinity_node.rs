@@ -45,6 +45,7 @@ fn main() -> Result<()> {
             local_recovery: false,
             break_dfinity_owned_node: true,
             add_and_bless_upgrade_version: true,
+            fix_dfinity_owned_node_like_np: false,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(45 * 60))
