@@ -109,8 +109,8 @@ pub struct DailyNodeProviderRewards {
     pub base_rewards: Vec<BaseRewards>,
     /// Base rewards broken down by "type 3" grouping (region aggregates)
     pub type3_base_rewards: Vec<Type3BaseRewards>,
-    /// Results for each node managed by this provider
-    pub nodes_results: Vec<DailyNodeRewards>,
+    /// Daily rewards for each node managed by this provider
+    pub daily_nodes_rewards: Vec<DailyNodeRewards>,
 }
 
 #[derive(Serialize, Deserialize)]

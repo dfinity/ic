@@ -6,7 +6,7 @@ use ic_nns_test_utils::common::build_node_rewards_test_wasm;
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
+    GetNodeProviderRewardsCalculationResponse, GetNodeProvidersRewardsCalculationRequest,
 };
 use ic_types::PrincipalId;
 use pocket_ic::PocketIcBuilder;
@@ -77,7 +77,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     pocket_ic.tick().await;
     let day = DateUtc::from_unix_timestamp_nanoseconds(past_time_nanos);
 
-    let request = GetNodeProviderRewardsCalculationRequest { day };
+    let request = GetNodeProvidersRewardsCalculationRequest { day };
 
     // Non-replicated query call is allowed.
     let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(

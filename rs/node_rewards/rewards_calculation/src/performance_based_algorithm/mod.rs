@@ -578,7 +578,7 @@ trait PerformanceBasedAlgorithm {
             rewards_total,
             base_rewards,
             type3_base_rewards: base_rewards_type3,
-            nodes_results: results_by_node,
+            daily_nodes_rewards: results_by_node,
         }
     }
 }

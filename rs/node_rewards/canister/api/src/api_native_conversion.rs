@@ -245,8 +245,8 @@ impl From<native_types::DailyNodeProviderRewards> for DailyNodeProviderRewards {
                 .into_iter()
                 .map(Type3BaseRewards::from)
                 .collect(),
-            nodes_results: src
-                .nodes_results
+            daily_nodes_rewards: src
+                .daily_nodes_rewards
                 .into_iter()
                 .map(DailyNodeRewards::from)
                 .collect(),
@@ -272,8 +272,8 @@ impl TryFrom<DailyNodeProviderRewards> for native_types::DailyNodeProviderReward
                 .into_iter()
                 .map(native_types::Type3BaseRewards::try_from)
                 .collect::<Result<_, _>>()?,
-            nodes_results: src
-                .nodes_results
+            daily_nodes_rewards: src
+                .daily_nodes_rewards
                 .into_iter()
                 .map(native_types::DailyNodeRewards::try_from)
                 .collect::<Result<_, _>>()?,

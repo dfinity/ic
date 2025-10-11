@@ -5,7 +5,7 @@ use ic_nervous_system_proto::pb::v1::Decimal;
 use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
-pub struct GetNodeProviderRewardsCalculationRequest {
+pub struct GetNodeProvidersRewardsCalculationRequest {
     pub day: DateUtc,
 }
 
@@ -66,7 +66,7 @@ pub struct DailyNodeProviderRewards {
     pub rewards_total_xdr_permyriad: Option<Decimal>,
     pub base_rewards: Vec<BaseRewards>,
     pub base_rewards_type3: Vec<Type3BaseRewards>,
-    pub nodes_results: Vec<DailyNodeRewards>,
+    pub daily_nodes_rewards: Vec<DailyNodeRewards>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyResults {
