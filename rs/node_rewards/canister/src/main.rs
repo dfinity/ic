@@ -9,7 +9,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
+    GetNodeProviderRewardsCalculationResponse, GetNodeProvidersRewardsCalculationRequest,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
@@ -118,7 +118,7 @@ async fn get_node_providers_rewards(
 
 #[query]
 fn get_node_provider_rewards_calculation(
-    request: GetNodeProviderRewardsCalculationRequest,
+    request: GetNodeProvidersRewardsCalculationRequest,
 ) -> GetNodeProviderRewardsCalculationResponse {
     if in_replicated_execution() {
         return Err(

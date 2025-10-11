@@ -1,4 +1,4 @@
-use candid::{Encode, Principal};
+use candid::Encode;
 use ic_nervous_system_agent::AgentFor;
 use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
@@ -6,7 +6,7 @@ use ic_nns_test_utils::common::build_node_rewards_test_wasm;
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
+    GetNodeProviderRewardsCalculationResponse, GetNodeProvidersRewardsCalculationRequest,
 };
 use ic_types::PrincipalId;
 use pocket_ic::PocketIcBuilder;
@@ -77,11 +77,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     pocket_ic.tick().await;
     let day = DateUtc::from_unix_timestamp_nanoseconds(past_time_nanos);
 
-    let request = GetNodeProviderRewardsCalculationRequest {
-        from_day: day,
-        to_day: day,
-        provider_id: Principal::anonymous(),
-    };
+    let request = GetNodeProvidersRewardsCalculationRequest { day };
 
     // Non-replicated query call is allowed.
     let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
