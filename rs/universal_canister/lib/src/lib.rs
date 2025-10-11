@@ -450,6 +450,14 @@ impl PayloadBuilder {
         self
     }
 
+    /// This function should only be used for testing the system API `ic0.call_data_append`,
+    /// but *not* for testing inter-canister calls.
+    pub fn call_data_append(mut self, bytes: &[u8]) -> Self {
+        self = self.push_bytes(bytes);
+        self.0.push(Ops::CallDataAppend as u8);
+        self
+    }
+
     pub fn message_payload(mut self) -> Self {
         self.0.push(Ops::MessagePayload as u8);
         self
