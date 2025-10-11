@@ -409,6 +409,14 @@ impl CanisterCall {
         }
     }
 
+    /// Deducts the specified fee from the payment of this message.
+    pub fn deduct_cycles(&mut self, fee: Cycles) {
+        match self {
+            CanisterCall::Request(request) => Arc::make_mut(request).payment -= fee,
+            CanisterCall::Ingress(_) => {} // Ingress messages don't have payments
+        }
+    }
+
     /// Extracts the cycles received with this message.
     pub fn take_cycles(&mut self) -> Cycles {
         match self {
