@@ -233,14 +233,16 @@ type Burn = record {
   memo : opt blob;
   created_at_time : opt Timestamp;
   amount : nat;
-  spender : opt Account
+  spender : opt Account;
+  fee : opt nat
 };
 
 type Mint = record {
   to : Account;
   memo : opt blob;
   created_at_time : opt Timestamp;
-  amount : nat
+  amount : nat;
+  fee : opt nat
 };
 
 type Transfer = record {

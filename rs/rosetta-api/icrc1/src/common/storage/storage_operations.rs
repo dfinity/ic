@@ -295,7 +295,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         )?;
                     }
                 }
-                crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
+                crate::common::storage::types::IcrcOperation::Mint { to, amount, .. } => {
                     let fee = rosetta_block
                         .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
@@ -423,7 +423,7 @@ pub fn store_blocks(
             fee,
             approval_expires_at,
         ) = match transaction.operation {
-            crate::common::storage::types::IcrcOperation::Mint { to, amount } => (
+            crate::common::storage::types::IcrcOperation::Mint { to, amount, fee } => (
                 "mint",
                 None,
                 None,
@@ -433,7 +433,7 @@ pub fn store_blocks(
                 None,
                 amount,
                 None,
-                None,
+                fee,
                 None,
             ),
             crate::common::storage::types::IcrcOperation::Transfer {
@@ -455,7 +455,9 @@ pub fn store_blocks(
                 fee,
                 None,
             ),
-            crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => (
+            crate::common::storage::types::IcrcOperation::Burn {
+                from, amount, fee, ..
+            } => (
                 "burn",
                 Some(from.owner),
                 Some(*from.effective_subaccount()),
@@ -465,7 +467,7 @@ pub fn store_blocks(
                 None,
                 amount,
                 None,
-                None,
+                fee,
                 None,
             ),
             crate::common::storage::types::IcrcOperation::Approve {

@@ -9,9 +9,9 @@ use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_ledger_suite_state_machine_helpers::{
-    balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+    add_block, archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+    set_icrc3_enabled,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
@@ -60,20 +60,6 @@ fn setup_icrc3_test_ledger() -> (StateMachine, CanisterId) {
     (env, canister_id)
 }
 
-fn add_block(
-    env: &StateMachine,
-    canister_id: CanisterId,
-    block: &ICRC3Value,
-) -> Result<Nat, String> {
-    Decode!(
-        &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
-            .expect("failed to add block")
-            .bytes(),
-        AddBlockResult
-    )
-    .expect("failed to decode add_block response")
-}
-
 fn icrc3_get_blocks(
     env: &StateMachine,
     canister_id: CanisterId,
@@ -104,26 +90,6 @@ fn get_blocks(
         GetBlocksResponse
     )
     .expect("failed to decode icrc3_get_blocks response")
-}
-
-fn archive_blocks(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    archive_id: CanisterId,
-    num_blocks: u64,
-) -> u64 {
-    let archive_args = ArchiveBlocksArgs {
-        archive_id: archive_id.into(),
-        num_blocks,
-    };
-    Decode!(
-        &env.execute_ingress(ledger_id, "archive_blocks", Encode!(&archive_args).unwrap())
-            .expect("failed to archive blocks")
-            .bytes(),
-        Result<u64, String>
-    )
-    .expect("failed to decode archive_blocks response")
-    .expect("archiving blocks operation failed")
 }
 
 fn check_legacy_get_blocks(
@@ -572,16 +538,6 @@ fn get_supported_standards(env: &StateMachine, canister_id: CanisterId) -> Vec<S
         Vec<StandardRecord>
     )
     .expect("failed to decode icrc1_supported_standards response")
-}
-
-fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
-    Decode!(
-        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
-            .expect("failed to set_icrc3_enabled")
-            .bytes(),
-        ()
-    )
-    .expect("failed to decode set_icrc3_enabled response")
 }
 
 #[test]

@@ -377,6 +377,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     mint_block.block.transaction.operation = IcrcOperation::Mint {
         to: from_account,
         amount: Nat::from(1000000000u64),
+        fee: None,
     };
 
     let mut block1 = create_test_rosetta_block(1, 1000000000, &principal1, 100);
@@ -512,6 +513,7 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
     mint_block.block.transaction.operation = IcrcOperation::Mint {
         to: from_account,
         amount: Nat::from(1000000000u64),
+        fee: None,
     };
     store_blocks(&mut connection, vec![mint_block])?;
 

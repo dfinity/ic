@@ -286,7 +286,11 @@ fn arb_approve<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>>
 }
 
 fn arb_mint<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
-    (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint { to, amount })
+    (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint {
+        to,
+        amount,
+        fee: None,
+    })
 }
 
 fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
@@ -299,6 +303,7 @@ fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
             from,
             spender,
             amount,
+            fee: None,
         })
 }
 

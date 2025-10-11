@@ -76,14 +76,16 @@ type Burn = record {
   memo : opt vec nat8;
   created_at_time : opt nat64;
   amount : Tokens;
-  spender : opt Account
+  spender : opt Account;
+  fee : opt nat
 };
 
 type Mint = record {
   to : Account;
   memo : opt vec nat8;
   created_at_time : opt nat64;
-  amount : Tokens
+  amount : Tokens;
+  fee : opt nat
 };
 
 type Transfer = record {
@@ -137,6 +139,11 @@ type Status = record {
   num_blocks_synced : BlockIndex
 };
 
+type SyncStatus = record {
+  sync_active : bool;
+  sync_error : opt text
+};
+
 type FeeCollectorRanges = record {
   ranges : vec record { Account; vec record { BlockIndex; BlockIndex } }
 }
@@ -148,5 +155,6 @@ service : (index_arg : opt IndexArg) -> {
   icrc1_balance_of : (Account) -> (Tokens) query;
   ledger_id : () -> (principal) query;
   list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
-  status : () -> (Status) query
+  status : () -> (Status) query;
+  sync_status : () -> (SyncStatus) query
 }

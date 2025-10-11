@@ -18,7 +18,7 @@ use crate::archive::{ArchivingGuardError, FailedToArchiveBlocks, LedgerArchiving
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::tokens::{TokensType, Zero};
 use ic_ledger_hash_of::HashOf;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -34,6 +34,7 @@ pub enum TxApplyError<Tokens> {
     ExpiredApproval { now: TimeStamp },
     AllowanceChanged { current_allowance: Tokens },
     SelfApproval,
+    BurnOrMintFee,
 }
 
 impl<Tokens> From<BalanceError<Tokens>> for TxApplyError<Tokens> {
@@ -264,6 +265,9 @@ where
                 TransferError::AllowanceChanged { current_allowance }
             }
             TxApplyError::SelfApproval => TransferError::SelfApproval,
+            TxApplyError::BurnOrMintFee => TransferError::BadFee {
+                expected_fee: L::Tokens::zero(),
+            },
         })?;
 
     let fee_collector = ledger.fee_collector().cloned();

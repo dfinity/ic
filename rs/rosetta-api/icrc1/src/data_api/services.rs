@@ -1536,6 +1536,7 @@ mod test {
                     operation: IcrcOperation::Mint {
                         to: main_account,
                         amount: Nat::from(1000u64),
+                        fee: None,
                     },
                     created_at_time: Some(1000),
                     memo: None,
@@ -1603,6 +1604,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(500u64),
+                            fee: None,
                         },
                         created_at_time: Some(1000),
                         memo: None,
@@ -1621,6 +1623,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: account1,
                             amount: Nat::from(1000u64),
+                            fee: None,
                         },
                         created_at_time: Some(2000),
                         memo: None,
@@ -1770,6 +1773,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(1000u64),
+                            fee: None,
                         },
                         created_at_time: Some(1000),
                         memo: None,
@@ -2125,6 +2129,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(6000000u64), // 0.06 tokens
+                            fee: None,
                         },
                         created_at_time: Some(1),
                         memo: None,
@@ -2144,6 +2149,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: explicit_zero_account,
                             amount: Nat::from(1000000u64), // 0.01 tokens
+                            fee: None,
                         },
                         created_at_time: Some(2),
                         memo: None,
@@ -2163,6 +2169,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: account1,
                             amount: Nat::from(1000000u64), // 0.01 tokens
+                            fee: None,
                         },
                         created_at_time: Some(3),
                         memo: None,
@@ -2241,5 +2248,123 @@ mod test {
                 "The DISTINCT clause in the aggregation SQL treats them as one account instead of two"
             );
         }
+    }
+
+    #[test]
+    fn test_mint_and_burn_fees() {
+        use crate::common::storage::types::{
+            IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+        };
+        use candid::{Nat, Principal};
+        use icrc_ledger_types::icrc1::account::Account;
+        use rosetta_core::identifiers::AccountIdentifier;
+
+        let storage_client = StorageClient::new_in_memory().unwrap();
+        let symbol = "ICP";
+        let decimals = 8;
+
+        let principal = Principal::anonymous();
+
+        // First, add some blocks to the database so we can test the validation logic
+        let main_account = Account {
+            owner: principal,
+            subaccount: None,
+        };
+        let main_account_id = AccountIdentifier::from(main_account);
+
+        let add_mint_block =
+            |block_id: u64, amount: u64, fee: Option<u64>, effective_fee: Option<u64>| {
+                let blocks = vec![RosettaBlock::from_icrc_ledger_block(
+                    IcrcBlock {
+                        parent_hash: None,
+                        transaction: IcrcTransaction {
+                            operation: IcrcOperation::Mint {
+                                to: main_account,
+                                amount: Nat::from(amount),
+                                fee: fee.map(Into::into),
+                            },
+                            created_at_time: None,
+                            memo: None,
+                        },
+                        effective_fee: effective_fee.map(Into::into),
+                        timestamp: 1,
+                        fee_collector: None,
+                        fee_collector_block_index: None,
+                    },
+                    block_id,
+                )];
+
+                storage_client.store_blocks(blocks).unwrap();
+                storage_client.update_account_balances().unwrap();
+            };
+
+        let add_burn_block =
+            |block_id: u64, amount: u64, fee: Option<u64>, effective_fee: Option<u64>| {
+                let blocks = vec![RosettaBlock::from_icrc_ledger_block(
+                    IcrcBlock {
+                        parent_hash: None,
+                        transaction: IcrcTransaction {
+                            operation: IcrcOperation::Burn {
+                                from: main_account,
+                                amount: Nat::from(amount),
+                                fee: fee.map(Into::into),
+                                spender: None,
+                            },
+                            created_at_time: None,
+                            memo: None,
+                        },
+                        effective_fee: effective_fee.map(Into::into),
+                        timestamp: 1,
+                        fee_collector: None,
+                        fee_collector_block_index: None,
+                    },
+                    block_id,
+                )];
+
+                storage_client.store_blocks(blocks).unwrap();
+                storage_client.update_account_balances().unwrap();
+            };
+
+        let check_account_balance = |expected_balance: &str| {
+            let result = account_balance(
+                &storage_client,
+                &main_account_id,
+                &None,
+                decimals,
+                symbol.to_string(),
+            );
+
+            assert!(result.is_ok());
+            let balance_response = result.unwrap();
+            assert_eq!(balance_response.balances.len(), 1);
+            assert_eq!(
+                balance_response.balances[0].value.to_string(),
+                expected_balance
+            );
+        };
+
+        // The operation fee of 100 is applied
+        add_mint_block(0, 1000, Some(100), None);
+        check_account_balance("900");
+        add_burn_block(1, 100, Some(100), None);
+        check_account_balance("700");
+
+        // The block effective_fee of 100 is applied
+        add_mint_block(2, 200, Some(200), Some(100));
+        check_account_balance("800");
+        add_burn_block(3, 200, Some(200), Some(100));
+        check_account_balance("500");
+
+        // The block effective_fee of 100 is applied
+        add_mint_block(4, 200, None, Some(100));
+        check_account_balance("600");
+        add_burn_block(5, 200, None, Some(100));
+        check_account_balance("300");
+
+        // No fee
+        add_mint_block(6, 200, None, None);
+        check_account_balance("500");
+        add_burn_block(7, 200, None, None);
+        check_account_balance("300");
     }
 }

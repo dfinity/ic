@@ -165,19 +165,21 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
         let memo = b.transaction.memo;
 
         match b.transaction.operation {
-            Operation::Mint { to, amount } => {
+            Operation::Mint { to, amount, fee } => {
                 tx.kind = "mint".to_string();
                 tx.mint = Some(Mint {
                     to,
                     amount: amount.into(),
                     created_at_time,
                     memo,
+                    fee: fee.map(Into::into),
                 });
             }
             Operation::Burn {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
                 tx.kind = "burn".to_string();
                 tx.burn = Some(Burn {
@@ -186,6 +188,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     amount: amount.into(),
                     created_at_time,
                     memo,
+                    fee: fee.map(Into::into),
                 });
             }
             Operation::Transfer {
