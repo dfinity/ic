@@ -98,15 +98,27 @@ impl TryFrom<&EcdsaKeyId> for MasterPublicKey {
 
         #[cfg(feature = "secp256k1")]
         {
-            let key_id = match (key_id.curve, key_id.name.as_ref()) {
-                (EcdsaCurve::Secp256k1, "key_1") => ic_secp256k1::MasterPublicKeyId::EcdsaKey1,
-                (EcdsaCurve::Secp256k1, "test_key_1") => {
-                    ic_secp256k1::MasterPublicKeyId::EcdsaTestKey1
+            let mk = match (key_id.curve, key_id.name.as_ref()) {
+                (EcdsaCurve::Secp256k1, "key_1") => {
+                    ic_secp256k1::PublicKey::mainnet_key(ic_secp256k1::MasterPublicKeyId::EcdsaKey1)
                 }
+                (EcdsaCurve::Secp256k1, "test_key_1") => ic_secp256k1::PublicKey::mainnet_key(
+                    ic_secp256k1::MasterPublicKeyId::EcdsaTestKey1,
+                ),
+                (EcdsaCurve::Secp256k1, "pocketic_key_1") => ic_secp256k1::PublicKey::pocketic_key(
+                    ic_secp256k1::PocketIcMasterPublicKeyId::EcdsaKey1,
+                ),
+                (EcdsaCurve::Secp256k1, "pocketic_test_key_1") => {
+                    ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::EcdsaTestKey1,
+                    )
+                }
+                (EcdsaCurve::Secp256k1, "dfx_test_key") => ic_secp256k1::PublicKey::pocketic_key(
+                    ic_secp256k1::PocketIcMasterPublicKeyId::EcdsaDfxTestKey,
+                ),
                 (_, _) => return Err(Error::UnknownKeyIdentifier),
             };
 
-            let mk = ic_secp256k1::PublicKey::mainnet_key(key_id);
             let inner = MasterPublicKeyInner::EcdsaSecp256k1(mk);
             Ok(Self { inner })
         }
@@ -125,13 +137,25 @@ impl TryFrom<&SchnorrKeyId> for MasterPublicKey {
         #[cfg(feature = "secp256k1")]
         {
             if key_id.algorithm == SchnorrAlgorithm::Bip340secp256k1 {
-                let key_id = match key_id.name.as_ref() {
-                    "key_1" => ic_secp256k1::MasterPublicKeyId::SchnorrKey1,
-                    "test_key_1" => ic_secp256k1::MasterPublicKeyId::SchnorrTestKey1,
+                let mk = match key_id.name.as_ref() {
+                    "key_1" => ic_secp256k1::PublicKey::mainnet_key(
+                        ic_secp256k1::MasterPublicKeyId::SchnorrKey1,
+                    ),
+                    "test_key_1" => ic_secp256k1::PublicKey::mainnet_key(
+                        ic_secp256k1::MasterPublicKeyId::SchnorrTestKey1,
+                    ),
+                    "pocketic_key_1" => ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::SchnorrKey1,
+                    ),
+                    "pocketic_test_key_1" => ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::SchnorrTestKey1,
+                    ),
+                    "dfx_test_key" => ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::SchnorrDfxTestKey,
+                    ),
                     _ => return Err(Error::UnknownKeyIdentifier),
                 };
 
-                let mk = ic_secp256k1::PublicKey::mainnet_key(key_id);
                 let inner = MasterPublicKeyInner::Bip340Secp256k1(mk);
                 return Ok(Self { inner });
             }
@@ -140,13 +164,25 @@ impl TryFrom<&SchnorrKeyId> for MasterPublicKey {
         #[cfg(feature = "ed25519")]
         {
             if key_id.algorithm == SchnorrAlgorithm::Ed25519 {
-                let key_id = match key_id.name.as_ref() {
-                    "key_1" => ic_ed25519::MasterPublicKeyId::Key1,
-                    "test_key_1" => ic_ed25519::MasterPublicKeyId::TestKey1,
+                let mk = match key_id.name.as_ref() {
+                    "key_1" => {
+                        ic_ed25519::PublicKey::mainnet_key(ic_ed25519::MasterPublicKeyId::Key1)
+                    }
+                    "test_key_1" => {
+                        ic_ed25519::PublicKey::mainnet_key(ic_ed25519::MasterPublicKeyId::TestKey1)
+                    }
+                    "pocketic_key_1" => ic_ed25519::PublicKey::pocketic_key(
+                        ic_ed25519::PocketIcMasterPublicKeyId::Key1,
+                    ),
+                    "pocketic_test_key_1" => ic_ed25519::PublicKey::pocketic_key(
+                        ic_ed25519::PocketIcMasterPublicKeyId::TestKey1,
+                    ),
+                    "dfx_test_key" => ic_ed25519::PublicKey::pocketic_key(
+                        ic_ed25519::PocketIcMasterPublicKeyId::DfxTestKey,
+                    ),
                     _ => return Err(Error::UnknownKeyIdentifier),
                 };
 
-                let mk = ic_ed25519::PublicKey::mainnet_key(key_id);
                 let inner = MasterPublicKeyInner::Ed25519(mk);
                 return Ok(Self { inner });
             }

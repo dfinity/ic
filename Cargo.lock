@@ -9167,23 +9167,6 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba67d72c59e6e7a9794054bf991f6d6f397073f36b02d66ca652aa6f4c2117f3"
-dependencies = [
- "candid",
- "curve25519-dalek",
- "ed25519-dalek",
- "hex-literal 0.4.1",
- "hkdf",
- "pem 1.1.1",
- "rand 0.8.5",
- "thiserror 2.0.12",
- "zeroize",
-]
-
-[[package]]
-name = "ic-ed25519"
 version = "0.4.0"
 dependencies = [
  "curve25519-dalek",
@@ -9197,6 +9180,23 @@ dependencies = [
  "rand_chacha 0.3.1",
  "thiserror 2.0.12",
  "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-ed25519"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42596a652c7f0ae12bacf337da33695f53fb3758620271168a390a93aae73719"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex-literal 0.4.1",
+ "hkdf",
+ "ic_principal",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "thiserror 2.0.12",
  "zeroize",
 ]
 
@@ -12355,9 +12355,9 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "hex-literal 0.4.1",
- "ic-ed25519 0.3.0",
+ "ic-ed25519 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-management-canister-types",
- "ic-secp256k1 0.2.0",
+ "ic-secp256k1 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-vetkeys",
 ]
 
@@ -13301,26 +13301,6 @@ dependencies = [
 
 [[package]]
 name = "ic-secp256k1"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8c0b976993791865897b9edffd153253cef7b9ff2b51b75bb2a1ac82ebfcad7"
-dependencies = [
- "candid",
- "hex-literal 0.4.1",
- "hmac",
- "k256 0.13.4",
- "lazy_static",
- "num-bigint 0.4.6",
- "pem 1.1.1",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "sha2 0.10.9",
- "simple_asn1",
- "zeroize",
-]
-
-[[package]]
-name = "ic-secp256k1"
 version = "0.3.0"
 dependencies = [
  "bip32 0.5.3",
@@ -13338,6 +13318,25 @@ dependencies = [
  "sha2 0.10.9",
  "simple_asn1",
  "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-secp256k1"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bf34836f1c4e8114b6d13b7699428939742e9ad73615bc0be4799ccc5566869"
+dependencies = [
+ "hex-literal 0.4.1",
+ "hmac",
+ "ic_principal",
+ "k256 0.13.4",
+ "num-bigint 0.4.6",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "sha2 0.10.9",
+ "simple_asn1",
  "zeroize",
 ]
 
