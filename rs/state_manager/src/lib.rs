@@ -867,6 +867,8 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
+    /// The height at which this StateManager was started. Set once during initialization and never modified.
+    started_height: Height,
 }
 
 #[cfg(debug_assertions)]
@@ -1228,6 +1230,12 @@ impl StateManagerImpl {
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
+
+        let _timer = metrics
+            .api_call_duration
+            .with_label_values(&["new"])
+            .start_timer();
+
         info!(
             log,
             "Using path '{}' to manage local state",
@@ -1431,6 +1439,7 @@ impl StateManagerImpl {
                 ReplicatedState::new(own_subnet_id, own_subnet_type),
             ),
         };
+        let started_height = Height::new(latest_state_height.load(Ordering::Relaxed));
 
         let snapshots: VecDeque<Snapshot> = std::iter::once(initial_snapshot)
             .chain(
@@ -1521,6 +1530,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            started_height,
         }
     }
 
@@ -1535,6 +1545,11 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Returns the height at which this StateManager was started.
+    pub fn started_height(&self) -> Height {
+        self.started_height
     }
 
     /// Populate `num_page_maps_by_load_status` in the metrics with their actual
@@ -1777,11 +1792,15 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            certifications_metadata.insert(
+            let certification = Self::compute_certification_metadata(metrics, log, &state)
+                .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
+            info!(
+                log,
+                "Certification hash for height {} at startup: {:?}",
                 height,
-                Self::compute_certification_metadata(metrics, log, &state)
-                    .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
+                certification.certified_state_hash
             );
+            certifications_metadata.insert(height, certification);
 
             let metadata = metadatas.remove(&height);
 
@@ -3108,6 +3127,15 @@ impl StateManager for StateManagerImpl {
             Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
+        if scope == CertificationScope::Full {
+            info!(
+                self.log,
+                "Certification hash for height {}: {:?}",
+                height,
+                certification_metadata.certified_state_hash
+            );
+        }
+
         // This step is expensive, so we do it before the write lock for `states`.
         let next_tip = {
             let _timer = self
@@ -3829,6 +3857,21 @@ impl PageAllocatorFileDescriptorImpl {
 
 pub mod testing {
     use super::*;
+
+    /// Trait for test-only functionality on StateSync
+    pub trait StateSyncTesting {
+        /// Force validation to be enabled for testing purposes
+        fn set_test_force_validate(&mut self);
+    }
+
+    impl StateSyncTesting for crate::state_sync::StateSync {
+        fn set_test_force_validate(&mut self) {
+            #[cfg(debug_assertions)]
+            {
+                self.test_force_validate = true;
+            }
+        }
+    }
 
     pub trait StateManagerTesting {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.

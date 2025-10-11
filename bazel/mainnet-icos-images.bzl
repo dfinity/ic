@@ -48,13 +48,14 @@ def icos_dev_image_download_url(git_commit_id, variant, update):
         component = "update-img" if update else "disk-img",
     )
 
-def get_mainnet_setupos_images(versions):
+def get_mainnet_setupos_images():
     """
     Pull the requested SetupOS mainnet images, and their measurements.
-
-    Args:
-      versions: A dict of target names to image info used to expose images.
     """
+
+    versions = {
+        "mainnet_latest_setupos_disk_image": MAINNET_LATEST_HOSTOS,
+    }
 
     for (name, info) in versions.items():
         http_file(
@@ -81,7 +82,13 @@ def get_mainnet_setupos_images(versions):
             measurements = json.encode(info["dev_launch_measurements"]),
         )
 
-def get_mainnet_guestos_images(versions, extract_guestos):
+def get_mainnet_guestos_images(extract_guestos):
+    versions = {
+        "mainnet_latest_guest_img": MAINNET_LATEST,
+        "mainnet_nns_guest_img": MAINNET_NNS,
+        "mainnet_app_guest_img": MAINNET_APP,
+    }
+
     for (name, info) in versions.items():
         _get_mainnet_guestos_image(
             name = name,

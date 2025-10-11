@@ -744,6 +744,7 @@ mod tests {
             name: known_neuron_name,
             description: None,
             links: vec![],
+            committed_topics: vec![],
         }))
     }
 

@@ -907,6 +907,18 @@ impl IDkgMessage {
             IDkgMessage::Opening(x) => x.message_id(),
         }
     }
+
+    pub fn sig_share_dedup_key(&self) -> Option<(RequestId, NodeId)> {
+        match self {
+            IDkgMessage::EcdsaSigShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::SchnorrSigShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::VetKdKeyShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::Dealing(_)
+            | IDkgMessage::DealingSupport(_)
+            | IDkgMessage::Complaint(_)
+            | IDkgMessage::Opening(_) => None,
+        }
+    }
 }
 
 impl From<IDkgMessage> for pb::IDkgMessage {
