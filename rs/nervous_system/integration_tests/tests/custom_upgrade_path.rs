@@ -1,5 +1,4 @@
 use candid::Principal;
-use ic_base_types::CanisterId;
 use ic_nervous_system_agent::{
     helpers::await_with_timeout,
     nns::{
@@ -321,12 +320,12 @@ async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: 
         &pocket_ic_agent,
         nns_neuron_id,
         custom_path,
-        Some(CanisterId::unchecked_from_principal(
-            sns.governance.canister_id,
-        )),
+        Some(sns.governance.canister_id),
         DUMMY_URL_FOR_PROPOSALS,
     )
     .await
+    .unwrap()
+    .id
     .unwrap()
     .id;
     nns::governance::wait_for_proposal_execution(&pocket_ic, proposal_id)
