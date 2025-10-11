@@ -60,7 +60,7 @@ fn baby_giant_1000() {
         accum += &base;
     }
 
-    // Test that we can solve in the postive range:
+    // Test that we can solve in the positive range:
     let mut accum = Gt::identity();
     for x in 0..1000 {
         assert_eq!(baby_giant.solve(&accum), Some(Scalar::from_usize(x)));

@@ -54,7 +54,7 @@ struct CspServerEd25519Signer {
     // Ideally, this would be of type `Arc<dyn TlsHandshakeCspVault>` (because
     // that is all that is needed) but because `CryptoComponentImpl::vault` is
     // of type `Arc<dyn CspVault>` and [dyn upcasting
-    // coersion](https://github.com/rust-lang/rust/issues/65991) is not
+    // coercion](https://github.com/rust-lang/rust/issues/65991) is not
     // stabilized yet, we use the same type here.
     tls_csp_vault: Arc<dyn CspVault>,
 }
