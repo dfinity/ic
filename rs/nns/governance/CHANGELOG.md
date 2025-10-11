@@ -11,6 +11,36 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-10-10: Proposal 138913
+
+http://dashboard.internetcomputer.org/proposal/138913
+
+## Added
+
+* Record votes by known neurons before clearing ballots.
+* Allow updating known neuron through RegisterKnownNeuron without having to change its name.
+* Added `committed_topics` to the `KnownNeuronData` that can be submitted as part of the
+  `RegisterKnownNeuron` proposal.
+* Add an API to list neuron votes given a specific neuron id. In the short term it only works for
+  known neurons as only known neuron votes are recorded.
+* Enable 2 features - (1) recording known enuron voting history and (2) proposal type to deregister
+  known neurons. See [the forum post](https://forum.dfinity.org/t/better-known-neurons/55747) for
+  more details.
+
+## Changed
+
+* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
+  limit.
+
+* The Dogecoin canister (ID begins with gordg-) is considered a "protocol"
+  canister. This affects proposal topics.
+
+## Deprecated
+
+* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
+  instead).
+
+
 # 2025-09-19: Proposal 138583
 
 https://dashboard.internetcomputer.org/proposal/138583

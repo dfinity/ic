@@ -7,7 +7,21 @@ The process that populates this file is described in
 `rs/nervous_system/changelog_process.md`. In general though, the entries you see
 here were moved from the adjacent `unreleased_changelog.md` file.
 
+
 INSERT NEW RELEASES HERE
+
+
+# 2025-10-10: Proposal 138914
+
+http://dashboard.internetcomputer.org/proposal/138914
+
+## Added
+
+- Added `registry_latest_version` as an exposed metric at http endpoint `/metrics`.
+
+## Changed
+
+- Added rate limiting to certain registry operations.
 
 # 2025-10-03: Proposal 138825
 
