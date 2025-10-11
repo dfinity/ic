@@ -34,7 +34,7 @@ use std::{
     future::Future,
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, OnceLock, RwLock},
     thread,
     time::Duration,
 };
@@ -54,7 +54,14 @@ pub struct Orchestrator {
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     registration: Option<NodeRegistration>,
     // The subnet id of the node.
-    subnet_id: Arc<RwLock<Option<SubnetId>>>,
+    //  - `Arc` to share it between tasks
+    //  - `OnceLock` to detect when it is initialized (the first time the upgrade loop runs)
+    //    - Relevant for SSH keys provisioning
+    //  - `RwLock` for interior mutability
+    //  - `Option`:
+    //    - `None` if the node is unassigned
+    //    - `Some(subnet_id)` if the node is assigned to `subnet_id`
+    subnet_id: Arc<OnceLock<RwLock<Option<SubnetId>>>>,
     ipv4_configurator: Option<Ipv4Configurator>,
     task_tracker: TaskTracker,
 }
@@ -317,7 +324,7 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
+        let subnet_id: Arc<OnceLock<RwLock<Option<SubnetId>>>> = Default::default();
 
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
@@ -372,7 +379,7 @@ impl Orchestrator {
     ///    to do the rotation and attempt to register the rotated key.
     pub async fn start_tasks(&mut self, cancellation_token: CancellationToken) {
         async fn upgrade_checks(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            maybe_subnet_id: Arc<OnceLock<RwLock<Option<SubnetId>>>>,
             mut upgrade: Upgrade,
             cancellation_token: CancellationToken,
             log: ReplicaLogger,
@@ -392,10 +399,16 @@ impl Orchestrator {
                         match control_flow {
                             OrchestratorControlFlow::Assigned(subnet_id)
                             | OrchestratorControlFlow::Leaving(subnet_id) => {
-                                *maybe_subnet_id.write().unwrap() = Some(subnet_id);
+                                *maybe_subnet_id
+                                    .get_or_init(|| RwLock::new(Some(subnet_id)))
+                                    .write()
+                                    .unwrap() = Some(subnet_id);
                             }
                             OrchestratorControlFlow::Unassigned => {
-                                *maybe_subnet_id.write().unwrap() = None;
+                                *maybe_subnet_id
+                                    .get_or_init(|| RwLock::new(None))
+                                    .write()
+                                    .unwrap() = None;
                             }
                             OrchestratorControlFlow::Stop => {
                                 // Wake up all orchestrator tasks and instruct them to stop.
@@ -508,16 +521,19 @@ impl Orchestrator {
         }
 
         async fn key_rotation_check(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            maybe_subnet_id: Arc<OnceLock<RwLock<Option<SubnetId>>>>,
             registration: NodeRegistration,
             cancellation_token: CancellationToken,
         ) {
             loop {
-                let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
-                if let Some(subnet_id) = maybe_subnet_id {
-                    registration
-                        .check_all_keys_registered_otherwise_register(subnet_id)
-                        .await;
+                // Only attempt to register keys once the subnet is known and we are assigned.
+                if let Some(rw_lock) = maybe_subnet_id.get() {
+                    let maybe_subnet_id = *rw_lock.read().unwrap();
+                    if let Some(subnet_id) = maybe_subnet_id {
+                        registration
+                            .check_all_keys_registered_otherwise_register(subnet_id)
+                            .await;
+                    }
                 }
 
                 tokio::select! {
@@ -528,15 +544,22 @@ impl Orchestrator {
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            maybe_subnet_id: Arc<OnceLock<RwLock<Option<SubnetId>>>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
             cancellation_token: CancellationToken,
         ) {
             loop {
-                // Check if new SSH keys need to be deployed
-                ssh_access_manager.check_for_keyset_changes(*maybe_subnet_id.read().unwrap());
+                // Check if new SSH keys need to be deployed, but only once the subnet is known.
+                // Otherwise, if we just use the default value of `subnet_id` being None, we would
+                // assume we are unassigned and would purge all SSH keys if we were actually
+                // assigned to a subnet, having to wait for the upgrade loop to actually set
+                // `subet_id` and we would at that moment re-deploy the purged keys. We thus check
+                // this `OnceLock` to prevent purging keys on startup.
+                if let Some(rw_lock) = maybe_subnet_id.get() {
+                    ssh_access_manager.check_for_keyset_changes(*rw_lock.read().unwrap());
+                }
                 // Check and update the firewall rules
                 firewall.check_and_update();
                 // Check and update the network configuration
