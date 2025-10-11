@@ -299,6 +299,17 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 node.get_ip_addr()
             )
         });
+
+        // By restarting ic-replica, we are restarting the orchestrator. On startup, the
+        // orchestrator purges authorized SSH keys from the node. After figuring out its assigned
+        // subnet, it will re-add the keys that are present in the registry. We thus wait to make
+        // sure that the keys are re-added before proceeding.
+        wait_until_authentication_is_granted(
+            &logger,
+            &node.get_ip_addr(),
+            BACKUP_USERNAME,
+            &backup_auth,
+        );
     }
 
     info!(logger, "Ensure a healthy node still works in read mode");
@@ -381,6 +392,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         replay_until_height: Some(highest_certification_share_height),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        nb_checkpoints: Some(2),
         keep_downloaded_state: Some(false),
         wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),
@@ -679,6 +691,11 @@ fn local_recovery(
         .download_pool_node
         .map(|n| format!("--download-pool-node {n} "))
         .unwrap_or_default();
+    let maybe_nb_checkpoints = subnet_recovery_tool
+        .params
+        .nb_checkpoints
+        .map(|n| format!("--nb-checkpoints {n} "))
+        .unwrap_or_default();
     let maybe_keep_downloaded_state = subnet_recovery_tool
         .params
         .keep_downloaded_state
@@ -710,6 +727,7 @@ fn local_recovery(
         {maybe_replay_until_height}\
         {maybe_download_pool_node}\
         --admin-access-location local \
+        {maybe_nb_checkpoints}\
         {maybe_keep_downloaded_state}\
         --wait-for-cup-node {node_ip} \
         {maybe_backup_key_file}\

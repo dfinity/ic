@@ -79,6 +79,12 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long, value_parser=crate::util::data_location_from_str)]
     pub admin_access_location: Option<DataLocation>,
 
+    /// Number of checkpoints to download. The default is 1, which should be enough in most cases.
+    /// This parameter can be increased in the edge case where the node's latest checkpoint is
+    /// higher than the latest CUP height and we should download older checkpoints in that case.
+    #[clap(long)]
+    pub nb_checkpoints: Option<usize>,
+
     /// If the downloaded state should be backed up locally
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
@@ -203,6 +209,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::DownloadState => {
+                if self.params.nb_checkpoints.is_none() {
+                    self.params.nb_checkpoints = read_optional(
+                        &self.logger,
+                        "Enter number of checkpoints to download (default 1): ",
+                    );
+                }
+
                 if self.params.keep_downloaded_state.is_none()
                     && let Some(&DataLocation::Remote(_)) =
                         self.params.admin_access_location.as_ref()
@@ -296,6 +309,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         node_ip,
                         SshUser::Backup,
                         self.params.backup_key_file.clone(),
+                        /*nb_checkpoints=*/ None,
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/
                         vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
@@ -317,6 +331,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                             node_ip,
                             SshUser::Admin,
                             self.recovery.admin_key_file.clone(),
+                            self.params.nb_checkpoints,
                             self.params.keep_downloaded_state == Some(true),
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))

@@ -279,6 +279,7 @@ pub struct DownloadIcStateStep {
     pub node_ip: IpAddr,
     pub target: String,
     pub working_dir: String,
+    pub nb_checkpoints: usize,
     pub keep_downloaded_state: bool,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -337,7 +338,8 @@ impl Step for DownloadIcStateStep {
 
         let res = ssh_helper
             .ssh(format!(
-                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');"
+                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>={nb} {{ print a[n%{nb}] }} {{ a[n++%{nb}]=$0 }}');",
+                nb = self.nb_checkpoints
             ))?
             .unwrap_or_default();
         res.trim().split(' ').for_each(|cp| {

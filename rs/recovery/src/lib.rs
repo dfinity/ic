@@ -338,6 +338,7 @@ impl Recovery {
         node_ip: IpAddr,
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
+        nb_checkpoints: Option<usize>,
         keep_downloaded_state: bool,
         additional_excludes: Vec<&str>,
     ) -> impl Step + use<> {
@@ -346,6 +347,7 @@ impl Recovery {
             ssh_user,
             node_ip,
             target: self.data_dir.display().to_string(),
+            nb_checkpoints: nb_checkpoints.unwrap_or(1),
             keep_downloaded_state,
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,

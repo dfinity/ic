@@ -472,7 +472,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
-        keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
         upgrade_version: version_is_broken.then(|| working_version.clone()),
         upgrade_image_url: Some(get_guestos_update_img_url()),
@@ -483,7 +482,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
         readonly_key_file: Some(ssh_readonly_priv_key_path),
         download_method: None, // We will set this after breaking/halting the subnet, see below
-        upload_method: None,   // We will set this after breaking/halting the subnet, see below
+        nb_checkpoints: Some(2),
+        keep_downloaded_state: Some(cfg.chain_key),
+        upload_method: None, // We will set this after breaking/halting the subnet, see below
         wait_for_cup_node: None, // We will set this after breaking/halting the subnet, see below
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
         next_step: None,
@@ -708,6 +709,11 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         .unwrap_or_default();
     let readonly_pub_key = subnet_recovery.params.readonly_pub_key.unwrap();
     let readonly_pub_key = readonly_pub_key.trim();
+    let maybe_nb_checkpoints = subnet_recovery
+        .params
+        .nb_checkpoints
+        .map(|n| format!("--nb-checkpoints {n} "))
+        .unwrap_or_default();
 
     let command = format!(
         r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
@@ -718,6 +724,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         {maybe_replay_until_height}\
         --readonly-pub-key "{readonly_pub_key}" \
         --download-method local \
+        {maybe_nb_checkpoints}\
         --upload-method local \
         --wait-for-cup-node {node_ip} \
         --skip DownloadCertifications \
