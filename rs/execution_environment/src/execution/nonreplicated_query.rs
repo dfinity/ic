@@ -82,8 +82,8 @@ pub fn execute_non_replicated_query(
         NonReplicatedQueryKind::Stateful { call_origin } => {
             preserve_changes = true;
             let caller = match call_origin {
-                CallOrigin::Query(source) => source.get(),
-                CallOrigin::CanisterQuery(sender, _) => sender.get(),
+                CallOrigin::Query(source, ..) => source.get(),
+                CallOrigin::CanisterQuery(sender, ..) => sender.get(),
                 _ => panic!("Unexpected call origin for execute_non_replicated_query"),
             };
             let call_context_id = canister

@@ -247,7 +247,12 @@ pub fn get_system_state() -> SystemState {
         .build();
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
