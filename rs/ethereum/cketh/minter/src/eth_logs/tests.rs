@@ -7,7 +7,7 @@ mod parser {
     };
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
     use candid::Principal;
-    use evm_rpc_client::LogEntry;
+    use evm_rpc_types::LogEntry;
     use ic_sha3::Keccak256;
     use std::str::FromStr;
 
@@ -258,7 +258,7 @@ mod scraping {
         use crate::numeric::BlockNumber;
         use crate::state::eth_logs_scraping::LogScrapingId;
         use crate::test_fixtures::initial_state;
-        use evm_rpc_client::Hex32;
+        use evm_rpc_types::Hex32;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
 
@@ -346,7 +346,7 @@ mod parse_principal_from_slice {
     use crate::eth_logs::parse_principal_from_slice;
     use assert_matches::assert_matches;
     use candid::Principal;
-    use evm_rpc_client::Hex32;
+    use evm_rpc_types::Hex32;
     use std::str::FromStr;
 
     const PRINCIPAL: &str = "2chl6-4hpzw-vqaaa-aaaaa-c";

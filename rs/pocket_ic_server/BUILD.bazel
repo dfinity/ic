@@ -43,6 +43,8 @@ LIB_DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
     "//rs/registry/keys",
     "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
@@ -80,6 +82,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
@@ -158,6 +161,7 @@ EXTERNAL_CANISTER_DATA = [
     "@internet_identity_dev_at_mainnet_commit//file",
     "@sns_aggregator//file",
     "@nns_dapp_test_at_mainnet_commit//file",
+    "@bitcoin_testnet_canister_at_mainnet_commit//file",
 ]
 
 EXTERNAL_CANISTER_ENV = {
@@ -165,6 +169,7 @@ EXTERNAL_CANISTER_ENV = {
     "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
     "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator//file)",
     "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @nns_dapp_test_at_mainnet_commit//file)",
+    "BITCOIN_TESTNET_CANISTER_WASM_PATH": "$(location @bitcoin_testnet_canister_at_mainnet_commit//file)",
 }
 
 HEAD_NNS_CANISTER_DATA = [
@@ -349,7 +354,7 @@ rust_test(
             #    )
             #  }
             "requires-network",
-            "test_macos",
+            "test_all_platforms",
         ],
         deps = TEST_DEPENDENCIES,
     )
@@ -398,21 +403,19 @@ rust_test(
         ":pocket-ic-server",
         "//:bitcoind",
         "@bitcoin_example_canister//file",
-        "@btc_canister//file",
         "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
+        "BITCOIN_EXAMPLE_CANISTER_WASM": "$(rootpath @bitcoin_example_canister//file)",
         "BITCOIND_BIN": "$(rootpath //:bitcoind)",
-        "BTC_WASM": "$(rootpath @btc_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
     deps = TEST_DEPENDENCIES,
 )

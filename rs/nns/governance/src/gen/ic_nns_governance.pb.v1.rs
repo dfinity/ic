@@ -2169,6 +2169,8 @@ pub struct KnownNeuronData {
     pub description: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, repeated, tag = "3")]
     pub links: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(enumeration = "Topic", repeated, tag = "4")]
+    pub committed_topics: ::prost::alloc::vec::Vec<i32>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.
 #[derive(
@@ -2892,6 +2894,14 @@ pub struct Governance {
     /// source of randomness (from the platform)
     #[prost(bytes = "vec", optional, tag = "28")]
     pub rng_seed: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Map of proposal IDs to their topics for those garbage collected.
+    #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
+    pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// First proposal id to record voting history for known neurons.
+    /// TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+    #[prost(message, optional, tag = "30")]
+    pub first_proposal_id_to_record_voting_history:
+        ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

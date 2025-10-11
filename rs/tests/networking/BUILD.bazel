@@ -44,9 +44,11 @@ HTTP_ENDPOINTS_DEPS = [
     "//rs/types/types",
     "//rs/universal_canister/lib",
     "@crate_index//:candid",
+    "@crate_index//:ic-utils",
     "@crate_index//:maplit",
     "@crate_index//:serde_cbor",
     "@crate_index//:url",
+    "@crate_index//:wat",
 ]
 
 system_test_nns(

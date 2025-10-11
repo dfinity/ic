@@ -70,7 +70,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
-    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store_mut},
+    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -99,8 +99,9 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
+    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoResponse,
+    ManageNeuronResponse, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
@@ -1985,7 +1986,7 @@ impl Governance {
             // requested_neuron_ids are supplied by the caller.
             let _ignore_when_neuron_not_found = self.with_neuron(neuron_id, |neuron| {
                 // Populate neuron_infos.
-                let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller);
+                let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller, true);
                 neuron_infos.insert(neuron_id.id, neuron_info);
 
                 // Populate full_neurons.
@@ -1999,7 +2000,7 @@ impl Governance {
                             && neuron.visibility() == Visibility::Public
                         );
                 if let_caller_read_full_neuron {
-                    full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics()));
+                    full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics(), true));
                 }
             });
         }
@@ -2038,6 +2039,55 @@ impl Governance {
             .collect();
 
         ListKnownNeuronsResponse { known_neurons }
+    }
+
+    pub fn list_neuron_votes(
+        &self,
+        request: ListNeuronVotesRequest,
+    ) -> Result<NeuronVotes, GovernanceError> {
+        let ListNeuronVotesRequest {
+            neuron_id,
+            before_proposal,
+            limit,
+        } = request;
+        let neuron_id = neuron_id.ok_or(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            "Neuron ID is required",
+        ))?;
+        // For now, we only support listing votes for known neurons. In the future when we record
+        // votes for all neurons, we can enhance this to check the caller if the neuron is not a
+        // known neuron.
+        if !self.neuron_store.is_known_neuron(neuron_id) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Neuron is not a known neuron",
+            ));
+        }
+
+        let votes = with_voting_history_store(|voting_history| {
+            voting_history.list_neuron_votes(neuron_id, before_proposal, limit)
+        });
+        let votes = votes
+            .into_iter()
+            .map(|(proposal_id, vote)| NeuronVote {
+                proposal_id: Some(proposal_id),
+                vote: Some(vote.into()),
+            })
+            .collect();
+
+        let all_finalized_before_proposal =
+            self.heap_data.proposals.iter().find_map(|(id, proposal)| {
+                if proposal.ballots.is_empty() {
+                    None
+                } else {
+                    Some(ProposalId { id: *id })
+                }
+            });
+
+        Ok(NeuronVotes {
+            votes: Some(votes),
+            all_finalized_before_proposal,
+        })
     }
 
     /// Claim the neurons supplied by the GTC on behalf of `new_controller`
@@ -3450,7 +3500,7 @@ impl Governance {
     ) -> Result<NeuronInfo, GovernanceError> {
         let now = self.env.now();
         self.with_neuron(id, |neuron| {
-            neuron.get_neuron_info(self.voting_power_economics(), now, requester)
+            neuron.get_neuron_info(self.voting_power_economics(), now, requester, false)
         })
     }
 
@@ -3463,7 +3513,12 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronInfo, GovernanceError> {
         self.with_neuron_by_neuron_id_or_subaccount(find_by, |neuron| {
-            neuron.get_neuron_info(self.voting_power_economics(), self.env.now(), requester)
+            neuron.get_neuron_info(
+                self.voting_power_economics(),
+                self.env.now(),
+                requester,
+                false,
+            )
         })
     }
 
@@ -3498,7 +3553,7 @@ impl Governance {
 
         let now_seconds = self.env.now();
         let voting_power_economics = self.voting_power_economics();
-        Ok(native_neuron.into_api(now_seconds, voting_power_economics))
+        Ok(native_neuron.into_api(now_seconds, voting_power_economics, false))
     }
 
     // Returns the set of currently registered node providers.
@@ -6991,7 +7046,12 @@ impl Governance {
                     };
                     p.reward_event_round = new_reward_event.day_after_genesis;
                     let ballots = std::mem::take(&mut p.ballots);
-                    record_known_neuron_abstentions(&known_neuron_ids, *pid, ballots);
+                    record_known_neuron_abstentions(
+                        &known_neuron_ids,
+                        *pid,
+                        ballots,
+                        self.heap_data.first_proposal_id_to_record_voting_history,
+                    );
                 }
             };
         }
@@ -8297,8 +8357,13 @@ fn record_known_neuron_abstentions(
     known_neuron_ids: &[NeuronId],
     proposal_id: ProposalId,
     ballots: HashMap<u64, Ballot>,
+    first_proposal_id_to_record_voting_history: ProposalId,
 ) {
-    if is_known_neuron_voting_history_enabled() {
+    // TODO(NNS1-4227): clean up `first_proposal_id_to_record_voting_history` after all proposals
+    // before this id have votes finalized.
+    if is_known_neuron_voting_history_enabled()
+        && proposal_id >= first_proposal_id_to_record_voting_history
+    {
         for known_neuron_id in known_neuron_ids {
             if let Some(ballot) = ballots.get(&known_neuron_id.id)
                 && ballot.vote() == Vote::Unspecified

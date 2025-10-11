@@ -1,4 +1,4 @@
-use evm_rpc_client::{EthMainnetService, RpcService as EvmRpcService};
+use evm_rpc_types::{EthMainnetService, RpcService as EvmRpcService};
 
 const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
 const PUBLIC_NODE: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::PublicNode);
@@ -10,7 +10,7 @@ mod multi_call_results {
         use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
         use crate::eth_rpc_client::{MinByKey, ReduceWithStrategy};
         use crate::numeric::TransactionCount;
-        use evm_rpc_client::{MultiRpcResult, Nat256};
+        use evm_rpc_types::{MultiRpcResult, Nat256};
 
         #[test]
         fn should_get_minimum_tx_count() {
@@ -31,7 +31,7 @@ mod multi_call_results {
         use crate::eth_rpc_client::{
             MultiCallError, MultiCallResults, ReduceWithStrategy, StrictMajorityByKey,
         };
-        use evm_rpc_client::{
+        use evm_rpc_types::{
             FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode, MultiRpcResult,
         };
 
@@ -270,7 +270,7 @@ mod multi_call_results {
     mod has_http_outcall_error_matching {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_client::{HttpOutcallError, JsonRpcError, LegacyRejectionCode, RpcError};
+        use evm_rpc_types::{HttpOutcallError, JsonRpcError, LegacyRejectionCode, RpcError};
         use proptest::prelude::any;
         use proptest::proptest;
 

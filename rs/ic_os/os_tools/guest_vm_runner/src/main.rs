@@ -26,7 +26,6 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
-use virt::error::{ErrorDomain, ErrorNumber};
 use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
 
 mod boot_args;
@@ -43,7 +42,8 @@ const UPGRADE_METRICS_FILE_PATH: &str =
 const DEFAULT_GUESTOS_SERVICE_NAME: &str = "guestos.service";
 const UPGRADE_GUESTOS_SERVICE_NAME: &str = "upgrade-guestos.service";
 
-const CONSOLE_TTY_PATH: &str = "/dev/tty1";
+const CONSOLE_TTY1_PATH: &str = "/dev/tty1";
+const CONSOLE_TTY_SERIAL_PATH: &str = "/dev/ttyS0";
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
 
 const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
@@ -142,21 +142,33 @@ impl VirtualMachine {
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
     ) -> Result<Self> {
+        // Check if a domain with the same name already exists and, if so, try to destroy it
+        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).context(
+            "Unable to create new domain while existing domain '{vm_domain_name}' exists.",
+        )?;
+
         let mut retries = 3;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
             match domain_result {
-                Ok(domain) => break domain,
-                Err(e)
-                    if retries > 0
-                        && e.code() == ErrorNumber::OperationInvalid
-                        && e.domain() == ErrorDomain::Domain =>
-                {
-                    Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                Ok(domain) => {
+                    eprintln!("Domain successfully created: {vm_domain_name}");
+                    break domain;
+                }
+                Err(e) if retries > 0 => {
+                    eprintln!("Domain creation failed, retrying: {e}");
+                    // TODO: Monitor if this code path is ever triggered - remove if unused
+                    if Domain::lookup_by_name(libvirt_connect, vm_domain_name).is_ok() {
+                        eprintln!(
+                            "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
+                            vm_domain_name
+                        );
+                        let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                    }
                     retries -= 1;
                     continue;
                 }
-                err => err.context("Failed to create domain")?,
+                err => err.context("Failed to create domain after retries")?,
             };
         };
         Ok(Self {
@@ -168,13 +180,17 @@ impl VirtualMachine {
         })
     }
 
-    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
-        println!("Attempting to destroy existing '{vm_domain_name}' domain");
-        if let Err(e) = Domain::lookup_by_name(libvirt_connect, vm_domain_name)
-            .and_then(|existing| existing.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL))
-        {
-            eprintln!("Failed to destroy existing domain: {e}");
+    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) -> Result<()> {
+        if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
+            eprintln!("Attempting to destroy existing '{vm_domain_name}' domain");
+            existing_domain
+                .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
+                .context("Failed to destroy existing domain")?;
+            eprintln!("Successfully destroyed existing domain");
+        } else {
+            eprintln!("No existing domain found to destroy");
         }
+        Ok(())
     }
 
     /// Checks if the virtual machine is currently running
@@ -257,7 +273,7 @@ pub struct GuestVmService {
     libvirt_connection: Connect,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
-    console_tty: Box<dyn Write + Send + Sync>,
+    console_ttys: Vec<Box<dyn Write + Send + Sync>>,
     guest_vm_type: GuestVMType,
     sev_certificate_provider: HostSevCertificateProvider,
     disk_device: PathBuf,
@@ -280,10 +296,15 @@ impl GuestVmService {
         let hostos_config: HostOSConfig =
             config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
-        let console_tty = std::fs::File::options()
+        let console_tty1 = std::fs::File::options()
             .write(true)
-            .open(CONSOLE_TTY_PATH)
-            .context("Failed to open console")?;
+            .open(CONSOLE_TTY1_PATH)
+            .context("Failed to open console tty1")?;
+
+        let console_tty_serial = std::fs::File::options()
+            .write(true)
+            .open(CONSOLE_TTY_SERIAL_PATH)
+            .context("Failed to open console ttyS0")?;
 
         let sev_certificate_provider = HostSevCertificateProvider::new(
             PathBuf::from(SEV_CERTIFICATE_CACHE_DIR),
@@ -313,7 +334,7 @@ impl GuestVmService {
             hostos_config,
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
-            console_tty: Box::new(console_tty),
+            console_ttys: vec![Box::new(console_tty1), Box::new(console_tty_serial)],
             sev_certificate_provider,
             partition_provider: Box::new(
                 GptPartitionProvider::new(disk_device.to_path_buf())
@@ -552,14 +573,14 @@ impl GuestVmService {
             self.write_to_console_and_stdout("#################################################");
 
             let tail_output = Command::new("tail")
-                .args(["-n", "30", serial_log_path.to_str().unwrap()])
+                .args(["-n", "100", serial_log_path.to_str().unwrap()])
                 .output()
                 .await
                 .context("Failed to tail serial log")?;
 
             let logs = String::from_utf8_lossy(&tail_output.stdout);
             for line in logs.lines() {
-                self.write_to_console_and_stdout(line);
+                self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
             }
         } else {
             self.write_to_console_and_stdout("No console log file found.");
@@ -597,8 +618,10 @@ impl GuestVmService {
     }
 
     fn write_to_console(&mut self, message: &str) {
-        let _ignore = writeln!(self.console_tty, "{message}");
-        let _ignore = self.console_tty.flush();
+        for console_tty in &mut self.console_ttys {
+            let _ignore = writeln!(console_tty, "{message}");
+            let _ignore = console_tty.flush();
+        }
     }
 }
 
@@ -815,7 +838,7 @@ mod tests {
                 libvirt_connection: self.libvirt_connection.clone(),
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),
-                console_tty: Box::new(File::create(console_file.path()).unwrap()),
+                console_ttys: vec![Box::new(File::create(console_file.path()).unwrap())],
                 partition_provider: Box::new(
                     GptPartitionProvider::with_mounter(
                         self.guestos_device.clone(),

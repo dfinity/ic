@@ -12,7 +12,7 @@ use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
-use bitcoin::Network;
+use bitcoin::Network as BtcAdapterNetwork;
 use bytes::Bytes;
 use candid::{Decode, Encode, Principal};
 use cycles_minting_canister::{
@@ -27,6 +27,7 @@ use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
 use ic_btc_adapter::start_server as start_btc_server;
+use ic_btc_interface::{Fees as BtcFees, InitConfig as BtcInitConfig, Network as BtcNetwork};
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
 use ic_config::{
@@ -66,16 +67,18 @@ use ic_metrics::MetricsRegistry;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
-    CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_registry_canister_api::GetChunkRequest;
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
@@ -127,7 +130,7 @@ use pocket_ic::common::rest::{
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
-use registry_canister::init::RegistryCanisterInitPayload;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::cmp::max;
@@ -181,6 +184,8 @@ const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
 const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
+const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
@@ -326,7 +331,7 @@ impl BitcoinAdapterParts {
             logger: logger_config_from_level(log_level),
             incoming_source: BtcIncomingSource::Path(uds_path.clone()),
             address_limits: (1, 1),
-            ..BitcoinAdapterConfig::default_with(Network::Regtest.into())
+            ..BitcoinAdapterConfig::default_with(BtcAdapterNetwork::Regtest.into())
         };
         let adapter = tokio::spawn(async move {
             start_btc_server(replica_logger, metrics_registry, bitcoin_adapter_config).await
@@ -524,6 +529,7 @@ struct PocketIcSubnets {
     nns_subnet: Option<Arc<Subnet>>,
     sns_subnet: Option<Arc<Subnet>>,
     ii_subnet: Option<Arc<Subnet>>,
+    btc_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     state_dir: Option<PathBuf>,
@@ -670,6 +676,7 @@ impl PocketIcSubnets {
             nns_subnet: None,
             sns_subnet: None,
             ii_subnet: None,
+            btc_subnet: None,
             runtime,
             state_dir,
             registry_data_provider,
@@ -718,6 +725,7 @@ impl PocketIcSubnets {
         self.nns_subnet.take();
         self.sns_subnet.take();
         self.ii_subnet.take();
+        self.btc_subnet.take();
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
@@ -855,6 +863,9 @@ impl PocketIcSubnets {
         if let SubnetKind::II = subnet_kind {
             self.ii_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
         }
+        if let SubnetKind::Bitcoin = subnet_kind {
+            self.btc_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+        }
 
         // We need the actual subnet ID to update the chain keys.
         for chain_key in subnet_chain_keys {
@@ -956,6 +967,7 @@ impl PocketIcSubnets {
                 sns,
                 ii,
                 nns_ui,
+                bitcoin,
             } = icp_features;
             if let Some(ref config) = registry {
                 self.update_registry(config);
@@ -980,6 +992,9 @@ impl PocketIcSubnets {
             }
             if let Some(ref config) = nns_ui {
                 self.deploy_nns_ui(config);
+            }
+            if let Some(ref config) = bitcoin {
+                self.deploy_bitcoin(config);
             }
         }
 
@@ -1039,7 +1054,7 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, REGISTRY_CANISTER_ID);
 
             // Install the registry canister.
-            let registry_init_payload = RegistryCanisterInitPayload { mutations: vec![] };
+            let registry_init_payload = RegistryCanisterInitPayloadBuilder::new().build();
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -1731,6 +1746,7 @@ impl PocketIcSubnets {
                         proposal_id: None,
                     }),
                     hash: sns_canister_wasm_hash.to_vec(),
+                    skip_update_latest_version: Some(false),
                 };
                 let res = self.execute_ingress_on(
                     nns_subnet.clone(),
@@ -2048,6 +2064,79 @@ impl PocketIcSubnets {
         }
     }
 
+    fn deploy_bitcoin(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        // Nothing to do if the Bitcoin subnet does not exist (yet).
+        let Some(ref btc_subnet) = self.btc_subnet else {
+            return;
+        };
+
+        if !btc_subnet
+            .state_machine
+            .canister_exists(BITCOIN_TESTNET_CANISTER_ID)
+        {
+            // Create the Bitcoin testnet canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"g4xu7-jiaaa-aaaan-aaaaq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec {
+            //         principal "r7inp-6aaaa-aaaaa-aaabq-cai";
+            //         principal "cmqvo-qqaaa-aaaai-q3waa-cai";
+            //         principal "yfb3o-hyaaa-aaaaj-qno4q-cai";
+            //       };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (2_000_000_000 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![
+                    ROOT_CANISTER_ID.get(),
+                    PrincipalId::from_str("cmqvo-qqaaa-aaaai-q3waa-cai").unwrap(),
+                    PrincipalId::from_str("yfb3o-hyaaa-aaaaj-qno4q-cai").unwrap(),
+                ])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                wasm_memory_limit: Some(2_000_000_000_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
+                Some(BITCOIN_TESTNET_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, BITCOIN_TESTNET_CANISTER_ID);
+
+            // Install the Bitcoin testnet canister.
+            let args = BtcInitConfig {
+                network: Some(BtcNetwork::Regtest),
+                fees: Some(BtcFees::testnet()),
+                ..Default::default()
+            };
+            btc_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    BITCOIN_TESTNET_CANISTER_WASM.to_vec(),
+                    Encode!(&args).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
     // This function should only be called for ingress messages that complete quickly
     // (within 100 rounds).
     fn execute_ingress_on(
@@ -2131,6 +2220,15 @@ impl PocketIcSubnets {
             }
             if synced_registry_version_before != self.synced_registry_version {
                 self.persist_registry_changes();
+                // update routing table
+                let registry_client =
+                    RegistryClientImpl::new(self.registry_data_provider.clone(), None);
+                registry_client.poll_once().unwrap();
+                let routing_table = registry_client
+                    .get_routing_table(self.registry_data_provider.latest_version())
+                    .expect("Failed to get routing table")
+                    .expect("Failed to get routing table");
+                self.routing_table = routing_table;
             }
         }
     }

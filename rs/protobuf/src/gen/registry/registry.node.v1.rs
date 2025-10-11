@@ -52,6 +52,21 @@ pub struct NodeRecord {
     pub domain: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(enumeration = "NodeRewardType", optional, tag = "20")]
     pub node_reward_type: ::core::option::Option<i32>,
+    /// SSH public keys that have permissions necessary to upload subnet state as
+    /// part of subnet recovery.
+    ///
+    /// This is set by NNS proposals of type SetSubnetOperationalLevel.
+    ///
+    /// This would generally be empty, only populated while subnet recovery is
+    /// being performed. At the beginning of the recovery process, this
+    /// would be populated (generally with a single value), and then at the end,
+    /// set back to empty.
+    ///
+    /// See also ssh_*_access fields in SubnetRecord. Of course, the difference is
+    /// that this applies only to one node, while the fields in SubnetRecord apply
+    /// to nodes in all the subnet.
+    #[prost(string, repeated, tag = "21")]
+    pub ssh_node_state_write_access: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// The type of the node.
 #[derive(

@@ -174,6 +174,31 @@ fn canister_init() {
             registry.maybe_apply_mutation_internal(mutation_request.mutations)
         });
     recertify_registry();
+
+    #[cfg(feature = "test")]
+    {
+        use registry_canister::flags::temporary_overrides::{
+            test_set_swapping_enabled_subnets, test_set_swapping_status,
+            test_set_swapping_whitelisted_callers,
+        };
+
+        println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
+        println!(
+            "{LOG_PREFIX}canister_intt: Swapping enabled: {}",
+            init_payload.is_swapping_feature_enabled
+        );
+        test_set_swapping_status(init_payload.is_swapping_feature_enabled);
+        println!(
+            "{LOG_PREFIX}canister_init: Swapping whietlisted callers: {:?}",
+            init_payload.swapping_whitelisted_callers
+        );
+        test_set_swapping_whitelisted_callers(init_payload.swapping_whitelisted_callers);
+        println!(
+            "{LOG_PREFIX}canister_init: Swapping enabled on subnets: {:?}",
+            init_payload.swapping_enabled_subnets
+        );
+        test_set_swapping_enabled_subnets(init_payload.swapping_enabled_subnets);
+    }
 }
 
 #[unsafe(export_name = "canister_pre_upgrade")]
@@ -1202,6 +1227,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "registry_total_memory_size_bytes",
         ic_nervous_system_common::total_memory_size_bytes() as f64,
         "Size of the total memory allocated by this canister measured in bytes.",
+    )?;
+    w.encode_gauge(
+        "registry_latest_version",
+        registry().latest_version() as f64,
+        "The current latest version of the registry.",
     )?;
 
     Ok(())

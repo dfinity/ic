@@ -22,7 +22,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
+      image: ghcr.io/dfinity/ic-build@sha256:9cfd9ecc6f751d631b74058643233aecc75a6d4b18501ae0c9fd0f2c1a110ac4
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     steps:
@@ -245,53 +245,6 @@ jobs:
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
-
-  dependency-scan-nightly:
-    if: false
-    name: Dependency Scan Nightly
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 60
-    permissions:
-      actions: write
-    env:
-      SHELL_WRAPPER: "/usr/bin/time"
-      CARGO_WASMPACK_VERSION: "0.12.1"
-      DEFAULT_NODE_VERSION: "20"
-      CI_PROJECT_PATH: ${{ github.repository }}
-      CI_PIPELINE_ID: ${{ github.run_id }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
-      GITHUB_REF: ${{ github.ref }}
-      REPO_NAME: ${{ github.repository }}
-    steps:
-      - *checkout
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Setup environment deps
-        id: setup-environment-deps
-        shell: bash
-        run: |
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
-          cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
-          source "${NVM_DIR}/nvm.sh"
-          nvm use ${DEFAULT_NODE_VERSION}
-          node --version
-          npm --version
-      - name: Run Dependency Scan Nightly
-        id: dependency-scan-nightly
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          cd ci/src/dependencies/
-          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
-          $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
-          $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
 
   # CI job is also executed in PR on use of 'CI_COVERAGE' label
   bazel-test-coverage:
