@@ -131,16 +131,12 @@ pub struct InstructionLimits {
 }
 
 impl InstructionLimits {
-    /// Returns the message and slice instruction limits based on the
-    /// deterministic time slicing flag.
-    pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
+    /// Returns the message and slice instruction limits.
+    pub fn new(message: NumInstructions, max_slice: NumInstructions) -> Self {
         Self {
             message,
             limit_to_report: message,
-            max_slice: match dts {
-                FlagStatus::Enabled => max_slice,
-                FlagStatus::Disabled => message,
-            },
+            max_slice,
         }
     }
 

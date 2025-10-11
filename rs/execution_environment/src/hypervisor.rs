@@ -120,7 +120,6 @@ pub struct Hypervisor {
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
-    deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
@@ -232,7 +231,6 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir_in(temp_dir).unwrap())
                     .build(),
             ),
-            deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
@@ -248,7 +246,6 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
-        deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
@@ -265,7 +262,6 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir().unwrap())
                     .build(),
             ),
-            deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
             canister_guaranteed_callback_quota,
@@ -360,16 +356,10 @@ impl Hypervisor {
         network_topology: &NetworkTopology,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> WasmExecutionResult {
-        match self.deterministic_time_slicing {
-            FlagStatus::Enabled => assert!(
-                execution_parameters.instruction_limits.message()
-                    >= execution_parameters.instruction_limits.slice()
-            ),
-            FlagStatus::Disabled => assert_eq!(
-                execution_parameters.instruction_limits.message(),
-                execution_parameters.instruction_limits.slice()
-            ),
-        }
+        assert!(
+            execution_parameters.instruction_limits.message()
+                >= execution_parameters.instruction_limits.slice()
+        );
         let caller = api_type.caller();
         let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
         let remaining_canister_callback_quota = system_state.call_context_manager().map_or(

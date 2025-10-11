@@ -688,7 +688,6 @@ pub(crate) struct SchedulerTestBuilder {
     allocatable_compute_capacity_in_percent: usize,
     rate_limiting_of_instructions: bool,
     rate_limiting_of_heap_delta: bool,
-    deterministic_time_slicing: bool,
     log: ReplicaLogger,
     master_public_key_ids: Vec<MasterPublicKeyId>,
     metrics_registry: MetricsRegistry,
@@ -718,7 +717,6 @@ impl Default for SchedulerTestBuilder {
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
             rate_limiting_of_heap_delta: false,
-            deterministic_time_slicing: true,
             log: no_op_logger(),
             master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
@@ -907,11 +905,6 @@ impl SchedulerTestBuilder {
         } else {
             FlagStatus::Disabled
         };
-        let deterministic_time_slicing = if self.deterministic_time_slicing {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             guaranteed_response_message_memory_capacity: NumBytes::from(
@@ -921,7 +914,6 @@ impl SchedulerTestBuilder {
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
-            deterministic_time_slicing,
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new(
@@ -934,7 +926,6 @@ impl SchedulerTestBuilder {
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),
-            deterministic_time_slicing,
             config.embedders_config.cost_to_compile_wasm_instruction,
             SchedulerConfig::application_subnet().dirty_page_overhead,
             self.canister_guaranteed_callback_quota,
@@ -982,7 +973,6 @@ impl SchedulerTestBuilder {
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
-            deterministic_time_slicing,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         SchedulerTest {

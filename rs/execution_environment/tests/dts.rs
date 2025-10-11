@@ -6,7 +6,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::IngressInductionCost;
@@ -131,7 +130,6 @@ fn dts_state_machine_config(subnet_config: SubnetConfig) -> StateMachineConfig {
                 cost_to_compile_wasm_instruction: 0.into(),
                 ..EmbeddersConfig::default()
             },
-            deterministic_time_slicing: FlagStatus::Enabled,
             ..Default::default()
         },
     )
@@ -172,10 +170,7 @@ fn dts_install_code_env(
         },
         ..default_app_subnet_config
     };
-    let hypervisor_config = HypervisorConfig {
-        deterministic_time_slicing: FlagStatus::Enabled,
-        ..Default::default()
-    };
+    let hypervisor_config = HypervisorConfig::default();
     let state_machine = ic_state_machine_tests::StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             subnet_config.clone(),
