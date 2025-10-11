@@ -30,10 +30,6 @@ jobs:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
-      - &generate-bazel-invocation-ids
-        name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
 
   insta-tests:
     name: Quick Feedback Tests
@@ -45,18 +41,15 @@ jobs:
     steps:
       - *checkout
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id"
-            }]
+        run: |
+          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          echo "BuildBuddy link: 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
+          echo "[BuildBuddy link](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
+          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
-          run: bazel test --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" //:insta_tests
+          run: bazel test //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-build-fuzzers-archives:
