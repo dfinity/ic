@@ -1,0 +1,14 @@
+name: External Contributor Workflow
+
+on:
+  workflow_call:
+
+jobs:
+  # This job is not run, but just used to set anchor references for other jobs
+  anchor-setup:
+    if: false
+    name: Placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder
+        run: echo "This is a placeholder job."
