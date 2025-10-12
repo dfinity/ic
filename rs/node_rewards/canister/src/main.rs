@@ -117,7 +117,7 @@ async fn get_node_providers_rewards(
 }
 
 #[query]
-fn get_node_provider_rewards_calculation(
+fn get_node_providers_rewards_calculation(
     request: GetNodeProvidersRewardsCalculationRequest,
 ) -> GetNodeProviderRewardsCalculationResponse {
     if in_replicated_execution() {
@@ -127,7 +127,7 @@ fn get_node_provider_rewards_calculation(
         );
     }
 
-    NodeRewardsCanister::get_node_provider_rewards_calculation(&CANISTER, request)
+    NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request)
 }
 
 #[cfg(test)]
