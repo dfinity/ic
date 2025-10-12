@@ -5,6 +5,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+// TODO: Remove these types in favor of Decimal. Also fields renaming to include units
+// https://github.com/dfinity/ic/pull/7071/files#r2406492271
 pub type XDRPermyriad = Decimal; // Rewards unit in XDR scaled by 1/10,000 (permyriad)
 pub type Percent = Decimal;
 pub type Region = String;
@@ -39,9 +41,11 @@ pub struct NodeMetricsDaily {
     ///
     /// Failure rate adjusted for subnet performance.
     /// Calculated as `max(0, original_fr - subnet_assigned_fr)`.
+    /// TODO: Link documentation about performance based rewards algorithm
     pub relative_fr: Percent,
 }
 
+// TODO: Renaming to NodeProductivity: https://github.com/dfinity/ic/pull/7071/files#r2406794563
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum NodeStatus {
     /// Node is assigned to a subnet with recorded metrics
@@ -57,37 +61,49 @@ pub enum NodeStatus {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct DailyNodeRewards {
-    /// Unique identifier of the node
     pub node_id: NodeId,
-    /// NodeRewardType
+
     pub node_reward_type: NodeRewardType,
+
     /// Geographical region of the node
+    /// TODO: Link to documentation about performance based rewards
     pub region: String,
+
     /// Data center identifier
+    /// TODO: Link to documentation about performance based rewards
     pub dc_id: String,
+
     /// Node status, assigned or unassigned, with associated metrics
     pub node_status: NodeStatus,
+
     /// Performance multiplier (1 - rewards_reduction)
     ///
     /// Represents how rewards are adjusted based on node performance
     pub performance_multiplier: Percent,
+
     /// Rewards reduction applied due to failure rates
+    // TODO: Link to documentation about performance based rewards
     pub rewards_reduction: Percent,
+
     /// Base rewards before applying performance multipliers
     pub base_rewards: XDRPermyriad,
+
     /// Rewards adjusted by the performance multiplier
     pub adjusted_rewards: XDRPermyriad,
 }
 
 /// Base rewards for NON type 3 nodes.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct BaseRewards {
+pub struct BaseRewardsSpec {
     /// NodeRewardType
     pub node_reward_type: NodeRewardType,
+
     /// Region for which base rewards are calculated
     pub region: Region,
+
     /// Monthly base rewards in XDR permyriad
     pub monthly: XDRPermyriad,
+
     /// Daily base rewards in XDR permyriad
     pub daily: XDRPermyriad,
 }
@@ -101,12 +117,16 @@ pub struct BaseRewards {
 pub struct Type3BaseRewards {
     /// Region for which the rewards are calculated
     pub region: Region,
+
     /// Number of nodes in the region
     pub nodes_count: usize,
+
     /// Average rewards for nodes in this region
     pub avg_rewards: XDRPermyriad,
+
     /// Average performance coefficient applied to nodes
     pub avg_coefficient: Percent,
+
     /// Base rewards value for Type 3 nodes
     pub value: XDRPermyriad,
 }
@@ -115,10 +135,13 @@ pub struct Type3BaseRewards {
 pub struct DailyNodeProviderRewards {
     /// Total rewards across all nodes for this provider in XDR permyriad
     pub rewards_total: XDRPermyriad,
+
     /// Base rewards broken down by node type and region
-    pub base_rewards: Vec<BaseRewards>,
+    pub base_rewards: Vec<BaseRewardsSpec>,
+
     /// Base rewards broken down by "type 3" grouping (region aggregates)
     pub type3_base_rewards: Vec<Type3BaseRewards>,
+
     /// Daily rewards for each node managed by this provider
     pub daily_nodes_rewards: Vec<DailyNodeRewards>,
 }
@@ -127,6 +150,7 @@ pub struct DailyNodeProviderRewards {
 pub struct DailyResults {
     /// Failure rates for all subnets on this day
     pub subnets_fr: BTreeMap<SubnetId, Percent>,
+
     /// Rewards for all node providers on this day
     pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,
 }
@@ -134,6 +158,7 @@ pub struct DailyResults {
 pub struct RewardsCalculatorResults {
     /// Total rewards for each provider across the entire reward period
     pub total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64>,
+
     /// Daily breakdown of results
     pub daily_results: BTreeMap<NaiveDate, DailyResults>,
 }

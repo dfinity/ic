@@ -1,6 +1,6 @@
 use crate::provider_rewards_calculation::{
-    BaseRewards, DailyNodeProviderRewards, DailyNodeRewards, DailyResults, NodeMetricsDaily,
-    NodeStatus, Type3BaseRewards,
+    BaseRewardsSpec, DailyNodeProviderRewards, DailyNodeRewards, DailyResults, NodeMetricsDaily,
+    NodeStatus, Type3BaseRewardsSpec,
 };
 use ic_base_types::{NodeId, SubnetId};
 use ic_nervous_system_proto::pb::v1::Decimal as DecimalProto;
@@ -153,8 +153,8 @@ impl TryFrom<DailyNodeRewards> for native_types::DailyNodeRewards {
 }
 
 // BaseRewards conversions
-impl From<native_types::BaseRewards> for BaseRewards {
-    fn from(src: native_types::BaseRewards) -> Self {
+impl From<native_types::BaseRewardsSpec> for BaseRewardsSpec {
+    fn from(src: native_types::BaseRewardsSpec) -> Self {
         Self {
             monthly_xdr_permyriad: Some(DecimalProto::from(src.monthly)),
             daily_xdr_permyriad: Some(DecimalProto::from(src.daily)),
@@ -164,10 +164,10 @@ impl From<native_types::BaseRewards> for BaseRewards {
     }
 }
 
-impl TryFrom<BaseRewards> for native_types::BaseRewards {
+impl TryFrom<BaseRewardsSpec> for native_types::BaseRewardsSpec {
     type Error = String;
 
-    fn try_from(src: BaseRewards) -> Result<Self, Self::Error> {
+    fn try_from(src: BaseRewardsSpec) -> Result<Self, Self::Error> {
         Ok(Self {
             node_reward_type: NodeRewardType::from(
                 src.node_reward_type
@@ -187,7 +187,7 @@ impl TryFrom<BaseRewards> for native_types::BaseRewards {
 }
 
 // Type3BaseRewards conversions
-impl From<native_types::Type3BaseRewards> for Type3BaseRewards {
+impl From<native_types::Type3BaseRewards> for Type3BaseRewardsSpec {
     fn from(src: native_types::Type3BaseRewards) -> Self {
         Self {
             region: Some(src.region),
@@ -199,10 +199,10 @@ impl From<native_types::Type3BaseRewards> for Type3BaseRewards {
     }
 }
 
-impl TryFrom<Type3BaseRewards> for native_types::Type3BaseRewards {
+impl TryFrom<Type3BaseRewardsSpec> for native_types::Type3BaseRewards {
     type Error = String;
 
-    fn try_from(value: Type3BaseRewards) -> Result<Self, Self::Error> {
+    fn try_from(value: Type3BaseRewardsSpec) -> Result<Self, Self::Error> {
         Ok(Self {
             region: value
                 .region
@@ -238,12 +238,12 @@ impl From<native_types::DailyNodeProviderRewards> for DailyNodeProviderRewards {
             base_rewards: src
                 .base_rewards
                 .into_iter()
-                .map(BaseRewards::from)
+                .map(BaseRewardsSpec::from)
                 .collect(),
             base_rewards_type3: src
                 .type3_base_rewards
                 .into_iter()
-                .map(Type3BaseRewards::from)
+                .map(Type3BaseRewardsSpec::from)
                 .collect(),
             daily_nodes_rewards: src
                 .daily_nodes_rewards
@@ -265,7 +265,7 @@ impl TryFrom<DailyNodeProviderRewards> for native_types::DailyNodeProviderReward
             base_rewards: src
                 .base_rewards
                 .into_iter()
-                .map(native_types::BaseRewards::try_from)
+                .map(native_types::BaseRewardsSpec::try_from)
                 .collect::<Result<_, _>>()?,
             type3_base_rewards: src
                 .base_rewards_type3

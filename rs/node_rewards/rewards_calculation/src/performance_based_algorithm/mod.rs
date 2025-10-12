@@ -1,5 +1,5 @@
 use crate::performance_based_algorithm::results::{
-    BaseRewards, DailyNodeProviderRewards, DailyNodeRewards, DailyResults, NodeMetricsDaily,
+    BaseRewardsSpec, DailyNodeProviderRewards, DailyNodeRewards, DailyResults, NodeMetricsDaily,
     NodeStatus, Percent, RewardsCalculatorResults, Type3BaseRewards, XDRPermyriad,
 };
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
@@ -58,7 +58,7 @@ struct PerformanceMultiplierResults {
 
 #[derive(Default)]
 struct BaseRewardsResults {
-    base_rewards: Vec<BaseRewards>,
+    base_rewards: Vec<BaseRewardsSpec>,
     base_rewards_type3: Vec<Type3BaseRewards>,
     base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
 }
@@ -481,7 +481,7 @@ trait PerformanceBasedAlgorithm {
         let base_rewards = base_rewards
             .into_iter()
             .map(
-                |((node_reward_type, region), (daily_rewards, monthly_rewards))| BaseRewards {
+                |((node_reward_type, region), (daily_rewards, monthly_rewards))| BaseRewardsSpec {
                     node_reward_type,
                     region,
                     monthly: monthly_rewards,
@@ -529,7 +529,7 @@ trait PerformanceBasedAlgorithm {
         mut performance_multiplier: BTreeMap<NodeId, Percent>,
         mut base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
         mut adjusted_rewards: BTreeMap<NodeId, XDRPermyriad>,
-        base_rewards: Vec<BaseRewards>,
+        base_rewards: Vec<BaseRewardsSpec>,
         base_rewards_type3: Vec<Type3BaseRewards>,
     ) -> DailyNodeProviderRewards {
         let mut results_by_node = Vec::new();

@@ -9,6 +9,7 @@ pub struct GetNodeProvidersRewardsCalculationRequest {
     pub day: DateUtc,
 }
 
+// TODO: Remove useless level of indirection: https://github.com/dfinity/ic/pull/7071/files#r2406450031
 pub type GetNodeProviderRewardsCalculationResponse = Result<DailyResults, String>;
 
 // These are API-facing types with all fields wrapped in `Option`
@@ -47,14 +48,14 @@ pub struct DailyNodeRewards {
     pub adjusted_rewards_xdr_permyriad: Option<Decimal>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub struct BaseRewards {
+pub struct BaseRewardsSpec {
     pub monthly_xdr_permyriad: Option<Decimal>,
     pub daily_xdr_permyriad: Option<Decimal>,
     pub node_reward_type: Option<String>,
     pub region: Option<String>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub struct Type3BaseRewards {
+pub struct Type3BaseRewardsSpec {
     pub region: Option<String>,
     pub nodes_count: Option<u64>,
     pub avg_rewards_xdr_permyriad: Option<Decimal>,
@@ -64,8 +65,8 @@ pub struct Type3BaseRewards {
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyNodeProviderRewards {
     pub rewards_total_xdr_permyriad: Option<Decimal>,
-    pub base_rewards: Vec<BaseRewards>,
-    pub base_rewards_type3: Vec<Type3BaseRewards>,
+    pub base_rewards: Vec<BaseRewardsSpec>,
+    pub base_rewards_type3: Vec<Type3BaseRewardsSpec>,
     pub daily_nodes_rewards: Vec<DailyNodeRewards>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]

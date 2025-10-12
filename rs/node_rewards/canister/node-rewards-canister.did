@@ -36,14 +36,14 @@ type DailyNodeRewards = record {
   adjusted_rewards_xdr_permyriad: opt Decimal;
 };
 
-type BaseRewards = record {
+type BaseRewardsSpec = record {
   monthly_xdr_permyriad: opt Decimal;
   daily_xdr_permyriad: opt Decimal;
   node_reward_type: opt text;
   region: opt text;
 };
 
-type Type3BaseRewards = record {
+type Type3BaseRewardsSpec = record {
   region: opt text;
   nodes_count: opt nat64;
   avg_rewards_xdr_permyriad: opt Decimal;
@@ -53,8 +53,8 @@ type Type3BaseRewards = record {
 
 type DailyNodeProviderRewards = record {
   rewards_total_xdr_permyriad: opt Decimal;
-  base_rewards: vec BaseRewards;
-  base_rewards_type3: vec Type3BaseRewards;
+  base_rewards: vec BaseRewardsSpec;
+  base_rewards_type3: vec Type3BaseRewardsSpec;
   daily_nodes_rewards: vec DailyNodeRewards;
 };
 
