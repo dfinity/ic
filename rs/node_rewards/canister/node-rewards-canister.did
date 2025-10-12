@@ -1,4 +1,4 @@
-// get_node_provider_rewards_calculation
+// get_node_providers_rewards_calculation
 
 type Decimal = record {
   human_readable: opt text;

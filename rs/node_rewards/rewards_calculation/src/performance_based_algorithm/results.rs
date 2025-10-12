@@ -11,21 +11,30 @@ pub type Region = String;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NodeMetricsDaily {
-    /// The subnet to which this node was assigned on this day
+    /// The subnet this node was assigned to on the given day.
+    /// This is determined by the subnet assigned to the node in the last registry version
+    /// before the next day's registry version was generated.
     pub subnet_assigned: SubnetId,
+
     /// Subnet Assigned Failure Rate
     ///
-    /// The failure rate of the entire subnet for this day.
+    /// This is the SUBNET_FAILURE_RATE_PERCENTILE of the original_fr all nodes in the subnet.
+    /// It is used to adjust individual node failure rates to account for systematic issues
+    /// affecting the whole subnet.
     pub subnet_assigned_fr: Percent,
-    /// Number of blocks proposed by this node on this day
+
+    /// Number of blocks successfully proposed by this node on this day
     pub num_blocks_proposed: u64,
+
     /// Number of blocks that failed to be included on this day
     pub num_blocks_failed: u64,
+
     /// Original Failure Rate
     ///
     /// Calculated as `num_blocks_failed / (num_blocks_proposed + num_blocks_failed)`.
-    /// Represents the raw failure rate of the node before any subnet-level adjustments.
+    /// Represents the failure rate of the node before any subnet-level adjustments.
     pub original_fr: Percent,
+
     /// Relative Failure Rate
     ///
     /// Failure rate adjusted for subnet performance.
@@ -37,6 +46,7 @@ pub struct NodeMetricsDaily {
 pub enum NodeStatus {
     /// Node is assigned to a subnet with recorded metrics
     Assigned { node_metrics: NodeMetricsDaily },
+
     /// Node is unassigned; only extrapolated failure rate is available
     Unassigned {
         /// Extrapolated Failure Rate (EFR)
@@ -84,7 +94,7 @@ pub struct BaseRewards {
 
 /// Base rewards for a Type 3 node.
 ///
-/// Type 3 nodes are defined [rs/protobuf/src/gen/registry/registry.node.v1.rs]
+/// Type3 nodes are defined [rs/protobuf/src/gen/registry/registry.node.v1.rs]
 /// For nodes which are type3 special logic is applied to compute base rewards.
 /// Check the documentation of the performance-based rewards algorithm for details.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]

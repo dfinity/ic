@@ -68,7 +68,7 @@ async fn get_node_providers_monthly_xdr_rewards_is_only_callable_by_governance()
 }
 
 #[tokio::test]
-async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated_mode() {
+async fn get_node_providers_rewards_calculation_is_only_callable_in_nonreplicated_mode() {
     let pocket_ic = setup_env().await;
     let node_rewards_id = NODE_REWARDS_CANISTER_ID.get().0;
 
@@ -83,7 +83,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
         &pocket_ic,
         node_rewards_id,
-        "get_node_provider_rewards_calculation",
+        "get_node_providers_rewards_calculation",
         (request.clone(),),
     )
     .await
@@ -99,7 +99,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
         &pocket_ic,
         node_rewards_id,
-        "get_node_provider_rewards_calculation",
+        "get_node_providers_rewards_calculation",
         (request,),
     )
     .await
