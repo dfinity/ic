@@ -732,7 +732,7 @@ impl IDkgComplaintHandlerImpl {
         block_reader: &'a dyn IDkgBlockReader,
         shapshot: &'a dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> BTreeMap<IDkgTranscriptId, &'a IDkgTranscript> {
-        // Get the tactive ranscript references in the finalized tip
+        // Get the active transcript references in the finalized tip
         let tanscript_refs_tip = block_reader
             .active_transcripts()
             .into_iter()
