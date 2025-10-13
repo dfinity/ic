@@ -1,5 +1,7 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//bazel:defs.bzl", "file_size_check")
-load("//ic-os:defs.bzl", "icos_build")
+load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_LATEST", "MAINNET_NNS")
+load("//ic-os:defs.bzl", "extract_mainnet_guestos_image", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 load("//publish:defs.bzl", "artifact_bundle")
 
@@ -45,4 +47,38 @@ artifact_bundle(
     ],
     prefix = "guest-os/update-img",
     visibility = ["//visibility:public"],
+)
+
+extract_mainnet_guestos_image(
+    name = "mainnet_latest_guest_img",
+    disk_img = "@@mainnet_latest_disk_img//file",
+)
+
+write_file(
+    name = "mainnet_latest_launch_measurements",
+    out = "mainnet_latest_launch_measurements.json",
+    content = [json.encode(MAINNET_LATEST["launch_measurements"])],
+)
+
+extract_mainnet_guestos_image(
+    name = "mainnet_nns_guest_img",
+    disk_img = "@@mainnet_nns_disk_img//file",
+)
+
+write_file(
+    name = "mainnet_nns_launch_measurements",
+    out = "mainnet_nns_launch_measurements.json",
+    content = [json.encode(MAINNET_NNS["launch_measurements"])],
+)
+
+extract_mainnet_guestos_image(
+    name = "mainnet_app_guest_img",
+    disk_img = "@@mainnet_app_disk_img//file",
+)
+
+write_file(
+    name = "mainnet_app_launch_measurements",
+    out = "mainnet_app_launch_measurements.json",
+    content = [json.encode(MAINNET_APP["launch_measurements"])],
+    visibility = ["//rs/tests/boundary_nodes:__subpackages__"],
 )

@@ -1,4 +1,6 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//bazel:defs.bzl", "file_size_check")
+load("//bazel:mainnet-icos-images.bzl", "MAINNET_LATEST_HOSTOS")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
@@ -34,4 +36,10 @@ artifact_bundle(
     inputs = [":prod"],
     prefix = "setup-os/disk-img",
     visibility = ["//visibility:public"],
+)
+
+write_file(
+    name = "mainnet_latest_launch_measurements",
+    out = "mainnet_latest_launch_measurements.json",
+    content = [json.encode(MAINNET_LATEST_HOSTOS["launch_measurements"])],
 )

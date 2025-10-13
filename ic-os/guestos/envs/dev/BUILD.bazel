@@ -1,5 +1,7 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//bazel:defs.bzl", "file_size_check")
-load("//ic-os:defs.bzl", "icos_build")
+load("//bazel:mainnet-icos-images.bzl", "MAINNET_LATEST")
+load("//ic-os:defs.bzl", "extract_mainnet_guestos_image", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 load("//publish:defs.bzl", "artifact_bundle")
 
@@ -58,4 +60,15 @@ artifact_bundle(
     ],
     prefix = "guest-os/update-img-dev",
     visibility = ["//visibility:public"],
+)
+
+extract_mainnet_guestos_image(
+    name = "mainnet_latest_guest_img",
+    disk_img = "@@mainnet_latest_disk_img_dev//file",
+)
+
+write_file(
+    name = "mainnet_latest_launch_measurements",
+    out = "mainnet_latest_launch_measurements.json",
+    content = [json.encode(MAINNET_LATEST["dev_launch_measurements"])],
 )
