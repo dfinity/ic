@@ -2897,6 +2897,11 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// First proposal id to record voting history for known neurons.
+    /// TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+    #[prost(message, optional, tag = "30")]
+    pub first_proposal_id_to_record_voting_history:
+        ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

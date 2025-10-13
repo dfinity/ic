@@ -261,6 +261,7 @@ rust_ic_test_suite_with_extra_srcs(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":canister",
         "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/state_machine_tests",
     ] + POCKET_IC_DEPS,
 )
 
