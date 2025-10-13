@@ -1,5 +1,5 @@
 {
-  "checksum": "74eaaa278e85ae34a079a17835f0c148d11bd96bdea18219667a016146caddd9",
+  "checksum": "2e9a8484fde988b5e58c53d85073d0eb6483a7e270f1b76b2f8f0f753cb51d9a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -949,7 +949,7 @@
               "target": "language_tags"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -1136,7 +1136,7 @@
               "target": "futures_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -4158,7 +4158,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -4820,7 +4820,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -7467,7 +7467,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -12486,7 +12486,7 @@
               "target": "lexical_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -15920,7 +15920,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -16252,7 +16252,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -20004,7 +20004,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -22032,6 +22032,10 @@
               "target": "which"
             },
             {
+              "id": "wirm 2.1.0",
+              "target": "wirm"
+            },
+            {
               "id": "wsl 0.1.0",
               "target": "wsl"
             },
@@ -23886,7 +23890,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -24305,7 +24309,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -24363,7 +24367,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -24441,7 +24445,7 @@
               "target": "humantime"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -24973,7 +24977,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -29936,7 +29940,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -31761,7 +31765,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -32649,7 +32653,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -35360,7 +35364,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -38299,7 +38303,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -38413,7 +38417,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -39645,7 +39649,7 @@
               "target": "jni_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -41777,7 +41781,7 @@
               "target": "libcryptsetup_rs_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -43939,14 +43943,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "log 0.4.20": {
+    "log 0.4.27": {
       "name": "log",
-      "version": "0.4.20",
+      "version": "0.4.27",
       "package_url": "https://github.com/rust-lang/log",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/log/0.4.20/download",
-          "sha256": "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+          "url": "https://static.crates.io/crates/log/0.4.27/download",
+          "sha256": "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
         }
       },
       "targets": [
@@ -43974,8 +43978,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.4.20"
+        "edition": "2021",
+        "version": "0.4.27"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -44826,7 +44830,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45144,7 +45148,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45209,7 +45213,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45869,7 +45873,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46436,7 +46440,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46528,7 +46532,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -46928,7 +46932,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47239,7 +47243,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47375,7 +47379,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -53239,7 +53243,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -53631,7 +53635,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -55984,7 +55988,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -56370,7 +56374,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -58300,7 +58304,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -58406,7 +58410,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -59216,7 +59220,7 @@
               "target": "cranelift_bitset"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -59574,7 +59578,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -62220,7 +62224,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -63063,7 +63067,7 @@
                 "target": "ipnet"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -63420,7 +63424,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -65912,7 +65916,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66018,7 +66022,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66143,7 +66147,7 @@
               "target": "brotli_decompressor"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66280,7 +66284,7 @@
               "target": "http"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66672,7 +66676,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -68767,7 +68771,7 @@
               "target": "fxhash"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -71489,7 +71493,7 @@
               "target": "colored"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -71602,7 +71606,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -71979,7 +71983,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -72187,7 +72191,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -74301,7 +74305,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -75410,7 +75414,7 @@
               "target": "libsystemd_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -79158,7 +79162,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -79226,7 +79230,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -80637,7 +80641,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -80939,7 +80943,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -81826,7 +81830,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -81920,7 +81924,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -84318,7 +84322,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -84399,7 +84403,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -84668,7 +84672,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -84971,7 +84975,7 @@
               "target": "bumpalo"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85605,6 +85609,94 @@
       ],
       "license_file": null
     },
+    "wasm-encoder 0.239.0": {
+      "name": "wasm-encoder",
+      "version": "0.239.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-encoder/0.239.0/download",
+          "sha256": "5be00faa2b4950c76fe618c409d2c3ea5a3c9422013e079482d78544bb2d184c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "std",
+            "wasmparser"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "leb128fmt 0.1.0",
+              "target": "leb128fmt"
+            },
+            {
+              "id": "wasm-encoder 0.239.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "wasmparser 0.239.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.239.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "wasm-smith 0.228.0": {
       "name": "wasm-smith",
       "version": "0.228.0",
@@ -86174,6 +86266,110 @@
       ],
       "license_file": null
     },
+    "wasmparser 0.239.0": {
+      "name": "wasmparser",
+      "version": "0.239.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.239.0/download",
+          "sha256": "8c9d90bb93e764f6beabf1d02028c70a2156a6583e63ac4218dd07ef733368b0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "features",
+            "hash-collections",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.15.2",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.7.1",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.26",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "wasmparser 0.239.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.239.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "wasmprinter 0.228.0": {
       "name": "wasmprinter",
       "version": "0.228.0",
@@ -86385,7 +86581,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -86645,7 +86841,7 @@
               "target": "indexmap"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -86824,7 +87020,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -87229,7 +87425,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -91710,6 +91906,81 @@
       ],
       "license_file": "LICENSE"
     },
+    "wirm 2.1.0": {
+      "name": "wirm",
+      "version": "2.1.0",
+      "package_url": "https://github.com/thesuhas/wirm",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wirm/2.1.0/download",
+          "sha256": "14732cb9a0eaf9ec52ecd36b9394ade5c16eea5405d160d8829f0199d97d507d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wirm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wirm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "parallel",
+            "rayon"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.27",
+              "target": "log"
+            },
+            {
+              "id": "rayon 1.10.0",
+              "target": "rayon"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "tempfile 3.20.0",
+              "target": "tempfile"
+            },
+            {
+              "id": "wasm-encoder 0.239.0",
+              "target": "wasm_encoder"
+            },
+            {
+              "id": "wasmparser 0.239.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "wit-bindgen-rt 0.33.0": {
       "name": "wit-bindgen-rt",
       "version": "0.33.0",
@@ -94361,6 +94632,7 @@
     "wat 1.234.0",
     "wee_alloc 0.4.5",
     "which 4.4.0",
+    "wirm 2.1.0",
     "wsl 0.1.0",
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
