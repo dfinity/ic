@@ -82,13 +82,15 @@ fn log_instructions(env: TestEnv) {
         .ok()
         .and_then(|s| s.parse::<u64>().ok());
 
+    let logger = env.logger();
+
     let subnet_size = env.get_all_nested_vms().unwrap().len();
     let minimum_to_break_subnet = (subnet_size - 1) / 3 + 1;
     if let Some(nb) = num_to_break
         && nb < minimum_to_break_subnet
     {
         warn!(
-            env.logger(),
+            logger,
             "NUM_NODES_TO_BREAK is {nb} but needs to be at least {minimum_to_break_subnet} to break a subnet of size {subnet_size}."
         );
     }
@@ -109,12 +111,6 @@ fn log_instructions(env: TestEnv) {
 
     env.sync_with_prometheus();
 
-    let logger = env.logger();
-
-    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
-    let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.infra_group_name;
-
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
@@ -126,6 +122,9 @@ fn log_instructions(env: TestEnv) {
     --upgrade-image-hash {upgrade_image_hash}"#
     );
 
+    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
+    let group_setup = GroupSetup::read_attribute(&env);
+    let group_name: String = group_setup.infra_group_name;
     info!(
         logger,
         "To reboot host VMs run any, or some of the following commands:"
