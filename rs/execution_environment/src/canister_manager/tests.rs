@@ -38,9 +38,10 @@ use ic_management_canister_types_private::{
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable, IC_00,
     InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
-    OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs, RenameToArgs, StoredChunksArgs,
-    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
+    OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -66,7 +67,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, assert_delta,
-    cycles_reserved_for_app_and_verified_app_subnets, get_reply,
+    cycles_reserved_for_app_and_verified_app_subnets, get_reject, get_reply,
     get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost, wat_canister,
     wat_compilation_cost, wat_fn,
 };
@@ -463,9 +464,17 @@ where
 }
 
 #[test]
-fn upgrade_non_existing_canister_fails() {
+fn install_code_on_non_existing_canister_fails() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = canister_test_id(0);
+    let err = test
+        .install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(
+        err.description()
+            .contains(&format!("Canister {canister_id} not found"))
+    );
     let err = test
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
@@ -606,18 +615,24 @@ fn install_code_with_wrong_controller_fails() {
     // Switch user id so the request comes from a non-controller.
     test.set_user_id(user_test_id(42));
 
-    let err = test
-        .install_code_v2(InstallCodeArgsV2::new(
-            CanisterInstallModeV2::Upgrade(None),
-            canister_id,
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-        ))
-        .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
-    assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} can control it"
-    )));
+    for mode in [
+        CanisterInstallModeV2::Install,
+        CanisterInstallModeV2::Reinstall,
+        CanisterInstallModeV2::Upgrade(None),
+    ] {
+        let err = test
+            .install_code_v2(InstallCodeArgsV2::new(
+                mode,
+                canister_id,
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+            ))
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+        assert!(err.description().contains(&format!(
+            "Only the controllers of the canister {canister_id} can control it"
+        )));
+    }
 }
 
 #[test]
@@ -840,6 +855,55 @@ fn install_does_not_change_canister_if_init_traps() {
 }
 
 #[test]
+fn create_and_install_via_inter_canister_call() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build();
+
+    let proxy = test.universal_canister().unwrap();
+
+    // Create using provisional API via proxy canister.
+    let provisional_create_args = ProvisionalCreateCanisterWithCyclesArgs {
+        amount: None,
+        settings: None,
+        specified_id: None,
+        sender_canister_version: None,
+    };
+    let call_args = CallArgs::default().other_side(provisional_create_args.encode());
+    let res = test.ingress(
+        proxy,
+        "update",
+        wasm()
+            .call_simple(
+                IC_00,
+                Method::ProvisionalCreateCanisterWithCycles,
+                call_args,
+            )
+            .build(),
+    );
+    let bytes = get_reply(res);
+    let canister_id = CanisterIdRecord::decode(&bytes).unwrap().get_canister_id();
+
+    // Install via proxy canister.
+    let install_args = InstallCodeArgsV2 {
+        mode: CanisterInstallModeV2::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: vec![],
+        sender_canister_version: None,
+    };
+    let call_args = CallArgs::default().other_side(install_args.encode());
+    let res = test.ingress(
+        proxy,
+        "update",
+        wasm()
+            .call_simple(IC_00, Method::InstallCode, call_args)
+            .build(),
+    );
+    let _ = get_reply(res);
+}
+
+#[test]
 fn stop_a_running_canister() {
     let mut test = ExecutionTestBuilder::new().build();
 
@@ -1041,6 +1105,183 @@ fn starting_an_already_running_canister_keeps_it_running() {
         test.canister_state(canister_id).status(),
         CanisterStatusType::Running
     );
+}
+
+#[test]
+fn stopping_an_already_stopped_canister_keeps_it_stopped() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    // Stop the canister.
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    // Stop the canister again. Since it's already stopped, the canister should
+    // remain stopped.
+    test.subnet_message(
+        Method::StopCanister,
+        CanisterIdRecord::from(canister_id).encode(),
+    )
+    .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+}
+
+#[test]
+fn stopping_canister_can_be_restarted() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    // Make the canister stopping.
+    let stop_id = test.stop_canister(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopping
+    );
+    assert_eq!(test.ingress_state(&stop_id), IngressState::Processing);
+
+    // Restart the canister
+    test.subnet_message(
+        Method::StartCanister,
+        CanisterIdRecord::from(canister_id).encode(),
+    )
+    .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
+    assert!(matches!(
+        test.ingress_state(&stop_id),
+        IngressState::Failed(_)
+    ));
+}
+
+#[test]
+fn canister_can_stop_with_received_message() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let receiver = test.universal_canister().unwrap();
+
+    // Make the canister not stop immediately due to an open call context.
+    let call_args = CallArgs::default().other_side(wasm().reply().build());
+    let (msg_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm().call_simple(receiver, "update", call_args).build(),
+    );
+    assert_eq!(test.ingress_state(&msg_id), IngressState::Received);
+
+    // Stop the canister.
+    let stop_id = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+    assert!(matches!(
+        test.ingress_state(&stop_id),
+        IngressState::Completed(WasmResult::Reply(_))
+    ));
+
+    test.execute_all();
+    assert!(matches!(
+        test.ingress_state(&msg_id),
+        IngressState::Failed(_)
+    ));
+}
+
+#[test]
+fn stop_canister_blocks_until_stopped() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let receiver = test.universal_canister().unwrap();
+
+    // Make the canister not stop immediately due to an open call context.
+    let call_args = CallArgs::default().other_side(wasm().reply().build());
+    let (msg_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm().call_simple(receiver, "update", call_args).build(),
+    );
+    assert_eq!(test.ingress_state(&msg_id), IngressState::Received);
+    test.execute_message(canister_id);
+    assert_eq!(test.ingress_state(&msg_id), IngressState::Processing);
+
+    // Try to stop the canister.
+    let stop_id = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopping
+    );
+    assert_eq!(test.ingress_state(&stop_id), IngressState::Processing);
+
+    test.execute_all();
+    assert!(matches!(
+        test.ingress_state(&msg_id),
+        IngressState::Completed(WasmResult::Reply(_))
+    ));
+
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+    assert!(matches!(
+        test.ingress_state(&stop_id),
+        IngressState::Completed(WasmResult::Reply(_))
+    ));
+}
+
+#[test]
+fn canister_only_accept_calls_if_running() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let check_res = |res: Result<WasmResult, UserError>, canister_status: CanisterStatusType| {
+        match canister_status {
+            CanisterStatusType::Running => {
+                assert!(matches!(res, Ok(WasmResult::Reply(_))));
+            }
+            CanisterStatusType::Stopping => {
+                let err = res.unwrap_err();
+                assert_eq!(err.code(), ErrorCode::CanisterStopping);
+            }
+            CanisterStatusType::Stopped => {
+                let err = res.unwrap_err();
+                assert_eq!(err.code(), ErrorCode::CanisterStopped);
+            }
+        }
+    };
+    let check_accept_calls = |test: &mut ExecutionTest, canister_status: CanisterStatusType| {
+        let res = test.ingress(canister_id, "update", wasm().reply().build());
+        check_res(res, canister_status.clone());
+        let res = test.ingress(canister_id, "query", wasm().reply().build());
+        check_res(res, canister_status.clone());
+        let res = test.non_replicated_query(canister_id, "query", wasm().reply().build());
+        check_res(res, canister_status.clone());
+    };
+    check_accept_calls(&mut test, CanisterStatusType::Running);
+
+    let _ = test.stop_canister(canister_id);
+    check_accept_calls(&mut test, CanisterStatusType::Stopping);
+
+    test.process_stopping_canisters();
+    check_accept_calls(&mut test, CanisterStatusType::Stopped);
+
+    test.start_canister(canister_id).unwrap();
+    check_accept_calls(&mut test, CanisterStatusType::Running);
 }
 
 #[test]
@@ -1365,7 +1606,7 @@ fn delete_stopping_canister_fails() {
 }
 
 #[test]
-fn delete_stopped_canister_succeeds() {
+fn delete_stopped_canister_succeeds_once() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
@@ -1380,6 +1621,72 @@ fn delete_stopped_canister_succeeds() {
     test.delete_canister(canister_id).unwrap();
     // Canister should no longer be there.
     assert!(test.state().canister_state(&canister_id).is_none());
+
+    // Deleting the canister again fails.
+    let err = test.delete_canister(canister_id).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(
+        err.description()
+            .contains(&format!("Canister {canister_id} not found"))
+    );
+}
+
+#[test]
+fn calling_deleted_canister_fails() {
+    // We cannot use `ExecutionTestBuilder` here since calling a deleted canister
+    // results in a panic.
+    let env = StateMachine::new();
+
+    let canister_id = env.create_canister(None);
+
+    env.stop_canister(canister_id).unwrap();
+    env.delete_canister(canister_id).unwrap();
+
+    let err = env
+        .execute_ingress(canister_id, "update", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+
+    let err = env
+        .execute_ingress(canister_id, "query", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+
+    let err = env
+        .query(canister_id, "query", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+
+    let proxy = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+    let call_args = CallArgs::default().other_side(wasm().reply().build());
+    let res = env.execute_ingress(
+        proxy,
+        "update",
+        wasm().call_simple(canister_id, "update", call_args).build(),
+    );
+    let bytes = get_reject(res);
+    assert_eq!(bytes.as_bytes(), 3_u32.to_le_bytes());
+}
+
+#[test]
+fn canister_status_of_deleted_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    test.delete_canister(canister_id).unwrap();
+
+    let err = test.canister_status(canister_id).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(
+        err.description()
+            .contains(&format!("Canister {canister_id} not found"))
+    );
 }
 
 #[test]
