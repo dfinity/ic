@@ -48,146 +48,35 @@ def icos_dev_image_download_url(git_commit_id, variant, update):
         component = "update-img" if update else "disk-img",
     )
 
-def get_mainnet_setupos_images():
-    """
-    Pull the requested SetupOS mainnet images, and their measurements.
-    """
+def mainnet_images():
+    """Set up repositories for ic-os images deployed to mainnet."""
 
-    versions = {
-        "mainnet_latest_setupos_disk_image": MAINNET_LATEST_HOSTOS,
-    }
-
-    for (name, info) in versions.items():
-        http_file(
-            name = name,
-            downloaded_file_path = "disk-img.tar.zst",
-            url = icos_image_download_url(info["version"], "setup-os", False),
-        )
-
-        # TODO: This could live in the same repo as above
-        _mainnet_measurements(
-            name = name + "_launch_measurements",
-            measurements = json.encode(info["launch_measurements"]),
-        )
-
-        http_file(
-            name = name + "_dev",
-            downloaded_file_path = "disk-img.tar.zst",
-            url = icos_dev_image_download_url(info["version"], "setup-os", False),
-        )
-
-        # TODO: This could live in the same repo as above
-        _mainnet_measurements(
-            name = name + "_dev_launch_measurements",
-            measurements = json.encode(info["dev_launch_measurements"]),
-        )
-
-def get_mainnet_guestos_images():
-    versions = {
-        "mainnet_latest_guest_img": MAINNET_LATEST,
-        "mainnet_nns_guest_img": MAINNET_NNS,
-        "mainnet_app_guest_img": MAINNET_APP,
-    }
-
-    for (name, info) in versions.items():
-        _get_mainnet_guestos_image(
-            name = name,
-            setupos_url = icos_image_download_url(info["version"], "setup-os", False),
-            measurements = json.encode(info["launch_measurements"]),
-        )
-
-        _get_mainnet_guestos_image(
-            name = name + "_dev",
-            setupos_url = icos_dev_image_download_url(info["version"], "setup-os", False),
-            measurements = json.encode(info["dev_launch_measurements"]),
-        )
-
-_DEFS_CONTENTS = '''\
-def extract_image(name, **kwargs):
-    native.genrule(
-        name = name,
-        srcs = ["disk-img.tar.zst"],
-        outs = [name + ".tar.zst"],
-        cmd = """#!/bin/bash
-            $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
-        """,
-        target_compatible_with = ["@platforms//os:linux"],
-        tools = ["@@//rs/ic_os/build_tools/partition_tools:extract-guestos"],
-        **kwargs
-    )
-'''
-
-_BUILD_CONTENTS = """\
-load(":defs.bzl", "extract_image")
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
-
-package(default_visibility = ["//visibility:public"])
-
-extract_image("{name}")
-
-write_file(
-    name = "launch_measurements",
-    out = "launch-measurements.json",
-    content = ['''{measurements}'''],
-)
-"""
-
-_attrs = {
-    "setupos_url": attr.string(mandatory = True, doc = "URL to the SetupOS image to extract from"),
-    "setupos_integrity": attr.string(doc = "Optional integrity for the image. If unset, it will be set after the image is downloaded."),
-    "measurements": attr.string(mandatory = True, doc = "Launch measurements for the GuestOS version extracted."),
-}
-
-def _copy_attrs(repository_ctx, attrs):
-    orig = repository_ctx.attr
-    keys = attrs.keys()
-
-    result = {}
-    for key in keys:
-        if hasattr(orig, key):
-            result[key] = getattr(orig, key)
-    result["name"] = orig.name
-
-    return result
-
-# Implementation based on https://github.com/bazelbuild/bazel/blob/a0bcf66154b37882d9ea2fd6be6137c949dea43b/tools/build_defs/repo/http.bzl#L524,
-# simplified, to allow multiple files in the same created repo.
-def _get_mainnet_guestos_image_impl(repository_ctx):
-    download_info = repository_ctx.download(
-        repository_ctx.attr.setupos_url,
-        "disk-img.tar.zst",
-        integrity = repository_ctx.attr.setupos_integrity,
+    http_file(
+        name = "mainnet_latest_disk_img",
+        url = icos_image_download_url(MAINNET_LATEST["version"], "setup-os", False),
     )
 
-    repository_ctx.file("defs.bzl", content = _DEFS_CONTENTS)
-    repository_ctx.file("BUILD.bazel", content = _BUILD_CONTENTS.format(name = repository_ctx.name, measurements = repository_ctx.attr.measurements))
+    http_file(
+        name = "mainnet_latest_disk_img_dev",
+        url = icos_dev_image_download_url(MAINNET_LATEST["version"], "setup-os", False),
+    )
 
-    new_attrs = _copy_attrs(repository_ctx, _attrs)
-    new_attrs.update({"setupos_integrity": download_info.integrity})
+    http_file(
+        name = "mainnet_nns_disk_img",
+        url = icos_image_download_url(MAINNET_NNS["version"], "setup-os", False),
+    )
 
-    return new_attrs
+    http_file(
+        name = "mainnet_nns_disk_img_dev",
+        url = icos_dev_image_download_url(MAINNET_NNS["version"], "setup-os", False),
+    )
 
-_get_mainnet_guestos_image = repository_rule(
-    implementation = _get_mainnet_guestos_image_impl,
-    attrs = _attrs,
-)
+    http_file(
+        name = "mainnet_app_disk_img",
+        url = icos_image_download_url(MAINNET_APP["version"], "setup-os", False),
+    )
 
-def _mainnet_measurements_impl(repository_ctx):
-    repository_ctx.file("BUILD.bazel", content = """\
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
-
-package(default_visibility = ["//visibility:public"])
-
-write_file(
-    name = "{name}",
-    out = "launch-measurements.json",
-    content = ['''{measurements}'''],
-)
-""".format(name = repository_ctx.name, measurements = repository_ctx.attr.measurements))
-
-_mainnet_measurements = repository_rule(
-    implementation = _mainnet_measurements_impl,
-    attrs = {
-        "measurements": attr.string(mandatory = True, doc = "Launch measurements to expose as file."),
-    },
-)
+    http_file(
+        name = "mainnet_app_disk_img_dev",
+        url = icos_dev_image_download_url(MAINNET_APP["version"], "setup-os", False),
+    )

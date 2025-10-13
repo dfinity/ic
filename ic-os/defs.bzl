@@ -17,6 +17,21 @@ load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
 
+def extract_mainnet_guestos_image(name = None, disk_img = None, **kwargs):
+    """Extract a GuestOS image from a mainnet setupos disk image."""
+
+    native.genrule(
+        name = name,
+        srcs = [disk_img],
+        outs = [name + ".tar.zst"],
+        cmd = """#!/bin/bash
+            $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
+        """,
+        target_compatible_with = ["@platforms//os:linux"],
+        tools = ["@@//rs/ic_os/build_tools/partition_tools:extract-guestos"],
+        **kwargs
+    )
+
 def icos_build(
         name,
         image_deps_func,
