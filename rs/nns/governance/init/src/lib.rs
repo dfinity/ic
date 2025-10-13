@@ -9,6 +9,7 @@ use std::path::Path;
 
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
+use ic_nns_governance_api::Visibility;
 use ic_nns_governance_api::{
     Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,
 };
@@ -121,7 +122,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: true,
                 voting_power_refreshed_timestamp_seconds,
-                visibility: Some(ic_nns_governance_api::Visibility::Public as i32),
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -149,7 +150,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
-                visibility: Some(ic_nns_governance_api::Visibility::Public as i32),
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -169,7 +170,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
-                visibility: Some(ic_nns_governance_api::Visibility::Public as i32),
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -284,8 +285,6 @@ impl GovernanceCanisterInitPayloadBuilder {
         }
 
         for result in reader.records() {
-            use ic_nns_governance_api::Visibility;
-
             let record = result.expect("error reading CSV record");
 
             let id_field: &str = &record[0];

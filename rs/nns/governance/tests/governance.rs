@@ -9584,6 +9584,7 @@ fn test_include_public_neurons_in_full_neurons() {
             name: "".to_string(),
             description: None,
             links: Some(vec![]),
+            committed_topics: Some(vec![]),
         }),
     );
     let explicitly_private_neuron = new_neuron(3, Visibility::Private, None);
@@ -10783,6 +10784,7 @@ async fn test_known_neurons() {
                     name: "One".to_string(),
                     description: None,
                     links: vec![],
+                    committed_topics: vec![],
                 }),
             })),
             ..Default::default()
@@ -10803,6 +10805,7 @@ async fn test_known_neurons() {
                     name: "Two".to_string(),
                     description: None,
                     links: vec![],
+                    committed_topics: vec![],
                 }),
             })),
             ..Default::default()
@@ -10825,6 +10828,7 @@ async fn test_known_neurons() {
                 name: "One".to_string(),
                 description: None,
                 links: vec![],
+                committed_topics: vec![],
             }),
         },
         KnownNeuron {
@@ -10833,6 +10837,7 @@ async fn test_known_neurons() {
                 name: "Two".to_string(),
                 description: None,
                 links: vec![],
+                committed_topics: vec![],
             }),
         },
     ];
@@ -10854,6 +10859,7 @@ async fn test_known_neurons() {
                     name: "Two".to_string(),
                     description: None,
                     links: vec![],
+                    committed_topics: vec![],
                 }),
             })),
             ..Default::default()
@@ -10881,6 +10887,7 @@ async fn test_known_neurons() {
                     name: "Zwei".to_string(),
                     description: None,
                     links: vec![],
+                    committed_topics: vec![],
                 }),
             })),
             ..Default::default()
@@ -13602,6 +13609,7 @@ fn test_neuron_info_private_enforcement() {
             name: "Hello, world!".to_string(),
             description: Some("All the best votes.".to_string()),
             links: Some(vec![]),
+            committed_topics: Some(vec![]),
         }),
         ..new_neuron()
     };
