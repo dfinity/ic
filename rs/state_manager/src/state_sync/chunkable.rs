@@ -201,6 +201,26 @@ impl Drop for IncompleteState {
 }
 
 impl IncompleteState {
+    /// Determines whether to validate chunks based on three conditions:
+    /// 1. validate_data: whether validation is normally required (checkpoint_height <= started_height)
+    /// 2. ALWAYS_VALIDATE: compile-time constant (currently false)
+    /// 3. test_force_validate: test-only override to force validation (only available in debug builds)
+    fn should_validate(&self, validate_data: bool) -> bool {
+        validate_data || ALWAYS_VALIDATE || self.is_test_force_validate_enabled()
+    }
+
+    /// Returns true if test force validation is enabled (debug builds only)
+    fn is_test_force_validate_enabled(&self) -> bool {
+        #[cfg(debug_assertions)]
+        {
+            self.state_sync.is_test_force_validate()
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            false
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_new(
         log: ReplicaLogger,
@@ -347,6 +367,7 @@ impl IncompleteState {
     /// Hardlink unchanged files from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn hardlink_files(
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -367,7 +388,7 @@ impl IncompleteState {
             log,
             "state sync: hardlink_files for {} files {} validation",
             diff_script.copy_files.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if self.should_validate(validate_data) {
                 "with"
             } else {
                 "without"
@@ -388,7 +409,7 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    if validate_data || ALWAYS_VALIDATE {
+                    if self.should_validate(validate_data) {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
                             fatal!(
@@ -449,7 +470,7 @@ impl IncompleteState {
                                 );
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -481,7 +502,7 @@ impl IncompleteState {
 
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -609,6 +630,7 @@ impl IncompleteState {
     /// Copy reusable chunks from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_chunks(
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -629,7 +651,7 @@ impl IncompleteState {
             log,
             "state sync: copy_chunks for {} chunks {} validation",
             diff_script.copy_chunks.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if self.should_validate(validate_data) {
                 "with"
             } else {
                 "without"
@@ -720,7 +742,7 @@ impl IncompleteState {
                         }
                         #[cfg(not(target_os = "linux"))]
                         let src_data = &src_map.as_slice()[byte_range];
-                        if validate_data || ALWAYS_VALIDATE {
+                        if self.should_validate(validate_data) {
                             #[cfg(target_os = "linux")]
                             let src_data = &src_map.as_slice()[byte_range];
 
@@ -743,7 +765,7 @@ impl IncompleteState {
                                 );
 
                                 corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}.",
@@ -1005,7 +1027,8 @@ impl IncompleteState {
                         missing_chunks: Default::default(),
                         root_old: checkpoint_layout.raw_path().to_path_buf(),
                         height_old: checkpoint_height,
-                        validate_data: true,
+                        validate_data: checkpoint_height
+                            <= self.state_sync.state_manager.started_height(),
                     })
                 }
             }
@@ -1023,11 +1046,8 @@ impl IncompleteState {
                     missing_chunks: Default::default(),
                     root_old: checkpoint_old.raw_path().to_path_buf(),
                     height_old: checkpoint_height,
-                    validate_data: !self
-                        .state_sync_refs
-                        .cache
-                        .read()
-                        .state_is_fetched(checkpoint_height),
+                    validate_data: checkpoint_height
+                        <= self.state_sync.state_manager.started_height(),
                 })
             }
             (None, None) => None,
@@ -1097,7 +1117,7 @@ impl IncompleteState {
                 .sub(diff_script.zeros_chunks as i64);
 
             let mut thread_pool = self.thread_pool.lock().unwrap();
-            Self::hardlink_files(
+            self.hardlink_files(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1110,7 +1130,7 @@ impl IncompleteState {
                 &mut fetch_chunks,
             );
 
-            Self::copy_chunks(
+            self.copy_chunks(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1421,10 +1441,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             Arc::new(meta_manifest.clone()),
                         );
                         self.state = DownloadState::Complete;
-                        self.state_sync_refs
-                            .cache
-                            .write()
-                            .register_successful_sync(self.height);
                         Ok(())
                     } else {
                         let state_sync_file_group = build_file_group_chunks(&manifest);
@@ -1618,11 +1634,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         Arc::new(meta_manifest.clone()),
                     );
                     self.state = DownloadState::Complete;
-
-                    self.state_sync_refs
-                        .cache
-                        .write()
-                        .register_successful_sync(self.height);
 
                     // Delay delivery of artifact
                     #[cfg(feature = "malicious_code")]

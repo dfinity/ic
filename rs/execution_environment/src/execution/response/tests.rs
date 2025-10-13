@@ -35,8 +35,8 @@ fn execute_response_when_stopping_status() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
     test.stop_canister(a_id);
 
@@ -96,8 +96,8 @@ fn execute_response_refunds_cycles() {
         .build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -152,8 +152,8 @@ fn execute_response_when_call_context_deleted() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -200,8 +200,8 @@ fn execute_response_successfully() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -259,8 +259,8 @@ fn execute_response_traps() {
         .build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -316,8 +316,8 @@ fn execute_response_with_trapping_cleanup() {
         .build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -2727,8 +2727,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -2776,8 +2776,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -2825,8 +2825,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -2880,8 +2880,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.

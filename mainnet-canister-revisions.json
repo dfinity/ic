@@ -3,6 +3,10 @@
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
+  "bitcoin_testnet": {
+    "sha256": "42af59ae4fd5041f30f8ac12f324e3a93533de0cb89cd2278100c2389cbfff65",
+    "tag": "release/2025-07-02"
+  },
   "ck_btc_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
     "sha256": "649401fd06e58e61aea55747961d5144af673b5e70bccd005898a6da65c84c29"
@@ -88,8 +92,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "72e86d5c9495d0762831cc9755bb3a3300db43156a8716ccd4537faa37a55565",
-    "tag": "release-2025-10-03"
+    "sha256": "cf47234df0ef47fad685fc0d346c80a74d25c71668543f941772b136f604355d",
+    "tag": "release-2025-10-10"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
