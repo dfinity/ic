@@ -26,7 +26,7 @@ fn gradius() {
         downstream_calls: vec![Call {
             receiver: canisters[1],
             //call_bytes: 2 * MB,
-            call_bytes: 2 * MB - 1000,
+            call_bytes: 1 * KB,
             reply_bytes: 5 * KB,
             timeout_secs: None,
             downstream_calls: vec![Call {

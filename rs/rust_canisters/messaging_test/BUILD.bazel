@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -33,4 +33,19 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":messaging-test-canister.did",
     deps = DEPENDENCIES + [":messaging_test"],
+)
+
+rust_test_suite(
+    name = "messaging_test_integration",
+    srcs = [
+        "tests/messaging_test.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        ":messaging_test",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
 )
