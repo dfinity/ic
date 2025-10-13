@@ -688,8 +688,6 @@ jobs:
               - "**/*.toml"
               - "**/*.lock"
       - name: Run Cargo ${{ matrix.name }} Linux
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         if: |
           steps.filter.outputs.cargo == 'true' ||
           contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||

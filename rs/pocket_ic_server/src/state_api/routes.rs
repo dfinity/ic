@@ -1398,6 +1398,8 @@ pub async fn create_instance(
             sns,
             ii,
             nns_ui,
+            /* `nns_ui` does not depend on `bitcoin` */
+            bitcoin: _,
         } = icp_features;
         if nns_ui.is_some() {
             if instance_config.http_gateway_config.is_none() {

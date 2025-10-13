@@ -268,6 +268,7 @@ mod test {
                 public_ipv4_config: None,
                 domain: Some(format!("dummy_domain_{test_id}")),
                 node_reward_type: Some(NodeRewardType::Type1dot1 as i32),
+                ssh_node_state_write_access: vec![],
             };
 
             assert_eq!(

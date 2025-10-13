@@ -1,6 +1,6 @@
 [package]
 name = "ic-ed25519"
-version = "0.3.0"
+version = "0.4.0"
 description = "A package created for the Internet Computer Protocol for creating and verifying Ed25519 signatures."
 license = "Apache-2.0"
 readme = "README.md"
@@ -27,6 +27,7 @@ rand = ["dep:rand"]
 
 [dev-dependencies]
 hex = { workspace = true }
+ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }

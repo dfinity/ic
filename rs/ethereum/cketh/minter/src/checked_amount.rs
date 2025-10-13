@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use evm_rpc_client::Nat256;
+use evm_rpc_types::Nat256;
 use minicbor;
 use rlp::RlpStream;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

@@ -231,6 +231,7 @@ fn modify_neuron_all_sections(neuron: &mut Neuron) {
         name: "name".to_string(),
         description: Some("description".to_string()),
         links: vec!["http://example.com".to_string()],
+        committed_topics: vec![Topic::Governance as i32],
     });
 }
 
@@ -277,6 +278,7 @@ fn record_neuron_vote() -> BenchResult {
                 Topic::NetworkEconomics,
                 ProposalId { id: rng.next_u64() },
                 Vote::Yes,
+                ProposalId { id: 0 },
             )
             .unwrap();
     })
@@ -304,6 +306,7 @@ fn record_known_neuron_vote() -> BenchResult {
             name: "a".repeat(KNOWN_NEURON_NAME_MAX_LEN),
             description: Some("b".repeat(KNOWN_NEURON_DESCRIPTION_MAX_LEN)),
             links: vec!["http://example.com".to_string()],
+            committed_topics: vec![Topic::Governance as i32],
         }))
         .build();
 
@@ -318,6 +321,7 @@ fn record_known_neuron_vote() -> BenchResult {
                 Topic::NetworkEconomics,
                 ProposalId { id: rng.next_u64() },
                 Vote::Yes,
+                ProposalId { id: 0 },
             )
             .unwrap();
     })

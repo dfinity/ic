@@ -1,11 +1,6 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
-use std::fmt::Display;
-
-use std::net::SocketAddr;
-
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
@@ -14,6 +9,9 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
 };
 use idna::domain_to_ascii_strict;
+use std::fmt::Display;
+use std::net::SocketAddr;
+use std::time::SystemTime;
 
 use crate::mutations::node_management::{
     common::{
@@ -22,6 +20,7 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
@@ -35,16 +34,20 @@ impl Registry {
         // Get the caller ID and check if it is in the registry
         let caller_id = dfn_core::api::caller();
         println!("{LOG_PREFIX}do_add_node started: {payload:?} caller: {caller_id:?}");
-        self.do_add_node_(payload, caller_id)
+        self.do_add_node_(payload, caller_id, now_system_time())
     }
 
     fn do_add_node_(
         &mut self,
         payload: AddNodePayload,
         caller_id: PrincipalId,
+        now: SystemTime,
     ) -> Result<NodeId, String> {
         let mut node_operator_record = get_node_operator_record(self, caller_id)
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
+
+        let reservation =
+            self.try_reserve_capacity_for_node_operator_operation(now, caller_id, 1)?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
@@ -159,6 +162,7 @@ impl Registry {
             public_ipv4_config: ipv4_intf_config,
             domain,
             node_reward_type,
+            ssh_node_state_write_access: vec![],
         };
 
         // 8. Insert node, public keys, and crypto keys
@@ -181,6 +185,10 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{LOG_PREFIX}do_add_node finished: {payload:?}");
+
+        if let Err(e) = self.commit_used_capacity_for_node_operator_operation(now, reservation) {
+            println!("{LOG_PREFIX}do_add_node did not use reservation capacity: {e}");
+        }
 
         Ok(node_id)
     }
@@ -532,7 +540,7 @@ mod tests {
         // Set an invalid domain name
         payload.domain = Some("invalid_domain_name".to_string());
         // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
         // Assert
         assert_eq!(
             result.unwrap_err(),
@@ -556,7 +564,7 @@ mod tests {
         )]);
         let (payload, _) = prepare_add_node_payload(1);
         // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
         // Assert
         assert_eq!(
             result.unwrap_err(),
@@ -571,7 +579,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         let (payload, _) = prepare_add_node_payload(1);
         // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
         // Assert
         assert_eq!(
             result.unwrap_err(),
@@ -597,7 +605,7 @@ mod tests {
         let (payload, _) = prepare_add_node_payload(1);
         // Act
         let node_id: NodeId = registry
-            .do_add_node_(payload.clone(), node_operator_id)
+            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         // Assert node record is correct
         let node_record_expected = NodeRecord {
@@ -641,10 +649,10 @@ mod tests {
         assert_ne!(payload_1.http_endpoint, payload_2.http_endpoint);
         // Act: add two nodes with the different IPs
         let node_id_1: NodeId = registry
-            .do_add_node_(payload_1.clone(), node_operator_id)
+            .do_add_node_(payload_1.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         let node_id_2: NodeId = registry
-            .do_add_node_(payload_2.clone(), node_operator_id)
+            .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         // Assert both node records are in the registry and are correct
         let node_record_expected_1 = NodeRecord {
@@ -692,7 +700,7 @@ mod tests {
         assert_eq!(payload_1.http_endpoint, payload_2.http_endpoint);
         // Act: Add two nodes with the same IPs
         let node_id_1: NodeId = registry
-            .do_add_node_(payload_1.clone(), node_operator_id)
+            .do_add_node_(payload_1.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         let node_record_expected_1 = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload_1.xnet_endpoint)),
@@ -705,7 +713,7 @@ mod tests {
         assert_eq!(node_record_1, node_record_expected_1);
         // Add the second node, this should remove the first one from the registry
         let node_id_2: NodeId = registry
-            .do_add_node_(payload_2.clone(), node_operator_id)
+            .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         // Assert second node record is in the registry and is correct
         let node_record_expected_2 = NodeRecord {
@@ -762,9 +770,9 @@ mod tests {
         payload_2.public_ipv4_config = ipv4_config;
 
         // Act
-        let _ = registry.do_add_node_(payload_1.clone(), node_operator_id);
+        let _ = registry.do_add_node_(payload_1.clone(), node_operator_id, now_system_time());
         let e = registry
-            .do_add_node_(payload_2.clone(), node_operator_id)
+            .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
             .unwrap_err();
         assert!(
             e.contains("do_add_node: There is already another node with the same IPv4 address")
@@ -805,7 +813,7 @@ mod tests {
             .http_endpoint
             .clone_from(&format!("[{}]:{}", http.ip_addr, http.port));
         let new_node_id = registry
-            .do_add_node_(payload.clone(), node_operator_id)
+            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
 
         // Verify the subnet record is updated with the new node
@@ -847,7 +855,7 @@ mod tests {
 
         // Add the new node
         let new_node_id = registry
-            .do_add_node_(payload.clone(), node_operator_id)
+            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
 
         // Verify the new node is present in the registry
@@ -894,7 +902,7 @@ mod tests {
             .http_endpoint
             .clone_from(&format!("[{}]:{}", http.ip_addr, http.port));
         let new_node_id = registry
-            .do_add_node_(payload.clone(), node_operator_id)
+            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
 
         // Verify that there is an API boundary node record for the new node
@@ -934,7 +942,7 @@ mod tests {
 
         // Attempt to add the new node, which should panic due to exhausted allowance
         registry
-            .do_add_node_(payload.clone(), node_operator_id)
+            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .unwrap();
     }
 
@@ -953,7 +961,7 @@ mod tests {
 
         // Add the new node
         let new_node_id = registry
-            .do_add_node_(payload.clone(), node_operator_id)
+            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
 
         // Verify the new node is present in the registry
@@ -986,7 +994,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1);
         payload.node_reward_type = None;
         // Code under test
-        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
 
         // Assert
         assert_eq!(
@@ -1012,7 +1020,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1);
         payload.node_reward_type = None;
         // Code under test
-        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
 
         // Assert
         assert!(
@@ -1038,12 +1046,62 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1);
         payload.node_reward_type = Some("invalid_type".to_string());
         // Code under test
-        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
 
         // Assert
         assert_eq!(
             result.unwrap_err(),
             "[Registry] do_add_node: Error parsing node type from payload: Invalid node type: invalid_type"
+        );
+    }
+
+    #[test]
+    fn test_do_add_node_fails_when_rate_limits_exceeded() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_id.to_vec(),
+            node_provider_principal_id: node_provider_id.to_vec(),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
+        };
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        let (payload, _) = prepare_add_node_payload(1);
+
+        // Exhaust the rate limit capacity
+        let available_operator =
+            registry.get_available_node_operator_op_capacity(node_operator_id, now);
+        let available_provider =
+            registry.get_available_node_provider_op_capacity(node_provider_id, now);
+        let available = available_operator.min(available_provider);
+        let reservation = registry
+            .try_reserve_capacity_for_node_operator_operation(now, node_operator_id, available)
+            .unwrap();
+        registry
+            .commit_used_capacity_for_node_operator_operation(now, reservation)
+            .unwrap();
+
+        let error = registry
+            .do_add_node_(payload, node_operator_id, now)
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            "Rate Limit Capacity exceeded. Please wait and try again later."
         );
     }
 }
