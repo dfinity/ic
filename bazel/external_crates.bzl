@@ -1621,6 +1621,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "which": crate.spec(
                 version = "^4.2.2",
             ),
+            "wirm": crate.spec(
+                version = "2.1.0",
+                features = ["parallel"],
+            ),
             "wsl": crate.spec(
                 version = "^0.1.0",
             ),

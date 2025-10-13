@@ -14,16 +14,15 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
 };
-use ic_wasm_transform::Module;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::sync::Arc;
-use wasmparser::ExternalKind;
+use wirm::{Module, wasmparser::ExternalKind};
 
 fn assert_memory_and_table_exports(module: &Module) {
     let export_section = &module.exports;
     let mut memory_exported = false;
     let mut table_exported = false;
-    for e in export_section {
+    for e in export_section.iter() {
         if ExternalKind::Table == e.kind {
             assert_eq!(e.name, "table");
             table_exported = true;
