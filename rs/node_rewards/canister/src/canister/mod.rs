@@ -10,8 +10,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     NodeProvidersMonthlyXdrRewards,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    DailyResults, GetNodeProviderRewardsCalculationResponse,
-    GetNodeProvidersRewardsCalculationRequest,
+    DailyResults, GetNodeProvidersRewardsCalculationRequest,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
