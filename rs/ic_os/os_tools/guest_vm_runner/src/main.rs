@@ -976,7 +976,9 @@ mod tests {
             .expect("Service should have failed but did not")
             .unwrap_err();
         assert!(
-            error.to_string().contains("Failed to define GuestOS virtual machine"),
+            error
+                .to_string()
+                .contains("Failed to define GuestOS virtual machine"),
             "Got unexpected error: \"{error:?}\""
         );
 
