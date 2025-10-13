@@ -541,7 +541,7 @@ fn verify_unknown_block_handling(
 }
 
 #[test]
-fn test_ledger_unknown_block_icrc3() {
+fn test_unknown_block_icrc3() {
     for bad_block_index in 0..NUM_BLOCKS + 1 {
         let env = &StateMachine::new();
         let ledger_id = install_icrc3_test_ledger(env);
@@ -552,7 +552,7 @@ fn test_ledger_unknown_block_icrc3() {
 }
 
 #[test]
-fn test_ledger_unknown_block_legacy() {
+fn test_unknown_block_legacy() {
     for bad_block_index in 0..NUM_BLOCKS + 1 {
         let env = &StateMachine::new();
         let ledger_id = install_icrc3_test_ledger(env);
