@@ -274,6 +274,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn canister_status(mut self) -> Self {
+        self.0.push(Ops::CanisterStatus as u8);
+        self
+    }
+
     pub fn canister_version(mut self) -> Self {
         self.0.push(Ops::CanisterVersion as u8);
         self

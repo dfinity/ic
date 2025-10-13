@@ -1408,6 +1408,116 @@ fn get_canister_status_of_self() {
 }
 
 #[test]
+fn canister_status_via_mgmt_canister_matches_system_api() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let status_via_mgmt_canister =
+        |test: &mut ExecutionTest, expected_status: CanisterStatusType| {
+            let result = test.canister_status(canister_id);
+            let reply = get_reply(result);
+            let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+            assert_eq!(status.status(), expected_status);
+        };
+
+    let status_via_post_upgrade = |test: &mut ExecutionTest, stable_memory_offset: u32| {
+        test.upgrade_canister_with_args(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm()
+                .stable_grow(1)
+                .push_int(stable_memory_offset)
+                .canister_status()
+                .int_to_blob()
+                .stable_write_offset_blob()
+                .build(),
+        )
+        .unwrap();
+    };
+
+    status_via_mgmt_canister(&mut test, CanisterStatusType::Running);
+    status_via_post_upgrade(&mut test, 0);
+
+    let result = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .canister_status()
+            .int_to_blob()
+            .append_and_reply()
+            .build(),
+    );
+    let reply = get_reply(result);
+    assert_eq!(reply, 1_u32.to_le_bytes());
+
+    let _ = test.stop_canister(canister_id);
+
+    status_via_mgmt_canister(&mut test, CanisterStatusType::Stopping);
+    status_via_post_upgrade(&mut test, 4);
+
+    test.process_stopping_canisters();
+
+    status_via_mgmt_canister(&mut test, CanisterStatusType::Stopped);
+    status_via_post_upgrade(&mut test, 8);
+
+    test.start_canister(canister_id).unwrap();
+
+    let result = test.ingress(
+        canister_id,
+        "update",
+        wasm().stable_read(0, 12).append_and_reply().build(),
+    );
+    let reply = get_reply(result);
+    assert_eq!(
+        reply,
+        [
+            1_u32.to_le_bytes(),
+            2_u32.to_le_bytes(),
+            3_u32.to_le_bytes()
+        ]
+        .concat()
+    );
+}
+
+#[test]
+fn canister_status_default_controller() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let result = test.canister_status(canister_id);
+    let reply = get_reply(result);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(status.controllers(), vec![test.user_id().get()]);
+}
+
+#[test]
+fn canister_status_module_hash() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let module_hash = |test: &mut ExecutionTest| {
+        let result = test.canister_status(canister_id);
+        let reply = get_reply(result);
+        let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+        status.module_hash()
+    };
+
+    assert_eq!(module_hash(&mut test), None);
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let universal_canister_module_hash = ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM);
+    assert_eq!(
+        module_hash(&mut test),
+        Some(universal_canister_module_hash.to_vec())
+    );
+}
+
+#[test]
 fn get_canister_status_of_stopped_canister() {
     with_setup(|canister_manager, mut state, _| {
         let sender = user_test_id(1).get();
