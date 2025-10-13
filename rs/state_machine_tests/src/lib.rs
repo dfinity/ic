@@ -3133,7 +3133,6 @@ impl StateMachine {
             )
             .with_subnet_size(self.nodes.len())
             .with_subnet_seed(seed)
-            .with_subnet_id(ic_test_utilities_types::ids::subnet_test_id(1221))
             .with_registry_data_provider(self.registry_data_provider.clone())
             .build_with_subnets(
                 (*self.pocket_xnet.read().unwrap())
