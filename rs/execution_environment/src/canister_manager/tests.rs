@@ -12,6 +12,8 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
+use flate2::Compression;
+use flate2::write::GzEncoder;
 use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
@@ -97,6 +99,7 @@ use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
+    io::Write,
     mem::size_of,
     path::Path,
     sync::Arc,
@@ -1496,25 +1499,49 @@ fn canister_status_default_controller() {
 fn canister_status_module_hash() {
     let mut test = ExecutionTestBuilder::new().build();
 
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
-
-    let module_hash = |test: &mut ExecutionTest| {
+    let module_hash = |test: &mut ExecutionTest, canister_id: CanisterId| {
         let result = test.canister_status(canister_id);
         let reply = get_reply(result);
         let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
         status.module_hash()
     };
 
-    assert_eq!(module_hash(&mut test), None);
+    let minimal_module = MINIMAL_WASM.to_vec();
+    let minimal_module_hash = ic_crypto_sha2::Sha256::hash(&minimal_module);
 
-    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(&MINIMAL_WASM).unwrap();
+    let gzipped_minimal_module = encoder.finish().unwrap();
+    let gzipped_minimal_module_hash = ic_crypto_sha2::Sha256::hash(&gzipped_minimal_module);
 
-    let universal_canister_module_hash = ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM);
-    assert_eq!(
-        module_hash(&mut test),
-        Some(universal_canister_module_hash.to_vec())
-    );
+    for (test_module, test_module_hash) in [
+        (minimal_module, minimal_module_hash),
+        (gzipped_minimal_module, gzipped_minimal_module_hash),
+    ] {
+        let canister_id = test.create_canister(*INITIAL_CYCLES);
+        assert_eq!(module_hash(&mut test, canister_id), None);
+
+        test.install_canister(canister_id, test_module.to_vec())
+            .unwrap();
+        assert_eq!(
+            module_hash(&mut test, canister_id),
+            Some(test_module_hash.to_vec())
+        );
+
+        test.reinstall_canister(canister_id, test_module.to_vec())
+            .unwrap();
+        assert_eq!(
+            module_hash(&mut test, canister_id),
+            Some(test_module_hash.to_vec())
+        );
+
+        test.upgrade_canister(canister_id, test_module.to_vec())
+            .unwrap();
+        assert_eq!(
+            module_hash(&mut test, canister_id),
+            Some(test_module_hash.to_vec())
+        );
+    }
 }
 
 #[test]

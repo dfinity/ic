@@ -9317,6 +9317,7 @@ dependencies = [
  "criterion",
  "escargot",
  "execution-environment-bench",
+ "flate2",
  "ic-base-types",
  "ic-btc-interface",
  "ic-canister-sandbox-backend-lib",
