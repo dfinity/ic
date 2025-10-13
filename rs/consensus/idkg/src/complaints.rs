@@ -733,7 +733,7 @@ impl IDkgComplaintHandlerImpl {
         shapshot: &'a dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> BTreeMap<IDkgTranscriptId, &'a IDkgTranscript> {
         // Get the active transcript references in the finalized tip
-        let tanscript_refs_tip = block_reader
+        let transcript_refs_tip = block_reader
             .active_transcripts()
             .into_iter()
             .map(|transcript_ref| (transcript_ref.transcript_id, transcript_ref));
@@ -748,7 +748,7 @@ impl IDkgComplaintHandlerImpl {
 
         // Deduplicate all references
         let transcript_refs =
-            BTreeMap::from_iter(tanscript_refs_tip.chain(transcript_refs_delivered));
+            BTreeMap::from_iter(transcript_refs_tip.chain(transcript_refs_delivered));
 
         // Resolve all references to transcripts on the blockchain
         let chain_transcripts = transcript_refs
