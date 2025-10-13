@@ -79,7 +79,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
                 signer.load_tecdsa_sig_transcripts(&inputs.as_ref());
                 inputs
             },
-            |inputs| sign_share(signer, &ThresholdEcdsaSigInputsOwned::as_ref(&inputs)),
+            |inputs| sign_share(signer, &ThresholdEcdsaSigInputsOwned::as_ref(inputs)),
             SmallInput,
         )
     });
@@ -136,7 +136,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                 verify_sig_share(
                     verifier,
                     *signer_id,
-                    &ThresholdEcdsaSigInputsOwned::as_ref(&inputs),
+                    &ThresholdEcdsaSigInputsOwned::as_ref(inputs),
                     sig_share,
                 )
             },
@@ -196,7 +196,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
             |(inputs, sig_shares)| {
                 combine_sig_shares(
                     &combiner,
-                    &ThresholdEcdsaSigInputsOwned::as_ref(&inputs),
+                    &ThresholdEcdsaSigInputsOwned::as_ref(inputs),
                     sig_shares,
                 )
             },
@@ -256,7 +256,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
             |(inputs, signature)| {
                 verify_combined_sig(
                     &verifier,
-                    &ThresholdEcdsaSigInputsOwned::as_ref(&inputs),
+                    &ThresholdEcdsaSigInputsOwned::as_ref(inputs),
                     signature,
                 )
             },
