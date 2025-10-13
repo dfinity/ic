@@ -4661,6 +4661,7 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "candid",
+ "canister-test",
  "futures",
  "ic-agent",
  "ic-base-types",
