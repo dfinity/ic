@@ -104,6 +104,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
+use wirm::wasmparser;
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
