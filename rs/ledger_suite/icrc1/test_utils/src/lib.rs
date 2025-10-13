@@ -764,6 +764,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
     /// - Avoid duplicate transactions and minting to the minter.
     fn mint_strategy(
         minter_identity: Arc<BasicIdentity>,
+        default_fee: u64,
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
@@ -773,16 +774,17 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
             amount_strategy(),
             valid_created_at_time_strategy(now),
             arb_memo(),
+            prop::option::of(Just(default_fee)),
         )
             .prop_filter_map(
                 "The minting account is set as to account or tx is a duplicate",
-                move |(to_signer, amount, created_at_time, memo)| {
+                move |(to_signer, amount, created_at_time, memo, fee)| {
                     let to = to_signer.account();
                     let tx = Transaction {
                         operation: Operation::Mint::<Tokens> {
                             amount: Tokens::from_e8s(amount),
                             to,
-                            fee: None,
+                            fee: fee.map(Tokens::from_e8s),
                         },
                         created_at_time,
                         memo: memo.clone(),
@@ -836,16 +838,17 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                 default_fee..=balance,
                 valid_created_at_time_strategy(now),
                 arb_memo(),
+                prop::option::of(Just(default_fee)),
             )
                 .prop_filter_map(
                     "Tx hash already exists",
-                    move |(amount, created_at_time, memo)| {
+                    move |(amount, created_at_time, memo, fee)| {
                         let tx = Transaction {
                             operation: Operation::Burn::<Tokens> {
                                 amount: Tokens::from_e8s(amount),
                                 from,
                                 spender: None,
-                                fee: None,
+                                fee: fee.map(Tokens::from_e8s),
                             },
                             created_at_time,
                             memo: memo.clone(),
@@ -1221,8 +1224,13 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         let tx_hashes_pointer = Arc::new(state.txs.clone());
         let account_to_basic_identity_pointer = Arc::new(state.principal_to_basic_identity.clone());
         let allowance_map_pointer = Arc::new(state.allowances.clone());
-        let mint_strategy =
-            mint_strategy(minter_identity.clone(), now, tx_hashes_pointer.clone()).boxed();
+        let mint_strategy = mint_strategy(
+            minter_identity.clone(),
+            default_fee,
+            now,
+            tx_hashes_pointer.clone(),
+        )
+        .boxed();
         let arb_tx = if balances.is_empty() {
             mint_strategy
         } else {
