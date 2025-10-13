@@ -299,17 +299,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 node.get_ip_addr()
             )
         });
-
-        // By restarting ic-replica, we are restarting the orchestrator. On startup, the
-        // orchestrator purges authorized SSH keys from the node. After figuring out its assigned
-        // subnet, it will re-add the keys that are present in the registry. We thus wait to make
-        // sure that the keys are re-added before proceeding.
-        wait_until_authentication_is_granted(
-            &logger,
-            &node.get_ip_addr(),
-            BACKUP_USERNAME,
-            &backup_auth,
-        );
     }
 
     info!(logger, "Ensure a healthy node still works in read mode");
