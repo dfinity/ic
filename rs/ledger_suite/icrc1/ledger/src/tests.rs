@@ -675,3 +675,54 @@ fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
         },
     )
 }
+
+#[test]
+fn test_burn_fee_error() {
+    let now = ts(1);
+
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
+
+    let from = test_account_id(1);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
+
+    let tr = Transaction {
+        operation: Operation::Burn {
+            from,
+            spender: None,
+            amount: tokens(1_000),
+            fee: Some(tokens(10_000)),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert_eq!(
+        tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
+        TxApplyError::BurnOrMintFee
+    );
+}
+
+#[test]
+fn test_mint_fee_error() {
+    let now = ts(1);
+
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
+
+    let to = test_account_id(1);
+
+    let tr = Transaction {
+        operation: Operation::Mint {
+            to,
+            amount: tokens(1_000),
+            fee: Some(tokens(10_000)),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert_eq!(
+        tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
+        TxApplyError::BurnOrMintFee
+    );
+}
