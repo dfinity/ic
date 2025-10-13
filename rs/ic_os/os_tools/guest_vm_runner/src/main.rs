@@ -905,7 +905,7 @@ mod tests {
 
     fn invalid_hostos_config() -> HostOSConfig {
         let mut hostos_config = valid_hostos_config();
-        hostos_config.hostos_settings.vm_memory = 0;
+        hostos_config.hostos_settings.vm_nr_of_vcpus = 0;
         hostos_config
     }
 
@@ -974,11 +974,10 @@ mod tests {
         let error = (&mut service.task)
             .await
             .expect("Service should have failed but did not")
-            .unwrap_err()
-            .to_string();
+            .unwrap_err();
         assert!(
-            error.contains("Failed to define GuestOS virtual machine"),
-            "Got unexpected error: \"{error}\""
+            error.to_string().contains("Failed to define GuestOS virtual machine"),
+            "Got unexpected error: \"{error:?}\""
         );
 
         service.assert_metrics_contains("hostos_guestos_service_start 0");
