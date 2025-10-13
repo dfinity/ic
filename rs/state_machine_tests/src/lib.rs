@@ -4858,10 +4858,10 @@ pub fn two_subnets_with_config(
 
 /// Sets up two `StateMachine` that can communicate with each other.
 pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
-    let config = StateMachineConfig {
-        subnet_config: SubnetConfig::new(SubnetType::Application),
-        hypervisor_config: HypervisorConfig::default(),
-    };
+    let config = StateMachineConfig::new(
+        SubnetConfig::new(SubnetType::Application),
+        HypervisorConfig::default(),
+    );
     two_subnets_with_config(config.clone(), config)
 }
 
