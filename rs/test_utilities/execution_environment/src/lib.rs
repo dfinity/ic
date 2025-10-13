@@ -1091,7 +1091,17 @@ impl ExecutionTest {
         state
             .canister_state_mut(&canister_id)
             .unwrap()
-            .push_ingress(ingress);
+            .push_ingress(ingress.clone());
+        self.ingress_history_writer.set_status(
+            &mut state,
+            ingress.message_id,
+            IngressStatus::Known {
+                receiver: ingress.receiver.get(),
+                user_id: ingress.source,
+                time: self.time,
+                state: IngressState::Received,
+            },
+        );
         self.state = Some(state);
         if !self.manual_execution {
             self.execute_all();
@@ -1328,7 +1338,18 @@ impl ExecutionTest {
             .method_payload(method_payload)
             .build();
 
-        state.subnet_queues_mut().push_ingress(message);
+        state.subnet_queues_mut().push_ingress(message.clone());
+
+        self.ingress_history_writer.set_status(
+            &mut state,
+            message.message_id,
+            IngressStatus::Known {
+                receiver: message.receiver.get(),
+                user_id: message.source,
+                time: self.time,
+                state: IngressState::Received,
+            },
+        );
 
         self.state = Some(state);
 
