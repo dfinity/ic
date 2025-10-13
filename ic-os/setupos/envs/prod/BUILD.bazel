@@ -42,4 +42,5 @@ write_file(
     name = "mainnet_latest_launch_measurements",
     out = "mainnet_latest_launch_measurements.json",
     content = [json.encode(MAINNET_LATEST_HOSTOS["launch_measurements"])],
+    visibility = ["//rs/tests:__subpackages__"],
 )

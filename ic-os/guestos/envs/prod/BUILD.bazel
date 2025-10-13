@@ -58,6 +58,7 @@ write_file(
     name = "mainnet_latest_launch_measurements",
     out = "mainnet_latest_launch_measurements.json",
     content = [json.encode(MAINNET_LATEST["launch_measurements"])],
+    visibility = ["//rs/tests:__subpackages__"],
 )
 
 extract_mainnet_guestos_image(
@@ -69,6 +70,7 @@ write_file(
     name = "mainnet_nns_launch_measurements",
     out = "mainnet_nns_launch_measurements.json",
     content = [json.encode(MAINNET_NNS["launch_measurements"])],
+    visibility = ["//rs/tests:__subpackages__"],
 )
 
 extract_mainnet_guestos_image(
@@ -80,5 +82,5 @@ write_file(
     name = "mainnet_app_launch_measurements",
     out = "mainnet_app_launch_measurements.json",
     content = [json.encode(MAINNET_APP["launch_measurements"])],
-    visibility = ["//rs/tests/boundary_nodes:__subpackages__"],
+    visibility = ["//rs/tests:__subpackages__"],
 )
