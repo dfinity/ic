@@ -37,8 +37,7 @@ jobs:
 
   insta-tests:
     name: Quick Feedback Tests
-    runs-on: &dind-small-setup
-      labels: dind-small
+    runs-on: ubuntu-latest
     container: *container-setup
     timeout-minutes: 30
     if: ${{ github.event_name != 'merge_group' }}
