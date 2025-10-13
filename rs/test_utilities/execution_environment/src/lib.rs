@@ -29,9 +29,10 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
+    CanisterUpgradeOptions, EmptyBlob, InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2,
+    MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
+    UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -786,6 +787,14 @@ impl ExecutionTest {
     pub fn canister_status(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         let payload = CanisterIdRecord::from(canister_id).encode();
         self.subnet_message(Method::CanisterStatus, payload)
+    }
+
+    /// Returns the canister status struct by canister id.
+    pub fn canister_status_struct(&mut self, canister_id: CanisterId) -> CanisterStatusResultV2 {
+        let payload = CanisterIdRecord::from(canister_id).encode();
+        let res = self.subnet_message(Method::CanisterStatus, payload);
+        let bytes = get_reply(res);
+        CanisterStatusResultV2::decode(&bytes).unwrap()
     }
 
     /// Updates the freezing threshold of the given canister.
