@@ -286,11 +286,12 @@ fn arb_approve<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>>
 }
 
 fn arb_mint<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
-    (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint {
-        to,
-        amount,
-        fee: None,
-    })
+    (
+        arb_account(),
+        arb_amount(),
+        proptest::option::of(arb_amount()),
+    )
+        .prop_map(|(to, amount, fee)| Operation::Mint { to, amount, fee })
 }
 
 fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
@@ -298,12 +299,13 @@ fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
         arb_account(),
         proptest::option::of(arb_account()),
         arb_amount(),
+        proptest::option::of(arb_amount()),
     )
-        .prop_map(|(from, spender, amount)| Operation::Burn {
+        .prop_map(|(from, spender, amount, fee)| Operation::Burn {
             from,
             spender,
             amount,
-            fee: None,
+            fee,
         })
 }
 
