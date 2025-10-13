@@ -2063,6 +2063,24 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
     );
 }
 
+#[test]
+fn test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
 fn list_allowances(
     env: &StateMachine,
     ledger: CanisterId,
