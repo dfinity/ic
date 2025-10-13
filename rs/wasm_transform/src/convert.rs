@@ -263,9 +263,23 @@ pub(super) mod internal_to_encoder {
             // Special cases with a single argument.
             (build BrTable $arg:ident) => (Ok(I::BrTable($arg.0, $arg.1)));
             (build TryTable $arg:ident) => (Ok(I::TryTable($arg.0, $arg.1)));
-            (build F32Const $arg:ident) => (Ok(I::F32Const(f32::from_bits($arg.bits()))));
-            (build F64Const $arg:ident) => (Ok(I::F64Const(f64::from_bits($arg.bits()))));
+            (build F32Const $arg:ident) => (Ok(I::F32Const(wasm_encoder::Ieee32::from(f32::from_bits($arg.bits())))));
+            (build F64Const $arg:ident) => (Ok(I::F64Const(wasm_encoder::Ieee64::from(f64::from_bits($arg.bits())))));
             (build V128Const $arg:ident) => (Ok(I::V128Const($arg.i128())));
+            (build TypedSelectMulti $arg:ident) => {
+                Ok(
+                    I::TypedSelectMulti(
+                        Cow::Owned(
+                            $arg
+                            .into_iter()
+                            .map(|v| {
+                                wasm_encoder::ValType::try_from(v)
+                                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", v)))
+                            }).collect::<Result<Vec<_>>>()?
+                        )
+                    )
+                )
+            };
 
             // Standard case with a single argument.
             (build $op:ident $arg:ident) => (Ok(I::$op($arg)));

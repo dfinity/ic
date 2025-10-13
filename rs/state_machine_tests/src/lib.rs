@@ -387,6 +387,7 @@ fn add_subnet_local_registry_records(
             public_ipv4_config: None,
             domain: None,
             node_reward_type: None,
+            ssh_node_state_write_access: vec![],
         };
         registry_data_provider
             .add(

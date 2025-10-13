@@ -57,6 +57,7 @@ use rstest::rstest;
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::time::Duration;
+use wirm::wasmparser;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
@@ -5881,8 +5882,8 @@ fn cannot_stop_canister_with_open_call_context() {
 
     // Enqueue ingress message to canister A but do not execute it (guaranteed
     // by "manual execution" option of the test).
-    let (ingress_id, ingress_status) = test.ingress_raw(a_id, "update", a);
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let ingress_id = test.ingress_raw(a_id, "update", a).0;
+    assert_eq!(test.ingress_state(&ingress_id), IngressState::Received);
 
     // Execute the ingress message and induct all messages to get the call
     // message to the input queue of canister B.

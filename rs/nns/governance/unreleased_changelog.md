@@ -9,23 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-* Record votes by known neurons before clearing ballots.
-* Allow updating known neuron through RegisterKnownNeuron without having to change its name.
-* Added `committed_topics` to the `KnownNeuronData` that can be submitted as part of the
-  `RegisterKnownNeuron` proposal.
-
 ## Changed
 
-* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
-  limit.
-
-* The Dogecoin canister (ID begins with gordg-) is considered a "protocol"
-  canister. This affects proposal topics.
-
 ## Deprecated
-
-* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
-  instead).
 
 ## Removed
 
