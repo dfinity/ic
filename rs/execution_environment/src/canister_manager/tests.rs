@@ -6654,21 +6654,27 @@ fn test_environment_variables() {
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
 /// in addition to both canisters being controlled by the anonymous principal.
+/// If the first state machine has the NNS canister range, then the first canister has the id of
+/// the migration canister such that it can call `rename_canister`.
 fn install_two_universal_canisters(
     env1: &StateMachine,
     env2: &StateMachine,
 ) -> (CanisterId, CanisterId) {
     const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
-
     // Create a canister on each of the two subnets.
-    let canister_id1 = env1
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
-            INITIAL_CYCLES_BALANCE,
-        )
-        .unwrap();
+
+    // Skip 16 canister IDs so that if env1 is the NNS, canister_id1 will have the migration canister ID.
+    let mut canister_id1 = CanisterId::from_u64(0);
+    for _ in 0..18 {
+        canister_id1 = env1
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                INITIAL_CYCLES_BALANCE,
+            )
+            .unwrap();
+    }
     let canister_id2 = env2
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.to_vec(),
