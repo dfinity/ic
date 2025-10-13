@@ -56,6 +56,7 @@ component_files = {
     Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
     Label("guestos/init/setup-encryption/setup-data-encryption.service"): "/etc/systemd/system/setup-data-encryption.service",
     Label("guestos/init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
+    Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
