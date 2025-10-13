@@ -273,6 +273,4 @@ idl_to_json(name = "idl2json")
 # Mainnet ICOS image support
 get_mainnet_setupos_images()
 
-get_mainnet_guestos_images(
-    extract_guestos = "//rs/ic_os/build_tools/partition_tools:extract-guestos",
-)
+get_mainnet_guestos_images()
