@@ -228,19 +228,16 @@ impl IDkgBlockReader for TestIDkgBlockReader {
         Box::new(self.target_subnet_xnet_transcripts.iter())
     }
 
-    fn transcript(
+    fn transcript_as_ref(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+    ) -> Result<&IDkgTranscript, TranscriptLookupError> {
         if self.fail_to_resolve {
             return Err("Test transcript resolve failure".into());
         }
-        self.idkg_transcripts
-            .get(transcript_ref)
-            .cloned()
-            .ok_or(format!(
-                "transcript(): {transcript_ref:?} not found in idkg_transcripts"
-            ))
+        self.idkg_transcripts.get(transcript_ref).ok_or(format!(
+            "transcript(): {transcript_ref:?} not found in idkg_transcripts"
+        ))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
@@ -541,12 +538,18 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
     node_id: NodeId,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies {
+        pool,
+        crypto,
+        state_manager,
+        ..
+    } = dependencies(pool_config.clone(), 1);
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        state_manager,
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -561,12 +564,28 @@ pub(crate) fn create_complaint_dependencies_and_pool(
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies {
+        pool,
+        crypto,
+        state_manager,
+        ..
+    } = dependencies(pool_config.clone(), 1);
+
+    state_manager
+        .get_mut()
+        .expect_get_certified_state_snapshot()
+        .returning(|| {
+            Some(Box::new(fake_state_with_signature_requests(
+                Height::from(0),
+                [],
+            )))
+        });
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         crypto,
+        state_manager,
         metrics_registry.clone(),
         logger.clone(),
     );
