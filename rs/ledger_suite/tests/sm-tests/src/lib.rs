@@ -970,6 +970,112 @@ where
     );
 }
 
+pub fn test_mint_burn_fee_rejected<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    assert_eq!(0, total_supply(&env, canister_id));
+    assert_eq!(0, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
+
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const TX_AMOUNT: u64 = 1_000_000;
+
+    let mint_error = send_transfer(
+        &env,
+        canister_id,
+        MINTER.owner,
+        &TransferArg {
+            from_subaccount: None,
+            to: p1.0.into(),
+            fee: Some(FEE.into()),
+            created_at_time: None,
+            amount: Nat::from(INITIAL_BALANCE),
+            memo: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        mint_error,
+        TransferError::BadFee {
+            expected_fee: Nat::from(0u64)
+        }
+    );
+
+    transfer(&env, canister_id, MINTER, p1.0, INITIAL_BALANCE).expect("mint failed");
+
+    let mut expected_balance = INITIAL_BALANCE;
+
+    assert_eq!(expected_balance, total_supply(&env, canister_id));
+    assert_eq!(expected_balance, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
+
+    let burn_error = send_transfer(
+        &env,
+        canister_id,
+        p1.0,
+        &TransferArg {
+            from_subaccount: None,
+            to: MINTER,
+            fee: Some(FEE.into()),
+            created_at_time: None,
+            amount: Nat::from(TX_AMOUNT),
+            memo: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        burn_error,
+        TransferError::BadFee {
+            expected_fee: Nat::from(0u64)
+        }
+    );
+
+    transfer(&env, canister_id, p1.0, MINTER, TX_AMOUNT).expect("burn failed");
+
+    expected_balance -= TX_AMOUNT;
+
+    assert_eq!(expected_balance, total_supply(&env, canister_id));
+    assert_eq!(expected_balance, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
+
+    let approve_args = default_approve_args(p2.0, u64::MAX);
+    send_approval(&env, canister_id, p1.into(), &approve_args).expect("approval failed");
+
+    expected_balance -= FEE;
+
+    let mut transfer_from_args = TransferFromArgs {
+        from: p1.0.into(),
+        to: MINTER,
+        fee: Some(FEE.into()),
+        created_at_time: None,
+        amount: Nat::from(TX_AMOUNT),
+        memo: None,
+        spender_subaccount: None,
+    };
+    let burn_from_error =
+        send_transfer_from(&env, canister_id, p2.0, &transfer_from_args).unwrap_err();
+    assert_eq!(
+        burn_from_error,
+        TransferFromError::BadFee {
+            expected_fee: Nat::from(0u64)
+        }
+    );
+
+    transfer_from_args.fee = None;
+    send_transfer_from(&env, canister_id, p2.0, &transfer_from_args).expect("transfer from failed");
+
+    expected_balance -= TX_AMOUNT;
+
+    assert_eq!(expected_balance, total_supply(&env, canister_id));
+    assert_eq!(expected_balance, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
+}
+
 pub fn test_account_canonicalization<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,

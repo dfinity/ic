@@ -463,6 +463,14 @@ fn test_mint_burn() {
 }
 
 #[test]
+fn test_mint_burn_fee_rejected() {
+    ic_ledger_suite_state_machine_tests::test_mint_burn_fee_rejected(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_anonymous_transfers() {
     ic_ledger_suite_state_machine_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
 }
