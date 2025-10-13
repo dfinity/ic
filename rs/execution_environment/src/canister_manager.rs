@@ -4,6 +4,7 @@ use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
 };
+use crate::util::MIGRATION_CANISTER_ID;
 use crate::{
     canister_settings::{CanisterSettings, ValidatedCanisterSettings},
     hypervisor::Hypervisor,
@@ -2880,7 +2881,10 @@ impl CanisterManager {
         // has to be a controller of the canister to be renamed.
         validate_controller(canister, &sender)?;
 
-        // TODO(MR-684): Only the migration orchestrator should be able to be the sender.
+        // Only the migration orchestrator should be able to be the sender.
+        if sender != MIGRATION_CANISTER_ID.into() {
+            return Err(CanisterManagerError::CallerNotAuthorized);
+        }
 
         if state.canister_state(&new_id).is_some() {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_id));
