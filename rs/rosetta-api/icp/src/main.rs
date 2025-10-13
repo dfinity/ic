@@ -398,7 +398,7 @@ async fn main() -> std::io::Result<()> {
     let ledger = Arc::new(client);
     let canister_id_str = canister_config.ledger_canister_id.to_string();
     let rosetta_metrics = RosettaMetrics::new("ICP".to_string(), canister_id_str);
-    let initial_sync_complete = Arc::new(AtomicBool::new(false));
+    let initial_sync_complete = Arc::new(AtomicBool::new(offline));
     let req_handler = RosettaRequestHandler::new(
         blockchain,
         ledger.clone(),
