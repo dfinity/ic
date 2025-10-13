@@ -712,16 +712,19 @@ fn reinstall_calls_canister_start_and_canister_init() {
     let mut test = ExecutionTestBuilder::new().build();
 
     // install wasm module with no exported functions
-    let id = test
-        .canister_from_cycles_and_wat(*INITIAL_CYCLES, EMPTY_WAT)
-        .unwrap();
+    let id = test.create_canister(*INITIAL_CYCLES);
 
-    let wasm = wat::parse_str(COUNTER_WAT).unwrap();
-    test.reinstall_canister(id, wasm).unwrap();
-    // If canister_start and canister_init were called, then the counter
-    // should be initialized to 42.
-    let reply = test.ingress(id, "read", vec![]);
-    assert_eq!(reply, Ok(WasmResult::Reply(vec![42, 0, 0, 0])));
+    // reinstall the canister twice:
+    // - once as an empty canister;
+    // - and then as a non-empty canister.
+    for _ in 0..2 {
+        let wasm = wat::parse_str(COUNTER_WAT).unwrap();
+        test.reinstall_canister(id, wasm).unwrap();
+        // If canister_start and canister_init were called, then the counter
+        // should be initialized to 42.
+        let reply = test.ingress(id, "read", vec![]);
+        assert_eq!(reply, Ok(WasmResult::Reply(vec![42, 0, 0, 0])));
+    }
 }
 
 #[test]
