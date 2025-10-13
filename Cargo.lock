@@ -12935,6 +12935,7 @@ dependencies = [
  "pretty_assertions",
  "prost 0.13.4",
  "rand 0.8.5",
+ "rayon",
  "serde",
  "serde_json",
  "slog",
