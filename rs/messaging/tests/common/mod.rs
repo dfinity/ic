@@ -1,12 +1,16 @@
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_state_machine_tests::{StateMachine, SubmitIngressError, UserError};
+use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
+use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
     Cycles,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
 };
-use messaging_test::{Call, Message, Reply, Response, decode_reply, encode_message};
+use messaging_test::{Call, Message, Reply, decode_reply, encode_message};
+use proptest::prelude::*;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 
 pub const KB: u32 = 1024;
@@ -53,12 +57,12 @@ impl PulseStatus {
 }
 
 pub struct TestSubnet {
-    env: Arc<StateMachine>,
+    pub env: Arc<StateMachine>,
     pulses: Vec<PulseStatus>,
 }
 
 impl TestSubnet {
-    pub fn new(env: Arc<StateMachine>, canisters_count: usize) -> Self {
+    pub fn new(env: Arc<StateMachine>, canisters_count: u64) -> Self {
         let wasm = Project::cargo_bin_maybe_from_env("messaging-test-canister", &[]).bytes();
         for _ in 0..canisters_count {
             env.install_canister_with_cycles(
@@ -82,19 +86,21 @@ impl TestSubnet {
     }
 
     /// Attempts to submit a new pulse.
-    pub fn pulse(
-        &mut self,
-        receiver: CanisterId,
-        msg: Message,
-    ) -> Result<(), (Message, SubmitIngressError)> {
+    pub fn pulse(&mut self, call: Call) -> Result<(), (Message, SubmitIngressError)> {
+        let msg = Message {
+            call_index: 0,
+            reply_bytes: call.reply_bytes,
+            downstream_calls: call.downstream_calls,
+        };
+
         // Try signing up a new pulse.
         let pulse = match self.env.submit_ingress_as(
             PrincipalId::new_anonymous(),
-            receiver,
+            call.receiver,
             "pulse",
-            messaging_test::encode_message(&msg, 0),
+            encode_message(&msg, call.call_bytes as usize),
         ) {
-            Ok(msg_id) => PulseStatus::Submitted(receiver, msg, msg_id),
+            Ok(msg_id) => PulseStatus::Submitted(call.receiver, msg, msg_id),
             Err(err) => {
                 return Err((msg, err));
             }
@@ -132,6 +138,190 @@ impl TestSubnet {
             .keys()
             .cloned()
             .collect()
+    }
+}
+
+/// Config for two `SubnetSubnet` including message memory limits
+/// and number of canisters for each subnet.
+///
+/// Note: low values for `*_max_instructions_per_round` can lead to continuous resets during
+/// execution, leading to the canister apparently doing nothing at all.
+#[derive(Debug)]
+pub struct TestSubnetsConfig {
+    pub local_canisters_count: u64,
+    pub local_max_instructions_per_round: u64,
+    pub local_message_memory_capacity: u64,
+    pub remote_canisters_count: u64,
+    pub remote_max_instructions_per_round: u64,
+    pub remote_message_memory_capacity: u64,
+}
+
+impl Default for TestSubnetsConfig {
+    fn default() -> Self {
+        Self {
+            local_canisters_count: 2,
+            local_max_instructions_per_round: 3_000_000_000,
+            local_message_memory_capacity: 100 * MB as u64,
+            remote_canisters_count: 1,
+            remote_max_instructions_per_round: 3_000_000_000,
+            remote_message_memory_capacity: 50 * MB as u64,
+        }
+    }
+}
+
+impl TestSubnetsConfig {
+    /// Generates a `StateMachineConfig` using defaults for an application subnet, except for the
+    /// subnet message memory capacity and the maximum number of instructions per round.
+    fn state_machine_config(
+        subnet_message_memory_capacity: u64,
+        max_instructions_per_round: u64,
+    ) -> StateMachineConfig {
+        StateMachineConfig::new(
+            SubnetConfig {
+                scheduler_config: SchedulerConfig {
+                    scheduler_cores: 4,
+                    max_instructions_per_round: max_instructions_per_round.into(),
+                    max_instructions_per_message_without_dts: max_instructions_per_round.into(),
+                    max_instructions_per_slice: max_instructions_per_round.into(),
+                    ..SchedulerConfig::application_subnet()
+                },
+                cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
+            },
+            HypervisorConfig {
+                guaranteed_response_message_memory_capacity: subnet_message_memory_capacity.into(),
+                best_effort_message_memory_capacity: subnet_message_memory_capacity.into(),
+                ..HypervisorConfig::default()
+            },
+        )
+    }
+
+    /// Generates a `StateMachineConfig` for the `local_env`.
+    pub fn local_state_machine_config(&self) -> StateMachineConfig {
+        Self::state_machine_config(
+            self.local_message_memory_capacity,
+            self.local_max_instructions_per_round,
+        )
+    }
+
+    /// Generates a `StateMachineConfig` for the `remote_env`.
+    pub fn remote_state_machine_config(&self) -> StateMachineConfig {
+        Self::state_machine_config(
+            self.remote_message_memory_capacity,
+            self.remote_max_instructions_per_round,
+        )
+    }
+}
+
+pub fn two_test_subnets(config: TestSubnetsConfig) -> (TestSubnet, TestSubnet) {
+    let (local_env, remote_env) = ic_state_machine_tests::two_subnets_with_config(
+        config.local_state_machine_config(),
+        config.remote_state_machine_config(),
+    );
+    (
+        TestSubnet::new(local_env, config.local_canisters_count),
+        TestSubnet::new(remote_env, config.remote_canisters_count),
+    )
+}
+
+prop_compose! {
+    /// Generates an arbitrary `Call` without any downstream calls.
+    fn arb_simple_call(
+        receivers: Vec<CanisterId>,
+        call_bytes_range: RangeInclusive<usize>,
+        reply_bytes_range: RangeInclusive<usize>,
+        best_effort_percentage: usize,
+        timeout_secs_range: RangeInclusive<usize>,
+    )(
+        receiver in proptest::sample::select(receivers),
+        call_bytes in call_bytes_range,
+        reply_bytes in reply_bytes_range,
+        best_effort_probe in 0..100_usize,
+        timeout_secs in timeout_secs_range,
+    ) -> Call {
+        Call {
+            receiver,
+            call_bytes: call_bytes as u32,
+            reply_bytes: reply_bytes as u32,
+            timeout_secs: (best_effort_probe < best_effort_percentage).then_some(timeout_secs as u32),
+            downstream_calls: Vec::new(),
+        }
+    }
+}
+
+/// Generates a count in `calls_count_range` `make_calls_percentage` of the time, 0 otherwise.
+fn arb_call_count(
+    make_calls_percentage: usize,
+    calls_count_range: RangeInclusive<usize>,
+) -> impl Strategy<Value = usize> {
+    (0..100_usize).prop_flat_map(move |p| {
+        if p < make_calls_percentage {
+            calls_count_range.clone()
+        } else {
+            0..=0_usize
+        }
+    })
+}
+
+/// Generates an arbitrary `Call` including downstream calls.
+///
+/// Starts with a list of `counts` and correspondingly sized list of simple calls,
+/// then recursively generates one call with nested downstream calls from them.
+pub fn arb_nested_call(
+    receivers: Vec<CanisterId>,
+    call_bytes_range: RangeInclusive<usize>,
+    reply_bytes_range: RangeInclusive<usize>,
+    best_effort_percentage: usize,
+    timeout_secs_range: RangeInclusive<usize>,
+    make_calls_percentage: usize,
+    max_total_calls: usize,
+    calls_count_range: RangeInclusive<usize>,
+) -> impl Strategy<Value = Call> {
+    proptest::collection::vec(
+        arb_call_count(make_calls_percentage, calls_count_range.clone()),
+        max_total_calls,
+    )
+    .prop_flat_map(move |counts| {
+        let s: usize = counts.iter().sum();
+        (
+            proptest::collection::vec(
+                arb_simple_call(
+                    receivers.clone(),
+                    call_bytes_range.clone(),
+                    reply_bytes_range.clone(),
+                    best_effort_percentage,
+                    timeout_secs_range.clone(),
+                ),
+                s + 1, // + 1 to make sure there is at least one call we can return.
+            ),
+            Just(counts),
+        )
+    })
+    .prop_map(|(mut simple_calls, mut counts)| {
+        let mut call = simple_calls.pop().unwrap();
+        to_nested_call(&mut call, &mut simple_calls, &mut counts);
+        call
+    })
+}
+
+/// Generates a `Call` from a number of simple calls (i.e. without downstream calls) using a vector of `counts`.
+///
+/// `counts` specifies how many downstream calls `call` should make. For a count > 0, count simple calls are popped
+/// from the list and appended as downstream calls; then for each downstream call this function is called recursively.
+///
+/// Stops once all recursions have encountered a count of 0, or we run out of counts or simple calls.
+fn to_nested_call(call: &mut Call, simple_calls: &mut Vec<Call>, counts: &mut Vec<usize>) {
+    if let Some(downstream_calls_count) = counts.pop() {
+        for _ in 0..downstream_calls_count {
+            match simple_calls.pop() {
+                Some(simple_call) => call.downstream_calls.push(simple_call),
+                None => {
+                    return;
+                }
+            }
+        }
+        for call in call.downstream_calls.iter_mut() {
+            to_nested_call(call, simple_calls, counts)
+        }
     }
 }
 
