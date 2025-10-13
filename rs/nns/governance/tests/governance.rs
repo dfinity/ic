@@ -13794,34 +13794,26 @@ fn fixture_for_follow_private_neuron_restrictions() -> api::Governance {
         dissolve_state: Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
         aging_since_timestamp_seconds: u64::MAX,
         visibility,
+        followees: followee.clone(),
         ..Default::default()
     };
 
     let neurons = vec![
-        api::Neuron {
-            followees: followee.clone(),
-            ..neuron(
-                1,
-                Some(principal(NEURON_1_CONTROLLER)),
-                Some(Visibility::Private as i32),
-            )
-        },
-        api::Neuron {
-            followees: followee.clone(),
-            ..neuron(
-                2,
-                Some(principal(NEURON_2_CONTROLLER)),
-                Some(Visibility::Private as i32),
-            )
-        },
-        api::Neuron {
-            followees: followee.clone(),
-            ..neuron(
-                3,
-                Some(principal(NEURON_3_CONTROLLER)),
-                Some(Visibility::Private as i32),
-            )
-        },
+        neuron(
+            1,
+            Some(principal(NEURON_1_CONTROLLER)),
+            Some(Visibility::Private as i32),
+        ),
+        neuron(
+            2,
+            Some(principal(NEURON_2_CONTROLLER)),
+            Some(Visibility::Private as i32),
+        ),
+        neuron(
+            3,
+            Some(principal(NEURON_3_CONTROLLER)),
+            Some(Visibility::Private as i32),
+        ),
         neuron(
             MANAGER_ID,
             Some(principal(MANAGER_ID)),
