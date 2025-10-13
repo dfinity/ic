@@ -82,7 +82,7 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         # here we pop "this_uuid=foo" from "BUILD_UUIDS=foo:bar:baz" leaving "BUILD_UUIDS="bar:baz"
         this_uuid="${BUILD_UUIDS%%:*}"
         BUILD_UUIDS="${BUILD_UUIDS#$this_uuid}"
-        BUILD_UUIDS="${BUILD_UUIDS#:}"
+        export BUILD_UUIDS="${BUILD_UUIDS#:}"
         echo "BUILD_UUIDS=$BUILD_UUIDS" >> "$GITHUB_ENV" # update the env
 
         if [ -n "$this_uuid:-" ]; then
