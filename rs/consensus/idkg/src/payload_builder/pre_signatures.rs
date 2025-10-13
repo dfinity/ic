@@ -262,19 +262,18 @@ fn update_schnorr_transcript_in_creation(
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     // Update pre_signature with completed transcripts
-    if pre_signature.blinder_unmasked.is_none() {
-        if let Some(transcript) =
+    if pre_signature.blinder_unmasked.is_none()
+        && let Some(transcript) =
             transcripts.remove(&pre_signature.blinder_unmasked_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
-                pre_signature_id
-            );
-            pre_signature.blinder_unmasked =
-                Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+    {
+        debug!(
+            log,
+            "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
+            pre_signature_id
+        );
+        pre_signature.blinder_unmasked =
+            Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
     Ok((pre_signature.blinder_unmasked.is_some(), new_transcripts))
 }
