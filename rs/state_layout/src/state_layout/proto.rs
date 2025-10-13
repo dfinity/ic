@@ -143,9 +143,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .unwrap_or_default()
             .into(),
             execution_state_bits,
-            memory_allocation: MemoryAllocation::new_unchecked(NumBytes::from(
-                value.memory_allocation,
-            )),
+            memory_allocation: MemoryAllocation::from(NumBytes::from(value.memory_allocation)),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,

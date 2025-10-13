@@ -150,6 +150,6 @@ sh_test(
     args = ["$(rootpath " + b + ")" for b in BINS_TO_TEST],
     data = BINS_TO_TEST,
     tags = [
-        "test_macos",
+        "test_all_platforms",
     ],
 )

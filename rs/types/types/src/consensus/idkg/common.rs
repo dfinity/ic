@@ -1,4 +1,5 @@
 //! Canister threshold transcripts and references related defininitions.
+use crate::consensus::get_faults_tolerated;
 use crate::{Height, RegistryVersion};
 use crate::{
     consensus::idkg::{
@@ -961,6 +962,19 @@ impl IDkgTranscriptParamsRef {
     /// Updates the height of the references.
     pub fn update(&mut self, height: Height) {
         self.operation_type_ref.update(height);
+    }
+
+    /// Number of contributions needed to reconstruct a sharing.
+    pub fn reconstruction_threshold(&self) -> usize {
+        let faulty = get_faults_tolerated(self.receivers.len());
+        faulty + 1
+    }
+
+    /// Number of multi-signature shares needed to include a dealing in a
+    /// transcript.
+    pub fn verification_threshold(&self) -> usize {
+        let faulty = get_faults_tolerated(self.receivers.len());
+        self.reconstruction_threshold() + faulty
     }
 }
 

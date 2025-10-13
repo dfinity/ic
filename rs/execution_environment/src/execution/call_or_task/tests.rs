@@ -14,7 +14,7 @@ use ic_replicated_state::{
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
 use ic_types::batch::CanisterCyclesCostSchedule;
-use ic_types::ingress::IngressStatus;
+use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
@@ -1202,8 +1202,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -1230,8 +1230,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).trap().build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.

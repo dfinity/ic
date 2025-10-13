@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use common::test_helpers::install_registry_canister_with_payload_builder;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::swap_node_in_subnet_directly;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
+    get_value, swap_node_in_subnet_directly,
+};
 use ic_nns_test_utils::registry::{
     create_subnet_threshold_signing_pubkey_and_cup_mutations,
     invariant_compliant_mutation_as_atomic_req,
@@ -242,6 +244,212 @@ async fn subnet_not_whitelisted() {
 }
 
 #[tokio::test]
+async fn subnet_rate_limited() {
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+    let operator_id = PrincipalId::new_user_test_id(1);
+    let different_sender = PrincipalId::new_user_test_id(5);
+
+    let (mutations, nodes) = get_mutations_and_node_ids(&[
+        // Old node id
+        NodeInformation {
+            subnet_id: Some(subnet_id),
+            operator: operator_id,
+        },
+        // New node id
+        NodeInformation {
+            subnet_id: None,
+            operator: operator_id,
+        },
+    ]);
+
+    let old_node_id = nodes[0];
+    let new_node_id = nodes[1];
+
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    builder.push_init_mutate_request(RegistryAtomicMutateRequest {
+        mutations,
+        preconditions: vec![],
+    });
+
+    builder.enable_swapping_feature_globally();
+    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(different_sender);
+    builder.enable_swapping_feature_for_subnet(subnet_id);
+
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(new_node_id.get()),
+            old_node_id: Some(old_node_id.get()),
+        },
+        operator_id,
+    )
+    .await;
+
+    assert!(response.is_ok(), "Expected ok but got {response:?}");
+
+    // Make a call again which should fail because of rate limiting.
+    // Now old and new nodes are swapped in the payload because they
+    // were swaped in the previous call to the canister.
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
+        },
+        operator_id,
+    )
+    .await;
+
+    let expected_err = SwapError::SubnetRateLimited { subnet_id };
+
+    assert!(
+        response
+            .as_ref()
+            .is_err_and(|err| err.reject_message.contains(&format!("{}", expected_err))),
+        "Expected error {expected_err:?} but got response: {response:?}"
+    );
+
+    // The call should fail for a different sender as well
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
+        },
+        different_sender,
+    )
+    .await;
+
+    assert!(
+        response
+            .as_ref()
+            .is_err_and(|err| err.reject_message.contains(&format!("{}", expected_err))),
+        "Expected error {expected_err:?} but got response: {response:?}"
+    );
+}
+
+#[tokio::test]
+async fn subnet_rate_limit_passed() {
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+    let operator_id = PrincipalId::new_user_test_id(1);
+
+    let (mutations, nodes) = get_mutations_and_node_ids(&[
+        // Old node id
+        NodeInformation {
+            subnet_id: Some(subnet_id),
+            operator: operator_id,
+        },
+        // New node id
+        NodeInformation {
+            subnet_id: None,
+            operator: operator_id,
+        },
+    ]);
+
+    let old_node_id = nodes[0];
+    let new_node_id = nodes[1];
+
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    builder.push_init_mutate_request(RegistryAtomicMutateRequest {
+        mutations,
+        preconditions: vec![],
+    });
+
+    builder.enable_swapping_feature_globally();
+    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.enable_swapping_feature_for_subnet(subnet_id);
+
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(new_node_id.get()),
+            old_node_id: Some(old_node_id.get()),
+        },
+        operator_id,
+    )
+    .await;
+
+    assert!(response.is_ok(), "Expected ok but got {response:?}");
+
+    // Make a call again which should fail because of rate limiting.
+    // Old and new nodes are now changed because they were swapped
+    // in a previous call.
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
+        },
+        operator_id,
+    )
+    .await;
+
+    let expected_err = SwapError::SubnetRateLimited { subnet_id };
+
+    assert!(
+        response
+            .as_ref()
+            .is_err_and(|err| err.reject_message.contains(&format!("{}", expected_err))),
+        "Expected error {expected_err:?} but got response: {response:?}"
+    );
+
+    // Advance the time for 3 hours because the subnet is rate limited
+    let current_time = pocket_ic.get_time().await;
+    pocket_ic
+        .set_time(current_time + Duration::from_secs(3 * 60 * 60))
+        .await;
+
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
+        },
+        operator_id,
+    )
+    .await;
+
+    let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+        subnet_id,
+        caller: operator_id,
+    };
+
+    assert!(
+        response
+            .as_ref()
+            .is_err_and(|err| err.reject_message.contains(&format!("{}", expected_err))),
+        "Expected error {expected_err:?} but got response: {response:?}"
+    );
+
+    // Advance the time for another 10 hours because the same caller is making a call
+    let current_time = pocket_ic.get_time().await;
+    pocket_ic
+        .set_time(current_time + Duration::from_secs(10 * 60 * 60))
+        .await;
+
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
+        },
+        operator_id,
+    )
+    .await;
+
+    assert!(response.is_ok(), "Expected ok but got {response:?}");
+}
+
+#[tokio::test]
 async fn e2e_valid_swap() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
@@ -286,5 +494,25 @@ async fn e2e_valid_swap() {
     )
     .await;
 
-    assert!(response.is_ok(), "Expected ok but got {response:?}")
+    assert!(response.is_ok(), "Expected ok but got {response:?}");
+
+    let response = get_value(&pocket_ic, make_subnet_record_key(subnet_id), None)
+        .await
+        .unwrap();
+
+    let content = match response.content.unwrap() {
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(items) => items,
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => panic!("Didn't expect large value chunk keys"),
+    };
+
+    let subnet_record = SubnetRecord::decode(content.as_slice()).unwrap();
+
+    let members: Vec<_> = subnet_record
+        .membership
+        .into_iter()
+        .map(|n| NodeId::new(PrincipalId::try_from(n).unwrap()))
+        .collect();
+
+    assert!(members.contains(&new_node_id));
+    assert!(!members.contains(&old_node_id));
 }
