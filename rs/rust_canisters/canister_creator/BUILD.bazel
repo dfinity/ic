@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:rand",
     "@crate_index//:rand_pcg",
     "@crate_index//:serde",
@@ -25,10 +26,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/types",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/rust_canisters/dfn_macro",
-]
+MACRO_DEPENDENCIES = []
 
 rust_library(
     name = "canister_creator",

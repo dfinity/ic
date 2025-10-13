@@ -69,14 +69,9 @@ use_repo(pip, "python_deps")
 bazel_dep(
     name = "protobuf",
     version = "28.2",
-    # We need to give the repository an explicit name that rules_closure
-    # can find
+    # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
-
-# Closure (JS framework) dependencies
-
-bazel_dep(name = "rules_java", version = "7.11.1")
 
 # Go dependencies
 
@@ -855,6 +850,23 @@ filegroup(
 )
 
 http_archive(
+    name = "bitcoin_core_linux_aarch64",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "cb35e250ae9d0328aa90e7aad0b877ed692597420a1092e8ab1a5dd756209722",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-aarch64-linux-gnu.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-aarch64-linux-gnu.tar.gz",
+    ],
+)
+
+http_archive(
     name = "bitcoin_core_darwin_x86",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
@@ -905,8 +917,8 @@ filegroup(
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
-    sha256 = "2a428e8d35518ce22002e498f7d618a9eeeddf57371f965e92cf480dd3cbd046",
-    url = "https://github.com/dfinity/examples/releases/download/rust-basic-bitcoin-24-09-16/basic_bitcoin.wasm.gz",
+    sha256 = "e5560c9f7ca3f06c62b0169ffdc5b568ce0eb48e600a1ab893fdeb7414117dc2",
+    url = "https://github.com/dfinity/examples/releases/download/rust-basic-bitcoin-25-10-10/basic_bitcoin.wasm.gz",
 )
 
 http_file(
@@ -971,4 +983,47 @@ register_toolchains(
 
     # These toolchains are only registered locally.
     dev_dependency = True,
+)
+
+new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
+
+# Use libsystemd from the host environment
+# Ideally this is pulled hermetically, but as this is only used by infogetty
+# within IC images, we have less compatibility to worry about, and packaging it
+# this way is easier.
+new_local_repository(
+    name = "libsystemd",
+    build_file_content = """
+cc_import(
+    name = "libsystemd-internal",
+    hdrs = glob(["include/systemd/*.h"]),
+    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
+    system_provided = True,
+    visibility = ["//visibility:private"],
+)
+
+# Use an extra cc_library to hide the depth of the include folder
+cc_library(
+    name = "libsystemd",
+    includes = ["include"],
+    deps = ["libsystemd-internal"],
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
+)
+
+# Use libvirt from the host environment
+# Used for managing virtual machines programmatically.
+new_local_repository(
+    name = "libvirt",
+    build_file_content = """
+cc_import(
+    name = "libvirt",
+    hdrs = glob(["include/libvirt/*.h"]),
+    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
 )

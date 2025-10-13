@@ -11,7 +11,8 @@ use ic_embedders::{
     wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, SubnetAvailableExecutionMemoryChange,
+    SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
@@ -177,9 +178,17 @@ impl InstallCodeHelper {
             module_hash: module_hash.clone(),
         });
         let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
-        self.canister
-            .system_state
-            .add_canister_change(timestamp_nanos, origin, details);
+        let available_execution_memory_change =
+            self.canister
+                .add_canister_change(timestamp_nanos, origin, details);
+        match available_execution_memory_change {
+            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
+                self.allocated_bytes += allocated_bytes;
+            }
+            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
+                self.deallocated_bytes += deallocated_bytes;
+            }
+        }
     }
 
     pub fn charge_for_large_wasm_assembly(&mut self, instructions: NumInstructions) {

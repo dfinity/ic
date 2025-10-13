@@ -4,7 +4,7 @@ use crate::numeric::LedgerBurnIndex;
 use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use evm_rpc_client::BlockTag;
+use evm_rpc_types::BlockTag;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};

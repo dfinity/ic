@@ -387,6 +387,7 @@ fn add_subnet_local_registry_records(
             public_ipv4_config: None,
             domain: None,
             node_reward_type: None,
+            ssh_node_state_write_access: vec![],
         };
         registry_data_provider
             .add(
@@ -4803,11 +4804,9 @@ impl Subnets for SubnetsImpl {
 fn multi_subnet_setup(
     subnets: Arc<dyn Subnets>,
     subnet_seed: u8,
-    subnet_type: SubnetType,
+    config: StateMachineConfig,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
-    let config =
-        StateMachineConfig::new(SubnetConfig::new(subnet_type), HypervisorConfig::default());
     StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
@@ -4815,25 +4814,18 @@ fn multi_subnet_setup(
         .build_with_subnets(subnets)
 }
 
-/// Sets up two `StateMachine` that can communicate with each other.
-pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+/// Sets up two `StateMachine` configured with a `StateMachineConfig` that can communicate with each other.
+pub fn two_subnets_with_config(
+    config1: StateMachineConfig,
+    config2: StateMachineConfig,
+) -> (Arc<StateMachine>, Arc<StateMachine>) {
     // Set up registry data provider.
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
     // Set up the two state machines for the two (app) subnets.
     let subnets = Arc::new(SubnetsImpl::new());
-    let env1 = multi_subnet_setup(
-        subnets.clone(),
-        1,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
-    let env2 = multi_subnet_setup(
-        subnets.clone(),
-        2,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
+    let env1 = multi_subnet_setup(subnets.clone(), 1, config1, registry_data_provider.clone());
+    let env2 = multi_subnet_setup(subnets.clone(), 2, config2, registry_data_provider.clone());
 
     // Set up routing table with two subnets.
     let subnet_id1 = env1.get_subnet_id();
@@ -4862,6 +4854,15 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     env2.reload_registry();
 
     (env1, env2)
+}
+
+/// Sets up two `StateMachine` that can communicate with each other.
+pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+    let config = StateMachineConfig::new(
+        SubnetConfig::new(SubnetType::Application),
+        HypervisorConfig::default(),
+    );
+    two_subnets_with_config(config.clone(), config)
 }
 
 /// Generates the subnet ID from `seed`.
