@@ -459,7 +459,7 @@ jobs:
 
   bazel-run-fuzzers:
     name: Bazel Run Fuzzers
-    runs-on: *dind-large-setup
+    runs-on: ubuntu-latest
     container: *container-setup
     timeout-minutes: 90
     steps:
