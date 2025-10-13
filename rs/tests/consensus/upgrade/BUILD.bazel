@@ -137,7 +137,6 @@ system_test_nns(
 system_test_nns(
     name = "upgrade_with_alternative_urls",
     tags = [
-        "k8s",
         "long_test",
     ],
     uses_guestos_img = True,
@@ -158,7 +157,6 @@ system_test_nns(
 system_test_nns(
     name = "unassigned_node_upgrade_test",
     tags = [
-        "k8s",
         "long_test",
     ],
     uses_guestos_img = True,

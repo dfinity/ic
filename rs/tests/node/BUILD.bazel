@@ -59,7 +59,6 @@ uvm_config_image(
 system_test(
     name = "reboot_toy",
     tags = [
-        "k8s",
         "manual",
     ],
     deps = [

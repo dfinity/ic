@@ -3657,8 +3657,6 @@ dependencies = [
  "json5",
  "jsonrpc",
  "k256 0.13.4",
- "k8s-openapi",
- "kube",
  "lazy_static",
  "leb128",
  "libc",
@@ -5616,26 +5614,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-http-proxy"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d06dbdfbacf34d996c6fb540a71a684a7aae9056c71951163af8a8a4c07b9a4"
-dependencies = [
- "bytes",
- "futures-util",
- "headers 0.4.0",
- "http 1.3.1",
- "hyper 1.6.0",
- "hyper-rustls 0.27.5",
- "hyper-util",
- "pin-project-lite",
- "rustls-native-certs 0.7.0",
- "tokio",
- "tokio-rustls 0.26.0",
- "tower-service",
-]
-
-[[package]]
 name = "hyper-rustls"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5661,7 +5639,6 @@ dependencies = [
  "http 1.3.1",
  "hyper 1.6.0",
  "hyper-util",
- "log",
  "rustls 0.23.27",
  "rustls-native-certs 0.8.0",
  "rustls-pki-types",
@@ -6985,21 +6962,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jsonpath-rust"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19d8fe85bd70ff715f31ce8c739194b423d79811a19602115d611a3ec85d6200"
-dependencies = [
- "lazy_static",
- "once_cell",
- "pest",
- "pest_derive",
- "regex",
- "serde_json",
- "thiserror 1.0.68",
-]
-
-[[package]]
 name = "jsonrpc"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7045,20 +7007,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "k8s-openapi"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19501afb943ae5806548bc3ebd7f3374153ca057a38f480ef30adfde5ef09755"
-dependencies = [
- "base64 0.22.1",
- "chrono 0.4.38",
- "schemars",
- "serde",
- "serde-value",
- "serde_json",
-]
-
-[[package]]
 name = "keccak"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7099,86 +7047,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4b1eb7788f3824c629b1116a7a9060d6e898c358ebff59070093d51103dcc3c"
 dependencies = [
  "typewit",
-]
-
-[[package]]
-name = "kube"
-version = "0.94.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ace78a62b361077505f2950bd48aa3e46596fb15350c9c993de15ddfa3cac5"
-dependencies = [
- "k8s-openapi",
- "kube-client",
- "kube-core",
- "kube-derive",
-]
-
-[[package]]
-name = "kube-client"
-version = "0.94.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18ec0fcafd3add30b413b096a61d69b0a37f94d3f95b6f505a57ea3d27cec2a7"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "chrono 0.4.38",
- "either",
- "futures",
- "home",
- "http 1.3.1",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.6.0",
- "hyper-http-proxy",
- "hyper-rustls 0.27.5",
- "hyper-timeout",
- "hyper-util",
- "jsonpath-rust",
- "k8s-openapi",
- "kube-core",
- "pem 3.0.3",
- "rustls 0.23.27",
- "rustls-pemfile 2.2.0",
- "secrecy",
- "serde",
- "serde_json",
- "serde_yaml 0.9.34+deprecated",
- "thiserror 1.0.68",
- "tokio",
- "tokio-util",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
-]
-
-[[package]]
-name = "kube-core"
-version = "0.94.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a50c095f051dada37740d883b6d47ad0430e95082140718073b773c8a70f231c"
-dependencies = [
- "chrono 0.4.38",
- "form_urlencoded",
- "http 1.3.1",
- "k8s-openapi",
- "schemars",
- "serde",
- "serde-value",
- "serde_json",
- "thiserror 1.0.68",
-]
-
-[[package]]
-name = "kube-derive"
-version = "0.94.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7871f02c3c848b63fee3d2f2645bb4a3c0b68ee147badcddf1b0cf8fb5db87ad"
-dependencies = [
- "darling 0.20.11",
- "proc-macro2",
- "quote",
- "serde_json",
- "syn 2.0.101",
 ]
 
 [[package]]
@@ -8941,15 +8809,6 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
-name = "ordered-float"
-version = "2.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
-dependencies = [
- "num-traits",
-]
 
 [[package]]
 name = "ordered-float"
@@ -11266,19 +11125,6 @@ dependencies = [
 
 [[package]]
 name = "rustls-native-certs"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f1fb85efa936c42c6d5fc28d2629bb51e4b2f4b8a5211e297d599cc5a093792"
-dependencies = [
- "openssl-probe",
- "rustls-pemfile 2.2.0",
- "rustls-pki-types",
- "schannel",
- "security-framework 2.11.1",
-]
-
-[[package]]
-name = "rustls-native-certs"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcaf18a4f2be7326cd874a5fa579fae794320a0f388d365dca7e480e55f83f8a"
@@ -11617,16 +11463,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "secrecy"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
-dependencies = [
- "serde",
- "zeroize",
-]
-
-[[package]]
 name = "security-framework"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11716,16 +11552,6 @@ checksum = "9eb83481bce328081ced4404f986de002bf2e08865bec386734595ebf3b2c425"
 dependencies = [
  "base64 0.13.1",
  "hex",
- "serde",
-]
-
-[[package]]
-name = "serde-value"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
-dependencies = [
- "ordered-float 2.10.0",
  "serde",
 ]
 
@@ -13538,13 +13364,11 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
 dependencies = [
- "base64 0.21.6",
  "bitflags 2.9.0",
  "bytes",
  "http 1.3.1",
  "http-body 1.0.1",
  "http-body-util",
- "mime",
  "pin-project-lite",
  "tokio",
  "tower-layer",

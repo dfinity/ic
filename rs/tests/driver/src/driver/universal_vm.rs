@@ -16,10 +16,6 @@ use crate::driver::test_env_api::{
     HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, get_dependency_path,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
-use crate::k8s::datavolume::DataVolumeContentType;
-use crate::k8s::images::upload_image;
-use crate::k8s::tnet::TNet;
-use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
@@ -189,30 +185,6 @@ impl UniversalVm {
                     );
                 }
                 image_specs.push(file_spec);
-            } else {
-                let tnet = TNet::read_attribute(env);
-                let tnet_node = tnet.nodes.last().expect("no nodes");
-                info!(
-                    env.logger(),
-                    "Uploading image {} to {}",
-                    config_img.clone().display().to_string(),
-                    tnet_node.config_url.clone().expect("missing config url")
-                );
-                block_on(upload_image(
-                    config_img,
-                    &format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("missing config url"),
-                        CONF_IMG_FNAME
-                    ),
-                ))?;
-                block_on(tnet_node.deploy_config_image(
-                    CONF_IMG_FNAME,
-                    "config",
-                    DataVolumeContentType::Kubevirt,
-                ))
-                .expect("deploying config image failed");
-                block_on(tnet_node.add_volume("config")).expect("deploying config image failed");
             }
         }
 
@@ -224,10 +196,6 @@ impl UniversalVm {
                 image_specs,
             )?;
             farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
-        } else if InfraProvider::read_attribute(env) == InfraProvider::K8s {
-            let tnet = TNet::read_attribute(env);
-            let tnet_node = tnet.nodes.last().expect("no nodes");
-            block_on(tnet_node.start()).expect("starting vm failed");
         }
 
         Ok(())

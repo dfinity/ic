@@ -7,9 +7,6 @@ CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuanc
 
 system_test_nns(
     name = "api_bn_integration_test",
-    tags = [
-        "k8s",
-    ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -48,9 +45,6 @@ system_test_nns(
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
     deps = [
@@ -76,9 +70,6 @@ system_test_nns(
         "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
     },
     proc_macro_deps = [],
-    tags = [
-        "k8s",
-    ],
     runtime_deps = [
         "//rs/boundary_node/salt_sharing:salt_sharing_canister",
     ],
@@ -109,7 +100,6 @@ system_test_nns(
     },
     proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
-        "k8s",
         "long_test",  # the P90 duration was over 5 minutes for the week starting on 2025-08-25.
     ],
     runtime_deps = [
@@ -168,7 +158,6 @@ system_test(
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     tags = [
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
@@ -190,7 +179,6 @@ system_test(
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     tags = [
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
@@ -205,7 +193,6 @@ system_test(
 system_test_nns(
     name = "api_bn_decentralization_test",
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,

@@ -24,7 +24,6 @@ pub struct GroupContext {
     pub debug_keepalive: bool,
     pub no_farm_keepalive: bool,
     pub group_base_name: String,
-    pub k8s: bool,
     pub logs_enabled: bool,
     pub exclude_logs: Vec<Regex>,
 }
@@ -42,7 +41,6 @@ impl GroupContext {
         debug_keepalive: bool,
         no_farm_keepalive: bool,
         group_base_name: String,
-        k8s: bool,
         logs_enabled: bool,
         exclude_logs: Vec<Regex>,
     ) -> Result<Self> {
@@ -68,7 +66,6 @@ impl GroupContext {
             debug_keepalive,
             no_farm_keepalive,
             group_base_name,
-            k8s,
             logs_enabled,
             exclude_logs,
         })

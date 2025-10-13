@@ -82,8 +82,6 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 json5 = "0.4.1"
-k8s-openapi = { workspace = true }
-kube = { workspace = true }
 lazy_static = { workspace = true }
 macaddr = { workspace = true }
 maplit = "1.0.2"

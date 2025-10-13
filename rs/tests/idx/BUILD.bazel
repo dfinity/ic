@@ -30,7 +30,6 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,

@@ -1,5 +1,5 @@
 {
-  "checksum": "18900e59ecae1f09a87ae378267b24738dc0c59e84dc0b93d17abde71d758c61",
+  "checksum": "74eaaa278e85ae34a079a17835f0c148d11bd96bdea18219667a016146caddd9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21266,14 +21266,6 @@
               "target": "k256"
             },
             {
-              "id": "k8s-openapi 0.22.0",
-              "target": "k8s_openapi"
-            },
-            {
-              "id": "kube 0.94.2",
-              "target": "kube"
-            },
-            {
               "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
@@ -32599,85 +32591,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-http-proxy 1.0.0": {
-      "name": "hyper-http-proxy",
-      "version": "1.0.0",
-      "package_url": "https://github.com/metalbear-co/hyper-http-proxy",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hyper-http-proxy/1.0.0/download",
-          "sha256": "5d06dbdfbacf34d996c6fb540a71a684a7aae9056c71951163af8a8a4c07b9a4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hyper_http_proxy",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hyper_http_proxy",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.10.1",
-              "target": "bytes"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "headers 0.4.0",
-              "target": "headers"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "hyper 1.6.0",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-util 0.1.12",
-              "target": "hyper_util"
-            },
-            {
-              "id": "pin-project-lite 0.2.13",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "tokio 1.45.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "1.0.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE-MIT.md"
-    },
     "hyper-rustls 0.24.2": {
       "name": "hyper-rustls",
       "version": "0.24.2",
@@ -32802,8 +32715,6 @@
           "common": [
             "http1",
             "http2",
-            "log",
-            "logging",
             "native-tokio",
             "ring",
             "rustls-native-certs",
@@ -32845,10 +32756,6 @@
             {
               "id": "hyper-util 0.1.12",
               "target": "hyper_util"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
             },
             {
               "id": "rustls 0.23.27",
@@ -40037,80 +39944,6 @@
       ],
       "license_file": null
     },
-    "jsonpath-rust 0.5.1": {
-      "name": "jsonpath-rust",
-      "version": "0.5.1",
-      "package_url": "https://github.com/besok/jsonpath-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/jsonpath-rust/0.5.1/download",
-          "sha256": "19d8fe85bd70ff715f31ce8c739194b423d79811a19602115d611a3ec85d6200"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "jsonpath_rust",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "jsonpath_rust",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "lazy_static 1.5.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "pest 2.7.1",
-              "target": "pest"
-            },
-            {
-              "id": "regex 1.11.1",
-              "target": "regex"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "pest_derive 2.7.1",
-              "target": "pest_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.1"
-      },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
-    },
     "jsonrpc 0.18.0": {
       "name": "jsonrpc",
       "version": "0.18.0",
@@ -40406,108 +40239,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "k8s-openapi 0.22.0": {
-      "name": "k8s-openapi",
-      "version": "0.22.0",
-      "package_url": "https://github.com/Arnavion/k8s-openapi",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/k8s-openapi/0.22.0/download",
-          "sha256": "19501afb943ae5806548bc3ebd7f3374153ca057a38f480ef30adfde5ef09755"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "k8s_openapi",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "k8s_openapi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "schemars",
-            "v1_28"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.22.1",
-              "target": "base64"
-            },
-            {
-              "id": "chrono 0.4.38",
-              "target": "chrono"
-            },
-            {
-              "id": "k8s-openapi 0.22.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "schemars 0.8.21",
-              "target": "schemars"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde-value 0.7.0",
-              "target": "serde_value"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.22.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "links": "k8s-openapi-0.22.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "keccak 0.1.4": {
       "name": "keccak",
       "version": "0.1.4",
@@ -40752,421 +40483,6 @@
         "Zlib"
       ],
       "license_file": "LICENSE-ZLIB.md"
-    },
-    "kube 0.94.2": {
-      "name": "kube",
-      "version": "0.94.2",
-      "package_url": "https://github.com/kube-rs/kube",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/kube/0.94.2/download",
-          "sha256": "52ace78a62b361077505f2950bd48aa3e46596fb15350c9c993de15ddfa3cac5"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "kube",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "kube",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "client",
-            "config",
-            "default",
-            "derive",
-            "kube-client",
-            "kube-derive",
-            "rustls-tls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "k8s-openapi 0.22.0",
-              "target": "k8s_openapi"
-            },
-            {
-              "id": "kube-client 0.94.2",
-              "target": "kube_client"
-            },
-            {
-              "id": "kube-core 0.94.2",
-              "target": "kube_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "kube-derive 0.94.2",
-              "target": "kube_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.94.2"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "kube-client 0.94.2": {
-      "name": "kube-client",
-      "version": "0.94.2",
-      "package_url": "https://github.com/kube-rs/kube",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/kube-client/0.94.2/download",
-          "sha256": "18ec0fcafd3add30b413b096a61d69b0a37f94d3f95b6f505a57ea3d27cec2a7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "kube_client",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "kube_client",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "__non_core",
-            "base64",
-            "bytes",
-            "chrono",
-            "client",
-            "config",
-            "either",
-            "futures",
-            "home",
-            "http-body",
-            "http-body-util",
-            "hyper",
-            "hyper-rustls",
-            "hyper-timeout",
-            "hyper-util",
-            "jsonpath-rust",
-            "pem",
-            "rustls",
-            "rustls-pemfile",
-            "rustls-tls",
-            "serde_yaml",
-            "tokio",
-            "tokio-util",
-            "tower",
-            "tower-http",
-            "tracing"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.22.1",
-              "target": "base64"
-            },
-            {
-              "id": "bytes 1.10.1",
-              "target": "bytes"
-            },
-            {
-              "id": "chrono 0.4.38",
-              "target": "chrono"
-            },
-            {
-              "id": "either 1.14.0",
-              "target": "either"
-            },
-            {
-              "id": "futures 0.3.31",
-              "target": "futures"
-            },
-            {
-              "id": "home 0.5.9",
-              "target": "home"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "http-body 1.0.1",
-              "target": "http_body"
-            },
-            {
-              "id": "http-body-util 0.1.3",
-              "target": "http_body_util"
-            },
-            {
-              "id": "hyper 1.6.0",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-rustls 0.27.5",
-              "target": "hyper_rustls"
-            },
-            {
-              "id": "hyper-timeout 0.5.1",
-              "target": "hyper_timeout"
-            },
-            {
-              "id": "hyper-util 0.1.12",
-              "target": "hyper_util"
-            },
-            {
-              "id": "jsonpath-rust 0.5.1",
-              "target": "jsonpath_rust"
-            },
-            {
-              "id": "k8s-openapi 0.22.0",
-              "target": "k8s_openapi"
-            },
-            {
-              "id": "kube-core 0.94.2",
-              "target": "kube_core"
-            },
-            {
-              "id": "pem 3.0.3",
-              "target": "pem"
-            },
-            {
-              "id": "rustls 0.23.27",
-              "target": "rustls"
-            },
-            {
-              "id": "rustls-pemfile 2.2.0",
-              "target": "rustls_pemfile"
-            },
-            {
-              "id": "secrecy 0.8.0",
-              "target": "secrecy"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_yaml 0.9.34+deprecated",
-              "target": "serde_yaml"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.45.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-util 0.7.13",
-              "target": "tokio_util"
-            },
-            {
-              "id": "tower 0.4.13",
-              "target": "tower"
-            },
-            {
-              "id": "tower-http 0.5.2",
-              "target": "tower_http"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.94.2"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "kube-core 0.94.2": {
-      "name": "kube-core",
-      "version": "0.94.2",
-      "package_url": "https://github.com/kube-rs/kube",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/kube-core/0.94.2/download",
-          "sha256": "a50c095f051dada37740d883b6d47ad0430e95082140718073b773c8a70f231c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "kube_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "kube_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "schema",
-            "schemars"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "chrono 0.4.38",
-              "target": "chrono"
-            },
-            {
-              "id": "form_urlencoded 1.2.1",
-              "target": "form_urlencoded"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "k8s-openapi 0.22.0",
-              "target": "k8s_openapi"
-            },
-            {
-              "id": "schemars 0.8.21",
-              "target": "schemars"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde-value 0.7.0",
-              "target": "serde_value"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.94.2"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "kube-derive 0.94.2": {
-      "name": "kube-derive",
-      "version": "0.94.2",
-      "package_url": "https://github.com/kube-rs/kube",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/kube-derive/0.94.2/download",
-          "sha256": "7871f02c3c848b63fee3d2f2645bb4a3c0b68ee147badcddf1b0cf8fb5db87ad"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "kube_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "kube_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling 0.20.11",
-              "target": "darling"
-            },
-            {
-              "id": "proc-macro2 1.0.95",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.40",
-              "target": "quote"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            },
-            {
-              "id": "syn 2.0.101",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.94.2"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
     },
     "lalrpop 0.19.12": {
       "name": "lalrpop",
@@ -52613,60 +51929,6 @@
         "MPL-2.0"
       ],
       "license_file": "LICENSE.txt"
-    },
-    "ordered-float 2.10.0": {
-      "name": "ordered-float",
-      "version": "2.10.0",
-      "package_url": "https://github.com/reem/rust-ordered-float",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ordered-float/2.10.0/download",
-          "sha256": "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ordered_float",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ordered_float",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "2.10.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE-MIT"
     },
     "ordered-float 3.9.2": {
       "name": "ordered-float",
@@ -67143,79 +66405,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-native-certs 0.7.0": {
-      "name": "rustls-native-certs",
-      "version": "0.7.0",
-      "package_url": "https://github.com/rustls/rustls-native-certs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rustls-native-certs/0.7.0/download",
-          "sha256": "8f1fb85efa936c42c6d5fc28d2629bb51e4b2f4b8a5211e297d599cc5a093792"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rustls_native_certs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rustls_native_certs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rustls-pemfile 2.2.0",
-              "target": "rustls_pemfile"
-            },
-            {
-              "id": "rustls-pki-types 1.12.0",
-              "target": "rustls_pki_types",
-              "alias": "pki_types"
-            }
-          ],
-          "selects": {
-            "cfg(all(unix, not(target_os = \"macos\")))": [
-              {
-                "id": "openssl-probe 0.1.5",
-                "target": "openssl_probe"
-              }
-            ],
-            "cfg(target_os = \"macos\")": [
-              {
-                "id": "security-framework 2.11.1",
-                "target": "security_framework"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "schannel 0.1.22",
-                "target": "schannel"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.7.0"
-      },
-      "license": "Apache-2.0 OR ISC OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "ISC",
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "rustls-native-certs 0.8.0": {
       "name": "rustls-native-certs",
       "version": "0.8.0",
@@ -69309,66 +68498,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "secrecy 0.8.0": {
-      "name": "secrecy",
-      "version": "0.8.0",
-      "package_url": "https://github.com/iqlusioninc/crates/tree/main/secrecy",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/secrecy/0.8.0/download",
-          "sha256": "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "secrecy",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "secrecy",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "serde"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "zeroize 1.8.1",
-              "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "security-framework 2.11.1": {
       "name": "security-framework",
       "version": "2.11.1",
@@ -69983,57 +69112,6 @@
       ],
       "license_file": "LICENSE.md"
     },
-    "serde-value 0.7.0": {
-      "name": "serde-value",
-      "version": "0.7.0",
-      "package_url": "https://github.com/arcnmx/serde-value",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde-value/0.7.0/download",
-          "sha256": "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_value",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_value",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ordered-float 2.10.0",
-              "target": "ordered_float"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.7.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
-    },
     "serde-wasm-bindgen 0.5.0": {
       "name": "serde-wasm-bindgen",
       "version": "0.5.0",
@@ -70364,7 +69442,6 @@
         ],
         "crate_features": {
           "common": [
-            "alloc",
             "arbitrary_precision",
             "default",
             "raw_value",
@@ -80744,7 +79821,6 @@
             "buffer",
             "default",
             "discover",
-            "filter",
             "futures-core",
             "futures-util",
             "indexmap",
@@ -80983,25 +80059,16 @@
         ],
         "crate_features": {
           "common": [
-            "auth",
-            "base64",
             "default",
-            "map-response-body",
-            "mime",
             "timeout",
             "tokio",
             "trace",
-            "tracing",
-            "validate-request"
+            "tracing"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
-            {
-              "id": "base64 0.21.6",
-              "target": "base64"
-            },
             {
               "id": "bitflags 2.9.0",
               "target": "bitflags"
@@ -81021,10 +80088,6 @@
             {
               "id": "http-body-util 0.1.3",
               "target": "http_body_util"
-            },
-            {
-              "id": "mime 0.3.17",
-              "target": "mime"
             },
             {
               "id": "pin-project-lite 0.2.13",
@@ -95100,8 +94163,6 @@
     "json5 0.4.1",
     "jsonrpc 0.18.0",
     "k256 0.13.4",
-    "k8s-openapi 0.22.0",
-    "kube 0.94.2",
     "lazy_static 1.5.0",
     "leb128 0.2.5",
     "libc 0.2.172",

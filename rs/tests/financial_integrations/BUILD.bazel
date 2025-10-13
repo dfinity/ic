@@ -12,9 +12,6 @@ system_test(
     env = {
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
-    tags = [
-        "k8s",
-    ],
     runtime_deps =
         LEDGER_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -44,9 +41,6 @@ system_test_nns(
     ],
     proc_macro_deps = [
         "@crate_index//:async-recursion",
-    ],
-    tags = [
-        "k8s",
     ],
     deps = [
         "//rs/canister_client/sender",
