@@ -1177,7 +1177,7 @@ fn canister_can_stop_with_received_message() {
     let canister_id = test.universal_canister().unwrap();
     let receiver = test.universal_canister().unwrap();
 
-    // Make the canister not stop immediately due to an open call context.
+    // Push an ingress message to the canister.
     let call_args = CallArgs::default().other_side(wasm().reply().build());
     let (msg_id, _) = test.ingress_raw(
         canister_id,
@@ -1198,11 +1198,14 @@ fn canister_can_stop_with_received_message() {
         IngressState::Completed(WasmResult::Reply(_))
     ));
 
+    // Executing the ingress message fails since the canister is stopped.
     test.execute_all();
-    assert!(matches!(
-        test.ingress_state(&msg_id),
-        IngressState::Failed(_)
-    ));
+    match test.ingress_state(&msg_id) {
+        IngressState::Failed(err) => {
+            assert_eq!(err.code(), ErrorCode::CanisterStopped);
+        }
+        ingress_state => panic!("Unexpected ingress state: {:?}", ingress_state),
+    };
 }
 
 #[test]
@@ -1212,7 +1215,7 @@ fn stop_canister_blocks_until_stopped() {
     let canister_id = test.universal_canister().unwrap();
     let receiver = test.universal_canister().unwrap();
 
-    // Make the canister not stop immediately due to an open call context.
+    // Push an ingress message to the canister.
     let call_args = CallArgs::default().other_side(wasm().reply().build());
     let (msg_id, _) = test.ingress_raw(
         canister_id,
@@ -1220,10 +1223,13 @@ fn stop_canister_blocks_until_stopped() {
         wasm().call_simple(receiver, "update", call_args).build(),
     );
     assert_eq!(test.ingress_state(&msg_id), IngressState::Received);
+
+    // Make the canister not stop immediately due to an open call context.
     test.execute_message(canister_id);
     assert_eq!(test.ingress_state(&msg_id), IngressState::Processing);
 
-    // Try to stop the canister.
+    // Try to stop the canister. The canister remains stopping
+    // due to the open call context.
     let stop_id = test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
@@ -1232,12 +1238,14 @@ fn stop_canister_blocks_until_stopped() {
     );
     assert_eq!(test.ingress_state(&stop_id), IngressState::Processing);
 
+    // Execute the ingress message to close its open call context.
     test.execute_all();
     assert!(matches!(
         test.ingress_state(&msg_id),
         IngressState::Completed(WasmResult::Reply(_))
     ));
 
+    // The canister can fully stop now.
     test.process_stopping_canisters();
     assert_eq!(
         test.canister_state(canister_id).status(),
