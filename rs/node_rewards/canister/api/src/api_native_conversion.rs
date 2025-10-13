@@ -10,7 +10,7 @@ use rust_decimal::prelude::ToPrimitive;
 use std::convert::TryFrom;
 
 // ================================================================================================
-// Conversion implementations for API types <-> Internal types (Decimal → f64 for API)
+// Conversion implementations for API types <-> Internal types
 // ================================================================================================
 
 // NodeMetricsDaily conversions
