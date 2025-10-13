@@ -43,6 +43,21 @@ use tokio_util::sync::CancellationToken;
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
+/// The subnet is initially in the `Unknown` state. After the upgrade loop runs for the first time,
+/// it will initialize it to either `Unassigned` or `Assigned(subnet_id)`.
+#[derive(Copy, Clone)]
+pub(crate) enum SubnetAssignment {
+    Unknown,
+    Unassigned,
+    Assigned(SubnetId),
+}
+
+impl Default for SubnetAssignment {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
 pub struct Orchestrator {
     logger: ReplicaLogger,
     _metrics_runtime: MetricsHttpEndpoint,
@@ -54,7 +69,7 @@ pub struct Orchestrator {
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     registration: Option<NodeRegistration>,
     // The subnet id of the node.
-    subnet_id: Arc<RwLock<Option<SubnetId>>>,
+    subnet_id: Arc<RwLock<SubnetAssignment>>,
     ipv4_configurator: Option<Ipv4Configurator>,
     task_tracker: TaskTracker,
 }
@@ -317,7 +332,7 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
+        let subnet_id: Arc<RwLock<SubnetAssignment>> = Default::default();
 
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
@@ -372,7 +387,7 @@ impl Orchestrator {
     ///    to do the rotation and attempt to register the rotated key.
     pub async fn start_tasks(&mut self, cancellation_token: CancellationToken) {
         async fn upgrade_checks(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            maybe_subnet_id: Arc<RwLock<SubnetAssignment>>,
             mut upgrade: Upgrade,
             cancellation_token: CancellationToken,
             log: ReplicaLogger,
@@ -392,10 +407,11 @@ impl Orchestrator {
                         match control_flow {
                             OrchestratorControlFlow::Assigned(subnet_id)
                             | OrchestratorControlFlow::Leaving(subnet_id) => {
-                                *maybe_subnet_id.write().unwrap() = Some(subnet_id);
+                                *maybe_subnet_id.write().unwrap() =
+                                    SubnetAssignment::Assigned(subnet_id);
                             }
                             OrchestratorControlFlow::Unassigned => {
-                                *maybe_subnet_id.write().unwrap() = None;
+                                *maybe_subnet_id.write().unwrap() = SubnetAssignment::Unassigned;
                             }
                             OrchestratorControlFlow::Stop => {
                                 // Wake up all orchestrator tasks and instruct them to stop.
@@ -508,13 +524,13 @@ impl Orchestrator {
         }
 
         async fn key_rotation_check(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            maybe_subnet_id: Arc<RwLock<SubnetAssignment>>,
             registration: NodeRegistration,
             cancellation_token: CancellationToken,
         ) {
             loop {
                 let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
-                if let Some(subnet_id) = maybe_subnet_id {
+                if let SubnetAssignment::Assigned(subnet_id) = maybe_subnet_id {
                     registration
                         .check_all_keys_registered_otherwise_register(subnet_id)
                         .await;
@@ -528,15 +544,29 @@ impl Orchestrator {
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            maybe_subnet_id: Arc<RwLock<SubnetAssignment>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
             cancellation_token: CancellationToken,
         ) {
             loop {
-                // Check if new SSH keys need to be deployed
-                ssh_access_manager.check_for_keyset_changes(*maybe_subnet_id.read().unwrap());
+                // Check if new SSH keys need to be deployed, but only once the subnet is known.
+                // Otherwise, if we just used the default value of `None`, we would incorrectly
+                // assume that we are unassigned, while it could just be that the upgrade loop has
+                // not already had the chance of setting `subnet_id`. In that case we would purge
+                // all SSH keys if we were actually assigned to a subnet, having to wait for the
+                // upgrade loop to actually set `subnet_id` and we would only at that point redeploy
+                // the purged keys.
+                match *maybe_subnet_id.read().unwrap() {
+                    SubnetAssignment::Assigned(subnet_id) => {
+                        ssh_access_manager.check_for_keyset_changes(Some(subnet_id));
+                    }
+                    SubnetAssignment::Unassigned => {
+                        ssh_access_manager.check_for_keyset_changes(None);
+                    }
+                    SubnetAssignment::Unknown => {}
+                };
                 // Check and update the firewall rules
                 firewall.check_and_update();
                 // Check and update the network configuration

@@ -1,13 +1,12 @@
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
-    registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
-    upgrade::ReplicaProcess,
+    catch_up_package_provider::CatchUpPackageProvider, orchestrator::SubnetAssignment,
+    process_manager::ProcessManager, registry_helper::RegistryHelper,
+    ssh_access_manager::SshAccessParameters, upgrade::ReplicaProcess,
 };
 pub use ic_dashboard::Dashboard;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{
-    NodeId, RegistryVersion, ReplicaVersion, SubnetId, consensus::HasHeight,
-    hostos_version::HostosVersion,
+    NodeId, RegistryVersion, ReplicaVersion, consensus::HasHeight, hostos_version::HostosVersion,
 };
 use std::{
     process::Command,
@@ -24,7 +23,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-    subnet_id: Arc<RwLock<Option<SubnetId>>>,
+    subnet_id: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
     cup_provider: Arc<CatchUpPackageProvider>,
@@ -87,7 +86,7 @@ impl OrchestratorDashboard {
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-        subnet_id: Arc<RwLock<Option<SubnetId>>>,
+        subnet_id: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
         cup_provider: Arc<CatchUpPackageProvider>,
@@ -138,15 +137,17 @@ impl OrchestratorDashboard {
 
     fn get_subnet_id(&self) -> String {
         match *self.subnet_id.read().unwrap() {
-            Some(id) => id.to_string(),
-            None => "None".to_string(),
+            SubnetAssignment::Assigned(id) => id.to_string(),
+            SubnetAssignment::Unassigned => "Unassigned".to_string(),
+            SubnetAssignment::Unknown => "Subnet not known yet".to_string(),
         }
     }
 
     fn get_scheduled_upgrade(&self) -> String {
         let subnet_id = match *self.subnet_id.read().unwrap() {
-            Some(id) => id,
-            None => return "None".to_string(),
+            SubnetAssignment::Assigned(id) => id,
+            SubnetAssignment::Unassigned => return "None".to_string(),
+            SubnetAssignment::Unknown => return "Subnet not known yet".to_string(),
         };
 
         let expected_replica_version = match self.registry.get_expected_replica_version(subnet_id) {
