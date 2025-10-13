@@ -1088,6 +1088,16 @@ impl ExecutionTest {
             .method_name(method_name)
             .method_payload(method_payload)
             .build();
+        self.ingress_history_writer.set_status(
+            &mut state,
+            ingress_id.clone(),
+            IngressStatus::Known {
+                receiver: canister_id.get(),
+                user_id: self.user_id,
+                time: self.time,
+                state: IngressState::Received,
+            },
+        );
         state
             .canister_state_mut(&canister_id)
             .unwrap()
@@ -1327,6 +1337,17 @@ impl ExecutionTest {
             .method_name(method_name)
             .method_payload(method_payload)
             .build();
+
+        self.ingress_history_writer.set_status(
+            &mut state,
+            message_id.clone(),
+            IngressStatus::Known {
+                receiver: CanisterId::ic_00().get(),
+                user_id: self.user_id,
+                time: self.time,
+                state: IngressState::Received,
+            },
+        );
 
         state.subnet_queues_mut().push_ingress(message);
 
