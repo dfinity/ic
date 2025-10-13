@@ -675,7 +675,7 @@ jobs:
     name: Cargo  ${{ matrix.name }} Linux
     runs-on: ubuntu-latest
     container: *container-setup
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
