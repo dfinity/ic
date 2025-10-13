@@ -6,7 +6,7 @@ use ic_nns_test_utils::common::build_node_rewards_test_wasm;
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetNodeProviderRewardsCalculationResponse, GetNodeProvidersRewardsCalculationRequest,
+    GetNodeProvidersRewardsCalculationRequest, GetNodeProvidersRewardsCalculationResponse,
 };
 use ic_types::PrincipalId;
 use pocket_ic::PocketIcBuilder;
@@ -80,7 +80,7 @@ async fn get_node_providers_rewards_calculation_is_only_callable_in_nonreplicate
     let request = GetNodeProvidersRewardsCalculationRequest { day };
 
     // Non-replicated query call is allowed.
-    let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
+    let err = query_candid::<_, (GetNodeProvidersRewardsCalculationResponse,)>(
         &pocket_ic,
         node_rewards_id,
         "get_node_providers_rewards_calculation",
@@ -96,7 +96,7 @@ async fn get_node_providers_rewards_calculation_is_only_callable_in_nonreplicate
     );
 
     // Replicated update call is not allowed.
-    let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
+    let err = update_candid::<_, (GetNodeProvidersRewardsCalculationResponse,)>(
         &pocket_ic,
         node_rewards_id,
         "get_node_providers_rewards_calculation",
