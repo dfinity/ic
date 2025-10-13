@@ -141,7 +141,7 @@ impl TestSubnet {
     }
 }
 
-/// Config for two `SubnetSubnet` including message memory limits
+/// Config for two `TestSubnet` including message memory limits
 /// and number of canisters for each subnet.
 ///
 /// Note: low values for `*_max_instructions_per_round` can lead to continuous resets during
@@ -264,7 +264,7 @@ fn arb_call_count(
 
 /// Generates an arbitrary `Call` including downstream calls.
 ///
-/// Starts with a list of `counts` and correspondingly sized list of simple calls,
+/// Starts with a list of `counts` and a correspondingly sized list of simple calls,
 /// then recursively generates one call with nested downstream calls from them.
 pub fn arb_nested_call(
     receivers: Vec<CanisterId>,
