@@ -458,9 +458,9 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     loop {
         // Once the node leaves the subnet, the orchestrator shuts down the replica, including the
         // metrics endpoint, in which case the below call would be an Err. But if that is the case,
-        // and after waiting a bit more than 10 seconds below, then we should not be able to login
-        // and we should break out of the loop. And if we don't, then the `expect` afterwards will
-        // catch that.
+        // and after waiting 2 check intervals below, then we should not be able to login and we
+        // should break out of the loop. And if we don't, then the `expect` afterwards will catch
+        // that.
         let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
 
         // We wait for the orchestrator to 1) read the CUP and 2) check for new keys to give it the
