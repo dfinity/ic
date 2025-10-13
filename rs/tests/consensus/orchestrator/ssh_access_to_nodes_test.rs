@@ -126,7 +126,7 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    // Update the registry with two new pairs of keys.
+    info!(logger, "Updating the registry with new pairs of keys.");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
@@ -164,7 +164,7 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
-    // Update the registry with two new pairs of keys.
+    info!(logger, "Updating the registry with new pairs of keys.");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
@@ -193,7 +193,7 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    // Update the registry with two new pairs of keys.
+    info!(logger, "Updating the registry with new pairs of keys.");
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
     let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
     let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
@@ -239,7 +239,7 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
-    // Update the registry with two new pairs of keys.
+    info!(logger, "Updating the registry with new pairs of keys.");
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
     let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
     let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
@@ -373,7 +373,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    // Update the registry with two new pairs of keys.
+    info!(logger, "Updating the registry with new pairs of keys.");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
@@ -422,7 +422,7 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    // Update the registry with two new pairs of keys.
+    info!(logger, "Updating the registry with new pairs of keys.");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
