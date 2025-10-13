@@ -11,7 +11,7 @@ use ic_types::{
 };
 use std::{
     process::Command,
-    sync::{Arc, Mutex, OnceLock, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 const ORCHESTRATOR_DASHBOARD_PORT: u16 = 7070;
@@ -24,7 +24,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-    subnet_id: Arc<OnceLock<RwLock<Option<SubnetId>>>>,
+    subnet_id: Arc<RwLock<Option<SubnetId>>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
     cup_provider: Arc<CatchUpPackageProvider>,
@@ -87,7 +87,7 @@ impl OrchestratorDashboard {
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-        subnet_id: Arc<OnceLock<RwLock<Option<SubnetId>>>>,
+        subnet_id: Arc<RwLock<Option<SubnetId>>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
         cup_provider: Arc<CatchUpPackageProvider>,
@@ -137,18 +137,16 @@ impl OrchestratorDashboard {
     }
 
     fn get_subnet_id(&self) -> String {
-        match self.subnet_id.get().map(|lock| *lock.read().unwrap()) {
-            Some(Some(id)) => id.to_string(),
-            Some(None) => "Unassigned".to_string(),
-            None => "Subnet not known yet".to_string(),
+        match *self.subnet_id.read().unwrap() {
+            Some(id) => id.to_string(),
+            None => "None".to_string(),
         }
     }
 
     fn get_scheduled_upgrade(&self) -> String {
-        let subnet_id = match self.subnet_id.get().map(|lock| *lock.read().unwrap()) {
-            Some(Some(id)) => id,
-            Some(None) => return "None".to_string(),
-            None => return "Subnet not known yet".to_string(),
+        let subnet_id = match *self.subnet_id.read().unwrap() {
+            Some(id) => id,
+            None => return "None".to_string(),
         };
 
         let expected_replica_version = match self.registry.get_expected_replica_version(subnet_id) {
