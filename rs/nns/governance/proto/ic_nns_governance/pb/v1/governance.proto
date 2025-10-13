@@ -1675,6 +1675,7 @@ message KnownNeuronData {
   string name = 1;
   optional string description = 2;
   repeated string links = 3;
+  repeated Topic committed_topics = 4;
 }
 
 // Proposal action to deregister a known neuron by removing its name and description.
@@ -2149,6 +2150,10 @@ message Governance {
 
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
+
+  // First proposal id to record voting history for known neurons.
+  // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+  ic_nns_common.pb.v1.ProposalId first_proposal_id_to_record_voting_history = 30;
 
   reserved 6;
   reserved "authz";

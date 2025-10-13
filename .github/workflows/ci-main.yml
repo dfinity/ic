@@ -40,7 +40,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:3b1bdea254318bca524e9c61a441452f3585c8046888702438546a6de5be0d1a
+      image: ghcr.io/dfinity/ic-build@sha256:9cfd9ecc6f751d631b74058643233aecc75a6d4b18501ae0c9fd0f2c1a110ac4
       options: >-
          -e NODE_NAME --privileged --cgroupns host
     steps:
@@ -214,10 +214,10 @@ jobs:
               targets_args+=("--skip_long_tests")
             fi
             if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
-              targets_args+=("--skip_didc_checks")
+              targets_args+=("--exclude_tags=didc")
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-              targets_args+=("--skip_buf_checks")
+              targets_args+=("--exclude_tags=buf")
             fi
             if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
               targets_args+=(
@@ -302,7 +302,7 @@ jobs:
             bazel build \
               --config=stamped \
               --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" \
-              --build_tag_filters=test_macos \
+              --build_tag_filters=test_all_platforms \
               //... --nobuild
 
       - name: Build & Test
@@ -313,7 +313,7 @@ jobs:
             bazel test \
               --config=stamped \
               --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
-              --test_tag_filters=test_macos \
+              --test_tag_filters=test_all_platforms \
               //...
 
       - name: Upload artifacts
@@ -332,12 +332,21 @@ jobs:
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
 
-  # Build & test the arm64-linux variant of pocket-ic-server and makes
-  # it available as a GHA artifact
-  # NOTE: uses 'namespace.so' runners
-  bazel-test-arm64-linux:
-    name: Bazel Test arm64-linux
-    runs-on: namespace-profile-arm64-linux # profile created in namespace console
+  # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
+  # build the entire codebase on arm64-darwin,
+  # and run tests tagged to run on all platforms.
+  # NOTE: uses 'namespace.so' runners.
+  bazel-test-arm64:
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            profile: namespace-profile-arm64-linux # profile created in namespace console
+          - os: darwin
+            profile: namespace-profile-darwin # profile created in namespace console
+    name: Bazel Test arm64-${{ matrix.os }}
+    runs-on: ${{ matrix.profile }}
+    timeout-minutes: 120
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
       - name: Set up Bazel cache
@@ -348,82 +357,60 @@ jobs:
       # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
       # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
       - name: Install lld
+        if: ${{ matrix.os == 'linux' }}
         run: |
           sudo apt install lld
 
-      - name: Build and Test
+      - name: Build PocketIC server to publish
         run: |
-          # run pocket-ic tests
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
-            test \
-              //packages/pocket-ic:all \
-              //rs/pocket_ic_server:test \
-              //rs/pocket_ic_server:gateway \
-              //rs/pocket_ic_server:pocket-ic-server \
-              //publish/binaries:pocket-ic.gz
+            build \
+            //publish/binaries:pocket-ic.gz
 
           mkdir -p build
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
-            ./build/pocket-ic-server-arm64-linux.gz
+            ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
 
-      - name: Upload pocket-ic-server
-        uses: actions/upload-artifact@v4
-        with:
-          name: pocket-ic-server-arm64-linux.gz
-          path: ./build/pocket-ic-server-arm64-linux.gz
-
-  bazel-test-arm64-darwin:
-    name: Bazel Test macOS Apple Silicon
-    timeout-minutes: 120
-    runs-on: namespace-profile-darwin # profile created in namespace console
-    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
-    steps:
-      - name: Set up Bazel cache
+      # Ensures that local development works on arm64-darwin.
+      - name: Build the entire codebase on darwin
+        if: ${{ matrix.os == 'darwin' }}
         run: |
-          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
-          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
-      - uses: actions/checkout@v4
-
-      # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
-      - name: Test
-        run: |
-          # Setup zig-cache
-          mkdir -p /tmp/zig-cache
-
-          bazel_targets=(
-            # make sure codebase builds for local development
+          # We do not use `//...` here to exclude `//publish/...` which is not required for local development.
+          bazel_build_targets=(
             //rs/...
-            //publish/binaries/...
+            //packages/...
+          )
 
-            # necessary artifacts & tests for pocket -ic
-            //packages/pocket-ic:all \
-            # NOTE: technically covered by //rs/... above, but
-            # added explicitly for clarity
-            //rs/pocket_ic_server:test \
-            //rs/pocket_ic_server:gateway \
-            //rs/pocket_ic_server:pocket-ic-server
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build \
+            "${bazel_build_targets[@]}"
+
+      - name: Run tests tagged to run on all platforms
+        run: |
+          # We do not use `//...` here to exclude `//publish/...` which does not build on arm64-linux.
+          bazel_test_targets=(
+            //rs/...
+            //packages/...
           )
 
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
-            --test_tag_filters="test_macos,test_macos_slow" \
-            "${bazel_targets[@]}"
-
-          mkdir -p build
-          cp \
-            ./bazel-bin/publish/binaries/pocket-ic.gz \
-            ./build/pocket-ic-server-arm64-darwin.gz
+            --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
+            --build_tests_only \
+            "${bazel_test_targets[@]}"
 
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
         with:
-          name: pocket-ic-server-arm64-darwin.gz
-          path: ./build/pocket-ic-server-arm64-darwin.gz
+          name: pocket-ic-server-arm64-${{ matrix.os }}.gz
+          path: ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
 
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
@@ -431,7 +418,7 @@ jobs:
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
-    needs: [bazel-test-arm64-linux, bazel-test-arm64-darwin, config]
+    needs: [bazel-test-arm64, config]
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     steps:
       - uses: actions/checkout@v4
@@ -488,9 +475,7 @@ jobs:
 
   python-ci-tests:
     name: Python CI Tests
-    runs-on: &dind-small-setup
-      labels: dind-small
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - *checkout
@@ -681,9 +666,15 @@ jobs:
           run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  cargo-clippy-linux:
-    name: Cargo Clippy Linux
-    runs-on: *dind-small-setup
+  cargo-linux:
+    strategy:
+      matrix:
+        include:
+          - name: Lint
+          - name: Build
+    name: Cargo  ${{ matrix.name }} Linux
+    runs-on:
+      labels: dind-small
     container: *container-setup
     timeout-minutes: 30
     steps:
@@ -697,12 +688,10 @@ jobs:
               - "**/*.rs"
               - "**/*.toml"
               - "**/*.lock"
-      - name: Run Cargo Clippy Linux
-        id: cargo-clippy-linux
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+      - name: Run Cargo ${{ matrix.name }} Linux
         if: |
           steps.filter.outputs.cargo == 'true' ||
+          contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
           startsWith(env.BRANCH_NAME, 'hotfix-')
@@ -710,43 +699,16 @@ jobs:
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
-          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
 
-  cargo-build-release-linux:
-    name: Cargo Build Release Linux
-    runs-on: *dind-small-setup
-    container: *container-setup
-    timeout-minutes: 30
-    steps:
-      - *checkout
-      - name: Filter Rust Files [*.{rs,toml,lock}]
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          filters: |
-            cargo:
-              - "**/*.rs"
-              - "**/*.toml"
-              - "**/*.lock"
-      - name: Run Cargo Build Release Linux
-        id: cargo-build-release-linux
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-        if: |
-          steps.filter.outputs.cargo == 'true' ||
-          env.BRANCH_NAME == 'master' ||
-          startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
-        shell: bash
-        run: |
-          set -eExuo pipefail
-          export CARGO_TERM_COLOR=always # ensure output has colors
-          cargo build --release --locked
+          if [[ "${{ matrix.name }}" == "Lint" ]]; then
+            "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+          else
+            cargo build --release --locked
+          fi
 
   check-pull-request-bazel-targets:
     name: Check PULL_REQUEST_BAZEL_TARGETS
-    runs-on: *dind-small-setup
-    container: *container-setup
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout

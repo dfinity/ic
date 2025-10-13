@@ -1,5 +1,5 @@
 {
-  "checksum": "7feedba152e1ec92d5d680933db408d452d7d1132fdb66b04cbc9539b3a7bd3a",
+  "checksum": "18900e59ecae1f09a87ae378267b24738dc0c59e84dc0b93d17abde71d758c61",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18956,6 +18956,118 @@
       ],
       "license_file": "LICENSE"
     },
+    "datasize 0.2.15": {
+      "name": "datasize",
+      "version": "0.2.15",
+      "package_url": "https://github.com/casperlabs/datasize-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/datasize/0.2.15/download",
+          "sha256": "e65c07d59e45d77a8bda53458c24a828893a99ac6cdd9c84111e09176ab739a2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "datasize",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "datasize",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "const-generics",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "datasize_derive 0.2.15",
+              "target": "datasize_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.15"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "datasize_derive 0.2.15": {
+      "name": "datasize_derive",
+      "version": "0.2.15",
+      "package_url": "https://github.com/casperlabs/datasize-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/datasize_derive/0.2.15/download",
+          "sha256": "613e4ee15899913285b7612004bbd490abd605be7b11d35afada5902fb6b91d5"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "datasize_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "datasize_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.15"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "dbus 0.9.7": {
       "name": "dbus",
       "version": "0.9.7",
@@ -20969,7 +21081,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-btc-interface 0.2.2",
+              "id": "ic-btc-interface 0.2.3",
               "target": "ic_btc_interface"
             },
             {
@@ -33791,14 +33903,14 @@
       "license_ids": [],
       "license_file": "LICENSE"
     },
-    "ic-btc-interface 0.2.2": {
+    "ic-btc-interface 0.2.3": {
       "name": "ic-btc-interface",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "package_url": "https://github.com/dfinity/bitcoin-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.2/download",
-          "sha256": "b0152e14e697b0e988dbfdcb3f7e352d1c76a65b7d2d75c5d76bad22c3aca10d"
+          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.3/download",
+          "sha256": "eb974b1626d8a45dad7d1e2383829c6b08c5fd53b42d9f0938a51f2f0e057c7e"
         }
       },
       "targets": [
@@ -33827,6 +33939,10 @@
               "target": "candid"
             },
             {
+              "id": "datasize 0.2.15",
+              "target": "datasize"
+            },
+            {
               "id": "serde 1.0.219",
               "target": "serde"
             },
@@ -33838,7 +33954,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -94937,7 +95053,7 @@
     "hyper-util 0.1.12",
     "ic-agent 0.40.1",
     "ic-bn-lib 0.1.0",
-    "ic-btc-interface 0.2.2",
+    "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",

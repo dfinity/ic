@@ -710,6 +710,8 @@ impl NeuronStore {
         topic: Topic,
         proposal_id: ProposalId,
         vote: Vote,
+        // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+        first_proposal_id_to_record_voting_history: ProposalId,
     ) -> Result<(), NeuronStoreError> {
         let should_record_voting_history = with_stable_neuron_store_mut(
             |stable_neuron_store| -> Result<bool, NeuronStoreError> {
@@ -720,7 +722,8 @@ impl NeuronStore {
                     vote,
                 )?;
                 let should_record_voting_history = is_known_neuron_voting_history_enabled()
-                    && stable_neuron_store.is_known_neuron(neuron_id);
+                    && stable_neuron_store.is_known_neuron(neuron_id)
+                    && proposal_id >= first_proposal_id_to_record_voting_history;
                 Ok(should_record_voting_history)
             },
         )?;
@@ -812,6 +815,13 @@ impl NeuronStore {
             indexes
                 .known_neuron()
                 .known_neuron_id_by_name(known_neuron_name)
+        })
+    }
+
+    /// Returns if the neuron is a known neuron.
+    pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
+        with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store.is_known_neuron(neuron_id)
         })
     }
 

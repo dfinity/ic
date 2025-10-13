@@ -1,14 +1,13 @@
 #![allow(deprecated)]
-use candid::{CandidType, Encode};
+use candid::{CandidType, Encode, Nat};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
-use dfn_protobuf::ProtoBuf;
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
 use ic_cdk::{
-    api::call::{CallResult, ManualReply, reply_raw},
+    api::call::{CallResult, ManualReply},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
@@ -42,7 +41,6 @@ use icp_ledger::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
-use on_wire::IntoWire;
 use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -2321,11 +2319,9 @@ fn ensure_balance(
     Ok(())
 }
 
-#[unsafe(export_name = "canister_query total_cycles_minted")]
-fn total_cycles_minted() {
-    let value: u64 = with_state(|state| state.total_cycles_minted.get().try_into().unwrap());
-    let response = ProtoBuf::new(value).into_bytes().unwrap();
-    reply_raw(&response);
+#[query(hidden = true)]
+fn total_cycles_minted() -> Nat {
+    with_state(|state| state.total_cycles_minted.get().into())
 }
 
 /// Return the list of subnets in which this controller is allowed to create

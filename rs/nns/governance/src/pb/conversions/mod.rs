@@ -2068,20 +2068,106 @@ impl From<pb_api::KnownNeuron> for pb::KnownNeuron {
     }
 }
 
+impl From<pb::Topic> for pb_api::TopicToFollow {
+    fn from(topic: pb::Topic) -> Self {
+        match topic {
+            pb::Topic::Unspecified => pb_api::TopicToFollow::CatchAll,
+            pb::Topic::NeuronManagement => pb_api::TopicToFollow::NeuronManagement,
+            pb::Topic::ExchangeRate => pb_api::TopicToFollow::ExchangeRate,
+            pb::Topic::NetworkEconomics => pb_api::TopicToFollow::NetworkEconomics,
+            pb::Topic::Governance => pb_api::TopicToFollow::Governance,
+            pb::Topic::NodeAdmin => pb_api::TopicToFollow::NodeAdmin,
+            pb::Topic::ParticipantManagement => pb_api::TopicToFollow::ParticipantManagement,
+            pb::Topic::SubnetManagement => pb_api::TopicToFollow::SubnetManagement,
+            pb::Topic::ApplicationCanisterManagement => {
+                pb_api::TopicToFollow::ApplicationCanisterManagement
+            }
+            pb::Topic::Kyc => pb_api::TopicToFollow::Kyc,
+            pb::Topic::NodeProviderRewards => pb_api::TopicToFollow::NodeProviderRewards,
+            pb::Topic::IcOsVersionDeployment => pb_api::TopicToFollow::IcOsVersionDeployment,
+            pb::Topic::IcOsVersionElection => pb_api::TopicToFollow::IcOsVersionElection,
+            pb::Topic::SnsAndCommunityFund => pb_api::TopicToFollow::SnsAndCommunityFund,
+            pb::Topic::ApiBoundaryNodeManagement => {
+                pb_api::TopicToFollow::ApiBoundaryNodeManagement
+            }
+            pb::Topic::SubnetRental => pb_api::TopicToFollow::SubnetRental,
+            pb::Topic::ProtocolCanisterManagement => {
+                pb_api::TopicToFollow::ProtocolCanisterManagement
+            }
+            pb::Topic::ServiceNervousSystemManagement => {
+                pb_api::TopicToFollow::ServiceNervousSystemManagement
+            }
+        }
+    }
+}
+
+impl From<pb_api::TopicToFollow> for pb::Topic {
+    fn from(topic: pb_api::TopicToFollow) -> Self {
+        match topic {
+            pb_api::TopicToFollow::CatchAll => pb::Topic::Unspecified,
+            pb_api::TopicToFollow::NeuronManagement => pb::Topic::NeuronManagement,
+            pb_api::TopicToFollow::ExchangeRate => pb::Topic::ExchangeRate,
+            pb_api::TopicToFollow::NetworkEconomics => pb::Topic::NetworkEconomics,
+            pb_api::TopicToFollow::Governance => pb::Topic::Governance,
+            pb_api::TopicToFollow::NodeAdmin => pb::Topic::NodeAdmin,
+            pb_api::TopicToFollow::ParticipantManagement => pb::Topic::ParticipantManagement,
+            pb_api::TopicToFollow::SubnetManagement => pb::Topic::SubnetManagement,
+            pb_api::TopicToFollow::Kyc => pb::Topic::Kyc,
+            pb_api::TopicToFollow::NodeProviderRewards => pb::Topic::NodeProviderRewards,
+            pb_api::TopicToFollow::IcOsVersionDeployment => pb::Topic::IcOsVersionDeployment,
+            pb_api::TopicToFollow::IcOsVersionElection => pb::Topic::IcOsVersionElection,
+            pb_api::TopicToFollow::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
+            pb_api::TopicToFollow::ApiBoundaryNodeManagement => {
+                pb::Topic::ApiBoundaryNodeManagement
+            }
+            pb_api::TopicToFollow::SubnetRental => pb::Topic::SubnetRental,
+            pb_api::TopicToFollow::ApplicationCanisterManagement => {
+                pb::Topic::ApplicationCanisterManagement
+            }
+            pb_api::TopicToFollow::ProtocolCanisterManagement => {
+                pb::Topic::ProtocolCanisterManagement
+            }
+            pb_api::TopicToFollow::ServiceNervousSystemManagement => {
+                pb::Topic::ServiceNervousSystemManagement
+            }
+        }
+    }
+}
+
 impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
     fn from(item: pb::KnownNeuronData) -> Self {
+        let committed_topics = Some(
+            item.committed_topics
+                .iter()
+                .map(|&topic_i32| {
+                    let topic = pb::Topic::try_from(topic_i32).ok();
+                    topic.map(pb_api::TopicToFollow::from)
+                })
+                .collect(),
+        );
+
         Self {
             name: item.name,
             description: item.description,
             links: Some(item.links),
+            committed_topics,
         }
     }
 }
+
 impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
     fn from(item: pb_api::KnownNeuronData) -> Self {
+        let committed_topics = item
+            .committed_topics
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|topic| topic.map(|topic| pb::Topic::from(topic) as i32))
+            .collect();
+
         Self {
             name: item.name,
             description: item.description,
+            committed_topics,
             links: item.links.unwrap_or_default(),
         }
     }
