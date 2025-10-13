@@ -1090,10 +1090,10 @@ impl ExecutionTest {
             .build();
         self.ingress_history_writer.set_status(
             &mut state,
-            ingress_id.clone(),
+            ingress.message_id.clone(),
             IngressStatus::Known {
-                receiver: canister_id.get(),
-                user_id: self.user_id,
+                receiver: ingress.receiver.get(),
+                user_id: ingress.source,
                 time: self.time,
                 state: IngressState::Received,
             },
@@ -1340,10 +1340,10 @@ impl ExecutionTest {
 
         self.ingress_history_writer.set_status(
             &mut state,
-            message_id.clone(),
+            message.message_id.clone(),
             IngressStatus::Known {
-                receiver: CanisterId::ic_00().get(),
-                user_id: self.user_id,
+                receiver: message.receiver.get(),
+                user_id: message.source,
                 time: self.time,
                 state: IngressState::Received,
             },
