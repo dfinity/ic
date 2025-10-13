@@ -28,9 +28,10 @@ use ic_config::{
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
     wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
+    wasmtime_embedder::system_api::sandbox_safe_system_state::CanisterStatusView,
     wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits},
 };
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
@@ -471,22 +472,21 @@ where
 fn install_code_on_non_existing_canister_fails() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = canister_test_id(0);
+    let check_err = |err: UserError| {
+        assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+        assert!(
+            err.description()
+                .contains(&format!("Canister {canister_id} not found"))
+        );
+    };
     let err = test
         .install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
-    assert!(
-        err.description()
-            .contains(&format!("Canister {canister_id} not found"))
-    );
+    check_err(err);
     let err = test
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
-    assert!(
-        err.description()
-            .contains(&format!("Canister {canister_id} not found"))
-    );
+    check_err(err);
 }
 
 #[test]
@@ -1165,10 +1165,12 @@ fn stopping_canister_can_be_restarted() {
         test.canister_state(canister_id).status(),
         CanisterStatusType::Running
     );
-    assert!(matches!(
-        test.ingress_state(&stop_id),
-        IngressState::Failed(_)
-    ));
+    match test.ingress_state(&stop_id) {
+        IngressState::Failed(err) => {
+            assert_eq!(err.code(), ErrorCode::CanisterStoppingCancelled);
+        }
+        state => panic!("Unexpected ingress state: {:?}", state),
+    };
 }
 
 #[test]
@@ -1454,6 +1456,8 @@ fn canister_status_via_mgmt_canister_matches_system_api() {
     status_via_mgmt_canister(&mut test, CanisterStatusType::Running);
     status_via_post_upgrade(&mut test, 0);
 
+    // now that the canister is running, we can also get `ic0.canister_status`
+    // via an update call
     let result = test.ingress(
         canister_id,
         "update",
@@ -1464,7 +1468,7 @@ fn canister_status_via_mgmt_canister_matches_system_api() {
             .build(),
     );
     let reply = get_reply(result);
-    assert_eq!(reply, 1_u32.to_le_bytes());
+    assert_eq!(reply, (CanisterStatusView::Running as u32).to_le_bytes());
 
     let _ = test.stop_canister(canister_id);
 
@@ -1478,6 +1482,8 @@ fn canister_status_via_mgmt_canister_matches_system_api() {
 
     test.start_canister(canister_id).unwrap();
 
+    // we check the results of `ic0.canister_status`
+    // stored in stable memory
     let result = test.ingress(
         canister_id,
         "update",
@@ -1487,9 +1493,9 @@ fn canister_status_via_mgmt_canister_matches_system_api() {
     assert_eq!(
         reply,
         [
-            1_u32.to_le_bytes(),
-            2_u32.to_le_bytes(),
-            3_u32.to_le_bytes()
+            (CanisterStatusView::Running as u32).to_le_bytes(),
+            (CanisterStatusView::Stopping as u32).to_le_bytes(),
+            (CanisterStatusView::Stopped as u32).to_le_bytes()
         ]
         .concat()
     );
@@ -1519,17 +1525,14 @@ fn canister_status_module_hash() {
     };
 
     let minimal_module = MINIMAL_WASM.to_vec();
-    let minimal_module_hash = ic_crypto_sha2::Sha256::hash(&minimal_module);
 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
     encoder.write_all(&MINIMAL_WASM).unwrap();
     let gzipped_minimal_module = encoder.finish().unwrap();
-    let gzipped_minimal_module_hash = ic_crypto_sha2::Sha256::hash(&gzipped_minimal_module);
 
-    for (test_module, test_module_hash) in [
-        (minimal_module, minimal_module_hash),
-        (gzipped_minimal_module, gzipped_minimal_module_hash),
-    ] {
+    for test_module in [minimal_module, gzipped_minimal_module] {
+        let test_module_hash = ic_crypto_sha2::Sha256::hash(&test_module);
+
         let canister_id = test.create_canister(*INITIAL_CYCLES);
         assert_eq!(module_hash(&mut test, canister_id), None);
 
@@ -1816,7 +1819,10 @@ fn calling_deleted_canister_fails() {
         wasm().call_simple(canister_id, "update", call_args).build(),
     );
     let bytes = get_reject(res);
-    assert_eq!(bytes.as_bytes(), 3_u32.to_le_bytes());
+    assert_eq!(
+        bytes.as_bytes(),
+        (RejectCode::DestinationInvalid as u32).to_le_bytes()
+    );
 }
 
 #[test]
