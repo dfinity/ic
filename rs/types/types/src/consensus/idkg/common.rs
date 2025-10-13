@@ -1147,18 +1147,18 @@ impl BuildSignatureInputsError {
 // This warning is suppressed because Clippy incorrectly reports the size of the
 // `ThresholdEcdsaSigInputs` and `ThresholdSchnorrSigInputs` variants to be "at least 0 bytes".
 #[allow(clippy::large_enum_variant)]
-pub enum ThresholdSigInputs {
-    Ecdsa(ThresholdEcdsaSigInputs),
+pub enum ThresholdSigInputs<'a> {
+    Ecdsa(ThresholdEcdsaSigInputs<'a>),
     Schnorr(ThresholdSchnorrSigInputs),
     VetKd(VetKdArgs),
 }
 
-impl ThresholdSigInputs {
-    pub fn caller(&self) -> PrincipalId {
+impl ThresholdSigInputs<'_> {
+    pub fn caller(&self) -> &PrincipalId {
         match self {
-            ThresholdSigInputs::Ecdsa(inputs) => inputs.derivation_path().caller,
-            ThresholdSigInputs::Schnorr(inputs) => inputs.derivation_path().caller,
-            ThresholdSigInputs::VetKd(inputs) => inputs.context.caller,
+            ThresholdSigInputs::Ecdsa(inputs) => inputs.caller(),
+            ThresholdSigInputs::Schnorr(inputs) => &inputs.derivation_path().caller,
+            ThresholdSigInputs::VetKd(inputs) => &inputs.context.caller,
         }
     }
 

@@ -1,6 +1,6 @@
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
-    generate_key_transcript, setup_unmasked_random_params,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdEcdsaSigInputsOwned,
+    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
@@ -38,7 +38,7 @@ use ic_types::{
     crypto::{
         AlgorithmId, ExtendedDerivationPath,
         canister_threshold_sig::{
-            SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
+            SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
             idkg::{
                 IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
@@ -47,6 +47,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
+        vetkd::VetKdArgs,
     },
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
@@ -404,8 +405,8 @@ pub struct TestPreSigRef {
     pub pre_signature_ref: PreSignatureRef,
 }
 
-impl From<&ThresholdEcdsaSigInputs> for TestPreSigRef {
-    fn from(inputs: &ThresholdEcdsaSigInputs) -> TestPreSigRef {
+impl From<&ThresholdEcdsaSigInputsOwned> for TestPreSigRef {
+    fn from(inputs: &ThresholdEcdsaSigInputsOwned) -> TestPreSigRef {
         let height = Height::from(0);
         let quad = inputs.presig_quadruple();
         let key = inputs.key_transcript();
@@ -781,10 +782,27 @@ pub fn create_pre_sig_ref(caller: u8, key_id: &IDkgMasterPublicKeyId) -> TestPre
     create_pre_sig_ref_with_height(caller, Height::new(100), key_id)
 }
 
+#[allow(clippy::large_enum_variant)]
+pub enum ThresholdSigInputsOwned {
+    Ecdsa(ThresholdEcdsaSigInputsOwned),
+    Schnorr(ThresholdSchnorrSigInputs),
+    VetKd(VetKdArgs),
+}
+
+impl ThresholdSigInputsOwned {
+    pub fn as_ref<'a>(&'a self) -> ThresholdSigInputs<'a> {
+        match self {
+            ThresholdSigInputsOwned::Ecdsa(i) => ThresholdSigInputs::Ecdsa(i.as_ref()),
+            ThresholdSigInputsOwned::Schnorr(i) => ThresholdSigInputs::Schnorr(i.clone()),
+            ThresholdSigInputsOwned::VetKd(i) => ThresholdSigInputs::VetKd(i.clone()),
+        }
+    }
+}
+
 pub fn create_threshold_sig_inputs(
     caller: u8,
     key_id: &IDkgMasterPublicKeyId,
-) -> ThresholdSigInputs {
+) -> ThresholdSigInputsOwned {
     let path = ExtendedDerivationPath {
         caller: PrincipalId::try_from(&vec![caller]).unwrap(),
         derivation_path: vec![],
@@ -798,16 +816,14 @@ pub fn create_threshold_sig_inputs(
                 PreSigId(1),
                 RegistryVersion::from(1),
             );
-            ThresholdSigInputs::Ecdsa(
-                ThresholdEcdsaSigInputs::new(
-                    &path,
-                    &[1; 32],
-                    rnd,
-                    pre_sig.pre_signature.as_ref().clone(),
-                    pre_sig.key_transcript.as_ref().clone(),
-                )
-                .unwrap(),
-            )
+            ThresholdSigInputsOwned::Ecdsa(ThresholdEcdsaSigInputsOwned::new(
+                path.caller,
+                path.derivation_path,
+                [1; 32].to_vec(),
+                rnd.get(),
+                pre_sig.pre_signature.as_ref().clone(),
+                pre_sig.key_transcript.as_ref().clone(),
+            ))
         }
         MasterPublicKeyId::Schnorr(key_id) => {
             let pre_sig = fake_schnorr_matched_pre_signature(
@@ -816,7 +832,7 @@ pub fn create_threshold_sig_inputs(
                 PreSigId(1),
                 RegistryVersion::from(1),
             );
-            ThresholdSigInputs::Schnorr(
+            ThresholdSigInputsOwned::Schnorr(
                 ThresholdSchnorrSigInputs::new(
                     &path,
                     &[1; 64],
