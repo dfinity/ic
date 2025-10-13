@@ -304,8 +304,7 @@ impl NodeRewardsCanister {
         let daily_results = result
             .daily_results
             .remove(&day)
-            .expect("Could not find daily results for the requested day");
-
+            .ok_or("Could not find daily results for the requested day")?;
         Ok(DailyResults::from(daily_results))
     }
 }
