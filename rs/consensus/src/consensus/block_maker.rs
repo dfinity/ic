@@ -32,7 +32,7 @@ use ic_types::{
     time::current_time,
 };
 use num_traits::ops::saturating::SaturatingSub;
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::ThreadPool;
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -61,16 +61,6 @@ pub(crate) fn subnet_records_for_registry_version(
     })
 }
 
-/// Builds a rayon thread pool with the given number of threads.
-fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
-}
-
 /// A consensus subcomponent that is responsible for creating block proposals.
 pub struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
@@ -81,11 +71,11 @@ pub struct BlockMaker {
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
+    thread_pool: Arc<ThreadPool>,
     pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
     pub(crate) log: ReplicaLogger,
-    thread_pool: Arc<ThreadPool>,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.
@@ -104,6 +94,7 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
@@ -118,11 +109,11 @@ impl BlockMaker {
             payload_builder,
             dkg_pool,
             idkg_pool,
+            thread_pool,
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
             idkg_payload_metrics: IDkgPayloadMetrics::new(metrics_registry),
-            thread_pool: build_thread_pool(8),
             stable_registry_version_age,
         }
     }
@@ -615,6 +606,8 @@ pub(super) fn is_time_to_make_block(
 
 #[cfg(test)]
 mod tests {
+    use crate::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
+
     use super::*;
     use ic_consensus_mocks::{Dependencies, MockPayloadBuilder, dependencies_with_subnet_params};
     use ic_interfaces::consensus_pool::ConsensusPool;
@@ -685,6 +678,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -766,6 +760,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -894,6 +889,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -933,6 +929,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -1008,6 +1005,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),

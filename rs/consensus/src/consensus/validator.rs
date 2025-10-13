@@ -46,7 +46,7 @@ use ic_types::{
     state_manager::StateManagerError,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -65,9 +65,6 @@ const LOG_EVERY_N_SECONDS: i32 = 60;
 /// The time, after which we will load a CUP even if we
 /// where holding it back before, to give recomputation a chance during catch up.
 const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
-
-/// The maximum number of threads used to validate payloads in parallel.
-const MAX_VALIDATION_THREADS: usize = 8;
 
 /// Possible transient validation failures.
 #[derive(Debug)]
@@ -674,16 +671,6 @@ impl RankMap {
     }
 }
 
-/// Builds a rayon thread pool with the given number of threads.
-fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
-}
-
 /// Validator holds references to components required for artifact validation.
 /// It implements validation functions for all consensus artifacts which are
 /// called by `on_state_change` in round-robin manner.
@@ -715,6 +702,7 @@ impl Validator {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
@@ -728,7 +716,7 @@ impl Validator {
             state_manager,
             message_routing,
             dkg_pool,
-            thread_pool: build_thread_pool(MAX_VALIDATION_THREADS),
+            thread_pool,
             log,
             metrics,
             schedule: RoundRobin::default(),
@@ -1930,7 +1918,9 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::block_maker::get_block_maker_delay;
+    use crate::consensus::{
+        MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -2027,6 +2017,7 @@ pub mod test {
                 dependencies.state_manager.clone(),
                 message_routing.clone(),
                 dependencies.dkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
