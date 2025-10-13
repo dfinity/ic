@@ -59,7 +59,7 @@ type DailyResults = record {
     provider_results: vec record { principal; DailyNodeProviderRewards };
 };
 
-type GetNodeProviderRewardsCalculationResponse = variant { Ok: DailyResults; Err: text };
+type GetNodeProvidersRewardsCalculationResponse = variant { Ok: DailyResults; Err: text };
 
 type GetNodeProvidersRewardsCalculationRequest = record {
   day: DateUtc;
@@ -103,5 +103,5 @@ service: () -> {
         GetNodeProvidersMonthlyXdrRewardsResponse
     );
     get_node_providers_rewards: (GetNodeProvidersRewardsRequest) -> (GetNodeProvidersRewardsResponse);
-    get_node_providers_rewards_calculation: (GetNodeProvidersRewardsCalculationRequest) -> (GetNodeProviderRewardsCalculationResponse) query;
+    get_node_providers_rewards_calculation: (GetNodeProvidersRewardsCalculationRequest) -> (GetNodeProvidersRewardsCalculationResponse) query;
 }

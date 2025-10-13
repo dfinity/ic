@@ -9,7 +9,7 @@ pub struct GetNodeProvidersRewardsCalculationRequest {
 }
 
 // TODO: Remove useless level of indirection: https://github.com/dfinity/ic/pull/7071/files#r2406450031
-pub type GetNodeProviderRewardsCalculationResponse = Result<DailyResults, String>;
+pub type GetNodeProvidersRewardsCalculationResponse = Result<DailyResults, String>;
 
 // These are API-facing types with all fields wrapped in `Option`
 // to ensure forward compatibility. This way, new fields can be added
