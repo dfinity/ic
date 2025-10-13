@@ -407,7 +407,9 @@ impl TestEnv {
     }
 }
 
-fn matches_blockchain_is_empty_or_still_syncing_error(error: &rosetta_core::miscellaneous::Error) -> bool {
+fn matches_blockchain_is_empty_or_still_syncing_error(
+    error: &rosetta_core::miscellaneous::Error,
+) -> bool {
     (error.code == 700 || error.code == 702 || error.code == 712 || error.code == 721)
         && error.details.is_some()
         && error
