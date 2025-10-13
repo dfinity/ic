@@ -416,7 +416,7 @@ impl Recovery {
                 descr: format!(
                     r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
                     if add_and_bless_replica_version {
-                        " --and-and-bless-replica-version"
+                        " --add-and-bless-replica-version"
                     } else {
                         ""
                     },
