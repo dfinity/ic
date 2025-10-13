@@ -122,6 +122,14 @@ fn log_instructions(env: TestEnv) {
     --upgrade-image-hash {upgrade_image_hash}"#
     );
 
+    info!(logger, "Host <-> IPs mapping:");
+    for vm in env.get_all_nested_vms().unwrap() {
+        let vm_name = vm.vm_name();
+        let host_ip = vm.get_nested_network().unwrap().host_ip;
+        let guest_ip = vm.get_nested_network().unwrap().guest_ip;
+        info!(logger, "{vm_name}: HostOS {host_ip}, GuestOS {guest_ip}");
+    }
+
     let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
