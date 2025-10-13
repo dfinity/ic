@@ -759,12 +759,19 @@ impl IDkgComplaintHandlerImpl {
             .map(|transcript| (transcript.transcript_id, transcript));
 
         let state = shapshot.get_state();
-        // Transcripts stashed in replicated state
-        let stashed_transcripts = state
+        // Pre-signature transcripts stashed in replicated state
+        let stashed_pre_sig_transcripts = state
             .pre_signature_stashes()
             .values()
             .flat_map(|stash| stash.pre_signatures.values())
             .flat_map(|pre_sig| pre_sig.iter_idkg_transcripts())
+            .map(|transcript| (transcript.transcript_id, transcript));
+
+        // Key transcripts stashed in replicated state
+        let stashed_key_transcripts = state
+            .pre_signature_stashes()
+            .values()
+            .map(|stash| stash.key_transcript.as_ref())
             .map(|transcript| (transcript.transcript_id, transcript));
 
         // Transcripts paired with active requests
@@ -776,7 +783,8 @@ impl IDkgComplaintHandlerImpl {
 
         BTreeMap::from_iter(
             chain_transcripts
-                .chain(stashed_transcripts)
+                .chain(stashed_pre_sig_transcripts)
+                .chain(stashed_key_transcripts)
                 .chain(paired_transcripts),
         )
     }
