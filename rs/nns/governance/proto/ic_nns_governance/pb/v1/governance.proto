@@ -494,7 +494,6 @@ enum NnsFunction {
 
   // Take subnet offline or bring back online. Used as part of subnet recovery.
   NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL = 55;
-
 }
 
 // Payload of a proposal that calls a function on another NNS
