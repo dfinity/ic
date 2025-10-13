@@ -142,7 +142,7 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     # So we have to ensure that the targets are either empty or include at least one test
     # otherwise `bazel test` will error with: ERROR: No test targets were found, yet testing was requested
     if command == "test":
-        query = f'kind(".*_test", {query})'
+        query = f'kind(".*_test|test_suite", {query})'
 
     # Exclude the long_tests if requested:
     query = f"({query})" + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
