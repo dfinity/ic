@@ -641,7 +641,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
             ),
             "ic-btc-interface": crate.spec(
-                version = "^0.2.2",
+                version = "^0.2.3",
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",

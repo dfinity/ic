@@ -212,7 +212,12 @@ impl Governance {
         };
 
         while !machine.is_completely_finished() {
-            machine.continue_processing(&mut self.neuron_store, ballots, is_over_soft_limit);
+            machine.continue_processing(
+                &mut self.neuron_store,
+                ballots,
+                is_over_soft_limit,
+                self.heap_data.first_proposal_id_to_record_voting_history,
+            );
 
             if is_over_soft_limit() {
                 break;
@@ -508,6 +513,8 @@ impl ProposalVotingStateMachine {
         neuron_store: &mut NeuronStore,
         ballots: &mut HashMap<u64, Ballot>,
         is_over_instructions_limit: fn() -> bool,
+        // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+        first_proposal_id_to_record_voting_history: ProposalId,
     ) {
         let voting_finished = self.is_voting_finished();
 
@@ -551,8 +558,13 @@ impl ProposalVotingStateMachine {
             }
         } else {
             while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
-                match neuron_store.record_neuron_vote(neuron_id, self.topic, self.proposal_id, vote)
-                {
+                match neuron_store.record_neuron_vote(
+                    neuron_id,
+                    self.topic,
+                    self.proposal_id,
+                    vote,
+                    first_proposal_id_to_record_voting_history,
+                ) {
                     Ok(_) => {}
                     Err(e) => {
                         // This is a bad inconsistency, but there is
@@ -957,7 +969,12 @@ mod test {
         );
 
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
 
         assert_eq!(
             ballots,
@@ -971,7 +988,12 @@ mod test {
         assert!(!state_machine.is_voting_finished());
 
         // Now we see voting finished but not recording recent ballots finished
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
         assert!(!state_machine.is_completely_finished());
         assert!(state_machine.is_voting_finished());
 
@@ -992,7 +1014,12 @@ mod test {
             None
         );
 
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
         assert!(state_machine.is_completely_finished());
 
         assert_eq!(
@@ -1083,9 +1110,24 @@ mod test {
 
         // We assert it is done after checking both sets of followers
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
         assert!(state_machine.is_completely_finished());
     }
 

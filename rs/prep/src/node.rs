@@ -470,6 +470,7 @@ mod node_configuration {
             public_ipv4_config: None,
             domain: None,
             node_reward_type: None,
+            ssh_node_state_write_access: vec![],
         };
 
         assert_eq!(got, want);
