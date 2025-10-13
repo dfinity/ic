@@ -101,6 +101,8 @@ def main():
                 data = kn["known_neuron_data"]
                 neuron["name"] = data.get("name", "Unnamed")
                 neuron["description"] = data.get("description", "")
+                neuron["links"] = data.get("links", []) or []
+                neuron["committed_topics"] = data.get("committed_topics", []) or []
 
             neurons.append(neuron)
 
@@ -122,6 +124,8 @@ def main():
             neuron_id = neuron.get("id", "Unknown")
             neuron_name = neuron.get("name", "Unnamed")
             neuron_description = neuron.get("description", "")
+            neuron_links = neuron.get("links", []) or []
+            neuron_committed_topics = neuron.get("committed_topics", []) or []
 
             print(f"\n--- Neuron {i+1} ---")
             print(f"ID: {neuron_id}")
@@ -135,6 +139,16 @@ def main():
                 else:
                     desc_display = neuron_description
                 print(f"Description: {desc_display}")
+
+            if len(neuron_links) > 0:
+                print("Links:")
+                for link in neuron_links:
+                    print(f"  - {link}")
+
+            if len(neuron_committed_topics) > 0:
+                print("Committed Topics:")
+                for topic in neuron_committed_topics:
+                    print(f"  - {topic}")
     else:
         print("No known neurons found or unexpected response format. Response structure:")
         print(json.dumps(response, indent=2))
