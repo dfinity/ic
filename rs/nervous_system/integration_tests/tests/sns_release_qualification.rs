@@ -228,18 +228,3 @@ pub async fn test_sns_deployment(
     )
     .await;
 }
-
-#[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
-pub struct HttpRequest {
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub body: Vec<u8>,
-}
-
-#[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
-pub struct HttpResponse {
-    pub status_code: u16,
-    pub headers: Vec<(String, String)>,
-    pub body: Vec<u8>,
-}
