@@ -126,7 +126,7 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    info!(logger, "Updating the registry with new pairs of keys.");
+    info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
@@ -142,7 +142,12 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
+    info!(logger, "Waiting for backup authentication to be granted...");
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    info!(
+        logger,
+        "Readonly authentication should now also be granted."
+    );
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
@@ -164,7 +169,7 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
-    info!(logger, "Updating the registry with new pairs of keys.");
+    info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
@@ -193,7 +198,7 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    info!(logger, "Updating the registry with new pairs of keys.");
+    info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
     let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
     let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
@@ -225,7 +230,12 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
+    info!(logger, "Waiting for backup authentication to be granted...");
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean1);
+    info!(
+        logger,
+        "All other authentications should now also be granted."
+    );
     assert_authentication_works(&node_ip, "backup", &backup_mean2);
     assert_authentication_works(&node_ip, "backup", &backup_mean3);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean1);
@@ -239,7 +249,7 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
-    info!(logger, "Updating the registry with new pairs of keys.");
+    info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
     let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
     let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
@@ -260,7 +270,15 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
+    info!(
+        logger,
+        "Waiting for readonly authentication to be granted..."
+    );
     wait_until_authentication_is_granted(&logger, &node_ip, "readonly", &readonly_mean1);
+    info!(
+        logger,
+        "All other authentications should now also be granted."
+    );
     assert_authentication_works(&node_ip, "readonly", &readonly_mean2);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
@@ -373,7 +391,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    info!(logger, "Updating the registry with new pairs of keys.");
+    info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
@@ -389,15 +407,23 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
+    info!(logger, "Waiting for backup authentication to be granted...");
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    info!(
+        logger,
+        "Readonly authentication should now also be granted."
+    );
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
-    // Restart the orchestrator
+    info!(logger, "Restarting the orchestrator...");
     app_node
         .block_on_bash_script("sudo systemctl restart ic-replica")
         .unwrap();
 
-    // Make sure the node still accepts connections until the replica is healthy again.
+    info!(
+        logger,
+        "Making sure that the node still accepts connections until the replica is healthy again..."
+    );
     const CHECK_INTERVAL: Duration = Duration::from_secs(2);
     while !app_node.status_is_healthy().is_ok_and(|healthy| healthy) {
         assert_authentication_works(&node_ip, "backup", &backup_mean);
@@ -407,6 +433,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     // In the unlucky case where the replica became healthy so fast that the orchestrator did not
     // even have the chance to update its keys (i.e. possibly remove), we check again for 10
     // seconds.
+    info!(logger, "Checking again for longer to be sure...");
     for _ in 0..((ORCHESTRATOR_TASK_CHECK_INTERVAL.as_secs() + 1) / CHECK_INTERVAL.as_secs()) {
         assert_authentication_works(&node_ip, "backup", &backup_mean);
         assert_authentication_works(&node_ip, "readonly", &readonly_mean);
@@ -422,7 +449,7 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    info!(logger, "Updating the registry with new pairs of keys.");
+    info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
@@ -439,10 +466,15 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
+    info!(logger, "Waiting for backup authentication to be granted...");
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    info!(
+        logger,
+        "Readonly authentication should now also be granted."
+    );
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
-    // Remove the node from the subnet
+    info!(logger, "Removing the node from its subnet...");
     block_on(remove_nodes_via_endpoint(
         nns_node.get_public_url(),
         &[app_node.node_id],
@@ -451,6 +483,10 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     let registry_version_without_node = block_on(topology.block_for_newer_registry_version())
         .unwrap()
         .get_registry_version();
+    info!(
+        logger,
+        "Registry version without the node: {}", registry_version_without_node
+    );
 
     // The node should keep its current keys until it completely leaves the subnet, i.e. until the
     // oldest registry version in use is greater or equal to the version where the node was
@@ -463,6 +499,13 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
         // that.
         let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
 
+        info!(
+            logger,
+            "Node's earliest registry version in use: {:?}. Waiting a bit for the orchestrator to \
+            update its keys if it is time to do so...",
+            maybe_earliest_registry_version_in_use
+        );
+
         // We wait for the orchestrator to 1) read the CUP and 2) check for new keys to give it the
         // chance to remove the keys when finally leaving the subnet.
         std::thread::sleep(2 * ORCHESTRATOR_TASK_CHECK_INTERVAL + Duration::from_secs(1));
@@ -474,16 +517,11 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
             break;
         }
 
+        info!(logger, "Backup authentication still works.");
+
         let earliest_registry_version_in_use = maybe_earliest_registry_version_in_use.expect(
             "The node kept access to the backup account even though it left the subnet. Indeed, \
             the metrics endpoint is down, so the replica process must have been stopped.",
-        );
-
-        info!(
-            logger,
-            "Node's earliest registry version in use: {}. Registry version without the node: {}",
-            earliest_registry_version_in_use,
-            registry_version_without_node
         );
 
         assert!(
