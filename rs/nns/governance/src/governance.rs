@@ -3360,7 +3360,8 @@ impl Governance {
             let topic = topic.unwrap_or_default();
             let followees = followees.clone();
 
-            topic_to_followees = self.modify_followees(
+            topic_to_followees = modify_followees(
+                &self.neuron_store,
                 &neuron,
                 &topic_to_followees,
                 topic,
@@ -3376,104 +3377,6 @@ impl Governance {
         })?;
 
         Ok(())
-    }
-
-    fn modify_followees(
-        &self,
-        neuron: &Neuron,
-        topic_to_followees: &HashMap<i32, Followees>,
-        topic: i32,
-        new_followees: Followees,
-    ) -> Result<HashMap<i32, Followees>, GovernanceError> {
-        let controller = neuron.controller();
-        let mut updated_followees = topic_to_followees.clone();
-        if new_followees.followees.is_empty() {
-            // If the new followees list is empty, remove the entry for the topic.
-            updated_followees.remove(&topic);
-            return Ok(updated_followees);
-        }
-
-        if !is_neuron_follow_restrictions_enabled() {
-            // If the neuron follow restrictions are not enabled, we can directly update the entry.
-            updated_followees.insert(topic, new_followees);
-            return Ok(updated_followees);
-        }
-
-        // Otherwise, update the entry with the new followees list.
-        // A new can follow another neuron if:
-        // 1. the followee neuron is a public neuron
-        // 2. or if the followee neuron is a private neuron, either
-        //      * they share a controller or
-        //      * the controller of the follower neuron is in the hot keys of the followee neuron.
-        // If in the list of followees, there are any follow relationships
-        // that don't adhere to the aforementioned rules, return a GovernanceError
-        // including all the invalid followees.
-        let mut invalid_followees = 0_032;
-        let mut error_message = String::new();
-
-        // To avoid looking up the already existing followees of the neuron
-        // (which are not changing) we only validate the new followees.
-        let old_followees = topic_to_followees
-            .get(&topic)
-            .map(|f| f.followees.iter().collect::<HashSet<&NeuronId>>())
-            .unwrap_or_default();
-
-        for followee in &new_followees.followees {
-            if old_followees.contains(followee) {
-                // The follow relationship already exists, so it was already validated.
-                continue;
-            }
-
-            if let Ok((followee_visibility, followee_controller, followee_hot_keys)) = self
-                .with_neuron(followee, |neuron| {
-                    (
-                        neuron.visibility(),
-                        neuron.controller(),
-                        neuron.hot_keys.clone(),
-                    )
-                })
-            {
-                let allowed_to_follow = followee_visibility == Visibility::Public
-                    || followee_controller == controller
-                    || followee_hot_keys.contains(&controller);
-
-                if !allowed_to_follow {
-                    invalid_followees += 1;
-                    error_message.push_str(&format!(
-                                "{}: Neuron {} is a private neuron.\n\
-                                If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
-                                invalid_followees,
-                                followee.id,
-                                followee.id,
-                                controller
-                            ));
-                }
-            } else {
-                invalid_followees += 1;
-                error_message.push_str(&format!(
-                            "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
-                            invalid_followees,
-                            followee.id
-                        ));
-            }
-        }
-
-        if invalid_followees > 0 {
-            // Note: These error messages are matched in the nns-dapp. In case of changes, please sync with the nns dev team.
-            error_message = format!(
-                "The {} followee(s) listed below is(are) invalid:\n{}",
-                invalid_followees, error_message
-            );
-
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                error_message,
-            ));
-        }
-
-        updated_followees.insert(topic, new_followees);
-
-        Ok(updated_followees)
     }
 
     /// Set the status of a proposal that is 'being executed' to
@@ -6040,7 +5943,8 @@ impl Governance {
 
         let now_seconds = self.env.now();
         let new_neuron_followees = self.with_neuron(id, |neuron| {
-            self.modify_followees(
+            modify_followees(
+                &self.neuron_store,
                 neuron,
                 &neuron.followees,
                 topic as i32,
@@ -8437,4 +8341,104 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
+}
+
+fn modify_followees(
+    neuron_store: &NeuronStore,
+    neuron: &Neuron,
+    topic_to_followees: &HashMap<i32, Followees>,
+    topic: i32,
+    new_followees: Followees,
+) -> Result<HashMap<i32, Followees>, GovernanceError> {
+    let controller = neuron.controller();
+    let mut updated_followees = topic_to_followees.clone();
+    if new_followees.followees.is_empty() {
+        // If the new followees list is empty, remove the entry for the topic.
+        updated_followees.remove(&topic);
+        return Ok(updated_followees);
+    }
+
+    if !is_neuron_follow_restrictions_enabled() {
+        // If the neuron follow restrictions are not enabled, we can directly update the entry.
+        updated_followees.insert(topic, new_followees);
+        return Ok(updated_followees);
+    }
+
+    // Otherwise, update the entry with the new followees list.
+    // A new can follow another neuron if:
+    // 1. the followee neuron is a public neuron
+    // 2. or if the followee neuron is a private neuron, either
+    //      * they share a controller or
+    //      * the controller of the follower neuron is in the hot keys of the followee neuron.
+    // If in the list of followees, there are any follow relationships
+    // that don't adhere to the aforementioned rules, return a GovernanceError
+    // including all the invalid followees.
+    let mut invalid_followees = 0_i32;
+    let mut error_message = String::new();
+
+    // To avoid looking up the already existing followees of the neuron
+    // (which are not changing) we only validate the new followees.
+    let old_followees = topic_to_followees
+        .get(&topic)
+        .map(|f| f.followees.iter().collect::<HashSet<&NeuronId>>())
+        .unwrap_or_default();
+
+    for followee in &new_followees.followees {
+        if old_followees.contains(followee) {
+            // An already existing follow relationship is either
+            // grandfathered in, or it was already validated when it was created.
+            // Hence, we don't need to validate it again.
+            continue;
+        }
+
+        if let Ok((followee_visibility, followee_controller, followee_hot_keys)) = neuron_store
+            .with_neuron(followee, |neuron| {
+                (
+                    neuron.visibility(),
+                    neuron.controller(),
+                    neuron.hot_keys.clone(),
+                )
+            })
+        {
+            let allowed_to_follow = followee_visibility == Visibility::Public
+                || followee_controller == controller
+                || followee_hot_keys.contains(&controller);
+
+            if !allowed_to_follow {
+                invalid_followees += 1;
+                error_message.push_str(&format!(
+                                "{}: Neuron {} is a private neuron.\n\
+                                If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
+                                invalid_followees,
+                                followee.id,
+                                followee.id,
+                                controller
+                            ));
+            }
+        } else {
+            invalid_followees += 1;
+            error_message.push_str(&format!(
+                            "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
+                            invalid_followees,
+                            followee.id
+                        ));
+        }
+    }
+
+    if invalid_followees > 0 {
+        // Note: These error messages are matched in the nns-dapp. In case of changes, please sync with the nns dev team.
+        error_message = format!(
+            "The {} followee(s) listed below is(are) invalid:\n{}",
+            invalid_followees, error_message
+        );
+
+        return Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            error_message,
+        ));
+    }
+
+    updated_followees.insert(topic, new_followees);
+
+    Ok(updated_followees)
 }
