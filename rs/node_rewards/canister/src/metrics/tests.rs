@@ -73,7 +73,7 @@ async fn subnet_metrics_added_correctly() {
 
     let subnet_1 = subnet_id(1);
 
-    let _ = mm.update_subnets_metrics(vec![subnet_1]).await;
+    mm.update_subnets_metrics(vec![subnet_1]).await.unwrap();
     for i in 0..days {
         let key = SubnetMetricsKey {
             timestamp_nanos: i * ONE_DAY_NANOS,
@@ -94,7 +94,9 @@ async fn multiple_subnets_metrics_added_correctly() {
     let subnet_1 = subnet_id(1);
     let subnet_2 = subnet_id(2);
 
-    let _ = mm.update_subnets_metrics(vec![subnet_1, subnet_2]).await;
+    mm.update_subnets_metrics(vec![subnet_1, subnet_2])
+        .await
+        .unwrap();
 
     for subnet in &[subnet_1, subnet_2] {
         for i in 0..days {
@@ -125,7 +127,9 @@ async fn partial_failures_are_handled_correctly() {
 
     let mm = MetricsManager::new_test(mock);
 
-    let _ = mm.update_subnets_metrics(vec![subnet_1, subnet_2]).await;
+    mm.update_subnets_metrics(vec![subnet_1, subnet_2])
+        .await
+        .unwrap();
 
     let key = SubnetMetricsKey {
         timestamp_nanos: 0,
@@ -244,7 +248,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     let mm = MetricsManager::new_test(mock);
 
     for _ in 0..MAX_TIMES {
-        let _ = mm.update_subnets_metrics(vec![subnet_id(1)]).await;
+        mm.update_subnets_metrics(vec![subnet_id(1)]).await.unwrap();
     }
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> =
         mm.metrics_by_subnet(&day_start).into_values().collect();
@@ -324,7 +328,9 @@ async fn daily_metrics_correct_2_subs() {
     let mm = MetricsManager::new_test(mock);
 
     for _ in 0..MAX_TIMES {
-        let _ = mm.update_subnets_metrics(vec![subnet_1, subnet_2]).await;
+        mm.update_subnets_metrics(vec![subnet_1, subnet_2])
+            .await
+            .unwrap();
     }
 
     let mut node_1_daily_metrics = Vec::new();

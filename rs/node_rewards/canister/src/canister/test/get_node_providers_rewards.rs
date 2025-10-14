@@ -1,8 +1,11 @@
 use crate::canister::NodeRewardsCanister;
-use crate::canister::test::test_utils::{CANISTER_TEST, VM, setup_thread_local_canister_for_test};
+use crate::canister::test::test_utils::{
+    CANISTER_TEST, LAST_DAY_SYNCED, VM, setup_thread_local_canister_for_test,
+};
 use crate::chrono_utils::{last_unix_timestamp_nanoseconds, to_native_date};
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
+use crate::storage::NaiveDateStorable;
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_node_rewards_canister_api::providers_rewards::{
@@ -299,6 +302,7 @@ fn setup_data_for_test_rewards_calculation(
             }],
         },
     );
+    LAST_DAY_SYNCED.with_borrow_mut(|cell| cell.set(Some(NaiveDateStorable(day2))).unwrap());
 }
 
 #[test]
@@ -308,7 +312,6 @@ fn test_get_node_providers_rewards() {
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
     NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST).now_or_never();
-    NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST).now_or_never();
     let from = to_native_date("2024-01-01");
     let to = to_native_date("2024-01-02");
 
