@@ -40,12 +40,6 @@ jobs:
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link: 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
