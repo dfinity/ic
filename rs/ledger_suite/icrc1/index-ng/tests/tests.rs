@@ -9,7 +9,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
-    InitArg as IndexInitArg, ListSubaccountsArgs, SyncStatus, TransactionWithId,
+    InitArg as IndexInitArg, ListSubaccountsArgs, Status, SyncStatus, TransactionWithId,
 };
 use ic_icrc1_ledger::{
     ChangeFeeCollector, LedgerArgument, Tokens, UpgradeArgs as LedgerUpgradeArgs,
@@ -87,12 +87,12 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .expect("Balance must be a u64!")
 }
 
-fn sync_status(env: &StateMachine, canister_id: CanisterId) -> SyncStatus {
+fn status(env: &StateMachine, canister_id: CanisterId) -> Status {
     let res = env
-        .execute_ingress(canister_id, "sync_status", Encode!(&()).unwrap())
-        .expect("Failed to query sync_status")
+        .execute_ingress(canister_id, "status", Encode!(&()).unwrap())
+        .expect("Failed to query index status")
         .bytes();
-    Decode!(&res, SyncStatus).expect("Failed to decode sync_status response")
+    Decode!(&res, Status).expect("Failed to decode index status response")
 }
 
 fn index_get_blocks(
@@ -527,17 +527,17 @@ fn verify_unknown_block_handling(
         bad_block_index
     );
 
-    let status = sync_status(env, index_id);
-    if bad_block_index < NUM_BLOCKS {
-        assert!(!status.sync_active);
-        assert!(status.sync_error.unwrap().starts_with(&format!(
-            "Block at index {} has unknown fields.",
-            bad_block_index
-        )));
-    } else {
-        assert!(status.sync_active);
-        assert_eq!(status.sync_error, None);
-    }
+    let status = status(env, index_id);
+    match status.sync_status {
+        SyncStatus::Syncing => assert!(bad_block_index >= NUM_BLOCKS),
+        SyncStatus::NotSyncing(sync_error) => {
+            assert!(bad_block_index < NUM_BLOCKS);
+            assert!(sync_error.error_msg.starts_with(&format!(
+                "Block at index {} has unknown fields.",
+                bad_block_index
+            )));
+        }
+    };
 }
 
 #[test]

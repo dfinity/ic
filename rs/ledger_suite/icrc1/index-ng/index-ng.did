@@ -136,12 +136,15 @@ type ListSubaccountsArgs = record {
 };
 
 type Status = record {
-  num_blocks_synced : BlockIndex
+  num_blocks_synced : BlockIndex;
+  sync_status : SyncStatus
 };
 
-type SyncStatus = record {
-  sync_active : bool;
-  sync_error : opt text
+type SyncStatus = variant {
+  Syncing;
+  NotSyncing : record {
+    error_msg : text
+  }  
 };
 
 type FeeCollectorRanges = record {
@@ -156,5 +159,4 @@ service : (index_arg : opt IndexArg) -> {
   ledger_id : () -> (principal) query;
   list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
   status : () -> (Status) query;
-  sync_status : () -> (SyncStatus) query
 }

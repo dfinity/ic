@@ -81,12 +81,18 @@ pub struct ListSubaccountsArgs {
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct Status {
     pub num_blocks_synced: BlockIndex,
+    pub sync_status: SyncStatus,
 }
 
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct SyncStatus {
-    pub sync_active: bool,
-    pub sync_error: Option<String>,
+pub struct SyncError {
+    pub error_msg: String,
+}
+
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub enum SyncStatus {
+    Syncing,
+    NotSyncing(SyncError),
 }
 
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
