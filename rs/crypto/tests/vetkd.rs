@@ -1,6 +1,3 @@
-use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
@@ -10,23 +7,23 @@ use ic_crypto_test_utils_ni_dkg::{
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
-use ic_logger::replica_logger::no_op_logger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
 use ic_types::crypto::vetkd::*;
-use ic_types::{CanisterId, NodeId, NumberOfNodes};
+use ic_types::{CanisterId, NodeId};
 use ic_types_test_utils::ids::canister_test_id;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
+use slog::Level;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 struct VetKDTestServer {
+    env: NiDkgTestEnvironment,
     config: NiDkgConfig,
     dkg_id: NiDkgId,
-    crypto_components: BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     transcript: NiDkgTranscript,
 }
 
@@ -39,53 +36,22 @@ impl VetKDTestServer {
             .build(rng)
             .into_config();
         let dkg_id = config.dkg_id().clone();
-        let crypto_components = NiDkgTestEnvironment::new_for_config(&config, rng).crypto_components;
+        let env = NiDkgTestEnvironment::new_for_config_with_inmem_logger(&config, rng);
 
-        let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
+        let transcript = run_ni_dkg_and_create_single_transcript(&config, &env.crypto_components);
         load_transcript_for_receivers_expecting_status(
             &config,
             &transcript,
-            &crypto_components,
+            &env.crypto_components,
             Some(LoadTranscriptResult::SigningKeyAvailable),
         );
 
         Self {
+            env,
             config,
             dkg_id,
-            crypto_components,
             transcript,
         }
-    }
-
-    fn modify_stored_keys<
-        R: Rng + CryptoRng,
-        F: FnOnce(&mut ProtoSecretKeyStore, &mut ProtoPublicKeyStore) -> (),
-    >(
-        &mut self,
-        rng: &mut R,
-        mutator: F,
-    ) -> NodeId {
-        let victim_node = random_node_in(self.config.receivers().get(), rng);
-
-        let victim_crypto = crypto_for(victim_node, &self.crypto_components);
-
-        let key_store_dir = victim_crypto.temp_dir_path();
-        let sks_name = "sks_data.pb";
-        let pks_name = "public_keys.pb";
-
-        let mut sks = ProtoSecretKeyStore::open(
-            key_store_dir,
-            sks_name,
-            None,
-            Arc::new(CryptoMetrics::none()),
-        );
-        let mut pks = ProtoPublicKeyStore::open(key_store_dir, pks_name, no_op_logger());
-
-        mutator(&mut sks, &mut pks);
-
-        // If the callback actually modifies the stores then they are implicitly written
-
-        victim_node
     }
 
     fn derive_key(&self, caller: &CanisterId, context: &[u8]) -> ic_vetkeys::DerivedPublicKey {
@@ -106,7 +72,7 @@ impl VetKDTestServer {
         rng: &mut R,
     ) -> (NodeId, &TempCryptoComponentGeneric<ChaCha20Rng>) {
         let node_id = random_node_in(self.config.receivers().get(), rng);
-        (node_id, crypto_for(node_id, &self.crypto_components))
+        (node_id, crypto_for(node_id, &self.env.crypto_components))
     }
 
     fn create_key_shares<R: Rng + CryptoRng>(
@@ -117,7 +83,7 @@ impl VetKDTestServer {
         let mut key_shares = BTreeMap::new();
 
         for creator in self.config.receivers().get() {
-            let crypto = crypto_for(*creator, &self.crypto_components);
+            let crypto = crypto_for(*creator, &self.env.crypto_components);
             let key_share = crypto.create_encrypted_key_share(vetkd_args.clone())?;
             key_shares.insert(*creator, key_share);
         }
@@ -145,9 +111,11 @@ impl VetKDTestServer {
         shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
         vetkd_args: &VetKdArgs,
         rng: &mut R,
-    ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
-        let (_combiner_id, combiner) = self.random_node(rng);
-        combiner.combine_encrypted_key_shares(shares, vetkd_args)
+    ) -> Result<(NodeId, VetKdEncryptedKey), VetKdKeyShareCombinationError> {
+        let (combiner_id, combiner) = self.random_node(rng);
+        combiner
+            .combine_encrypted_key_shares(shares, vetkd_args)
+            .map(|ek| (combiner_id, ek))
     }
 
     fn verify_encrypted_key<R: Rng + CryptoRng>(
@@ -246,7 +214,8 @@ fn should_vetkd_consistently_derive_the_same_vetkey_given_sufficient_shares() {
 
         let encrypted_key = server
             .combine_key_shares(&shares, &vetkd_args, &mut rng)
-            .expect("Share combination failed");
+            .expect("Share combination failed")
+            .1;
 
         let decrypted_key = client
             .decrypt_key(&encrypted_key)
@@ -275,26 +244,6 @@ fn should_vetkd_create_encrypted_key_share_err_if_threshold_sig_data_not_loaded(
 }
 
 #[test]
-fn should_vetkd_create_encrypted_key_share_err_if_pub_coeffs_in_store_are_empty() {
-    let mut rng = reproducible_rng();
-    let mut server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
-
-    server.modify_stored_keys(&mut rng, |_sks, _pks| {
-        todo!("how to modify store?");
-    });
-
-    let shares = server.create_key_shares(&vetkd_args, &mut rng);
-
-    match shares {
-        Err(VetKdKeyShareCreationError::InternalError(_)) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
-    }
-}
-
-#[test]
 fn should_vetkd_create_encrypted_key_share_err_if_transport_public_key_is_invalid() {
     let mut rng = reproducible_rng();
     let server = VetKDTestServer::new(&mut rng);
@@ -311,18 +260,6 @@ fn should_vetkd_create_encrypted_key_share_err_if_transport_public_key_is_invali
         Ok(_) => panic!("Unexpected success"),
         Err(e) => panic!("Unexpected error {:?}", e),
     }
-}
-
-#[test]
-fn should_vetkd_create_encrypted_key_share_err_with_internal_error_if_master_public_key_in_store_is_invalid()
- {
-    todo!("how to modify the store??");
-}
-
-#[test]
-fn should_vetkd_create_encrypted_key_share_err_with_transientinternalerror_if_vault_returns_transient_error()
- {
-    todo!("how to cause vault transient error?");
 }
 
 #[test]
@@ -414,7 +351,7 @@ fn should_vetkd_verify_key_share_err_with_verificationerror_if_share_signature_i
 #[test]
 fn should_vetkd_combine_shares_succeed_if_reconstruction_threshold_many_shares_are_valid() {
     let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
+    let mut server = VetKDTestServer::new(&mut rng);
     let client = VetKDTestClient::new(&mut rng, &server);
     let vetkd_args = client.create_args(&server.dkg_id);
 
@@ -422,18 +359,26 @@ fn should_vetkd_combine_shares_succeed_if_reconstruction_threshold_many_shares_a
         .create_key_shares(&vetkd_args, &mut rng)
         .expect("Share creation unexpectedly failed");
 
-    let corrupted_shares = n_random_nodes_in(
-        server.config.receivers().get(),
-        server.config.max_corrupt_dealers(),
-        &mut rng,
-    );
+    let to_corrupt = shares.len() - server.config.threshold().get().get() as usize;
 
-    for dealer in &corrupted_shares {
-        swap_share_c1c3(&mut shares.get_mut(&dealer).expect("Missing share").encrypted_key_share);
-    }
+    modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
+        swap_share_c1c3(&mut share.encrypted_key_share);
+    });
 
     match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-        Ok(_key) => { /* expected success */ },
+        Ok((combiner, _key)) => {
+            /* expected success */
+            let logger = server
+                .env
+                .loggers
+                .remove(&combiner)
+                .expect("Missing loggers");
+            let logs = logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Info,
+                "EncryptedKey::combine_all failed with InvalidShares, falling back to EncryptedKey::combine_valid_shares"
+            );
+        }
         Err(e) => panic!("Combination failed {:?}", e),
     }
 }
@@ -493,17 +438,6 @@ fn should_vetkd_combine_shares_err_if_reconstruction_threshold_not_met() {
 }
 
 #[test]
-fn should_vetkd_combine_shares_err_with_internal_error_if_pub_coeffs_in_store_are_empty() {
-    todo!("how to modify store?");
-}
-
-#[test]
-fn should_vetkd_combine_shares_err_with_invalidargumentmasterpublickey_if_master_public_key_in_store_is_invalid()
- {
-    todo!("how to modify stored keys?");
-}
-
-#[test]
 fn should_vetkd_combine_shares_err_if_transport_public_key_is_invalid() {
     let mut rng = reproducible_rng();
     let server = VetKDTestServer::new(&mut rng);
@@ -522,11 +456,6 @@ fn should_vetkd_combine_shares_err_if_transport_public_key_is_invalid() {
         Ok(_) => panic!("Unexpected success"),
         Err(e) => panic!("Unexpected error {:?}", e),
     }
-}
-
-#[test]
-fn should_vetkd_combine_shares_err_with_internal_error_if_node_index_is_missing_in_tsd_store() {
-    todo!("how to modify the store?");
 }
 
 #[test]
@@ -549,12 +478,6 @@ fn should_vetkd_combine_shares_err_if_some_encrypted_key_share_is_invalid() {
         Ok(_) => panic!("Unexpected success"),
         Err(e) => panic!("Unexpected error {:?}", e),
     }
-}
-
-#[test]
-fn should_vetkd_combine_shares_error_with_internal_error_if_individual_public_key_from_store_is_invalid()
- {
-    todo!("how to modify the key store?");
 }
 
 #[test]
@@ -603,7 +526,8 @@ fn should_vetkd_verify_encrypted_key_err_with_invalidargumentencryptedkey_if_enc
 
     let mut ek = server
         .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed");
+        .expect("Share combination failed")
+        .1;
 
     assert!(
         server
@@ -634,7 +558,8 @@ fn should_vetkd_verify_encrypted_key_err_with_thresholdsigdatanotfound_if_thresh
 
     let ek = server
         .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed");
+        .expect("Share combination failed")
+        .1;
 
     vetkd_args.ni_dkg_id = wrong_ni_dkg_id(&vetkd_args.ni_dkg_id);
 
@@ -643,17 +568,6 @@ fn should_vetkd_verify_encrypted_key_err_with_thresholdsigdatanotfound_if_thresh
         Err(VetKdKeyVerificationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
         Err(e) => panic!("Unexpected error {:?}", e),
     }
-}
-
-#[test]
-fn should_vetkd_verify_encrypted_key_err_with_internal_error_if_pub_coeffs_in_store_are_empty() {
-    todo!("how to modify store?");
-}
-
-#[test]
-fn should_vetkd_verify_encrypted_key_err_with_invalidargumentmasterpublickey_if_master_public_key_in_store_is_invalid()
- {
-    todo!("how to modify store?");
 }
 
 #[test]
@@ -670,7 +584,8 @@ fn should_vetkd_verify_encrypted_key_err_with_invalidargumentencryptionpublickey
 
     let ek = server
         .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed");
+        .expect("Share combination failed")
+        .1;
 
     flip_random_bit(&mut vetkd_args.transport_public_key, &mut rng);
 
@@ -694,7 +609,8 @@ fn should_vetkd_verify_encrypted_key_err_with_verificationerror_if_encrypted_key
 
     let mut ek = server
         .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed");
+        .expect("Share combination failed")
+        .1;
 
     let g1_bytes = ic_crypto_internal_bls12_381_vetkd::G1Affine::generator().serialize();
     ek.encrypted_key[0..48].copy_from_slice(&g1_bytes);
@@ -737,15 +653,4 @@ fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
 
 fn random_node_in<R: Rng + CryptoRng>(nodes: &BTreeSet<NodeId>, rng: &mut R) -> NodeId {
     *nodes.iter().choose(rng).expect("nodes empty")
-}
-
-fn n_random_nodes_in<R: Rng + CryptoRng>(
-    nodes: &BTreeSet<NodeId>,
-    n: NumberOfNodes,
-    rng: &mut R,
-) -> Vec<NodeId> {
-    let n_usize = usize::try_from(n.get()).expect("conversion to usize failed");
-    let chosen = nodes.iter().copied().choose_multiple(rng, n_usize);
-    assert_eq!(chosen.len(), n_usize);
-    chosen
 }
