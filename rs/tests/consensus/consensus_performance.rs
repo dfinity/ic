@@ -45,6 +45,27 @@
 //
 // Happy testing!
 
+/*
+* 2025-10-10 10:53:12.599 INFO[uvms_logs_stream:StdOut] [uvm=colocated-test-driver] TEST_LOG:      Block r
+ate: 2.8 blocks/s
+2025-10-10 10:53:12.599 INFO[uvms_logs_stream:StdOut] [uvm=colocated-test-driver] TEST_LOG:      Through
+put: 0.0 MiB/s, 1.0 messages/s
+2025-10-10 10:53:12.599 INFO[uvms_logs_stream:StdOut] [uvm=colocated-test-driver] TEST_LOG:      Average
+ time to receive a rank 0 block: 0.18s
+2025-10-10 10:53:12.599 INFO[uvms_logs_stream:StdOut] [uvm=colocated-test-driver] TEST_LOG:      Avarage
+ E2E ingress message latency: 1.21s
+
+13:
+1. 2.8 Block/s 1.21s e2e latency  - 1,1,0
+2. 1.9 Block/s 1.53s e2e latency  - 1,1,300
+3. 1.8 Block/s 1.96s e2e latency  - 6,1MB,300
+4. 2.0 Block/s 1.88s
+
+1. 3.0 block/s 1.07s e2e latency
+2. 2.1 block/s 1.28s e2e latency
+3. 2.0 block/s 1.49s e2e latency
+4. 2.4 block/s 1.35s e2e latency
+*/
 use ic_consensus_system_test_utils::performance::{
     PayloadSizeDistribution, persist_metrics, setup_jaeger_vm,
 };
@@ -75,9 +96,9 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 const NODES_COUNT: usize = 13;
-const DKG_INTERVAL: u64 = 999;
+const DKG_INTERVAL: u64 = 99;
 // Network parameters
-const BANDWIDTH_MBITS: u32 = 1_000; // artificial cap on bandwidth
+const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
 const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
@@ -87,8 +108,6 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
 /// Look for "Jaeger frontend available at: $URL" in the logs and follow the link to visualize &
 /// analyze traces.
 const SHOULD_SPAWN_JAEGER_VM: bool = false;
-
-const MAX_BLOCK_SIZE_MB: u64 = 8;
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -125,7 +144,6 @@ fn setup(env: TestEnv) {
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_max_block_payload_size(MAX_BLOCK_SIZE_MB * 1024 * 1024)
                 .add_nodes(NODES_COUNT),
         )
         .setup_and_start(&env)
@@ -140,12 +158,13 @@ fn setup(env: TestEnv) {
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
 
     app_subnet.apply_network_settings(NETWORK_SIMULATION);
-    let app_nodes: Vec<_> = app_subnet.nodes().collect();
-    let app_node = app_nodes[app_nodes.len() - 1].clone();
-    let app_node_2 = app_nodes[app_nodes.len() - 2].clone();
 
-    app_node.vm().kill();
-    app_node_2.vm().kill();
+    let mut nodes = app_subnet.nodes();
+    let node_0 = nodes.next().unwrap();
+    let node_1 = nodes.next().unwrap();
+
+    node_0.vm().kill();
+    node_1.vm().kill();
 }
 
 fn test(env: TestEnv, payload_size_distribution: PayloadSizeDistribution, rps: f64) {
@@ -167,7 +186,7 @@ fn test(env: TestEnv, payload_size_distribution: PayloadSizeDistribution, rps: f
 
     let test_metrics = ic_consensus_system_test_utils::performance::test_with_rt_handle(
         env,
-        payload_size_distribution,
+        payload_size_distribution.clone(),
         rps,
         rt.handle().clone(),
         true,
@@ -189,38 +208,16 @@ fn test(env: TestEnv, payload_size_distribution: PayloadSizeDistribution, rps: f
     }
 }
 
-fn test_few_small_messages(env: TestEnv) {
-    test(env, PayloadSizeDistribution::Uniform(1), 1.0)
-}
-
-fn test_small_messages(env: TestEnv) {
-    test(env, PayloadSizeDistribution::Uniform(4_000), 500.0)
-}
-
-fn test_few_large_messages(env: TestEnv) {
-    test(env, PayloadSizeDistribution::Uniform(1_999_000), 1.0)
-}
-
-fn test_large_messages(env: TestEnv) {
-    test(env, PayloadSizeDistribution::Uniform(950_000), 4.0)
-}
-
-fn test_c4isl_25_09_2025(env: TestEnv) {
-    test(env, PayloadSizeDistribution::C4ISL_25_09_2025, 25.0)
-}
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         // Since we setup VMs in sequence it takes more than the default timeout
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        //    .add_test(systest!(test_c4isl_25_09_2025))
-        .add_test(systest!(
-            test;
-            PayloadSizeDistribution::Uniform(500_000),
-            16.0
-        ))
+        .add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![1]), 1_000.0))
+        .add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![2_000_000]), 5.0))
+        .add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![1, 2_000_000]), 10.0))
+        .add_test(systest!(test; PayloadSizeDistribution::C4ISL_25_09_2025, 60.0))
         .execute_from_args()?;
     Ok(())
 }

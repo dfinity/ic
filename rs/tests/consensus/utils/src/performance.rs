@@ -68,18 +68,19 @@ fn sample_from_distribution(distribution: &BTreeMap<u64, u64>, rng: &mut StdRng)
     for (value, count) in distribution {
         if *count >= random {
             // Shrink the payload a bit, otherwise it might rejected by IC
-            if *value >= 2 * 1024 * 1024 {
-                return *value - 1024;
-            }
-            return *value;
+            const MAX_SIZE: u64 = 2 * 1024 * 1024 - 1024;
+
+            return std::cmp::min(*value, MAX_SIZE);
         }
     }
     unreachable!()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum PayloadSizeDistribution {
-    Uniform(usize),
+    /// Picks a size from the given vector uniformly at random.
+    Uniform(Vec<u64>),
+    /// Samples a size from the observed traffic on `c4isl` subnet on 25th September 2025.
     #[allow(non_camel_case_types)]
     C4ISL_25_09_2025,
 }
@@ -100,9 +101,12 @@ pub fn test_with_rt_handle(
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::Application)
         .ok_or(anyhow::anyhow!("Failed to find an application subnet"))?;
-    let app_node = subnet
-        .nodes()
-        .next()
+    let mut nodes = subnet.nodes().collect::<Vec<_>>();
+    nodes.remove(0);
+    nodes.remove(0);
+
+    let app_node = nodes
+        .first()
         .ok_or(anyhow::anyhow!("Subnet doesn't have any hodes"))?;
 
     info!(
@@ -112,9 +116,6 @@ pub fn test_with_rt_handle(
     let mut canisters = Vec::new();
     let agent = rt.block_on(app_node.build_canister_agent());
 
-    let mut nodes = subnet.nodes().collect::<Vec<_>>();
-    nodes.pop();
-    nodes.pop();
     let agents = rt.block_on(async {
         join_all(
             nodes
@@ -139,12 +140,19 @@ pub fn test_with_rt_handle(
 
     let consensus_metrics_before = rt.block_on(get_consensus_metrics(&nodes));
     let distribution = match payload_size_distribution {
-        PayloadSizeDistribution::Uniform(size) => BTreeMap::from([(size as u64, 1_u64)]),
+        PayloadSizeDistribution::Uniform(sizes) => BTreeMap::from_iter(
+            sizes
+                .iter()
+                .enumerate()
+                .map(|(index, size)| (*size, index as u64 + 1)),
+        ),
         PayloadSizeDistribution::C4ISL_25_09_2025 => sample_c4isl_25_09_2025_traffic_distribution(),
     };
     let now = Instant::now();
 
     let mut rng = StdRng::seed_from_u64(42);
+
+    std::thread::sleep(Duration::from_secs(60));
 
     for index in 0..calls_count {
         let agent = agents[index % agents.len()].clone();
@@ -402,8 +410,8 @@ pub async fn persist_metrics(
     let timestamp =
         chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
 
-    let message_size = match payload_size_distribution {
-        PayloadSizeDistribution::Uniform(size) => size.to_string(),
+    let message_size_distribution = match payload_size_distribution {
+        PayloadSizeDistribution::Uniform(sizes) => format!("Uniform from {sizes:?}"),
         PayloadSizeDistribution::C4ISL_25_09_2025 => String::from("c4isl_25092025"),
     };
 
@@ -413,7 +421,7 @@ pub async fn persist_metrics(
             "timestamp": timestamp,
             "ic_version": ic_version,
             "benchmark_settings": {
-                "message_size": message_size,
+                "message_size_distribution": message_size_distribution,
                 "rps": rps,
                 "latency_seconds": latency.as_secs_f64(),
                 "bandwith_bits_per_second": bandwidth_bits_per_seconds,
