@@ -4429,15 +4429,15 @@ pub struct MaturityDisbursement {
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct GetNeuronIndexRequest {
-    exclusive_start_neuron_id: Option<NeuronId>,
-    page_size: Option<u32>,
+    pub exclusive_start_neuron_id: Option<NeuronId>,
+    pub page_size: Option<u32>,
 }
 
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct NeuronIndexData {
-    neurons: Vec<NeuronInfo>,
+    pub neurons: Vec<NeuronInfo>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]

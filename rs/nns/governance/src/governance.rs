@@ -16,8 +16,8 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        NeuronMetrics, NeuronStore, approve_genesis_kyc, metrics::NeuronSubsetMetrics,
-        prune_some_following,
+        MAX_NEURON_PAGE_SIZE, NeuronMetrics, NeuronStore, approve_genesis_kyc,
+        metrics::NeuronSubsetMetrics, prune_some_following,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -46,7 +46,7 @@ use crate::{
             add_or_remove_node_provider::Change,
             archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
-            get_neurons_fund_audit_info_response,
+            get_neurons_fund_audit_info_response::{self, Result},
             governance::{
                 GovernanceCachedMetrics, NeuronInFlightCommand,
                 governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
@@ -70,7 +70,10 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
-    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
+    storage::{
+        VOTING_POWER_SNAPSHOTS, neuron_indexes::NeuronIndex, with_voting_history_store,
+        with_voting_history_store_mut,
+    },
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -100,8 +103,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoResponse,
-    ManageNeuronResponse, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
+    GetNeuronIndexRequest, ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse,
+    ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData, NeuronInfo, NeuronVote,
+    NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
@@ -3507,6 +3511,25 @@ impl Governance {
         self.with_neuron(id, |neuron| {
             neuron.get_neuron_info(self.voting_power_economics(), now, requester, false)
         })
+    }
+
+    /// TODO
+    pub fn get_neuron_index(
+        &self,
+        req: GetNeuronIndexRequest,
+    ) -> Result<NeuronIndexData, GovernanceError> {
+        let exclusive_start_id = req.exclusive_start_neuron_id.unwrap_or(NeuronId { id: 0 });
+
+        let page_size = req
+            .page_size
+            .unwrap_or(MAX_NEURON_PAGE_SIZE)
+            .min(MAX_NEURON_PAGE_SIZE);
+
+        let neurons = self
+            .neuron_store
+            .list_all_neurons_paginated(exclusive_start_id, page_size);
+
+        Ok(NeuronIndexData { neurons })
     }
 
     /// Returns the neuron info for a neuron identified by id or subaccount.

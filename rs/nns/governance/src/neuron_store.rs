@@ -18,6 +18,7 @@ use ic_nervous_system_governance::index::{
     neuron_following::NeuronFollowingIndex, neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_governance_api::NeuronInfo;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -540,17 +541,9 @@ impl NeuronStore {
 
     pub fn list_all_neurons_paginated(
         &self,
-        exclusive_start_id: Option<NeuronId>,
-        page_size: Option<usize>,
-    ) -> Vec<Neuron> {
-        // We can allow the user to determine if they want a more detailed
-        // neuron information. If so, then we have to return lower number of neurons
-        // per page.
-        let exclusive_start_id = exclusive_start_id.unwrap_or(NeuronId { id: 0 });
-        let page_size = page_size
-            .unwrap_or(MAX_NEURON_PAGE_SIZE)
-            .min(MAX_NEURON_PAGE_SIZE);
-
+        exclusive_start_id: NeuronId,
+        page_size: usize,
+    ) -> Vec<NeuronInfo> {
         with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
