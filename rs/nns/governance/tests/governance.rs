@@ -13968,6 +13968,7 @@ async fn test_follow_private_neuron_hotkeys() {
         .unwrap();
 
     assert!(result.is_ok());
+
     // Make a proposal to have neuron 3 follow neuron 1.
     gov.make_proposal(
         &NeuronId { id: MANAGER_ID },
@@ -14073,6 +14074,179 @@ async fn test_follow_public_neuron_succeeds() {
             .unwrap()
             .followees
             .get(&(Topic::NeuronManagement as i32))
+            .unwrap()
+            .followees
+            .contains(&NeuronId { id: 1 })
+    );
+}
+
+/// Fixture for testing grandfathering behavior.
+/// It creates 2 neurons. Neuron 2 follows neuron 1, which according
+/// to the restrictions should not be allowed. However, since
+/// neuron 2 is grandfathered, it should be allowed.
+fn fixture_for_grandfathering() -> api::Governance {
+    let mut driver = fake::FakeDriver::default();
+    let followee = hashmap! {
+    Topic::NeuronManagement as i32 => api::neuron::Followees {
+            followees: vec![NeuronId { id: MANAGER_ID }]
+        },
+    };
+    // A 'default' neuron, extended with additional fields below.
+    let mut neuron = move |id, controller, visibility| api::Neuron {
+        id: Some(NeuronId { id }),
+        controller,
+        cached_neuron_stake_e8s: 10 * E8, // 10 ICP
+        account: driver
+            .random_byte_array()
+            .expect("Could not get random byte array")
+            .to_vec(),
+        dissolve_state: Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
+        aging_since_timestamp_seconds: u64::MAX,
+        visibility,
+        followees: followee.clone(),
+        ..Default::default()
+    };
+
+    let neurons = vec![
+        api::Neuron {
+            followees: hashmap! {
+            Topic::NeuronManagement as i32 => api::neuron::Followees {
+                    followees: vec![NeuronId { id: MANAGER_ID }]
+                },
+            },
+            ..neuron(
+                1,
+                Some(principal(NEURON_1_CONTROLLER)),
+                Some(Visibility::Private as i32),
+            )
+        },
+        api::Neuron {
+            followees: hashmap! {
+                Topic::NeuronManagement as i32 => api::neuron::Followees {
+                        followees: vec![NeuronId { id: MANAGER_ID }]
+                },
+                // By default, neuron 2 cannot follow neuron 1 on Topic::Governance
+                // since they have different controllers and neuron 1 is private.
+                Topic::Governance as i32 => api::neuron::Followees {
+                        followees: vec![NeuronId { id: 1 }]
+                },
+            },
+            ..neuron(
+                2,
+                Some(principal(NEURON_3_CONTROLLER)),
+                Some(Visibility::Private as i32),
+            )
+        },
+        neuron(
+            MANAGER_ID,
+            Some(principal(MANAGER_ID)),
+            Some(Visibility::Public as i32),
+        ),
+    ];
+
+    GovernanceProtoBuilder::new()
+        .with_instant_neuron_operations()
+        .with_economics(api::NetworkEconomics::with_default_values())
+        .with_neurons(neurons)
+        .with_short_voting_period(1)
+        .with_neuron_management_voting_period(1)
+        .with_wait_for_quiet_threshold(10)
+        .build()
+}
+
+#[tokio::test]
+async fn test_grandfathering() {
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_grandfathering(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    );
+
+    // Make a proposal to have neuron 2 follow neuron 1.
+    gov.make_proposal(
+        &NeuronId { id: MANAGER_ID },
+        &principal(MANAGER_ID),
+        &Proposal {
+            title: Some("N2 follow N1".to_string()),
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 2 })),
+                id: None,
+                command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
+                    topic: Topic::ExchangeRate as i32,
+                    followees: [NeuronId { id: 1 }].to_vec(),
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        ProposalStatus::Failed,
+        gov.get_proposal_data(ProposalId { id: 1 })
+            .unwrap()
+            .status()
+    );
+
+    // Set a shared hotkey for neurons 1 and 2.
+    let result = gov
+        .manage_neuron(
+            &principal(NEURON_1_CONTROLLER),
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                command: Some(manage_neuron::Command::Configure(
+                    manage_neuron::Configure {
+                        operation: Some(manage_neuron::configure::Operation::AddHotKey(
+                            manage_neuron::AddHotKey {
+                                new_hot_key: Some(principal(NEURON_3_CONTROLLER)),
+                            },
+                        )),
+                    },
+                )),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    assert!(result.is_ok());
+
+    // Make a proposal to have neuron 2 follow neuron 1.
+    gov.make_proposal(
+        &NeuronId { id: MANAGER_ID },
+        &principal(MANAGER_ID),
+        &Proposal {
+            title: Some("N2 follow N1".to_string()),
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 2 })),
+                id: None,
+                command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
+                    topic: Topic::ExchangeRate as i32,
+                    followees: [NeuronId { id: 1 }].to_vec(),
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        ProposalStatus::Executed,
+        gov.get_proposal_data(ProposalId { id: 2 })
+            .unwrap()
+            .status()
+    );
+
+    assert!(
+        gov.get_full_neuron(&NeuronId { id: 2 }, &principal(NEURON_3_CONTROLLER))
+            .unwrap()
+            .followees
+            .get(&(Topic::ExchangeRate as i32))
             .unwrap()
             .followees
             .contains(&NeuronId { id: 1 })
