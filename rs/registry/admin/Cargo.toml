@@ -17,6 +17,7 @@ cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-admin-derive = { path = "../admin-derive" }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
