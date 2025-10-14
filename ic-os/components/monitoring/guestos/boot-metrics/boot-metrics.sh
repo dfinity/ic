@@ -9,8 +9,6 @@ source /opt/ic/bin/logging.sh
 METRICS_DIR="/run/node_exporter/collector_textfile"
 METRICS_FILE="${METRICS_DIR}/guestos_startup.prom"
 
-# --- Metric Writing Helper Functions ---
-
 # Writes metric headers (# HELP and # TYPE) to the metrics file.
 # Globals:
 #   METRICS_FILE
@@ -23,8 +21,8 @@ write_metric_header() {
     local help="$2"
     local type="$3"
 
-    echo "# HELP ${name} ${help}" >> "${METRICS_FILE}"
-    echo "# TYPE ${name} ${type}" >> "${METRICS_FILE}"
+    echo "# HELP ${name} ${help}" >>"${METRICS_FILE}"
+    echo "# TYPE ${name} ${type}" >>"${METRICS_FILE}"
 }
 
 # Appends a metric value (with optional labels) to the metrics file.
@@ -39,7 +37,7 @@ append_metric() {
     local labels="$2"
     local value="$3"
 
-    echo "${name}${labels} ${value}" >> "${METRICS_FILE}"
+    echo "${name}${labels} ${value}" >>"${METRICS_FILE}"
 }
 
 convert_time_to_seconds() {
@@ -69,8 +67,6 @@ convert_time_to_seconds() {
     awk -v min="${minutes:-0}" -v sec="${seconds:-0}" -v ms="${milliseconds:-0}" \
         'BEGIN { printf "%.4f\n", (min * 60) + sec + (ms / 1000) }'
 }
-
-# --- Metric Collection Functions ---
 
 function get_startup_timings() {
     # Parse systemd-analyze output to get the time taken for the entire startup.
@@ -133,7 +129,7 @@ function get_slowest_services() {
 
 function main() {
     # Start with an empty metrics file for this run.
-    > "${METRICS_FILE}"
+    >"${METRICS_FILE}"
 
     write_log "Generating GuestOS startup metrics..."
     get_startup_timings
