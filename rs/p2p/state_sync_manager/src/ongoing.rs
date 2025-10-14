@@ -22,6 +22,10 @@ use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_quic_transport::{Shutdown, Transport};
+use rand::SeedableRng;
+use rand::distributions::WeightedIndex;
+use rand::prelude::Distribution;
+use rand::rngs::SmallRng;
 use std::sync::RwLock;
 use std::{
     collections::{HashMap, hash_map::Entry},
@@ -319,7 +323,7 @@ impl OngoingStateSync {
     }
 
     fn choose_peer_for_chunk(&self, chunk_id: ChunkId) -> Option<NodeId> {
-        let minimally_loaded_peer = self
+        let (peers, weights): (Vec<&NodeId>, Vec<usize>) = self
             .peer_state
             .iter()
             // Filter out peers that have already the maximum number of downloads
@@ -328,17 +332,22 @@ impl OngoingStateSync {
             .filter(|&(peer_id, peer_state)| {
                 peer_state.is_chunk_served(*peer_id, self.artifact_id.clone(), chunk_id)
             })
-            // Find the peer with the lowest number of parital downloads
-            .map(|(peer_id, peer_state)| (peer_id, peer_state.active_downloads()))
-            .reduce(|(peer1, downloads1), (peer2, downloads2)| {
-                if downloads1 < downloads2 {
-                    (peer1, downloads1)
-                } else {
-                    (peer2, downloads2)
-                }
-            });
+            // Map each peer with a to a weight
+            .map(|(peer_id, peer_state)| {
+                (
+                    peer_id,
+                    PARALLEL_CHUNK_DOWNLOADS.saturating_sub(peer_state.active_downloads()) + 1,
+                )
+            })
+            .unzip();
 
-        minimally_loaded_peer.map(|(peer_id, _)| peer_id).copied()
+        if peers.is_empty() {
+            return None;
+        }
+
+        let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
+        let mut rng = SmallRng::from_entropy();
+        Some(*peers[dist.sample(&mut rng)])
     }
 
     async fn download_chunk_task<T: 'static + Send>(
