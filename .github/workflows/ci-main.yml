@@ -164,23 +164,15 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - name: Generate Bazel invocation IDs
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-
-          test_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (test): 'https://dash.idx.dfinity.network/invocation/$test_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$test_uuid)" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "BUILD_UUIDS=$build_uuid:$test_uuid" >> "$GITHUB_ENV"
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-test-all
+          invocation-names: |
+            build
+            test
           run: |
             set -euo pipefail
 
@@ -280,36 +272,23 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs (build)
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (eval): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link (eval)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
-
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
         uses: ./.github/actions/bazel
         with:
+          invocation-names: eval
           run: |
             bazel build \
               --config=stamped \
               --build_tag_filters=test_all_platforms \
               //... --nobuild
 
-      - name: Generate Bazel invocation ID (test)
-        if: ${{ needs.config.outputs.full_macos_build == 'true' }}
-        run: |
-          test_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$test_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$test_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$test_uuid" >> "$GITHUB_ENV"
-
       - name: Build & Test
         if: ${{ needs.config.outputs.full_macos_build == 'true' }}
         uses: ./.github/actions/bazel
         with:
+          invocation-names: build
           run: |
             bazel test \
               --config=stamped \
@@ -467,10 +446,12 @@ jobs:
       - name: Run Libfuzzer targets
         uses: ./.github/actions/bazel
         with:
+          invocation-names: libfuzzer
           run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
       - name: Run AFL targets
         uses: ./.github/actions/bazel
         with:
+          invocation-names: afl
           run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
@@ -511,12 +492,6 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - name: Generate Bazel invocation IDs
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link: 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -646,12 +621,6 @@ jobs:
     timeout-minutes: 90
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs
-        run: |
-          uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid:$test_uuid" >> "$GITHUB_ENV"
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
