@@ -878,21 +878,11 @@ fn get_canister_status_of_nonexisting_canister() {
     assert_eq!(ErrorCode::CanisterNotFound, err.code());
 }
 
-fn get_canister_status(
-    test: &mut ExecutionTest,
-    canister_id: CanisterId,
-) -> CanisterStatusResultV2 {
-    match test.canister_status(canister_id).unwrap() {
-        WasmResult::Reply(reply) => CanisterStatusResultV2::decode(&reply).unwrap(),
-        WasmResult::Reject(msg) => panic!("unexpected reject: {msg}"),
-    }
-}
-
 #[test]
 fn get_canister_status_memory_metrics() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
 
     let wasm_memory_size = csr.wasm_memory_size();
     let stable_memory_size = csr.stable_memory_size();
@@ -920,10 +910,12 @@ fn get_canister_status_memory_metrics() {
 fn get_canister_status_memory_metrics_wasm_memory_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
 
     assert_eq!(
-        get_canister_status(&mut test, canister_id).wasm_memory_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .wasm_memory_size(),
         csr.wasm_memory_size()
     );
 
@@ -946,7 +938,7 @@ fn get_canister_status_memory_metrics_wasm_memory_size() {
 fn get_canister_status_memory_metrics_stable_memory_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.ingress(
         canister_id,
         "update",
@@ -959,7 +951,9 @@ fn get_canister_status_memory_metrics_stable_memory_size() {
     )
     .unwrap();
     assert_eq!(
-        get_canister_status(&mut test, canister_id).stable_memory_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .stable_memory_size(),
         csr.stable_memory_size() + NumBytes::from(WASM_PAGE_SIZE_IN_BYTES as u64)
     );
 }
@@ -968,7 +962,7 @@ fn get_canister_status_memory_metrics_stable_memory_size() {
 fn get_canister_status_memory_metrics_global_memory_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     let exported_globals = test.execution_state(canister_id).exported_globals.clone();
     assert_eq!(
         csr.global_memory_size(),
@@ -980,7 +974,7 @@ fn get_canister_status_memory_metrics_global_memory_size() {
 fn get_canister_status_memory_metrics_wasm_binary_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     assert_eq!(
         csr.wasm_binary_size(),
         NumBytes::new(UNIVERSAL_CANISTER_WASM.len() as u64)
@@ -991,7 +985,7 @@ fn get_canister_status_memory_metrics_wasm_binary_size() {
 fn get_canister_status_memory_metrics_custom_sections_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     let metadata = test.execution_state(canister_id).metadata.clone();
     assert_eq!(
         csr.custom_sections_size(),
@@ -1009,13 +1003,15 @@ fn get_canister_status_memory_metrics_custom_sections_size() {
 fn get_canister_status_memory_metrics_canister_history_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.set_controller(canister_id, test.user_id().get())
         .unwrap();
     let memory_difference =
         NumBytes::from((size_of::<CanisterChange>() + size_of::<PrincipalId>()) as u64);
     assert_eq!(
-        get_canister_status(&mut test, canister_id).canister_history_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .canister_history_size(),
         csr.canister_history_size() + memory_difference
     );
 }
@@ -1024,7 +1020,7 @@ fn get_canister_status_memory_metrics_canister_history_size() {
 fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.subnet_message(
         "upload_chunk",
         UploadChunkArgs {
@@ -1035,7 +1031,9 @@ fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
     )
     .unwrap();
     assert_gt!(
-        get_canister_status(&mut test, canister_id).wasm_chunk_store_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .wasm_chunk_store_size(),
         csr.wasm_chunk_store_size()
     );
 }
@@ -1044,7 +1042,7 @@ fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
 fn get_canister_status_memory_metrics_snapshots_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.subnet_message(
         "take_canister_snapshot",
         TakeCanisterSnapshotArgs {
@@ -1055,7 +1053,7 @@ fn get_canister_status_memory_metrics_snapshots_size() {
     )
     .unwrap();
     assert_gt!(
-        get_canister_status(&mut test, canister_id).snapshots_size(),
+        test.canister_status(canister_id).unwrap().snapshots_size(),
         csr.snapshots_size()
     );
 }
@@ -3857,8 +3855,7 @@ fn test_canister_settings_log_visibility_default_controllers() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000));
     // Act.
-    let result = test.canister_status(canister_id);
-    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
@@ -3879,8 +3876,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
                 .build(),
         )
         .unwrap();
-    let result = test.canister_status(canister_id);
-    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
@@ -3896,8 +3892,7 @@ fn test_canister_settings_log_visibility_set_to_public() {
     // Act.
     test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
-    let result = test.canister_status(canister_id);
-    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
