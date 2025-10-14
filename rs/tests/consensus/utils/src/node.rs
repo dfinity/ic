@@ -175,11 +175,11 @@ where
 
     let vals = metrics[metric_name].clone();
     if vals.len() != nodes.len() {
-        return Err(anyhow!(
+        bail!(
             "Metrics not available for all nodes yet. {} metrics, {} nodes",
             vals.len(),
             nodes.len()
-        ));
+        );
     }
 
     Ok(vals)
