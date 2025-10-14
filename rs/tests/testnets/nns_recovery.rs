@@ -10,7 +10,7 @@
 // The driver will print how to reboot the host-1 VM and how to get to its console such that you can interact with its grub:
 //
 // ```
-// $ ict testnet create nns_recovery --lifetime-mins 10 --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=199 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
+// $ ict testnet create nns_recovery --lifetime-mins 10 --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
 // ...
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:16:0] To reboot the host VM run the following command:
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:17:0] curl -X PUT 'https://farm.dfinity.systems/group/nested--1756837630333/vm/host-1/reboot'
@@ -30,6 +30,7 @@
 // Happy testing!
 
 use anyhow::Result;
+use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
     BACKUP_USERNAME, SetupConfig, grant_backup_access_to_all_nns_nodes,
     replace_nns_with_unassigned_nodes,
@@ -57,7 +58,7 @@ fn setup(env: TestEnv) {
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(199);
+        .unwrap_or(DKG_INTERVAL_HEIGHT);
 
     PrometheusVm::default()
         .start(&env)
