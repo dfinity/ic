@@ -39,7 +39,7 @@ impl BareMetalIpmiSession {
             if matched.contains("SOL Session operational") {
                 return Ok(BareMetalIpmiSession {
                     session,
-                    host_address: login_info.host_ip.clone(),
+                    host_address: login_info.host_ip,
                 });
             }
 
