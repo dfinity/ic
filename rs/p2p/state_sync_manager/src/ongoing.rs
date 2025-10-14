@@ -225,9 +225,12 @@ impl OngoingStateSync {
                 // Err(DownloadChunkError::Overloaded)
                 // | Err(DownloadChunkError::Timeout)
                 // | Err(DownloadChunkError::Cancelled) => {
-                self.peer_state.entry(peer_id).and_modify(|peer| {
-                    peer.deregister_download();
-                });
+
+                if self.peer_state.remove(&peer_id).is_some() {
+                    self.peer_state.entry(peer_id).and_modify(|peer| {
+                        peer.deregister_download();
+                    });
+                }
 
                 info!(
                     self.log,
@@ -249,13 +252,18 @@ impl OngoingStateSync {
         }
 
         loop {
-            match self.chunks_to_download.next_chunk_to_download() {
-                Some(chunk) => {
-                    let Some(peer_id) = self.choose_peer_for_chunk(chunk) else {
-                        self.chunks_to_download.download_failed(chunk);
-                        break;
-                    };
-
+            // match self.chunks_to_download.next_chunk_to_download() {
+            //     Some(chunk) => {
+            //         let Some(peer_id) = self.choose_peer_for_chunk(chunk) else {
+            //             self.chunks_to_download.download_failed(chunk);
+            //             break;
+            //         };
+            match self
+                .chunks_to_download
+                .next_chunk_to_download_with_lookahead(10000, |chunk| {
+                    self.choose_peer_for_chunk(chunk)
+                }) {
+                Some((peer_id, chunk)) => {
                     info!(
                         self.log,
                         "STATE_SYNC: Spawning download chunk {} for peer {}", chunk, peer_id

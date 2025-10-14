@@ -3,7 +3,10 @@ use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProxyDecodeError};
 use ic_types::NodeId;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, btree_map::Entry};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, btree_map::Entry},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Advert {
@@ -72,16 +75,19 @@ impl XorDistance {
     }
 }
 
-pub(crate) struct ChunksToDownload(BTreeMap<XorDistance, (ChunkId, bool)>, ReplicaLogger);
+pub(crate) struct ChunksToDownload(
+    RefCell<BTreeMap<XorDistance, (ChunkId, bool)>>,
+    ReplicaLogger,
+);
 
 impl ChunksToDownload {
     pub(crate) fn new(log: &ReplicaLogger) -> Self {
-        Self(BTreeMap::new(), log.clone())
+        Self(RefCell::new(BTreeMap::new()), log.clone())
     }
 
     // Add chunks to the chunks to download list
     pub(crate) fn add_chunks(
-        &mut self,
+        &self,
         node_id: NodeId,
         artifact_id: StateSyncArtifactId,
         chunks: impl Iterator<Item = ChunkId>,
@@ -90,7 +96,7 @@ impl ChunksToDownload {
         for chunk in chunks {
             let xor_distance = XorDistance::new(node_id, artifact_id.clone(), chunk);
 
-            if let Entry::Vacant(entry) = self.0.entry(xor_distance) {
+            if let Entry::Vacant(entry) = self.0.borrow_mut().entry(xor_distance) {
                 entry.insert((chunk, false));
                 added += 1;
             } else {
@@ -101,9 +107,10 @@ impl ChunksToDownload {
         added
     }
 
-    pub(crate) fn next_chunk_to_download(&mut self) -> Option<ChunkId> {
-        let next_chunk = self
-            .0
+    pub(crate) fn next_chunk_to_download(&self) -> Option<ChunkId> {
+        let mut chunks = self.0.borrow_mut();
+
+        let next_chunk = chunks
             .iter_mut()
             .find(|(_, (_, downloading))| !downloading)?;
 
@@ -111,25 +118,55 @@ impl ChunksToDownload {
         Some(next_chunk.1.0)
     }
 
-    pub(crate) fn download_finished(&mut self, chunk_id: ChunkId) {
-        if let Some(key) = self.0.iter().find(|(_, (chunk, _))| *chunk == chunk_id) {
+    pub(crate) fn next_chunk_to_download_with_lookahead<F>(
+        &self,
+        lookahead: usize,
+        check_fn: F,
+    ) -> Option<(NodeId, ChunkId)>
+    where
+        F: Fn(ChunkId) -> Option<NodeId>,
+    {
+        let mut chunks = self.0.borrow_mut();
+
+        let (next_chunk, peer) = chunks
+            .iter_mut()
+            .take(lookahead)
+            .filter(|(_, (_, downloading))| !downloading)
+            .filter_map(|chunk| check_fn(chunk.1.0).map(|peer| (chunk, peer)))
+            .next()?;
+
+        next_chunk.1.1 = true;
+        Some((peer, next_chunk.1.0))
+    }
+
+    pub(crate) fn download_finished(&self, chunk_id: ChunkId) {
+        let mut chunks = self.0.borrow_mut();
+        if let Some(key) = chunks.iter().find(|(_, (chunk, _))| *chunk == chunk_id) {
             let key = key.0.clone();
-            self.0.remove(&key);
+            chunks.remove(&key);
         }
     }
 
-    pub(crate) fn download_failed(&mut self, chunk_id: ChunkId) {
-        if let Some(next_chunk) = self.0.iter_mut().find(|(_, (chunk, _))| chunk == &chunk_id) {
+    pub(crate) fn download_failed(&self, chunk_id: ChunkId) {
+        if let Some(next_chunk) = self
+            .0
+            .borrow_mut()
+            .iter_mut()
+            .find(|(_, (chunk, _))| chunk == &chunk_id)
+        {
             next_chunk.1.1 = false;
         }
     }
 
     pub(crate) fn next_xor_distance(&self) -> Option<XorDistance> {
-        self.0.first_key_value().map(|(key, _)| key.clone())
+        self.0
+            .borrow()
+            .first_key_value()
+            .map(|(key, _)| key.clone())
     }
 
     pub(crate) fn num_entries(&self) -> usize {
-        self.0.len()
+        self.0.borrow().len()
     }
 }
 
