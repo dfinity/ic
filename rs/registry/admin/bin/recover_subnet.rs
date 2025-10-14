@@ -7,7 +7,7 @@ use crate::{ProposalTitle, SubnetDescriptor};
 use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::Sender;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -220,7 +220,7 @@ impl ProposeToUpdateRecoveryCupCmd {
 
 #[async_trait]
 impl ProposalPayload<do_recover_subnet::RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
-    async fn payload(&self, agent: &Agent) -> do_recover_subnet::RecoverSubnetPayload {
+    async fn payload(&self, agent: &ic_agent::Agent) -> do_recover_subnet::RecoverSubnetPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         self.new_payload_for_subnet(subnet_id)
