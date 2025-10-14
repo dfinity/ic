@@ -54,6 +54,7 @@ impl BareMetalIpmiSession {
         self.host_address
     }
 
+    /// Process ID of the ipmitool process that keeps the SOL session active
     pub fn process_id(&self) -> i32 {
         self.session.process.child_pid.as_raw()
     }
