@@ -71,7 +71,10 @@ pub async fn start_stream_acceptor(
             bi = conn_handle.conn().accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
-                        let send_stream = ResetStreamOnDrop::new(bi_tx, metrics.connection_handle_incoming_streams_total.clone());
+                        let send_stream = ResetStreamOnDrop::new(
+                            bi_tx,
+                            metrics.connection_handle_incoming_streams_total.clone()
+                        );
                         inflight_requests.spawn(
                             metrics.request_task_monitor.instrument(
                                 handle_bi_stream(
@@ -86,7 +89,11 @@ pub async fn start_stream_acceptor(
                         );
                     }
                     Err(err) => {
-                        info!(log, "Exiting request handler event loop due to conn error {:?}", err.to_string());
+                        info!(
+                            log,
+                            "Exiting request handler event loop due to conn error {:?}",
+                            err.to_string()
+                        );
                         observe_conn_error(&err, "accept_bi", &metrics.request_handle_errors_total);
                         break;
                     }
@@ -121,7 +128,9 @@ async fn handle_bi_stream(
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
         stopped = stopped_fut => {
-            return Ok(stopped.map(|_| ()).inspect_err(|err| observe_stopped_error(err, "request_handler", &metrics.request_handle_errors_total))?);
+            return Ok(stopped.map(|_| ()).inspect_err(|err| {
+                observe_stopped_error(err, "request_handler", &metrics.request_handle_errors_total)
+            })?);
         }
     };
 

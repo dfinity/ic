@@ -109,7 +109,8 @@ impl<
                 _ = cancellation_token.cancelled() => {
                     error!(
                         self.log,
-                        "Sender event loop for the P2P client `{:?}` terminated. No more transmits will be sent for this client.",
+                        "Sender event loop for the P2P client `{:?}` terminated. No more transmits \
+                        will be sent for this client.",
                         uri_prefix::<WireArtifact>()
                     );
                     break;
@@ -119,7 +120,9 @@ impl<
                 }
                 Some(outbound_transmit) = self.outbound_transmits.recv() => {
                     match outbound_transmit {
-                        ArtifactTransmit::Deliver(artifact) => self.handle_deliver_transmit(artifact, cancellation_token.clone()),
+                        ArtifactTransmit::Deliver(artifact) => {
+                            self.handle_deliver_transmit(artifact, cancellation_token.clone())
+                        },
                         ArtifactTransmit::Abort(id) => self.handle_abort_transmit(&id),
                     }
                     self.current_commit_id.inc_assign();
@@ -275,7 +278,6 @@ async fn send_transmit_to_all_peers(
                             false
                         }
                     });
-
 
                     if !is_initiated {
                         let child_token = cancellation_token.child_token();
