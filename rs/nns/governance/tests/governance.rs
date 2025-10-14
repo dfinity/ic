@@ -560,6 +560,7 @@ fn fixture_for_following() -> api::Governance {
             .random_byte_array()
             .expect("Could not get random byte array")
             .to_vec(),
+        visibility: Some(Visibility::Public as i32),
         ..Default::default()
     };
     api::Governance {
@@ -1829,6 +1830,7 @@ fn fixture_for_manage_neuron() -> api::Governance {
             .to_vec(),
         dissolve_state: Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
         aging_since_timestamp_seconds: u64::MAX,
+        visibility: Some(Visibility::Public as i32),
         ..Default::default()
     };
 
@@ -1865,7 +1867,7 @@ fn fixture_for_manage_neuron() -> api::Governance {
 }
 
 #[test]
-fn test_enforce_private_neuron() {
+fn test_enforce_public_neuron() {
     // Step 1: Prepare the world.
 
     let driver = fake::FakeDriver::default();
@@ -1902,8 +1904,11 @@ fn test_enforce_private_neuron() {
     );
 
     // Step 3: Inspect results.
-    assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32));
-    assert_eq!(full_neuron.visibility, Some(Visibility::Private as i32));
+    // TODO(NNS1-4230):
+    // Here, we just want to assert that for a random principal ID
+    // full_neuron is not in the result.
+    assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32));
+    assert_eq!(full_neuron.visibility, Some(Visibility::Public as i32));
 
     assert_eq!(
         list_neurons_response,
