@@ -114,7 +114,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                     break;
                 }
                 Some(_) = advertise_task.join_next() => {}
-                Some((advert, peer_id)) = self.advert_receiver.recv() =>{
+                Some((advert, peer_id)) = self.advert_receiver.recv() => {
                     self.handle_advert(advert, peer_id, transport.clone()).await;
                 }
                 // Make sure we only have one active advertise task.
