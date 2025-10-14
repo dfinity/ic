@@ -10,7 +10,7 @@ documentation.workspace = true
 async-trait = { workspace = true }
 candid = { workspace = true }
 chrono = { workspace = true }
-ic-canister-client = { path = "../../canister_client" }
+ic-agent = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -21,6 +21,7 @@ ic-types = { path = "../../types/types" }
 mockall = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
 url = { workspace = true }

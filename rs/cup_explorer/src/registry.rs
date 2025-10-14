@@ -37,7 +37,11 @@ impl RegistryCanisterClient {
 
         RegistryCanisterClient(Arc::new(RegistryCanister::new_with_agent_transformer(
             vec![nns_url],
-            |a| a.with_nns_public_key(nns_public_key),
+            |agent| {
+                // TODO DO NOT MERGE - how do we test this / verify it's the right change?
+                agent.set_root_key(nns_public_key.into_bytes().to_vec());
+                agent
+            },
         )))
     }
 }
