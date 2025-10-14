@@ -100,6 +100,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
+use wirm::wasmparser;
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -833,9 +834,7 @@ fn install_does_not_change_canister_if_init_traps() {
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
     // Canister is still empty.
-    let result = test.canister_status(canister_id);
-    let reply = get_reply(result);
-    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.module_hash(), None);
 }
 
@@ -1131,10 +1130,8 @@ fn get_canister_status_of_running_canister() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
-    let result = test.canister_status(canister_id);
 
-    let reply = get_reply(result);
-    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
 }
 
@@ -1244,9 +1241,7 @@ fn canister_status_with_environment_variables() {
     let canister_id = test
         .create_canister_with_settings(*INITIAL_CYCLES, settings)
         .unwrap();
-    let status = test.canister_status(canister_id);
-    let reply = get_reply(status);
-    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().environment_variables(),
         &expected_env_vars
@@ -1497,10 +1492,7 @@ fn can_get_canister_balance() {
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-    let result = test.canister_status(canister_id);
-
-    let reply = get_reply(result);
-    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.cycles(), INITIAL_CYCLES.get());
 }
 
@@ -4524,9 +4516,7 @@ fn canister_status_contains_reserved_cycles() {
     let canister_id = test
         .create_canister_with_allocation(CYCLES, None, Some(1_000_000))
         .unwrap();
-    let result = test.canister_status(canister_id);
-    let reply = get_reply(result);
-    let status = Decode!(reply.as_slice(), CanisterStatusResultV2).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.reserved_cycles(),
         test.cycles_account_manager()
@@ -4555,9 +4545,7 @@ fn canister_status_contains_reserved_cycles_limit() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
-    let result = test.canister_status(canister_id);
-    let reply = get_reply(result);
-    let status = CanisterStatusResultV2::decode(&reply).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().reserved_cycles_limit(),
         candid::Nat::from(
@@ -4570,9 +4558,7 @@ fn canister_status_contains_reserved_cycles_limit() {
     test.canister_update_reserved_cycles_limit(canister_id, Cycles::new(42))
         .unwrap();
 
-    let result = test.canister_status(canister_id);
-    let reply = get_reply(result);
-    let status = CanisterStatusResultV2::decode(&reply).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().reserved_cycles_limit(),
         candid::Nat::from(42_u32),
@@ -4909,17 +4895,13 @@ fn uninstall_code_on_empty_canister() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(CYCLES);
 
-    let status = test.canister_status(canister_id);
-    let reply = get_reply(status);
-    let empty_canister_status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    let empty_canister_status = test.canister_status(canister_id).unwrap();
     assert_eq!(empty_canister_status.status(), CanisterStatusType::Running);
     assert!(empty_canister_status.module_hash().is_none());
 
     test.uninstall_code(canister_id).unwrap();
 
-    let status = test.canister_status(canister_id);
-    let reply = get_reply(status);
-    let uninstalled_canister_status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    let uninstalled_canister_status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         uninstalled_canister_status.status(),
         CanisterStatusType::Running
@@ -6569,9 +6551,7 @@ fn check_environment_variables_via_canister_status(
     canister_id: CanisterId,
     expected_env_vars: Vec<EnvironmentVariable>,
 ) {
-    let status = test.canister_status(canister_id);
-    let reply = get_reply(status);
-    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().environment_variables(),
         &expected_env_vars
@@ -6653,21 +6633,27 @@ fn test_environment_variables() {
 
 /// Creates and deploys a pair of universal canisters with the second canister being controlled by the first one
 /// in addition to both canisters being controlled by the anonymous principal.
+/// If the first state machine has the NNS canister range, then the first canister has the id of
+/// the migration canister such that it can call `rename_canister`.
 fn install_two_universal_canisters(
     env1: &StateMachine,
     env2: &StateMachine,
 ) -> (CanisterId, CanisterId) {
     const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
-
     // Create a canister on each of the two subnets.
-    let canister_id1 = env1
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
-            INITIAL_CYCLES_BALANCE,
-        )
-        .unwrap();
+
+    // Skip 16 canister IDs so that if env1 is the NNS, canister_id1 will have the migration canister ID.
+    let mut canister_id1 = CanisterId::from_u64(0);
+    for _ in 0..18 {
+        canister_id1 = env1
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                INITIAL_CYCLES_BALANCE,
+            )
+            .unwrap();
+    }
     let canister_id2 = env2
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.to_vec(),
