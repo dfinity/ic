@@ -33,8 +33,21 @@ struct VetKDTestServer {
 impl VetKDTestServer {
     fn new<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let subnet_size = 7;
-        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
-        let transcript = run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
+
+        let config = RandomNiDkgConfig::builder()
+            .subnet_size(subnet_size)
+            .build(rng)
+            .into_config();
+        let dkg_id = config.dkg_id().clone();
+        let crypto_components = NiDkgTestEnvironment::new_for_config(&config, rng).crypto_components;
+
+        let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
+        load_transcript_for_receivers_expecting_status(
+            &config,
+            &transcript,
+            &crypto_components,
+            Some(LoadTranscriptResult::SigningKeyAvailable),
+        );
 
         Self {
             config,
@@ -345,6 +358,13 @@ fn corrupt_share_signature<R: Rng + CryptoRng>(share: &mut VetKdEncryptedKeyShar
     flip_random_bit(&mut share.node_signature, rng);
 }
 
+fn swap_share_c1c3(share: &mut VetKdEncryptedKeyShareContent) {
+    let share_len = share.0.len();
+    for idx in 0..48 {
+        share.0.swap(idx, share_len - 48 + idx);
+    }
+}
+
 fn modify_random_share<R: Rng + CryptoRng, F: FnOnce(&mut VetKdEncryptedKeyShare, &mut R)>(
     shares: &mut BTreeMap<NodeId, VetKdEncryptedKeyShare>,
     rng: &mut R,
@@ -409,11 +429,13 @@ fn should_vetkd_combine_shares_succeed_if_reconstruction_threshold_many_shares_a
     );
 
     for dealer in &corrupted_shares {
-        corrupt_share_signature(shares.get_mut(&dealer).expect("Missing share"), &mut rng);
+        swap_share_c1c3(&mut shares.get_mut(&dealer).expect("Missing share").encrypted_key_share);
     }
 
-    let combined = server.combine_key_shares(&shares, &vetkd_args, &mut rng);
-    assert!(combined.is_ok());
+    match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
+        Ok(_key) => { /* expected success */ },
+        Err(e) => panic!("Combination failed {:?}", e),
+    }
 }
 
 #[test]
@@ -557,10 +579,7 @@ fn should_vetkd_combine_shares_err_if_combination_fails_due_to_too_many_invalid_
     let to_corrupt = shares.len() - server.config.threshold().get().get() as usize + 1;
 
     modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
-        let share_len = share.encrypted_key_share.0.len();
-        for idx in 0..48 {
-            share.encrypted_key_share.0.swap(idx, share_len - 48 + idx);
-        }
+        swap_share_c1c3(&mut share.encrypted_key_share);
     });
 
     match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
@@ -687,40 +706,9 @@ fn should_vetkd_verify_encrypted_key_err_with_verificationerror_if_encrypted_key
     }
 }
 
-fn setup_with_random_ni_dkg_config<R: Rng + CryptoRng>(
-    subnet_size: usize,
-    rng: &mut R,
-) -> (
-    NiDkgConfig,
-    NiDkgId,
-    BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-) {
-    let config = RandomNiDkgConfig::builder()
-        .subnet_size(subnet_size)
-        .build(rng)
-        .into_config();
-    let dkg_id = config.dkg_id().clone();
-    let crypto_components = NiDkgTestEnvironment::new_for_config(&config, rng).crypto_components;
-    (config, dkg_id, crypto_components)
-}
-
 /////////////////////////////////////////////////////////////////////////////////
 // The following helper functions where copied from threshold_sigs_with_ni_dkg.rs
 /////////////////////////////////////////////////////////////////////////////////
-
-fn run_ni_dkg_and_load_transcript_for_receivers<C: CryptoComponentRng>(
-    config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
-) -> NiDkgTranscript {
-    let transcript = run_ni_dkg_and_create_single_transcript(config, crypto_components);
-    load_transcript_for_receivers_expecting_status(
-        config,
-        &transcript,
-        crypto_components,
-        Some(LoadTranscriptResult::SigningKeyAvailable),
-    );
-    transcript
-}
 
 fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
     config: &NiDkgConfig,
