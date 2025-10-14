@@ -8,15 +8,15 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{KeyManager, NiDkgAlgorithm, ThresholdSigner};
+use ic_logger::ReplicaLogger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{
     NiDkgConfig, NiDkgConfigData, NiDkgThreshold,
 };
-use ic_logger::ReplicaLogger;
-use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgDealing, NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
     NiDkgTranscript,
@@ -729,7 +729,10 @@ impl NiDkgTestEnvironment {
 
     /// Creates a new test environment appropriate for the given config.
     /// The crypto components are initialized with local vaults.
-    pub fn new_for_config_with_inmem_logger<R: Rng + CryptoRng>(config: &NiDkgConfig, rng: &mut R) -> Self {
+    pub fn new_for_config_with_inmem_logger<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        rng: &mut R,
+    ) -> Self {
         Self::new_for_config_impl(config, false, true, rng)
     }
 
@@ -903,7 +906,10 @@ impl NiDkgTestEnvironment {
         };
         let temp_crypto_builder = if use_inmem_logger {
             self.loggers.insert(node_id, InMemoryReplicaLogger::new());
-            let logger_ref = self.loggers.get(&node_id).expect("BTreeMap lost the logger");
+            let logger_ref = self
+                .loggers
+                .get(&node_id)
+                .expect("BTreeMap lost the logger");
             temp_crypto_builder.with_logger(ReplicaLogger::from(logger_ref))
         } else {
             temp_crypto_builder
