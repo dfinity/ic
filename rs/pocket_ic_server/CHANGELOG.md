@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- New DELETE endpoint `/prune_graph/<state_label>/<op_id>` for pruning the result of a long-running operation.
+  This endpoint should be called after successfully reading the result using the GET endpoint `/read_graph/<state_label>/<op_id>`.
+  The `state_label` and `op_id` are returned by `ApiResponse::Started {state_label, op_id}`.
+
 
 
 ## 10.0.0 - 2025-09-12

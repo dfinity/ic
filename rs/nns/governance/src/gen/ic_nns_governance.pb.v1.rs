@@ -2892,6 +2892,9 @@ pub struct Governance {
     /// source of randomness (from the platform)
     #[prost(bytes = "vec", optional, tag = "28")]
     pub rng_seed: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Map of proposal IDs to their topics for those garbage collected.
+    #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
+    pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

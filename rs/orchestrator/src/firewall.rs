@@ -730,8 +730,6 @@ mod tests {
 
     use super::*;
 
-    const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES: &[u8] =
@@ -944,20 +942,26 @@ mod tests {
 
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
-        // Make the string parsable by filling the template placeholders with dummy values
-        let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
-            .unwrap()
-            .replace("{{ ipv6_address }}", "::")
-            .replace("{{ backup_retention_time_secs }}", "0")
-            .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
-            .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_epoch_length }}", "600");
-        let config_source = ConfigSource::Literal(cfg);
+        let template = config::guestos::generate_ic_config::IcConfigTemplate {
+            ipv6_address: "::".to_string(),
+            ipv6_prefix: "::/64".to_string(),
+            ipv4_address: "".to_string(),
+            ipv4_gateway: "".to_string(),
+            nns_urls: "http://www.fakeurl.com/".to_string(),
+            backup_retention_time_secs: "0".to_string(),
+            backup_purging_interval_secs: "0".to_string(),
+            query_stats_epoch_length: "600".to_string(),
+            jaeger_addr: "".to_string(),
+            domain_name: "".to_string(),
+            node_reward_type: "".to_string(),
+            malicious_behavior: "null".to_string(),
+        };
 
-        let config: ConfigOptional = config_source.load().unwrap();
-
-        config
+        let ic_json = config::guestos::generate_ic_config::render_ic_config(template)
+            .expect("Failed to render config template");
+        ConfigSource::Literal(ic_json)
+            .load()
+            .expect("Failed to parse dummy config")
     }
 
     /// When `TEST_UNDECLARED_OUTPUTS_DIR` is set, writes the `content` to a file in the specified

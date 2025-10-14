@@ -37,14 +37,6 @@ pub(crate) use metrics::NeuronMetrics;
 // number of neurons returned in a single page to 300.
 pub const MAX_NEURON_PAGE_SIZE: usize = 300;
 
-// As a message canister limit is 2 MiB and neuron ID is 8 bytes, we can return
-// at most 256 K neuron IDs in a single message. However, to be safe, we limit
-// the number of neuron ID to 200 K.
-// Please note that `MAX_NUMBER_OF_NEURONS` (defined in `rs/nns/governance/src/governance.rs`)
-// is 500_000, which is greater than this limit. This is acceptable because
-// pagination is supported when listing neuron IDs.
-pub const MAX_NEURON_ID_PAGE_SIZE: usize = 200_000;
-
 #[derive(Eq, PartialEq, Debug)]
 pub enum NeuronStoreError {
     NeuronNotFound {
@@ -754,11 +746,8 @@ impl NeuronStore {
                     proposal_id,
                     vote,
                 )?;
-                let should_record_voting_history = if is_known_neuron_voting_history_enabled() {
-                    stable_neuron_store.is_known_neuron(neuron_id)
-                } else {
-                    false
-                };
+                let should_record_voting_history = is_known_neuron_voting_history_enabled()
+                    && stable_neuron_store.is_known_neuron(neuron_id);
                 Ok(should_record_voting_history)
             },
         )?;
@@ -843,12 +832,13 @@ impl NeuronStore {
             .collect()
     }
 
-    // Returns whether the known neuron name already exists.
-    pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
+    // Returns the neuron id for the given known neuron name if it exists. Returns None if the known
+    // neuron name does not exist.
+    pub fn known_neuron_id_by_name(&self, known_neuron_name: &str) -> Option<NeuronId> {
         with_stable_neuron_indexes(|indexes| {
             indexes
                 .known_neuron()
-                .contains_known_neuron_name(known_neuron_name)
+                .known_neuron_id_by_name(known_neuron_name)
         })
     }
 

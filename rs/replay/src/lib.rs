@@ -137,8 +137,8 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             let extra = move |player: &Player, time| -> Vec<IngressWithPrinter> {
                 let agent = &agent_with_principal_as_sender(&canister_caller_id.get()).unwrap();
                 match subcmd {
-                    Some(SubCommand::AddAndBlessReplicaVersion(cmd)) => {
-                        cmd_add_and_bless_replica_version(agent, player, cmd, time)
+                    Some(SubCommand::UpgradeSubnetToReplicaVersion(cmd)) => {
+                        cmd_upgrade_subnet_to_replica_version(agent, player, cmd, time)
                             .unwrap()
                             .into_iter()
                             .map(|ingress| ingress.into())

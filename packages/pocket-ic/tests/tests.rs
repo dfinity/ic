@@ -3121,3 +3121,25 @@ fn canister_not_found() {
     let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(bytes.contains("404 - canister not found"));
 }
+
+#[test]
+fn deterministic_registry() {
+    let registry_bytes = || {
+        // Create a temporary state directory from which the test can retrieve PocketIC registry.
+        let state_dir = TempDir::new().unwrap();
+        let state_dir_path_buf = state_dir.path().to_path_buf();
+
+        let _pocket_ic = PocketIcBuilder::new()
+            .with_state_dir(state_dir_path_buf.clone())
+            .with_nns_subnet()
+            .with_ii_subnet()
+            .with_fiduciary_subnet()
+            .with_application_subnet()
+            .build();
+
+        let registry_proto_path = state_dir_path_buf.join("registry.proto");
+        std::fs::read(registry_proto_path).unwrap()
+    };
+
+    assert_eq!(registry_bytes(), registry_bytes());
+}

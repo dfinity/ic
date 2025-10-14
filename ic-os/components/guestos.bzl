@@ -43,9 +43,7 @@ component_files = {
     Label("guestos/ic-https-outcalls-adapter/generate-https-outcalls-adapter-config.sh"): "/opt/ic/bin/generate-https-outcalls-adapter-config.sh",
     Label("guestos/ic-replica.service"): "/etc/systemd/system/ic-replica.service",
     Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
-    Label("guestos/generate-ic-config/generate-ic-config.sh"): "/opt/ic/bin/generate-ic-config.sh",
     Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
-    Label("guestos/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
     Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
     Label("guestos/share/nns_public_key.pem"): "/opt/ic/share/nns_public_key.pem",
 

@@ -1502,14 +1502,12 @@ fn notify_top_up(
     notify_top_up_as(state_machine, canister_id, amount, *TEST_USER1_PRINCIPAL)
 }
 
-fn total_cycles_minted(state_machine: &StateMachine) -> u64 {
-    use prost::Message;
-
+fn total_cycles_minted(state_machine: &StateMachine) -> Nat {
     if let WasmResult::Reply(res) = state_machine
         .query(CYCLES_MINTING_CANISTER_ID, "total_cycles_minted", vec![])
         .unwrap()
     {
-        u64::decode(&res[..]).unwrap()
+        Decode!(&res, Nat).unwrap()
     } else {
         panic!("total_cycles_minted rejected")
     }
@@ -1539,7 +1537,7 @@ fn cmc_notify_top_up_valid() {
     assert_eq!(cycles, Cycles::new(100_000_000_000_000u128));
     assert_eq!(
         total_minted_after - total_minted_before,
-        100_000_000_000_000
+        100_000_000_000_000u64
     );
 }
 
@@ -1567,7 +1565,7 @@ fn cmc_notify_top_up_invalid() {
     assert_matches!(error, NotifyError::Refunded { .. });
     assert_eq!(
         total_minted_after - total_minted_before,
-        100_000_000_000_000
+        100_000_000_000_000u64
     );
 
     let total_minted_before = total_cycles_minted(&state_machine);
@@ -1579,7 +1577,7 @@ fn cmc_notify_top_up_invalid() {
     .unwrap_err();
     let total_minted_after = total_cycles_minted(&state_machine);
     assert_matches!(error, NotifyError::Refunded { .. });
-    assert_eq!(total_minted_after - total_minted_before, 0);
+    assert_eq!(total_minted_after - total_minted_before, 0u64);
 }
 
 #[test]

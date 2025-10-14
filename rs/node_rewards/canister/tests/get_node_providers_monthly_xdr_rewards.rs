@@ -3,7 +3,7 @@ use ic_nervous_system_agent::AgentFor;
 use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_nns_test_utils::common::build_node_rewards_test_wasm;
-use ic_node_rewards_canister_api::DayUtc;
+use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
     GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
@@ -75,7 +75,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     let past_time_nanos = pocket_ic.get_time().await.as_nanos_since_unix_epoch();
     pocket_ic.advance_time(Duration::from_secs(86_400)).await;
     pocket_ic.tick().await;
-    let day = DayUtc::from_nanos(past_time_nanos);
+    let day = DateUtc::from_unix_timestamp_nanoseconds(past_time_nanos);
 
     let request = GetNodeProviderRewardsCalculationRequest {
         from_day: day,
@@ -96,7 +96,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     .unwrap_err();
     assert_eq!(
         err,
-        "Could not calculate rewards: \"No metrics found for day 1620345599999999999\""
+        "Could not calculate rewards: \"No metrics found for day 2021-05-06\""
     );
 
     // Replicated update call is not allowed.

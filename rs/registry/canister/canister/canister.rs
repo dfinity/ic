@@ -174,6 +174,31 @@ fn canister_init() {
             registry.maybe_apply_mutation_internal(mutation_request.mutations)
         });
     recertify_registry();
+
+    #[cfg(feature = "test")]
+    {
+        use registry_canister::flags::temporary_overrides::{
+            test_set_swapping_enabled_subnets, test_set_swapping_status,
+            test_set_swapping_whitelisted_callers,
+        };
+
+        println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
+        println!(
+            "{LOG_PREFIX}canister_intt: Swapping enabled: {}",
+            init_payload.is_swapping_feature_enabled
+        );
+        test_set_swapping_status(init_payload.is_swapping_feature_enabled);
+        println!(
+            "{LOG_PREFIX}canister_init: Swapping whietlisted callers: {:?}",
+            init_payload.swapping_whitelisted_callers
+        );
+        test_set_swapping_whitelisted_callers(init_payload.swapping_whitelisted_callers);
+        println!(
+            "{LOG_PREFIX}canister_init: Swapping enabled on subnets: {:?}",
+            init_payload.swapping_enabled_subnets
+        );
+        test_set_swapping_enabled_subnets(init_payload.swapping_enabled_subnets);
+    }
 }
 
 #[unsafe(export_name = "canister_pre_upgrade")]
@@ -996,7 +1021,9 @@ fn migrate_canisters() {
 
 #[candid_method(update, rename = "migrate_canisters")]
 fn migrate_canisters_(payload: MigrateCanistersPayload) -> MigrateCanistersResponse {
-    registry_mut().do_migrate_canisters(payload)
+    let res = registry_mut().do_migrate_canisters(payload);
+    recertify_registry();
+    res
 }
 
 #[unsafe(export_name = "canister_query get_node_providers_monthly_xdr_rewards")]

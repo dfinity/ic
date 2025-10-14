@@ -140,6 +140,7 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
+    "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
@@ -266,6 +267,7 @@ members = [
     "rs/nervous_system/proto",
     "rs/nervous_system/proto/protobuf_generator",
     "rs/nervous_system/proxied_canister_calls_tracker",
+    "rs/nervous_system/rate_limits",
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
@@ -274,6 +276,7 @@ members = [
     "rs/nervous_system/timers",
     "rs/nervous_system/timer_task",
     "rs/nervous_system/timestamp",
+    "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
@@ -385,7 +388,6 @@ members = [
     "rs/rust_canisters/dfn_http",
     "rs/rust_canisters/dfn_http_metrics",
     "rs/rust_canisters/dfn_json",
-    "rs/rust_canisters/dfn_macro",
     "rs/rust_canisters/dfn_protobuf",
     "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
@@ -811,6 +813,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"

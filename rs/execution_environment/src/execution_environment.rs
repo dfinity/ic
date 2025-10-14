@@ -37,9 +37,9 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
-    FetchCanisterLogsRequest, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    CanisterInfoResponse, CanisterMetadataRequest, CanisterStatusType, ClearChunkStoreArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EmptyBlob, FetchCanisterLogsRequest, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
     ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
     NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
@@ -806,6 +806,7 @@ impl ExecutionEnvironment {
                             msg.canister_change_origin(args.get_sender_canister_version()),
                             args.get_canister_id(),
                             &mut state,
+                            round_limits,
                             &self.metrics.canister_not_found_error,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
@@ -927,6 +928,27 @@ impl ExecutionEnvironment {
                 }
                 CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::CanisterInfo)
+                }
+            },
+
+            Ok(Ic00Method::CanisterMetadata) => match &msg {
+                CanisterCall::Request(_) => {
+                    let res = CanisterMetadataRequest::decode(payload).and_then(|record| {
+                        self.get_canister_metadata(
+                            *msg.sender(),
+                            record.canister_id(),
+                            &state,
+                            record.name(),
+                        )
+                        .map(|res| (res, Some(record.canister_id())))
+                    });
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::CanisterMetadata)
                 }
             },
 
@@ -1566,7 +1588,12 @@ impl ExecutionEnvironment {
                             } else {
                                 FetchCanisterLogsRequest::decode(payload)
                                     .and_then(|args| {
-                                        fetch_canister_logs(*msg.sender(), &state, args)
+                                        fetch_canister_logs(
+                                            *msg.sender(),
+                                            &state,
+                                            args,
+                                            self.config.fetch_canister_logs_filter,
+                                        )
                                     })
                                     .map(|resp| (Encode!(&resp).unwrap(), None))
                             };
@@ -1779,7 +1806,7 @@ impl ExecutionEnvironment {
                 let res = RenameCanisterArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
-                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                    self.rename_canister(*msg.sender(), &mut state, round_limits, args, origin)
                         .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
@@ -2315,6 +2342,20 @@ impl ExecutionEnvironment {
         Ok(res.encode())
     }
 
+    fn get_canister_metadata(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        state: &ReplicatedState,
+        name: &str,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(canister_id, state)?;
+        self.canister_manager
+            .get_canister_metadata(sender, canister, name)
+            .map(|res| res.encode())
+            .map_err(|err| err.into())
+    }
+
     fn stop_canister(
         &self,
         canister_id: CanisterId,
@@ -2621,6 +2662,7 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
         args: RenameCanisterArgs,
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
@@ -2651,6 +2693,7 @@ impl ExecutionEnvironment {
                 to_version,
                 to_total_num_changes,
                 state,
+                round_limits,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());

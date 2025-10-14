@@ -1031,6 +1031,10 @@ impl ExecutionTest {
         self.canister_from_cycles_and_wat(self.initial_canister_cycles, wat)
     }
 
+    pub fn create_canister_with_default_cycles(&mut self) -> CanisterId {
+        self.create_canister(self.initial_canister_cycles)
+    }
+
     /// Creates and installs a universal canister.
     pub fn universal_canister(&mut self) -> Result<CanisterId, UserError> {
         self.canister_from_binary(UNIVERSAL_CANISTER_WASM.to_vec())

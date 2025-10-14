@@ -272,7 +272,7 @@ fn test_validate_name_already_exists() {
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
-            && error.error_message.contains("already belongs to a known neuron")
+            && error.error_message.contains("already belongs to a different known neuron with ID 2")
             && error.error_message.contains("Existing Known Neuron")
     );
 }
@@ -407,6 +407,42 @@ fn test_execute_name_conflict() {
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
-            && error.error_message.contains("already belongs to a known neuron")
+            && error.error_message.contains("already belongs to a different known neuron with ID 2")
+    );
+}
+
+#[test]
+fn test_clobbering_same_neuron_allowed() {
+    let mut neuron_store = create_test_neuron_store();
+    // Try to register neuron ID 2 with its existing name "Existing Known Neuron"
+    // This should succeed (clobbering is allowed when same name and same ID)
+    let updated_data = KnownNeuronData {
+        name: "Existing Known Neuron".to_string(), // Same name as neuron ID 2 already has
+        description: Some("Updated description".to_string()),
+        links: vec!["https://updated.com".to_string()],
+    };
+    let request = KnownNeuron {
+        id: Some(NeuronId { id: 2 }),
+        known_neuron_data: Some(updated_data.clone()),
+    };
+
+    // Execute the registration - should succeed
+    let result = request.execute(&mut neuron_store);
+    assert_eq!(
+        result,
+        Ok(()),
+        "Should allow clobbering when same neuron ID and name"
+    );
+
+    // Verify the known neuron data has been updated
+    let known_data_after = neuron_store
+        .with_neuron(&NeuronId { id: 2 }, |neuron| {
+            neuron.known_neuron_data().cloned()
+        })
+        .expect("Neuron should exist");
+    assert_eq!(
+        known_data_after,
+        Some(updated_data),
+        "Known neuron data should be updated"
     );
 }

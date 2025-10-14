@@ -465,7 +465,10 @@ impl Orchestrator {
         ) {
             // Wait for a minute before starting the first loop, to allow the
             // registry some time to catch up, after starting.
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
+                _ = cancellation_token.cancelled() => return
+            }
 
             // Run the HostOS upgrade loop with an exponential backoff. A 15
             // minute liveness timeout will restart the loop if no progress is

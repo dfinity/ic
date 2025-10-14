@@ -9,7 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
+* Record votes by known neurons before clearing ballots.
+* Allow updating known neuron through RegisterKnownNeuron without having to change its name.
+
 ## Changed
+
+* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
+  limit.
 
 ## Deprecated
 
