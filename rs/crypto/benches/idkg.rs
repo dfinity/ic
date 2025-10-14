@@ -61,6 +61,8 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
             for mode in IDkgMode::iter() {
                 bench_create_dealing(group, &test_case, mode, vault_type, rng);
                 bench_verify_dealing_private(group, &test_case, mode, vault_type, rng);
+                for n in [10, 100]{
+                bench_verify_dealing_private_batch(group, &test_case, mode, vault_type, rng, n);}
                 bench_load_transcript(group, &test_case, mode, vault_type, rng);
                 if test_case.num_of_nodes >= mode.min_subnet_size_for_complaint() {
                     bench_open_transcript(group, &test_case, mode, vault_type, rng);
@@ -186,6 +188,46 @@ fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
             SmallInput,
         )
     });
+}
+
+fn bench_verify_dealing_private_batch<M: Measurement, R: RngCore + CryptoRng>(
+    group: &mut BenchmarkGroup<'_, M>,
+    test_case: &TestCase,
+    mode: IDkgMode,
+    vault_type: VaultType,
+    rng: &mut R,
+    n: usize,
+) {
+    let bench_context = OnceCell::new();
+
+    group.bench_function(
+        format!("verify_dealing_private_batch_{n}_{mode}"),
+        |bench| {
+            bench.iter_batched_ref(
+                || {
+                    let (env, _, params) = bench_context.get_or_init(|| {
+                        let env = test_case.new_test_environment(vault_type, rng);
+                        let context = IDkgModeTestContext::new(mode, &env, rng);
+                        let params = context.setup_params(&env, test_case.alg(), rng);
+                        (env, context, params)
+                    });
+                    let receiver = env
+                        .nodes
+                        .random_filtered_by_receivers(params.receivers(), rng);
+                    let dealer = env.nodes.random_dealer(params, rng);
+                    let dealings: Vec<_> = (0..n)
+                        .map(|_| create_dealing(dealer, params))
+                        .collect();
+                    (receiver, dealings)
+                },
+                |(receiver, dealings)| {
+                    let (_, _, params) = bench_context.get().unwrap();
+                    verify_dealing_private_batch(receiver, params, &dealings[..])
+                },
+                SmallInput,
+            )
+        },
+    );
 }
 
 fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
@@ -672,6 +714,24 @@ fn verify_dealing_private(
             panic!(
                 "failed to verify privately IDKG dealing {:?} by {:?} with parameters {:?}: {:?}",
                 signed_dealing,
+                receiver.id(),
+                params,
+                error
+            )
+        })
+}
+
+fn verify_dealing_private_batch(
+    receiver: &Node,
+    params: &IDkgTranscriptParams,
+    signed_dealings: &[SignedIDkgDealing],
+) {
+    receiver
+        .verify_dealing_private_batch(params, signed_dealings)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to verify privately IDKG dealings {:?} by {:?} with parameters {:?}: {:?}",
+                signed_dealings,
                 receiver.id(),
                 params,
                 error

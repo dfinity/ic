@@ -138,6 +138,45 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         result
     }
 
+    fn idkg_verify_dealing_private_batch(
+        &self,
+        algorithm_id: Vec<AlgorithmId>,
+        dealing: Vec<IDkgDealingInternalBytes>,
+        dealer_index: Vec<NodeIndex>,
+        receiver_index: Vec<NodeIndex>,
+        receiver_key_id: Vec<KeyId>,
+        context_data: Vec<Vec<u8>>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private_batch");
+        let start_time = self.metrics.now();
+        let result = (0..algorithm_id.len())
+            .into_iter()
+            .map(|i| {
+                let internal_dealing = IDkgDealingInternal::deserialize(dealing[i].as_ref()).map_err(|e| {
+                    IDkgVerifyDealingPrivateError::InvalidArgument(format!(
+                        "failed to deserialize internal dealing: {e:?}"
+                    ))
+                })?;
+                self.idkg_verify_dealing_private_internal(
+                    algorithm_id[i],
+                    &internal_dealing,
+                    dealer_index[i],
+                    receiver_index[i],
+                    receiver_key_id[i],
+                    &context_data[i],
+                )
+            })
+            .collect::<Result<Vec<()>, IDkgVerifyDealingPrivateError>>();
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::IdkgProtocol,
+            MetricsScope::Local,
+            "idkg_verify_dealing_private_batch",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result.map(|_| ())
+    }
+
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,

@@ -342,6 +342,14 @@ impl IDkgProtocol for CryptoReturningOk {
         Ok(())
     }
 
+    fn verify_dealing_private_batch(
+        &self,
+        _params: &IDkgTranscriptParams,
+        _signed_dealing: &[SignedIDkgDealing],
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        Ok(())
+    }
+
     fn verify_initial_dealings(
         &self,
         _params: &IDkgTranscriptParams,

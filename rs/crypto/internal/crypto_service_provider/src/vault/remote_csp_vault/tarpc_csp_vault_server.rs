@@ -377,6 +377,31 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
+    async fn idkg_verify_dealing_private_batch(
+        self,
+        _: context::Context,
+        algorithm_id: Vec<AlgorithmId>,
+        dealing: Vec<IDkgDealingInternalBytes>,
+        dealer_index: Vec<NodeIndex>,
+        receiver_index: Vec<NodeIndex>,
+        receiver_key_id: Vec<KeyId>,
+        context_data: Vec<ByteBuf>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        let vault = self.local_csp_vault;
+        let context_data = context_data.into_iter().map(|c| c.into_vec()).collect();
+        let job = move || {
+            vault.idkg_verify_dealing_private_batch(
+                algorithm_id,
+                dealing,
+                dealer_index,
+                receiver_index,
+                receiver_key_id,
+                context_data,
+            )
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
+
     async fn idkg_load_transcript(
         self,
         _: context::Context,

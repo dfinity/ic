@@ -224,7 +224,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/idkg.rs"],
     aliases = ALIASES,
-    pin_cpu = True,
+    pin_cpu = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

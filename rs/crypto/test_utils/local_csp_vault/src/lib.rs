@@ -155,6 +155,17 @@ mock! {
             context_data: Vec<u8>,
         ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
+
+        fn idkg_verify_dealing_private_batch(
+            &self,
+            algorithm_id: Vec<AlgorithmId>,
+            dealing: Vec<IDkgDealingInternalBytes>,
+            dealer_index: Vec<NodeIndex>,
+            receiver_index: Vec<NodeIndex>,
+            receiver_key_id: Vec<KeyId>,
+            context_data: Vec<Vec<u8>>,
+        ) -> Result<(), IDkgVerifyDealingPrivateError>;
+
         fn idkg_load_transcript(
             &self,
             algorithm_id: AlgorithmId,
