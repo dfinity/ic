@@ -1,7 +1,7 @@
 use crate::chrono_utils::last_unix_timestamp_nanoseconds;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
-use crate::storage::VM;
+use crate::storage::{NaiveDateStorable, VM};
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -23,6 +23,7 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_rewards_v0};
+use ic_stable_structures::StableCell;
 use ic_types::{RegistryVersion, Time};
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
@@ -53,7 +54,7 @@ pub fn current_time() -> Time {
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
     metrics_manager: Rc<MetricsManager<VM>>,
-    last_day_synced: RefCell<Option<NaiveDate>>,
+    last_day_synced: &'static LocalKey<RefCell<StableCell<Option<NaiveDateStorable>, VM>>>,
 }
 
 /// Internal methods
@@ -61,11 +62,12 @@ impl NodeRewardsCanister {
     pub fn new(
         registry_client: Arc<dyn CanisterRegistryClient>,
         metrics_manager: Rc<MetricsManager<VM>>,
+        last_day_synced: &'static LocalKey<RefCell<StableCell<Option<NaiveDateStorable>, VM>>>,
     ) -> Self {
         Self {
             registry_client,
             metrics_manager,
-            last_day_synced: RefCell::new(None),
+            last_day_synced,
         }
     }
 
@@ -84,6 +86,20 @@ impl NodeRewardsCanister {
         self.registry_client
             .get_value(key.as_ref(), self.registry_client.get_latest_version())
             .map_err(|e| format!("Failed to get registry value: {:?}", e))
+    }
+
+    pub fn get_last_day_synced(&self) -> Option<NaiveDate> {
+        self.last_day_synced
+            .with_borrow(|last_day_synced| last_day_synced.get().clone().map(|d| d.0))
+    }
+
+    pub fn set_last_day_synced(&self, last_day_synced: NaiveDate) {
+        self.last_day_synced.with_borrow_mut(|cell| {
+            cell.set(Some(NaiveDateStorable::from(NaiveDateStorable(
+                last_day_synced,
+            ))))
+            .expect("Could not set last day synced");
+        });
     }
 
     pub async fn schedule_registry_sync(
@@ -108,11 +124,8 @@ impl NodeRewardsCanister {
         let subnets_list = registry_querier.subnets_list(version);
         let last_day_synced: NaiveDate =
             metrics_manager.update_subnets_metrics(subnets_list).await?;
-        canister.with_borrow_mut(|canister| {
-            canister
-                .last_day_synced
-                .borrow_mut()
-                .replace(last_day_synced)
+        canister.with_borrow(|canister| {
+            canister.set_last_day_synced(last_day_synced);
         });
 
         Ok(())
@@ -123,10 +136,9 @@ impl NodeRewardsCanister {
         from_date: &NaiveDate,
         to_date: &NaiveDate,
     ) -> Result<(), String> {
-        let last_day_synced = match *self.last_day_synced.borrow() {
-            Some(date) => date,
-            None => return Err("Metrics have not been synced yet".to_string()),
-        };
+        let last_day_synced = self
+            .get_last_day_synced()
+            .ok_or("Metrics and registry are not synced up")?;
 
         if last_day_synced < *to_date {
             return Err("Metrics and registry are not synced up to to_date".to_string());

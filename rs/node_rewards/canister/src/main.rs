@@ -4,7 +4,9 @@ use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nervous_system_timer_task::{RecurringSyncTask, TimerTaskMetricsRegistry};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::storage::{METRICS_MANAGER, RegistryStoreStableMemoryBorrower};
+use ic_node_rewards_canister::storage::{
+    LAST_DAY_SYNCED, METRICS_MANAGER, RegistryStoreStableMemoryBorrower,
+};
 use ic_node_rewards_canister::timer_tasks::HourlySyncTask;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -33,7 +35,7 @@ thread_local! {
         });
         let metrics_manager = METRICS_MANAGER.with(|m| m.clone());
 
-        RefCell::new(NodeRewardsCanister::new(registry_store, metrics_manager))
+        RefCell::new(NodeRewardsCanister::new(registry_store, metrics_manager, &LAST_DAY_SYNCED))
     };
 
     static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
