@@ -467,6 +467,11 @@ fn test_ledger_growing() {
     );
 }
 
+// With 6 blocks we can store 2 blocks in 2 archives and the ledger each.
+// This way we can test all possible locations for the unknown block:
+// - ledger/archive
+// - last/not-last archive
+// - last block/not last block in the archive/ledger
 const NUM_BLOCKS: u64 = 6;
 
 fn verify_unknown_block_handling(
