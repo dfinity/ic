@@ -4661,6 +4661,7 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "candid",
+ "canister-test",
  "futures",
  "ic-agent",
  "ic-base-types",
@@ -12185,7 +12186,9 @@ dependencies = [
  "chrono",
  "ic-base-types",
  "ic-nervous-system-proto",
+ "ic-protobuf",
  "rewards-calculation",
+ "rust_decimal",
  "serde",
 ]
 

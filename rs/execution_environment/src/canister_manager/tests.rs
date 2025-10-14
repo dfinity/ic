@@ -855,7 +855,7 @@ fn install_does_not_change_canister_if_init_traps() {
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
     // Canister is still empty.
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.module_hash(), None);
 }
 
@@ -1388,7 +1388,7 @@ fn get_canister_status_of_running_canister() {
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
 }
 
@@ -1428,7 +1428,7 @@ fn canister_status_via_mgmt_canister_matches_system_api() {
 
     let status_via_mgmt_canister =
         |test: &mut ExecutionTest, expected_status: CanisterStatusType| {
-            let status = test.canister_status_struct(canister_id);
+            let status = test.canister_status(canister_id).unwrap();
             assert_eq!(status.status(), expected_status);
         };
 
@@ -1501,7 +1501,7 @@ fn canister_status_default_controller() {
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.controllers(), vec![test.user_id().get()]);
 }
 
@@ -1510,7 +1510,7 @@ fn canister_status_module_hash() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let module_hash = |test: &mut ExecutionTest, canister_id: CanisterId| {
-        let status = test.canister_status_struct(canister_id);
+        let status = test.canister_status(canister_id).unwrap();
         status.module_hash()
     };
 
@@ -1627,7 +1627,7 @@ fn canister_status_with_environment_variables() {
     let canister_id = test
         .create_canister_with_settings(*INITIAL_CYCLES, settings)
         .unwrap();
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().environment_variables(),
         &expected_env_vars
@@ -1947,7 +1947,7 @@ fn can_get_canister_balance() {
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.cycles(), INITIAL_CYCLES.get());
 }
 
@@ -4971,7 +4971,7 @@ fn canister_status_contains_reserved_cycles() {
     let canister_id = test
         .create_canister_with_allocation(CYCLES, None, Some(1_000_000))
         .unwrap();
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.reserved_cycles(),
         test.cycles_account_manager()
@@ -5000,7 +5000,7 @@ fn canister_status_contains_reserved_cycles_limit() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().reserved_cycles_limit(),
         candid::Nat::from(
@@ -5013,7 +5013,7 @@ fn canister_status_contains_reserved_cycles_limit() {
     test.canister_update_reserved_cycles_limit(canister_id, Cycles::new(42))
         .unwrap();
 
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().reserved_cycles_limit(),
         candid::Nat::from(42_u32),
@@ -5350,13 +5350,13 @@ fn uninstall_code_on_empty_canister() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(CYCLES);
 
-    let empty_canister_status = test.canister_status_struct(canister_id);
+    let empty_canister_status = test.canister_status(canister_id).unwrap();
     assert_eq!(empty_canister_status.status(), CanisterStatusType::Running);
     assert!(empty_canister_status.module_hash().is_none());
 
     test.uninstall_code(canister_id).unwrap();
 
-    let uninstalled_canister_status = test.canister_status_struct(canister_id);
+    let uninstalled_canister_status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         uninstalled_canister_status.status(),
         CanisterStatusType::Running
@@ -7006,7 +7006,7 @@ fn check_environment_variables_via_canister_status(
     canister_id: CanisterId,
     expected_env_vars: Vec<EnvironmentVariable>,
 ) {
-    let status = test.canister_status_struct(canister_id);
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(
         status.settings().environment_variables(),
         &expected_env_vars

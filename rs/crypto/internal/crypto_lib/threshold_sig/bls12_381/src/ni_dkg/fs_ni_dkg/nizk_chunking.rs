@@ -30,7 +30,7 @@ pub const CHALLENGE_BITS: usize = SECURITY_LEVEL.div_ceil(NUM_ZK_REPETITIONS);
 pub const CHALLENGE_BYTES: usize = CHALLENGE_BITS.div_ceil(8);
 const _: () = assert!(CHALLENGE_BYTES < std::mem::size_of::<usize>());
 
-// A bitmask specifyng the size of a challenge
+// A bitmask specifying the size of a challenge
 pub const CHALLENGE_MASK: usize = (1 << CHALLENGE_BITS) - 1;
 
 /// Instance for a chunking relation.

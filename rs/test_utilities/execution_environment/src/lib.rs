@@ -784,9 +784,17 @@ impl ExecutionTest {
     }
 
     /// Returns the canister status by canister id.
-    pub fn canister_status(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+    pub fn canister_status(
+        &mut self,
+        canister_id: CanisterId,
+    ) -> Result<CanisterStatusResultV2, UserError> {
         let payload = CanisterIdRecord::from(canister_id).encode();
-        self.subnet_message(Method::CanisterStatus, payload)
+        let result = self.subnet_message(Method::CanisterStatus, payload);
+        match result {
+            Ok(WasmResult::Reply(bytes)) => Ok(CanisterStatusResultV2::decode(&bytes).unwrap()),
+            Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
+            Err(err) => Err(err),
+        }
     }
 
     /// Returns the canister status struct by canister id.

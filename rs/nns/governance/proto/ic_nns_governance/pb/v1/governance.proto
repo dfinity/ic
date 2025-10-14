@@ -486,12 +486,14 @@ enum NnsFunction {
   // The proposal requests a subnet rental.
   NNS_FUNCTION_SUBNET_RENTAL_REQUEST = 52;
 
-  // STOP! Adding to NnsFunction is NOT the standard way to add new proposal
-  // types. Instead, add to the Proposal.action oneof DIRECTLY. The problem with
-  // NnsFunction is that it leads to proposals with opaque blobs (specifically,
-  // within the ExecuteNnsFunction.payload field). Such things are considered
-  // "bad practice":
-  // https://protobuf.dev/best-practices/api/#dont-encode-data-in-a-string
+  // Instruct the migration canister to not accept any more migration requests.
+  NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS = 53;
+
+  // Instruct the migration canister to accept migration requests again.
+  NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS = 54;
+
+  // Take subnet offline or bring back online. Used as part of subnet recovery.
+  NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL = 55;
 }
 
 // Payload of a proposal that calls a function on another NNS

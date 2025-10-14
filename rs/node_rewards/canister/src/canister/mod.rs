@@ -1,4 +1,3 @@
-use crate::api_conversion::into_rewards_calculation_results;
 use crate::chrono_utils::last_unix_timestamp_nanoseconds;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
@@ -11,7 +10,8 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     NodeProvidersMonthlyXdrRewards,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
+    DailyResults, GetNodeProviderRewardsCalculationResponse,
+    GetNodeProvidersRewardsCalculationRequest,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
@@ -145,13 +145,12 @@ impl NodeRewardsCanister {
     fn calculate_rewards(
         &self,
         request: GetNodeProvidersRewardsRequest,
-        provider_filter: Option<PrincipalId>,
     ) -> Result<RewardsCalculatorResults, String> {
         let start_day = NaiveDate::try_from(request.from_day)?;
         let end_day = NaiveDate::try_from(request.to_day)?;
         Self::validate_reward_period(&start_day, &end_day)?;
 
-        RewardsCalculationV1::calculate_rewards(&start_day, &end_day, provider_filter, self)
+        RewardsCalculationV1::calculate_rewards(&start_day, &end_day, self)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))
     }
 }
@@ -189,22 +188,6 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         registry_querier
             .get_rewardable_nodes_per_provider(date, None)
             .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
-    }
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        date: &NaiveDate,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String> {
-        let mut all_rewardable_nodes = self.get_rewardable_nodes(date)?;
-        let rewardable_nodes = all_rewardable_nodes.remove(provider_id).ok_or_else(|| {
-            format!(
-                "No rewardable nodes found for provider {} for day {}",
-                provider_id,
-                date.format("%Y-%m-%d")
-            )
-        })?;
-        Ok(rewardable_nodes)
     }
 }
 
@@ -293,7 +276,7 @@ impl NodeRewardsCanister {
                 )
             })?;
         NodeRewardsCanister::schedule_metrics_sync(canister).await;
-        let result = canister.with_borrow(|canister| canister.calculate_rewards(request, None))?;
+        let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
 
         let rewards_xdr_permyriad = result
             .total_rewards_xdr_permyriad
@@ -306,18 +289,23 @@ impl NodeRewardsCanister {
         })
     }
 
-    pub fn get_node_provider_rewards_calculation(
+    pub fn get_node_providers_rewards_calculation(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
-        request: GetNodeProviderRewardsCalculationRequest,
+        request: GetNodeProvidersRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
-        let provider_id = PrincipalId::from(request.provider_id);
         let request_inner = GetNodeProvidersRewardsRequest {
-            from_day: request.from_day,
-            to_day: request.to_day,
+            from_day: request.day,
+            to_day: request.day,
         };
-        let result = canister
-            .with_borrow(|canister| canister.calculate_rewards(request_inner, Some(provider_id)))?;
-        into_rewards_calculation_results(result, provider_id)
+        let mut result =
+            canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
+
+        let day = NaiveDate::try_from(request.day)?;
+        let daily_results = result
+            .daily_results
+            .remove(&day)
+            .ok_or("Could not find daily results for the requested day")?;
+        Ok(DailyResults::from(daily_results))
     }
 }
 
