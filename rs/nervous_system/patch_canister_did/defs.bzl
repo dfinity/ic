@@ -3,6 +3,8 @@ This module defines a macro to generate a test DID given a main DID and a patch,
 helper targets to generate the test DID and patch when the patch cannot be applied.
 """
 
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
 def canister_test_did(name, canister_did, canister_test_did_patch):
     """ Generates a test DID file from a main DID file and a patch file.
 
@@ -43,8 +45,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
             target_base_name = target_base_name,
         ),
     )
-
-    native.sh_binary(
+    sh_binary(
         name = canister_test_did + "_generate_test_did",
         srcs = [
             "//rs/nervous_system/patch_canister_did:helper.sh",
@@ -62,8 +63,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
             "--generate-test-did",
         ],
     )
-
-    native.sh_binary(
+    sh_binary(
         name = canister_test_did + "_update_patch",
         srcs = [
             "//rs/nervous_system/patch_canister_did:helper.sh",
