@@ -1,7 +1,6 @@
 use anyhow::{bail, Context, Result};
 use rexpect::{spawn, ReadUntil};
 use std::net::Ipv6Addr;
-use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
 /// A wrapper around a command line session for managing a baremetal host via IPMI Serial Over LAN

@@ -1,5 +1,5 @@
 {
-  "checksum": "3142d4b3ba812e33a3e084bbde628ae14eccfdc47095556c8b6d6265febb3fa0",
+  "checksum": "f19cfd2d538e6713bb45296f827b133cf61716f677f4e2bd189ed07ac89cad1a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14471,6 +14471,44 @@
       ],
       "license_file": "LICENSE"
     },
+    "comma 1.0.0": {
+      "name": "comma",
+      "version": "1.0.0",
+      "package_url": "https://github.com/emctague/comma",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/comma/1.0.0/download",
+          "sha256": "55b672471b4e9f9e95499ea597ff64941a309b2cdbffcc46f2cc5e2d971fd335"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "comma",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "comma",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.0.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
     "comparable 0.5.4": {
       "name": "comparable",
       "version": "0.5.4",
@@ -21577,6 +21615,10 @@
             {
               "id": "reqwest 0.12.23",
               "target": "reqwest"
+            },
+            {
+              "id": "rexpect 0.6.2",
+              "target": "rexpect"
             },
             {
               "id": "rgb 0.8.37",
@@ -48608,6 +48650,107 @@
       ],
       "license_file": "LICENSE"
     },
+    "nix 0.30.1": {
+      "name": "nix",
+      "version": "0.30.1",
+      "package_url": "https://github.com/nix-rust/nix",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/nix/0.30.1/download",
+          "sha256": "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nix",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "nix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "fs",
+            "process",
+            "signal",
+            "term"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "nix 0.30.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.30.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "no-std-compat 0.4.1": {
       "name": "no-std-compat",
       "version": "0.4.1",
@@ -64423,6 +64566,76 @@
       },
       "license": "MIT",
       "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "rexpect 0.6.2": {
+      "name": "rexpect",
+      "version": "0.6.2",
+      "package_url": "https://github.com/rust-cli/rexpect",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rexpect/0.6.2/download",
+          "sha256": "2c1bcd4ac488e9d2d726d147031cceff5cff6425011ff1914049739770fa4726"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rexpect",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rexpect",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "comma 1.0.0",
+              "target": "comma"
+            },
+            {
+              "id": "nix 0.30.1",
+              "target": "nix"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "tempfile 3.20.0",
+              "target": "tempfile"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE"
@@ -95202,6 +95415,7 @@
     "rcgen 0.13.1",
     "regex 1.11.1",
     "reqwest 0.12.23",
+    "rexpect 0.6.2",
     "rgb 0.8.37",
     "ring 0.17.14",
     "ripemd 0.1.3",

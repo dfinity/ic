@@ -11,14 +11,6 @@ rust_library(
     ],
     deps = [
         "@crate_index//:anyhow",
-        "@crate_index//:futures",
-        "@crate_index//:gpt",
-        "@crate_index//:reqwest",
         "@crate_index//:rexpect",
-        "@crate_index//:ssh2",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-stream",
-        "@crate_index//:uuid",
     ],
 )
