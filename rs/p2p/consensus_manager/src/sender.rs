@@ -114,17 +114,15 @@ impl<
                     );
                     break;
                 }
+                Some(result) = self.active_transmit_tasks.join_next() => {
+                    panic_on_join_err(result);
+                }
                 Some(outbound_transmit) = self.outbound_transmits.recv() => {
                     match outbound_transmit {
                         ArtifactTransmit::Deliver(artifact) => self.handle_deliver_transmit(artifact, cancellation_token.clone()),
                         ArtifactTransmit::Abort(id) => self.handle_abort_transmit(&id),
                     }
-
                     self.current_commit_id.inc_assign();
-                }
-
-                Some(result) = self.active_transmit_tasks.join_next() => {
-                    panic_on_join_err(result);
                 }
             }
 
@@ -252,6 +250,17 @@ async fn send_transmit_to_all_peers(
     let mut periodic_check_interval = time::interval(Duration::from_secs(5));
     loop {
         select! {
+            _ = cancellation_token.cancelled() => {
+                while let Some(result) = in_progress_transmissions.join_next().await {
+                    metrics.send_view_send_to_peer_cancelled_total.inc();
+                    panic_on_join_err(result);
+                }
+                break;
+            }
+            Some(result) = in_progress_transmissions.join_next() => {
+                panic_on_join_err(result);
+                metrics.send_view_send_to_peer_delivered_total.inc();
+            }
             _ = periodic_check_interval.tick() => {
                 // check for new peers/connection IDs
                 // spawn task for peers with higher conn id or not in completed transmissions.
@@ -288,17 +297,6 @@ async fn send_transmit_to_all_peers(
                         initiated_transmissions.insert(peer, (connection_id, child_token_clone));
                     }
                 }
-            }
-            Some(result) = in_progress_transmissions.join_next() => {
-                panic_on_join_err(result);
-                metrics.send_view_send_to_peer_delivered_total.inc();
-            }
-            _ = cancellation_token.cancelled() => {
-                while let Some(result) = in_progress_transmissions.join_next().await {
-                    metrics.send_view_send_to_peer_cancelled_total.inc();
-                    panic_on_join_err(result);
-                }
-                break;
             }
         }
     }

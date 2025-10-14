@@ -55,9 +55,19 @@ pub async fn start_stream_acceptor(
     // by the handlers instead by the underlying implementation.
     loop {
         tokio::select! {
-             _ = quic_metrics_scrape.tick() => {
-                metrics.collect_quic_connection_stats(conn_handle.conn(), &peer_id);
-            }
+            Some(completed_request) = inflight_requests.join_next() => {
+                match completed_request {
+                    Ok(res) => {
+                        let _ = res.inspect_err(|err| info!(every_n_seconds => 60, log, "{:?}", err));
+                    }
+                    Err(err) => {
+                        // Cancelling tasks is ok. Panicking tasks are not.
+                        if err.is_panic() {
+                            std::panic::resume_unwind(err.into_panic());
+                        }
+                    }
+                }
+            },
             bi = conn_handle.conn().accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
@@ -84,19 +94,9 @@ pub async fn start_stream_acceptor(
             },
             _ = conn_handle.conn().accept_uni() => {},
             _ = conn_handle.conn().read_datagram() => {},
-            Some(completed_request) = inflight_requests.join_next() => {
-                match completed_request {
-                    Ok(res) => {
-                        let _ = res.inspect_err(|err| info!(every_n_seconds => 60, log, "{:?}", err));
-                    }
-                    Err(err) => {
-                        // Cancelling tasks is ok. Panicking tasks are not.
-                        if err.is_panic() {
-                            std::panic::resume_unwind(err.into_panic());
-                        }
-                    }
-                }
-            },
+            _ = quic_metrics_scrape.tick() => {
+                metrics.collect_quic_connection_stats(conn_handle.conn(), &peer_id);
+            }
         }
     }
 }

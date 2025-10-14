@@ -244,9 +244,6 @@ where
                     );
                     break;
                 }
-                Some((slot_update, peer_id, conn_id)) = self.slot_updates_rx.recv() => {
-                    self.handle_slot_update_receive(slot_update, peer_id, conn_id, cancellation_token.clone());
-                }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
                     match result {
                         Ok((receiver, id)) => {
@@ -261,6 +258,9 @@ where
                             }
                         }
                     }
+                }
+                Some((slot_update, peer_id, conn_id)) = self.slot_updates_rx.recv() => {
+                    self.handle_slot_update_receive(slot_update, peer_id, conn_id, cancellation_token.clone());
                 }
                 Ok(()) = self.topology_watcher.changed() => {
                     self.handle_topology_update();
@@ -476,6 +476,7 @@ where
         };
 
         select! {
+            _ = cancellation_token.cancelled() => {}
             assemble_result = assemble_artifact => {
                 match assemble_result {
                     AssembleResult::Done { message, peer_id } => {
@@ -514,8 +515,6 @@ where
 
                     },
                 }
-            }
-            _ = cancellation_token.cancelled() => {
             }
             _ = all_peers_deleted_artifact => {
                 metrics

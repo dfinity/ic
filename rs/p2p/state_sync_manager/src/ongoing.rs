@@ -116,14 +116,6 @@ impl OngoingStateSync {
                 () = cancellation.cancelled() => {
                     break
                 },
-                Some(new_peer) = self.new_peers_rx.recv() => {
-                    if let Entry::Vacant(e) = self.active_downloads.entry(new_peer) {
-                        info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
-                        e.insert(0);
-                        self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
-                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
-                    }
-                }
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
                         Ok((result, _)) => {
@@ -145,6 +137,14 @@ impl OngoingStateSync {
                                 error!(self.log, "Bug: JoinMap task was cancelled.");
                             }
                         }
+                    }
+                }
+                Some(new_peer) = self.new_peers_rx.recv() => {
+                    if let Entry::Vacant(e) = self.active_downloads.entry(new_peer) {
+                        info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
+                        e.insert(0);
+                        self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
+                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
                     }
                 }
             }
