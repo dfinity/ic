@@ -20,6 +20,7 @@ use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::RecvStream;
+use tokio::task::JoinSet;
 use tower::ServiceExt;
 
 use crate::{
@@ -46,7 +47,7 @@ pub async fn start_stream_acceptor(
     metrics: QuicTransportMetrics,
     router: Router,
 ) {
-    let mut inflight_requests = tokio::task::JoinSet::new();
+    let mut inflight_requests: JoinSet<Result<(), P2PError>> = tokio::task::JoinSet::new();
     let mut quic_metrics_scrape = tokio::time::interval(QUIC_METRIC_SCRAPE_INTERVAL);
     // The extreme result of a slow handler is that the stream limit will be reach, hence
     // having buffered up to the stream limit number of messages/requests.
