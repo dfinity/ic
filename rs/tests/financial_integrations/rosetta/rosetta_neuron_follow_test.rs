@@ -23,6 +23,7 @@ use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8108;
 const VM_NAME: &str = "neuron-follow";
+const NUM_NEURONS_TO_FOLLOW: usize = 16;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -57,7 +58,7 @@ pub fn test(env: TestEnv) {
         neuron.maturity_e8s_equivalent = 300_000_000;
     });
     let mut neurons_to_follow = vec![];
-    for _ in 0..16 {
+    for _ in 0..NUM_NEURONS_TO_FOLLOW {
         let n = neurons.create(|neuron| {
             neuron.maturity_e8s_equivalent = 100_000_000;
         });
@@ -81,10 +82,10 @@ async fn test_follow(
     ros: &RosettaApiClient,
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
-    neurons_to_follow: &Vec<NeuronDetails>,
+    neurons_to_follow: &[NeuronDetails],
 ) {
     // IDs of neurons to follow (f1 and f2).
-    let f1 = neurons_to_follow.get(0).unwrap().neuron.id.unwrap().id;
+    let f1 = neurons_to_follow.first().unwrap().neuron.id.unwrap().id;
     let f2 = neurons_to_follow.get(1).unwrap().neuron.id.unwrap().id;
 
     let acc = neuron_info.account_id;
@@ -139,10 +140,10 @@ async fn test_follow_with_hotkey(
     ros: &RosettaApiClient,
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
-    neurons_to_follow: &Vec<NeuronDetails>,
+    neurons_to_follow: &[NeuronDetails],
 ) {
     // IDs of neurons to follow (f1 and f2).
-    let f1 = neurons_to_follow.get(0).unwrap().neuron.id.unwrap().id;
+    let f1 = neurons_to_follow.first().unwrap().neuron.id.unwrap().id;
     let f2 = neurons_to_follow.get(1).unwrap().neuron.id.unwrap().id;
 
     let acc = neuron_info.account_id;
@@ -231,10 +232,10 @@ async fn test_follow_with_hotkey_raw(
     ros: &RosettaApiClient,
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
-    neurons_to_follow: &Vec<NeuronDetails>,
+    neurons_to_follow: &[NeuronDetails],
 ) {
     // IDs of neurons to follow (f1, f2, and f3).
-    let f1 = neurons_to_follow.get(0).unwrap().neuron.id.unwrap().id;
+    let f1 = neurons_to_follow.first().unwrap().neuron.id.unwrap().id;
     let f2 = neurons_to_follow.get(1).unwrap().neuron.id.unwrap().id;
     let f3 = neurons_to_follow.get(2).unwrap().neuron.id.unwrap().id;
 
@@ -490,7 +491,7 @@ async fn test_follow_too_many(
     ros: &RosettaApiClient,
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
-    neurons_to_follow: &Vec<NeuronDetails>,
+    neurons_to_follow: &[NeuronDetails],
 ) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
@@ -498,7 +499,7 @@ async fn test_follow_too_many(
     let _expected_type = "FOLLOW".to_string();
     let followees: Vec<u64> = neurons_to_follow
         .iter()
-        .take(16)
+        .take(NUM_NEURONS_TO_FOLLOW)
         .map(|n| n.neuron.id.unwrap().id)
         .collect();
     let res = do_multiple_txn_external(
