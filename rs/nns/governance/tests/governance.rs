@@ -13923,13 +13923,11 @@ async fn test_follow_private_neuron_fails() {
     );
 
     assert!(
-        !gov.get_full_neuron(&NeuronId { id: 3 }, &principal(NEURON_3_CONTROLLER))
+        gov.get_full_neuron(&NeuronId { id: 3 }, &principal(NEURON_3_CONTROLLER))
             .unwrap()
             .followees
             .get(&(Topic::Kyc as i32))
-            .unwrap()
-            .followees
-            .contains(&NeuronId { id: 1 })
+            .is_none()
     );
 }
 
