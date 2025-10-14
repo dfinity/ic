@@ -45,17 +45,12 @@ const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 /// The subnet is initially in the `Unknown` state. After the upgrade loop runs for the first time,
 /// it will initialize it to either `Unassigned` or `Assigned(subnet_id)`.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub(crate) enum SubnetAssignment {
+    #[default]
     Unknown,
     Unassigned,
     Assigned(SubnetId),
-}
-
-impl Default for SubnetAssignment {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 pub struct Orchestrator {
