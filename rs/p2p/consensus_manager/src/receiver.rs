@@ -490,8 +490,8 @@ where
                             error!(
                                 log,
                                 "The receiving side of the channel, owned by the consensus thread, was closed. \
-                                This should be infallible situation since a cancellation token should be received. \
-                                If this happens then most likely there is very subnet synchonization bug."
+                                This should be an infallible situation since a cancellation token should be received. \
+                                If this happens then most likely there is a very serious synchonization bug."
                             );
                         }
 
@@ -506,8 +506,8 @@ where
                             error!(
                                 log,
                                 "The receiving side of the channel, owned by the consensus thread, was closed. \
-                                This should be infallible situation since a cancellation token should be received. \
-                                If this happens then most likely there is very subnet synchonization bug."
+                                This should be an infallible situation since a cancellation token should be received. \
+                                If this happens then most likely there is a very serious synchonization bug."
                             );
                         }
                         metrics
