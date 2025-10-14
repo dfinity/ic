@@ -1,5 +1,5 @@
-use anyhow::{bail, Context, Result};
-use rexpect::{spawn, ReadUntil};
+use anyhow::{Context, Result, bail};
+use rexpect::{ReadUntil, spawn};
 use std::net::Ipv6Addr;
 use std::time::Duration;
 
@@ -187,5 +187,14 @@ pub fn parse_login_info_from_csv(data: &str) -> Result<LoginInfo> {
 fn guestos_ipv6_to_hostos_ipv6(guestos_ipv6: Ipv6Addr) -> Ipv6Addr {
     // TODO: would be nice not to hardcode this but instead calculate it with deterministic_ips tool
     let segments = guestos_ipv6.segments();
-    Ipv6Addr::new(segments[0], segments[1], segments[2], segments[3], 0x6800, segments[5], segments[6], segments[7])
+    Ipv6Addr::new(
+        segments[0],
+        segments[1],
+        segments[2],
+        segments[3],
+        0x6800,
+        segments[5],
+        segments[6],
+        segments[7],
+    )
 }
