@@ -452,6 +452,10 @@ fn init_timers() {
         }
         saved_timer_id.replace(new_timer_id);
     });
+
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        ic_cdk::spawn(SnsRootCanister::reinstall_index_canister(&STATE))
+    });
 }
 
 #[update]
