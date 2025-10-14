@@ -386,20 +386,29 @@ fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
 
 fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let logger = env.logger();
-    let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
+    let (nns_node, app_node, unassigned_node, app_subnet) =
+        topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
+    let unassigned_node_ip: IpAddr = unassigned_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
+    info!(logger, "Updating app subnet record...");
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    info!(logger, "Updating unassigned nodes record...");
+    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
+    block_on(update_ssh_keys_for_all_unassigned_nodes(
+        nns_node.get_public_url(),
+        payload,
+    ));
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
@@ -407,36 +416,57 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
-    info!(logger, "Waiting for backup authentication to be granted...");
+    info!(
+        logger,
+        "Waiting for backup authentication to be granted on app node..."
+    );
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
     info!(
         logger,
-        "Readonly authentication should now also be granted."
+        "Readonly authentication should now also be granted on app node."
     );
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+    info!(
+        logger,
+        "Waiting for readonly authentication to be granted on unassigned node..."
+    );
+    wait_until_authentication_is_granted(&logger, &unassigned_node_ip, "readonly", &readonly_mean);
 
-    info!(logger, "Restarting the orchestrator...");
+    info!(logger, "Restarting the app node orchestrator...");
     app_node
+        .block_on_bash_script("sudo systemctl restart ic-replica")
+        .unwrap();
+    info!(logger, "Restarting the unassigned node orchestrator...");
+    unassigned_node
         .block_on_bash_script("sudo systemctl restart ic-replica")
         .unwrap();
 
     info!(
         logger,
-        "Making sure that the node still accepts connections until the replica is healthy again..."
+        "Making sure that the app and unassigned nodes still accept connections until the app replica \
+        is healthy again..."
     );
     const CHECK_INTERVAL: Duration = Duration::from_secs(2);
     while !app_node.status_is_healthy().is_ok_and(|healthy| healthy) {
         assert_authentication_works(&node_ip, "backup", &backup_mean);
         assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+        assert_authentication_works(&unassigned_node_ip, "readonly", &readonly_mean);
+        // Unassigned nodes do not have backup keys
+        assert_authentication_fails(&unassigned_node_ip, "backup", &backup_mean);
+
         std::thread::sleep(CHECK_INTERVAL);
     }
-    // In the unlucky case where the replica became healthy so fast that the orchestrator did not
-    // even have the chance to update its keys (i.e. possibly remove), we check again for 10
+    // In the unlucky case where the app replica became healthy so fast that the orchestrators did
+    // not even have the chance to update their keys (i.e. possibly remove), we check again for 10
     // seconds.
     info!(logger, "Checking again for longer to be sure...");
     for _ in 0..((ORCHESTRATOR_TASK_CHECK_INTERVAL.as_secs() + 1) / CHECK_INTERVAL.as_secs()) {
         assert_authentication_works(&node_ip, "backup", &backup_mean);
         assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+        assert_authentication_works(&unassigned_node_ip, "readonly", &readonly_mean);
+        // Unassigned nodes do not have backup keys
+        assert_authentication_fails(&unassigned_node_ip, "backup", &backup_mean);
+
         std::thread::sleep(CHECK_INTERVAL);
     }
 }
