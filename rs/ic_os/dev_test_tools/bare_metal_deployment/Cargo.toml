@@ -1,0 +1,17 @@
+[package]
+name = "bare_metal_deployment"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+tokio = { workspace = true }
+futures = "0.3"
+tokio-stream = { version = "0.1.17", features = ["io-util"] }
+gpt = { workspace = true }
+rexpect = "0.6.2"
+ssh2 = "0.9"
+reqwest = "0.12.23"
+tempfile = "3.20.0"
+ic_device = { path = "../../device" }
+uuid = { version = "1.12.1", features = ["v4"] }
