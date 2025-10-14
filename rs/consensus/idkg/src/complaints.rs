@@ -17,13 +17,9 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion,
     artifact::IDkgMessageId,
-    consensus::{
-        HasHeight,
-        idkg::{
-            IDkgBlockReader, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent,
-            SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef, complaint_prefix,
-            opening_prefix,
-        },
+    consensus::idkg::{
+        IDkgBlockReader, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent,
+        SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef, complaint_prefix, opening_prefix,
     },
     crypto::canister_threshold_sig::{
         error::IDkgLoadTranscriptError,
@@ -730,7 +726,7 @@ impl IDkgComplaintHandlerImpl {
     fn active_transcripts<'a>(
         &self,
         block_reader: &'a dyn IDkgBlockReader,
-        shapshot: &'a dyn CertifiedStateSnapshot<State = ReplicatedState>,
+        snapshot: &'a dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> BTreeMap<IDkgTranscriptId, &'a IDkgTranscript> {
         // Get the active transcript references in the finalized tip
         let transcript_refs_tip = block_reader
@@ -739,7 +735,7 @@ impl IDkgComplaintHandlerImpl {
             .map(|transcript_ref| (transcript_ref.transcript_id, transcript_ref));
 
         // Get the transcript references of delivered pre-signatures above the state height
-        let state_height = shapshot.get_height();
+        let state_height = snapshot.get_height();
         let transcript_refs_delivered = block_reader
             .iter_above(state_height)
             .flat_map(|payload| payload.available_pre_signatures.values())
@@ -758,7 +754,7 @@ impl IDkgComplaintHandlerImpl {
             })
             .map(|transcript| (transcript.transcript_id, transcript));
 
-        let state = shapshot.get_state();
+        let state = snapshot.get_state();
         // Pre-signature transcripts stashed in replicated state
         let stashed_pre_sig_transcripts = state
             .pre_signature_stashes()
@@ -802,21 +798,13 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         let state_height = snapshot.get_height();
         let finalized_chain = self.consensus_block_cache.finalized_chain();
 
-        let tip_height = finalized_chain.tip().height();
-
-        let min_length = tip_height.get().saturating_sub(state_height.get()) + 1;
-
-        if finalized_chain.len() < min_length as usize {
-            warn!(
-                self.log,
-                "on_state_change(): finalized chain is too short: tip_height = {}, state_height = {}, finalized_chain_length = {}, min_length = {}",
-                tip_height,
-                state_height,
-                finalized_chain.len(),
-                min_length
-            );
-            self.metrics
-                .complaint_errors_inc("finalized_chain_too_short");
+        if finalized_chain.get_block_by_height(state_height).is_err() {
+            // The finalized chain only contains blocks above and including the latest summary.
+            // However, the latest state height may be below the latest summary block height.
+            // In that case we would miss active transcripts that were delivered in blocks between
+            // the state height and the latest summary block height.
+            // Therefore, we do not run the complaints phase unless the state height is part of
+            // the finalized chain.
             return IDkgChangeSet::new();
         }
         let block_reader = IDkgBlockReaderImpl::new(finalized_chain);
@@ -1033,10 +1021,12 @@ mod tests {
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
         Height,
-        consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, TranscriptRef},
+        consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, PreSigId, RequestId, TranscriptRef},
         crypto::AlgorithmId,
+        messages::CallbackId,
         time::UNIX_EPOCH,
     };
+    use ic_types_test_utils::ids::subnet_test_id;
 
     // Tests the Action logic
     #[test]
@@ -1093,6 +1083,135 @@ mod tests {
             Action::action(&block_reader, &active, &requested, Height::from(20), &id_2),
             Action::Process(_)
         );
+    }
+
+    #[test]
+    fn test_get_active_transcripts() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (_, complaints) = create_complaint_dependencies(pool_config, logger);
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
+                let state_height = Height::from(10);
+                let empty_snapshot = fake_state_with_signature_requests(state_height, []);
+
+                // Should return transcripts that are active in the tip
+                let id = create_transcript_id(1);
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id)],
+                );
+
+                let active_transcripts =
+                    complaints.active_transcripts(&block_reader, &empty_snapshot);
+                // Assert that the active transcripts contains only the transcript with id 1
+                assert_eq!(active_transcripts.len(), 1);
+                assert!(active_transcripts.contains_key(&id));
+
+                // Should not return transcripts that fail to resolve
+                let block_reader = block_reader.with_fail_to_resolve();
+                assert!(
+                    complaints
+                        .active_transcripts(&block_reader, &empty_snapshot)
+                        .is_empty()
+                );
+
+                // Should return transcripts of delivered pre-signatures above the state height
+                let mut block_reader =
+                    TestIDkgBlockReader::for_complainer_test(&key_id, Height::new(100), vec![]);
+                let (mut payload_at_state_height, _, _) = set_up_idkg_payload(
+                    &mut reproducible_rng(),
+                    subnet_test_id(0),
+                    4,
+                    vec![key_id.clone()],
+                    true,
+                );
+                let mut payload_above_state_height = payload_at_state_height.clone();
+                let current_key_transcript_ref = payload_at_state_height
+                    .current_key_transcript(key_id.inner())
+                    .cloned()
+                    .unwrap();
+                create_available_pre_signature_with_key_transcript_and_height(
+                    &mut payload_at_state_height,
+                    1,
+                    key_id.clone(),
+                    Some(current_key_transcript_ref.unmasked_transcript()),
+                    state_height,
+                );
+                create_available_pre_signature_with_key_transcript_and_height(
+                    &mut payload_above_state_height,
+                    2,
+                    key_id.clone(),
+                    Some(current_key_transcript_ref.unmasked_transcript()),
+                    Height::from(15),
+                );
+                let payload_transcripts = payload_above_state_height.idkg_transcripts.clone();
+
+                block_reader.add_payload(state_height, payload_at_state_height);
+                block_reader.add_payload(Height::from(15), payload_above_state_height);
+
+                let active_transcripts =
+                    complaints.active_transcripts(&block_reader, &empty_snapshot);
+                assert_eq!(active_transcripts.len(), 4);
+                for (id, active_transcript) in active_transcripts {
+                    let payload_transcript = payload_transcripts.get(&id).unwrap();
+                    assert_eq!(payload_transcript, active_transcript);
+                }
+
+                let empty_reader =
+                    TestIDkgBlockReader::for_complainer_test(&key_id, Height::new(100), vec![]);
+
+                // Should return stashed transcripts
+                let stash = fake_pre_signature_stash(&key_id, 2);
+                let mut snapshot_with_stash = empty_snapshot;
+                Arc::get_mut(&mut snapshot_with_stash.state)
+                    .unwrap()
+                    .metadata
+                    .subnet_call_context_manager
+                    .pre_signature_stashes = BTreeMap::from([(key_id.clone(), stash.clone())]);
+
+                let active_transcripts =
+                    complaints.active_transcripts(&empty_reader, &snapshot_with_stash);
+
+                assert_eq!(active_transcripts.len(), 9); // 1 key + 2 * 4 pre-signature transcripts
+                assert_eq!(
+                    *active_transcripts
+                        .get(&stash.key_transcript.transcript_id)
+                        .unwrap(),
+                    stash.key_transcript.as_ref()
+                );
+                for pre_sig in stash.pre_signatures.values() {
+                    for transcript in pre_sig.iter_idkg_transcripts() {
+                        assert_eq!(
+                            *active_transcripts.get(&transcript.transcript_id).unwrap(),
+                            transcript
+                        );
+                    }
+                }
+
+                // Should return paired transcripts
+                let (id, context) = fake_signature_request_context_from_id(
+                    key_id.inner().clone(),
+                    PreSigId(0),
+                    RequestId {
+                        callback_id: CallbackId::from(1),
+                        height: state_height,
+                    },
+                );
+                let snapshot_with_requests =
+                    fake_state_with_signature_requests(state_height, [(id, context.clone())]);
+
+                let active_transcripts =
+                    complaints.active_transcripts(&empty_reader, &snapshot_with_requests);
+                assert_eq!(active_transcripts.len(), 5); // 1 key + 4 pre-signature transcripts
+                for transcript in context.iter_idkg_transcripts() {
+                    assert_eq!(
+                        *active_transcripts.get(&transcript.transcript_id).unwrap(),
+                        transcript
+                    );
+                }
+            })
+        });
     }
 
     #[test]

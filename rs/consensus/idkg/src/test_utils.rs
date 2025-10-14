@@ -122,6 +122,7 @@ pub(crate) struct TestIDkgBlockReader {
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
+    idkg_payloads: BTreeMap<Height, IDkgPayload>,
     fail_to_resolve: bool,
 }
 
@@ -199,6 +200,10 @@ impl TestIDkgBlockReader {
     ) {
         self.idkg_transcripts.insert(transcript_ref, transcript);
     }
+
+    pub(crate) fn add_payload(&mut self, height: Height, payload: IDkgPayload) {
+        self.idkg_payloads.insert(height, payload);
+    }
 }
 
 impl IDkgBlockReader for TestIDkgBlockReader {
@@ -235,17 +240,27 @@ impl IDkgBlockReader for TestIDkgBlockReader {
         if self.fail_to_resolve {
             return Err("Test transcript resolve failure".into());
         }
-        self.idkg_transcripts.get(transcript_ref).ok_or(format!(
-            "transcript(): {transcript_ref:?} not found in idkg_transcripts"
-        ))
+
+        if let Some(transcript) = self.idkg_transcripts.get(transcript_ref) {
+            return Ok(transcript);
+        }
+
+        self.idkg_payloads
+            .get(&transcript_ref.height)
+            .and_then(|payload| payload.idkg_transcripts.get(&transcript_ref.transcript_id))
+            .ok_or(format!("transcript(): {transcript_ref:?} not found"))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         self.idkg_transcripts.keys().cloned().collect()
     }
 
-    fn iter_above(&self, _height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
-        Box::new(std::iter::empty())
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
+        Box::new(
+            self.idkg_payloads
+                .range(height.increment()..)
+                .map(|(_, v)| v),
+        )
     }
 }
 
