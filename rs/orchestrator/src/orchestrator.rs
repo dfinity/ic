@@ -525,10 +525,13 @@ impl Orchestrator {
         ) {
             loop {
                 let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
-                if let SubnetAssignment::Assigned(subnet_id) = maybe_subnet_id {
-                    registration
-                        .check_all_keys_registered_otherwise_register(subnet_id)
-                        .await;
+                match maybe_subnet_id {
+                    SubnetAssignment::Assigned(subnet_id) => {
+                        registration
+                            .check_all_keys_registered_otherwise_register(subnet_id)
+                            .await
+                    }
+                    SubnetAssignment::Unassigned | SubnetAssignment::Unknown => {}
                 }
 
                 tokio::select! {
