@@ -797,14 +797,6 @@ impl ExecutionTest {
         }
     }
 
-    /// Returns the canister status struct by canister id.
-    pub fn canister_status_struct(&mut self, canister_id: CanisterId) -> CanisterStatusResultV2 {
-        let payload = CanisterIdRecord::from(canister_id).encode();
-        let res = self.subnet_message(Method::CanisterStatus, payload);
-        let bytes = get_reply(res);
-        CanisterStatusResultV2::decode(&bytes).unwrap()
-    }
-
     /// Updates the freezing threshold of the given canister.
     pub fn update_freezing_threshold(
         &mut self,
