@@ -59,7 +59,7 @@ pub fn sign_share(
 
     let extended_derivation_path = ExtendedDerivationPath {
         caller: *inputs.caller(),
-        derivation_path: inputs.derivation_path().clone(),
+        derivation_path: inputs.derivation_path().to_vec(),
     };
 
     let internal_sig_share = vault.create_ecdsa_sig_share(
@@ -124,7 +124,7 @@ pub fn verify_sig_share(
     )?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: *inputs.caller(),
-        derivation_path: inputs.derivation_path().clone(),
+        derivation_path: inputs.derivation_path().to_vec(),
     };
 
     verify_ecdsa_signature_share(
@@ -184,7 +184,7 @@ pub fn verify_combined_signature(
             )?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: *inputs.caller(),
-        derivation_path: inputs.derivation_path().clone(),
+        derivation_path: inputs.derivation_path().to_vec(),
     };
 
     verify_ecdsa_threshold_signature(
@@ -244,7 +244,7 @@ pub fn combine_sig_shares(
 
     let extended_derivation_path = ExtendedDerivationPath {
         caller: *inputs.caller(),
-        derivation_path: inputs.derivation_path().clone(),
+        derivation_path: inputs.derivation_path().to_vec(),
     };
 
     let internal_combined_sig = combine_ecdsa_signature_shares(

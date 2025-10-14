@@ -293,7 +293,7 @@ impl EcdsaPreSignatureQuadruple {
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct ThresholdEcdsaSigInputs<'a> {
     caller: &'a PrincipalId,
-    derivation_path: &'a Vec<Vec<u8>>,
+    derivation_path: &'a [Vec<u8>],
     hashed_message: &'a [u8],
     nonce: &'a [u8; 32],
     presig_quadruple: &'a EcdsaPreSignatureQuadruple,
@@ -346,7 +346,7 @@ impl<'a> ThresholdEcdsaSigInputs<'a> {
     ///   of the `key_transcript` and another masked transcript (error: `InvalidQuadrupleOrigin`)
     pub fn new(
         caller: &'a PrincipalId,
-        derivation_path: &'a Vec<Vec<u8>>,
+        derivation_path: &'a [Vec<u8>],
         hashed_message: &'a [u8],
         nonce: &'a [u8; 32],
         presig_quadruple: &'a EcdsaPreSignatureQuadruple,
@@ -371,7 +371,7 @@ impl<'a> ThresholdEcdsaSigInputs<'a> {
         self.caller
     }
 
-    pub fn derivation_path(&self) -> &Vec<Vec<u8>> {
+    pub fn derivation_path(&self) -> &[Vec<u8>] {
         self.derivation_path
     }
 

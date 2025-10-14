@@ -2551,7 +2551,7 @@ impl IntoBuilder for ThresholdEcdsaSigInputs<'_> {
     fn into_builder(self) -> Self::BuilderType {
         ThresholdEcdsaSigInputsBuilder {
             caller: *self.caller(),
-            derivation_path: self.derivation_path().clone(),
+            derivation_path: self.derivation_path().to_vec(),
             hashed_message: Vec::from(self.hashed_message()),
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
