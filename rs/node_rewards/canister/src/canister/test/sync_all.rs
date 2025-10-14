@@ -32,11 +32,10 @@ fn add_subnet_list(fake_registry: Arc<FakeRegistry>, subnets: Vec<SubnetId>) {
 }
 
 fn sync_all() {
-    NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST)
+    let _ = NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST)
         .now_or_never()
-        .unwrap()
         .unwrap();
-    NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST)
+    let _ = NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST)
         .now_or_never()
         .unwrap();
 }

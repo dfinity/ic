@@ -73,7 +73,7 @@ async fn subnet_metrics_added_correctly() {
 
     let subnet_1 = subnet_id(1);
 
-    mm.update_subnets_metrics(vec![subnet_1]).await;
+    let _ = mm.update_subnets_metrics(vec![subnet_1]).await;
     for i in 0..days {
         let key = SubnetMetricsKey {
             timestamp_nanos: i * ONE_DAY_NANOS,
