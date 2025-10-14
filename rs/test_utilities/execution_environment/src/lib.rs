@@ -1449,10 +1449,6 @@ impl ExecutionTest {
                     );
                 }
                 canister = result.canister;
-                println!(
-                    "balance in execution test: {}",
-                    canister.system_state.balance()
-                );
                 if let Some(ir) = result.ingress_status {
                     self.ingress_history_writer
                         .set_status(&mut state, ir.0, ir.1);

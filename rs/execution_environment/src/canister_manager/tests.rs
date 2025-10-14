@@ -2745,9 +2745,7 @@ fn check_memory_size_exceeds_memory_allocation(
     canister_id: CanisterId,
     memory_allocation: u64,
 ) {
-    let result = test.canister_status(canister_id);
-    let reply = get_reply(result);
-    let status = Decode!(reply.as_slice(), CanisterStatusResultV2).unwrap();
+    let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.settings().memory_allocation(), memory_allocation);
     assert!(status.memory_size().get() > memory_allocation);
 }
