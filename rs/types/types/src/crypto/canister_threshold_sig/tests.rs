@@ -7,7 +7,7 @@ use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -261,53 +261,49 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
 #[test]
 fn should_create_ecdsa_inputs_correctly() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers.clone(), rng);
+    let receivers = set_of_nodes(&[1, 2, 3]);
+    let inputs_owned = valid_tecdsa_inputs_with_receivers(receivers.clone(), rng);
 
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let extended_derivation_path = derivation_path();
-    let hashed_message = hashed_message();
-    let nonce = nonce();
-    let quadruple = quadruple.unwrap();
     let result = ThresholdEcdsaSigInputs::new(
-        &extended_derivation_path.caller,
-        &extended_derivation_path.derivation_path,
-        &hashed_message,
-        &nonce,
-        &quadruple,
-        &key_transcript,
+        &inputs_owned.caller,
+        &inputs_owned.derivation_path,
+        &inputs_owned.hashed_message,
+        &inputs_owned.nonce,
+        &inputs_owned.presig_quadruple,
+        &inputs_owned.key_transcript,
     );
     assert!(result.is_ok());
 
     let ecdsa_inputs = result.unwrap();
-    assert_eq!(ecdsa_inputs.caller(), &extended_derivation_path.caller);
+    assert_eq!(ecdsa_inputs.caller(), &inputs_owned.caller);
     assert_eq!(
         ecdsa_inputs.derivation_path(),
-        &extended_derivation_path.derivation_path
+        &inputs_owned.derivation_path
     );
-    assert_eq!(ecdsa_inputs.hashed_message(), &hashed_message);
-    assert_eq!(ecdsa_inputs.nonce(), &nonce);
-    assert_eq!(ecdsa_inputs.presig_quadruple(), &quadruple);
-    assert_eq!(ecdsa_inputs.key_transcript(), &key_transcript);
+    assert_eq!(ecdsa_inputs.hashed_message(), &inputs_owned.hashed_message);
+    assert_eq!(ecdsa_inputs.nonce(), &inputs_owned.nonce);
+    assert_eq!(
+        ecdsa_inputs.presig_quadruple(),
+        &inputs_owned.presig_quadruple
+    );
+    assert_eq!(ecdsa_inputs.key_transcript(), &inputs_owned.key_transcript);
     assert_eq!(
         ecdsa_inputs.reconstruction_threshold(),
-        key_transcript.reconstruction_threshold()
+        inputs_owned.key_transcript.reconstruction_threshold()
     );
-    assert_eq!(ecdsa_inputs.receivers(), &key_transcript.receivers);
-    assert_eq!(ecdsa_inputs.algorithm_id(), key_transcript.algorithm_id);
-    for node_id in common_receivers.iter() {
+    assert_eq!(
+        ecdsa_inputs.receivers(),
+        &inputs_owned.key_transcript.receivers
+    );
+    assert_eq!(
+        ecdsa_inputs.algorithm_id(),
+        inputs_owned.key_transcript.algorithm_id
+    );
+    for node_id in receivers.iter() {
         assert!(ecdsa_inputs.index_for_signer_id(*node_id).is_some());
         assert_eq!(
             ecdsa_inputs.index_for_signer_id(*node_id),
-            key_transcript.index_for_signer_id(*node_id)
+            inputs_owned.key_transcript.index_for_signer_id(*node_id)
         );
     }
 }
@@ -315,35 +311,19 @@ fn should_create_ecdsa_inputs_correctly() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tecdsa_inputs(rng);
 
     let wrong_algorithm = AlgorithmId::Tls;
-    assert_ne!(key_transcript.algorithm_id, wrong_algorithm);
-
-    key_transcript.algorithm_id = wrong_algorithm;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let nonce = nonce();
-    let derivation_path = derivation_path();
-    let hashed_message = hashed_message();
-    let quadruple = quadruple.unwrap();
+    assert_ne!(inputs_owned.key_transcript.algorithm_id, wrong_algorithm);
+    inputs_owned.key_transcript.algorithm_id = wrong_algorithm;
 
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path.caller,
-        &derivation_path.derivation_path,
-        &hashed_message,
-        &nonce,
-        &quadruple,
-        &key_transcript,
+        &inputs_owned.caller,
+        &inputs_owned.derivation_path,
+        &inputs_owned.hashed_message,
+        &inputs_owned.nonce,
+        &inputs_owned.presig_quadruple,
+        &inputs_owned.key_transcript,
     );
 
     assert_matches!(
@@ -355,44 +335,26 @@ fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (
-        mut kappa_unmasked,
-        mut lambda_masked,
-        mut kappa_times_lambda,
-        mut key_times_lambda,
-        mut key_transcript,
-    ) = transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tecdsa_inputs(rng);
 
     let wrong_algorithm = AlgorithmId::Tls;
-    assert_ne!(key_transcript.algorithm_id, wrong_algorithm);
-
-    kappa_unmasked.algorithm_id = wrong_algorithm;
-    lambda_masked.algorithm_id = wrong_algorithm;
-    kappa_times_lambda.algorithm_id = wrong_algorithm;
-    key_times_lambda.algorithm_id = wrong_algorithm;
-    key_transcript.algorithm_id = wrong_algorithm;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let extended_derivation_path = derivation_path();
-    let hashed_message = hashed_message();
-    let nonce = nonce();
-    let quadruple = quadruple.unwrap();
+    assert_ne!(inputs_owned.key_transcript.algorithm_id, wrong_algorithm);
+    inputs_owned.presig_quadruple.kappa_unmasked.algorithm_id = wrong_algorithm;
+    inputs_owned.presig_quadruple.lambda_masked.algorithm_id = wrong_algorithm;
+    inputs_owned
+        .presig_quadruple
+        .kappa_times_lambda
+        .algorithm_id = wrong_algorithm;
+    inputs_owned.presig_quadruple.key_times_lambda.algorithm_id = wrong_algorithm;
+    inputs_owned.key_transcript.algorithm_id = wrong_algorithm;
 
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &extended_derivation_path.caller,
-        &extended_derivation_path.derivation_path,
-        &hashed_message,
-        &nonce,
-        &quadruple,
-        &key_transcript,
+        &inputs_owned.caller,
+        &inputs_owned.derivation_path,
+        &inputs_owned.hashed_message,
+        &inputs_owned.nonce,
+        &inputs_owned.presig_quadruple,
+        &inputs_owned.key_transcript,
     );
 
     assert_matches!(
@@ -404,30 +366,17 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let inputs_owned = valid_tecdsa_inputs(rng);
 
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let extended_derivation_path = derivation_path();
     let hashed_message_invalid_length = [1u8; 33];
-    let nonce = nonce();
-    let quadruple = quadruple.unwrap();
 
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &extended_derivation_path.caller,
-        &extended_derivation_path.derivation_path,
+        &inputs_owned.caller,
+        &inputs_owned.derivation_path,
         &hashed_message_invalid_length,
-        &nonce,
-        &quadruple,
-        &key_transcript,
+        &inputs_owned.nonce,
+        &inputs_owned.presig_quadruple,
+        &inputs_owned.key_transcript,
     );
 
     assert_matches!(
@@ -439,35 +388,19 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
+    let mut inputs_owned = valid_tecdsa_inputs_with_receivers(set_of_nodes(&[1, 2, 3]), rng);
+
     let wrong_receivers = IDkgReceivers::new(set_of_nodes(&[1, 2, 3, 4])).unwrap();
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
-
-    assert_ne!(key_transcript.receivers, wrong_receivers);
-
-    key_transcript.receivers = wrong_receivers;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let extended_derivation_path = derivation_path();
-    let hashed_message = hashed_message();
-    let nonce = nonce();
-    let quadruple = quadruple.unwrap();
+    assert_ne!(inputs_owned.key_transcript.receivers, wrong_receivers);
+    inputs_owned.key_transcript.receivers = wrong_receivers;
 
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &extended_derivation_path.caller,
-        &extended_derivation_path.derivation_path,
-        &hashed_message,
-        &nonce,
-        &quadruple,
-        &key_transcript,
+        &inputs_owned.caller,
+        &inputs_owned.derivation_path,
+        &inputs_owned.hashed_message,
+        &inputs_owned.nonce,
+        &inputs_owned.presig_quadruple,
+        &inputs_owned.key_transcript,
     );
 
     assert_matches!(
@@ -479,38 +412,27 @@ fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
 #[test]
 fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tecdsa_inputs(rng);
 
     let wrong_key_transcript_id = random_transcript_id(rng);
-    assert_ne!(key_transcript.transcript_id, wrong_key_transcript_id);
-
-    key_transcript.transcript_id = wrong_key_transcript_id;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
+    assert_ne!(
+        inputs_owned.key_transcript.transcript_id,
+        wrong_key_transcript_id
     );
-    assert!(quadruple.is_ok());
-
-    let extended_derivation_path = derivation_path();
-    let hashed_message = hashed_message();
-    let nonce = nonce();
-    let quadruple = quadruple.unwrap();
+    inputs_owned.key_transcript.transcript_id = wrong_key_transcript_id;
 
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &extended_derivation_path.caller,
-        &extended_derivation_path.derivation_path,
-        &hashed_message,
-        &nonce,
-        &quadruple,
-        &key_transcript,
+        &inputs_owned.caller,
+        &inputs_owned.derivation_path,
+        &inputs_owned.hashed_message,
+        &inputs_owned.nonce,
+        &inputs_owned.presig_quadruple,
+        &inputs_owned.key_transcript,
     );
     assert_matches!(ecdsa_inputs, Err(ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(error))
-        if error == format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, quadruple.key_times_lambda().transcript_type)
+        if error == format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with \
+        origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type \
+        {:?}", inputs_owned.key_transcript.transcript_id, inputs_owned.presig_quadruple.key_times_lambda().transcript_type)
     );
 }
 
@@ -1027,4 +949,50 @@ fn message_in_size_range<R: Rng + CryptoRng>(
 ) -> Vec<u8> {
     let size = rng.gen_range(range);
     vec![123; size]
+}
+
+// Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdEcdsaSigInputsOwned.
+// The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
+// ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdEcdsaSigInputsOwned {
+    pub caller: PrincipalId,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub hashed_message: Vec<u8>,
+    pub nonce: [u8; 32],
+    pub presig_quadruple: EcdsaPreSignatureQuadruple,
+    pub key_transcript: IDkgTranscript,
+}
+
+fn valid_tecdsa_inputs(rng: &mut ReproducibleRng) -> ThresholdEcdsaSigInputsOwned {
+    valid_tecdsa_inputs_with_receivers(set_of_nodes(&[1, 2, 3]), rng)
+}
+
+fn valid_tecdsa_inputs_with_receivers(
+    receivers: BTreeSet<NodeId>,
+    rng: &mut ReproducibleRng,
+) -> ThresholdEcdsaSigInputsOwned {
+    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
+        transcripts_for_ecdsa_inputs(receivers, rng);
+
+    let quadruple = EcdsaPreSignatureQuadruple::new(
+        kappa_unmasked,
+        lambda_masked,
+        kappa_times_lambda,
+        key_times_lambda,
+    )
+    .unwrap();
+
+    let extended_derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let nonce = nonce();
+
+    ThresholdEcdsaSigInputsOwned {
+        caller: extended_derivation_path.caller,
+        derivation_path: extended_derivation_path.derivation_path,
+        hashed_message: hashed_message,
+        nonce: nonce,
+        presig_quadruple: quadruple,
+        key_transcript: key_transcript,
+    }
 }
