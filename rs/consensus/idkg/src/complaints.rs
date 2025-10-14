@@ -196,7 +196,7 @@ impl IDkgComplaintHandlerImpl {
                     .map(|transcript| (signed_complaint, transcript))
             })
             .flat_map(|(signed_complaint, transcript)| {
-                self.crypto_create_opening(&signed_complaint, &transcript)
+                self.crypto_create_opening(&signed_complaint, transcript)
             })
             .collect()
     }
