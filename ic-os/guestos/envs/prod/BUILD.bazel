@@ -51,7 +51,7 @@ artifact_bundle(
 
 extract_mainnet_guestos_image(
     name = "mainnet_latest_guest_img",
-    disk_img = "@@mainnet_latest_disk_img//file",
+    disk_img = "@mainnet_latest_disk_img//file",
 )
 
 write_file(
@@ -63,7 +63,7 @@ write_file(
 
 extract_mainnet_guestos_image(
     name = "mainnet_nns_guest_img",
-    disk_img = "@@mainnet_nns_disk_img//file",
+    disk_img = "@mainnet_nns_disk_img//file",
 )
 
 write_file(
@@ -75,7 +75,7 @@ write_file(
 
 extract_mainnet_guestos_image(
     name = "mainnet_app_guest_img",
-    disk_img = "@@mainnet_app_disk_img//file",
+    disk_img = "@mainnet_app_disk_img//file",
 )
 
 write_file(

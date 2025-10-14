@@ -64,7 +64,7 @@ artifact_bundle(
 
 extract_mainnet_guestos_image(
     name = "mainnet_latest_guest_img",
-    disk_img = "@@mainnet_latest_disk_img_dev//file",
+    disk_img = "@mainnet_latest_disk_img_dev//file",
     visibility = ["//rs/tests:__subpackages__"],
 )
 
