@@ -58,7 +58,7 @@ impl KeyRange for pb::v1::SubnetMetricsKey {
 //------------ Storable Implementations ------------//
 
 impl Storable for NaiveDateStorable {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         // We'll store it as a 32-bit integer: number of days since a fixed epoch.
         // NaiveDate stores dates internally as (year, ordinal_day), but we can easily
         // reconstruct it from a serializable integer.

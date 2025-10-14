@@ -95,10 +95,8 @@ impl NodeRewardsCanister {
 
     pub fn set_last_day_synced(&self, last_day_synced: NaiveDate) {
         self.last_day_synced.with_borrow_mut(|cell| {
-            cell.set(Some(NaiveDateStorable::from(NaiveDateStorable(
-                last_day_synced,
-            ))))
-            .expect("Could not set last day synced");
+            cell.set(Some(NaiveDateStorable(last_day_synced)))
+                .expect("Could not set last day synced");
         });
     }
 
