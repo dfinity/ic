@@ -63,8 +63,7 @@ pub struct Orchestrator {
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     registration: Option<NodeRegistration>,
-    // The subnet id of the node.
-    subnet_id: Arc<RwLock<SubnetAssignment>>,
+    subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     ipv4_configurator: Option<Ipv4Configurator>,
     task_tracker: TaskTracker,
 }
@@ -327,7 +326,7 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let subnet_id: Arc<RwLock<SubnetAssignment>> = Default::default();
+        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
 
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
@@ -336,7 +335,7 @@ impl Orchestrator {
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
             replica_process,
-            Arc::clone(&subnet_id),
+            Arc::clone(&subnet_assignment),
             replica_version,
             hostos_version.ok(),
             cup_provider,
@@ -353,7 +352,7 @@ impl Orchestrator {
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
             registration: Some(registration),
-            subnet_id,
+            subnet_assignment,
             ipv4_configurator: Some(ipv4_configurator),
             task_tracker,
         })
@@ -382,7 +381,7 @@ impl Orchestrator {
     ///    to do the rotation and attempt to register the rotated key.
     pub async fn start_tasks(&mut self, cancellation_token: CancellationToken) {
         async fn upgrade_checks(
-            maybe_subnet_id: Arc<RwLock<SubnetAssignment>>,
+            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             mut upgrade: Upgrade,
             cancellation_token: CancellationToken,
             log: ReplicaLogger,
@@ -402,11 +401,11 @@ impl Orchestrator {
                         match control_flow {
                             OrchestratorControlFlow::Assigned(subnet_id)
                             | OrchestratorControlFlow::Leaving(subnet_id) => {
-                                *maybe_subnet_id.write().unwrap() =
+                                *subnet_assignment.write().unwrap() =
                                     SubnetAssignment::Assigned(subnet_id);
                             }
                             OrchestratorControlFlow::Unassigned => {
-                                *maybe_subnet_id.write().unwrap() = SubnetAssignment::Unassigned;
+                                *subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
                             }
                             OrchestratorControlFlow::Stop => {
                                 // Wake up all orchestrator tasks and instruct them to stop.
@@ -519,13 +518,13 @@ impl Orchestrator {
         }
 
         async fn key_rotation_check(
-            maybe_subnet_id: Arc<RwLock<SubnetAssignment>>,
+            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             registration: NodeRegistration,
             cancellation_token: CancellationToken,
         ) {
             loop {
-                let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
-                match maybe_subnet_id {
+                let subnet_assignment = *subnet_assignment.read().unwrap();
+                match subnet_assignment {
                     SubnetAssignment::Assigned(subnet_id) => {
                         registration
                             .check_all_keys_registered_otherwise_register(subnet_id)
@@ -542,7 +541,7 @@ impl Orchestrator {
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
-            maybe_subnet_id: Arc<RwLock<SubnetAssignment>>,
+            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
@@ -552,11 +551,11 @@ impl Orchestrator {
                 // Check if new SSH keys need to be deployed, but only once the subnet is known.
                 // Otherwise, if we just used the default value of `None`, we would incorrectly
                 // assume that we are unassigned, while it could just be that the upgrade loop has
-                // not already had the chance of setting `subnet_id`. In that case we would purge
-                // all SSH keys if we were actually assigned to a subnet, having to wait for the
-                // upgrade loop to actually set `subnet_id` and we would only at that point redeploy
-                // the purged keys.
-                match *maybe_subnet_id.read().unwrap() {
+                // not already had the chance of setting `subnet_assignment`. In that case we would
+                // purge all SSH keys if we were actually assigned to a subnet, having to wait for
+                // the upgrade loop to actually set `subnet_assignment` and we would only at that
+                // point redeploy the purged keys.
+                match *subnet_assignment.read().unwrap() {
                     SubnetAssignment::Assigned(subnet_id) => {
                         ssh_access_manager.check_for_keyset_changes(Some(subnet_id));
                     }
@@ -587,7 +586,7 @@ impl Orchestrator {
             self.task_tracker.spawn(
                 "upgrade",
                 upgrade_checks(
-                    Arc::clone(&self.subnet_id),
+                    Arc::clone(&self.subnet_assignment),
                     upgrade,
                     cancellation_token.clone(),
                     self.logger.clone(),
@@ -617,7 +616,7 @@ impl Orchestrator {
             self.task_tracker.spawn(
                 "ssh_key_firewall_rules_ipv4_config",
                 ssh_key_and_firewall_rules_and_ipv4_config_checks(
-                    Arc::clone(&self.subnet_id),
+                    Arc::clone(&self.subnet_assignment),
                     ssh,
                     firewall,
                     ipv4_configurator,
@@ -637,7 +636,7 @@ impl Orchestrator {
             self.task_tracker.spawn(
                 "key_rotation",
                 key_rotation_check(
-                    Arc::clone(&self.subnet_id),
+                    Arc::clone(&self.subnet_assignment),
                     registration,
                     cancellation_token.clone(),
                 ),

@@ -23,7 +23,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-    subnet_id: Arc<RwLock<SubnetAssignment>>,
+    subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
     cup_provider: Arc<CatchUpPackageProvider>,
@@ -86,7 +86,7 @@ impl OrchestratorDashboard {
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-        subnet_id: Arc<RwLock<SubnetAssignment>>,
+        subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
         cup_provider: Arc<CatchUpPackageProvider>,
@@ -99,7 +99,7 @@ impl OrchestratorDashboard {
             last_applied_firewall_version,
             last_applied_ipv4_config_version,
             replica_process,
-            subnet_id,
+            subnet_assignment,
             replica_version,
             hostos_version,
             cup_provider,
@@ -136,7 +136,7 @@ impl OrchestratorDashboard {
     }
 
     fn get_subnet_id(&self) -> String {
-        match *self.subnet_id.read().unwrap() {
+        match *self.subnet_assignment.read().unwrap() {
             SubnetAssignment::Assigned(id) => id.to_string(),
             SubnetAssignment::Unassigned => "Unassigned".to_string(),
             SubnetAssignment::Unknown => "Subnet not known yet".to_string(),
@@ -144,7 +144,7 @@ impl OrchestratorDashboard {
     }
 
     fn get_scheduled_upgrade(&self) -> String {
-        let subnet_id = match *self.subnet_id.read().unwrap() {
+        let subnet_id = match *self.subnet_assignment.read().unwrap() {
             SubnetAssignment::Assigned(id) => id,
             SubnetAssignment::Unassigned => return "None".to_string(),
             SubnetAssignment::Unknown => return "Subnet not known yet".to_string(),
