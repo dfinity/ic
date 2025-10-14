@@ -1904,7 +1904,7 @@ fn test_enforce_public_neuron() {
     );
 
     // Step 3: Inspect results.
-    // TODO[NNS1-4230]:
+    // TODO(NNS1-4230):
     // Here, we just want to assert that for a random principal ID
     // full_neuron is not in the result.
     assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32));
