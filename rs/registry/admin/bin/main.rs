@@ -16,8 +16,7 @@ use helpers::{
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::Sender;
 use ic_canister_client_sender::SigKeys;
-// Type alias to distinguish the two Agent types in this file
-type OldAgent = ic_canister_client::Agent;
+// Type alias for clarity
 type IcAgent = ic_agent::Agent;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
@@ -3322,7 +3321,7 @@ impl ProposalTitle for ProposeToCreateServiceNervousSystemCmd {
 
 async fn propose_to_create_service_nervous_system(
     cmd: ProposeToCreateServiceNervousSystemCmd,
-    agent: OldAgent,
+    agent: IcAgent,
     proposer: NeuronId,
 ) {
     let is_dry_run = cmd.is_dry_run();
@@ -3824,12 +3823,9 @@ async fn main() {
         Sender::Anonymous
     };
 
-    let registry_canister = RegistryCanister::new_with_agent(make_ic_agent_client(
-        reachable_nns_urls.clone(),
-        opts.verify_nns_responses,
-        opts.nns_public_key_pem_file.clone(),
-        sender.clone(),
-    ));
+    let identity = sender_to_identity(sender.clone());
+    let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
+    let registry_canister = RegistryCanister::new_with_agent(ic_agent);
 
     match opts.subcmd {
         SubCommand::GetPublicKey(get_pk_cmd) => {
@@ -4018,23 +4014,12 @@ async fn main() {
         }
         SubCommand::ProposeToDeployGuestosToAllSubnetNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::DeployGuestosToAllSubnetNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4092,23 +4077,12 @@ async fn main() {
         }
         SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ReviseElectedGuestosVersions,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4116,40 +4090,21 @@ async fn main() {
         SubCommand::ProposeToCreateSubnet(mut cmd) => {
             cmd.apply_defaults_for_unset_fields();
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::CreateSubnet,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToCreateServiceNervousSystem(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_to_create_service_nervous_system(
-                cmd,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            propose_to_create_service_nervous_system(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToChangeSubnetMembership(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4161,120 +4116,62 @@ async fn main() {
                     "Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal"
                 )
             }
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ChangeSubnetMembership,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUpdateRecoveryCup(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RecoverSubnet,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUpdateSubnet(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UpdateConfigOfSubnet,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToAddNnsCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::NnsCanisterInstall,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToChangeNnsCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let canister_client = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
-            propose_action_from_command(cmd, canister_client, proposer).await;
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToHardResetNnsRootToVersion(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_external_proposal_from_command::<
                 HardResetNnsRootToVersionPayload,
                 ProposeToHardResetNnsRootToVersionCmd,
@@ -4282,165 +4179,90 @@ async fn main() {
                 cmd,
                 NnsFunction::HardResetNnsRootToVersion,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUninstallCode(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UninstallCode,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUpdateXdrIcpConversionRate(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::IcpXdrConversionRate,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToStartCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let canister_client = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
-            propose_action_from_command(cmd, canister_client, proposer).await;
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToStopCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let canister_client = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
-            propose_action_from_command(cmd, canister_client, proposer).await;
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ClearProvisionalWhitelist,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToSetAuthorizedSubnetworks(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::SetAuthorizedSubnetworks,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUpdateSubnetType(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UpdateSubnetType,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToChangeSubnetTypeAssignment(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ChangeSubnetTypeAssignment,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4458,46 +4280,24 @@ async fn main() {
         }
         SubCommand::ProposeToRemoveNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RemoveNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToAddNodeOperator(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::AssignNoid,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4546,23 +4346,12 @@ async fn main() {
         }
         SubCommand::ProposeToUpdateNodeOperatorConfig(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UpdateNodeOperatorConfig,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4579,23 +4368,12 @@ async fn main() {
         }
         SubCommand::ProposeToSetFirewallConfig(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::SetFirewallConfig,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4605,23 +4383,12 @@ async fn main() {
                 test_add_firewall_rules(cmd, &registry_canister).await;
             } else {
                 let (proposer, sender) = cmd.proposer_and_sender(sender);
-                let ic_agent = make_ic_agent_client(
-                    reachable_nns_urls.clone(),
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file.clone(),
-                    sender.clone(),
-                );
-                let old_agent = make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                );
+                let identity = sender_to_identity(sender);
+                let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
                 propose_external_proposal_from_command(
                     cmd,
                     NnsFunction::AddFirewallRules,
                     ic_agent,
-                    old_agent,
                     proposer,
                 )
                 .await;
@@ -4632,23 +4399,12 @@ async fn main() {
                 test_remove_firewall_rules(cmd, &registry_canister).await;
             } else {
                 let (proposer, sender) = cmd.proposer_and_sender(sender);
-                let ic_agent = make_ic_agent_client(
-                    reachable_nns_urls.clone(),
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file.clone(),
-                    sender.clone(),
-                );
-                let old_agent = make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                );
+                let identity = sender_to_identity(sender);
+                let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
                 propose_external_proposal_from_command(
                     cmd,
                     NnsFunction::RemoveFirewallRules,
                     ic_agent,
-                    old_agent,
                     proposer,
                 )
                 .await;
@@ -4659,23 +4415,12 @@ async fn main() {
                 test_update_firewall_rules(cmd, &registry_canister).await;
             } else {
                 let (proposer, sender) = cmd.proposer_and_sender(sender);
-                let ic_agent = make_ic_agent_client(
-                    reachable_nns_urls.clone(),
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file.clone(),
-                    sender.clone(),
-                );
-                let old_agent = make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                );
+                let identity = sender_to_identity(sender);
+                let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
                 propose_external_proposal_from_command(
                     cmd,
                     NnsFunction::UpdateFirewallRules,
                     ic_agent,
-                    old_agent,
                     proposer,
                 )
                 .await;
@@ -4693,17 +4438,9 @@ async fn main() {
         SubCommand::ProposeToAddOrRemoveNodeProvider(cmd) => {
             let (proposer, sender) =
                 get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
-            propose_to_add_or_remove_node_provider(
-                cmd,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            propose_to_add_or_remove_node_provider(cmd, ic_agent, proposer).await
         }
         SubCommand::GetRegistryVersion => {
             let latest_version = registry_canister.get_latest_version().await.unwrap();
@@ -4711,41 +4448,23 @@ async fn main() {
         }
         SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(cmd) => {
             let sender = get_test_sender_if_set(sender, cmd.test_user_proposer);
-            submit_root_proposal_to_upgrade_governance_canister(
-                cmd,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-            )
-            .await
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            submit_root_proposal_to_upgrade_governance_canister(cmd, ic_agent).await
         }
         SubCommand::SwapNodeInSubnetDirectly(cmd) => {
             swap_node_in_subnet_directly(registry_canister, cmd).await;
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
-            get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            ))
-            .await
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            get_pending_root_proposals_to_upgrade_governance_canister(ic_agent).await
         }
         SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(cmd) => {
             let sender = get_test_sender_if_set(sender, cmd.test_user_voter);
-            vote_on_root_proposal_to_upgrade_governance_canister(
-                cmd,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-            )
-            .await
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            vote_on_root_proposal_to_upgrade_governance_canister(cmd, ic_agent).await
         }
         SubCommand::GetDataCenter(cmd) => {
             print_and_get_last_value::<DataCenterRecord>(
@@ -4759,23 +4478,12 @@ async fn main() {
         }
         SubCommand::ProposeToAddOrRemoveDataCenters(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::AddOrRemoveDataCenters,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4824,69 +4532,36 @@ async fn main() {
         }
         SubCommand::ProposeToUpdateNodeRewardsTable(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UpdateNodeRewardsTable,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::DeployGuestosToAllUnassignedNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -4902,13 +4577,10 @@ async fn main() {
             .await;
         }
         SubCommand::GetMonthlyNodeProviderRewards => {
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
+                ic_agent,
                 GOVERNANCE_CANISTER_ID,
                 None,
             ));
@@ -4918,92 +4590,48 @@ async fn main() {
         }
         SubCommand::ProposeToRemoveNodeOperators(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RemoveNodeOperators,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToRerouteCanisterRanges(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RerouteCanisterRanges,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToPrepareCanisterMigration(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::PrepareCanisterMigration,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToCompleteCanisterMigration(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::CompleteCanisterMigration,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -5018,69 +4646,36 @@ async fn main() {
         }
         SubCommand::ProposeToAddWasmToSnsWasm(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::AddSnsWasm,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UpdateSnsWasmSnsSubnetIds,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToUpdateSnsDeployWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UpdateAllowedPrincipals,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -5089,18 +4684,8 @@ async fn main() {
             let (proposer, sender) =
                 get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
 
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             // Custom rendering to make it easier to debug your command
             if cmd.is_dry_run() {
                 let payload = cmd.payload(&ic_agent).await;
@@ -5112,7 +4697,6 @@ async fn main() {
                 cmd,
                 NnsFunction::InsertSnsWasmUpgradePathEntries,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await
@@ -5120,72 +4704,34 @@ async fn main() {
         SubCommand::ProposeToSetBitcoinConfig(cmd) => {
             let (proposer, sender) =
                 get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_external_proposal_from_command::<
                 BitcoinSetConfigProposal,
                 ProposeToSetBitcoinConfig,
-            >(
-                cmd,
-                NnsFunction::BitcoinSetConfig,
-                ic_agent,
-                old_agent,
-                proposer,
-            )
+            >(cmd, NnsFunction::BitcoinSetConfig, ic_agent, proposer)
             .await;
         }
         SubCommand::ProposeToReviseElectedHostosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ReviseElectedHostosVersions,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToDeployHostosToSomeNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::DeployHostosToSomeNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -5216,69 +4762,36 @@ async fn main() {
         }
         SubCommand::ProposeToAddApiBoundaryNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::AddApiBoundaryNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToRemoveApiBoundaryNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RemoveApiBoundaryNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
@@ -5303,46 +4816,27 @@ async fn main() {
         }
         SubCommand::ProposeToRentSubnet(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let ic_agent = make_ic_agent_client(
-                reachable_nns_urls.clone(),
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file.clone(),
-                sender.clone(),
-            );
-            let old_agent = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
+            let identity = sender_to_identity(sender.clone());
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::SubnetRentalRequest,
                 ic_agent,
-                old_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToFulfillSubnetRentalRequest(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let canister_client = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
-            propose_action_from_command(cmd, canister_client, proposer).await;
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let canister_client = make_canister_client(
-                reachable_nns_urls,
-                opts.verify_nns_responses,
-                opts.nns_public_key_pem_file,
-                sender,
-            );
-            propose_action_from_command(cmd, canister_client, proposer).await;
+            let identity = sender_to_identity(sender);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            propose_action_from_command(cmd, ic_agent, proposer).await;
         }
     }
 }
@@ -5573,12 +5067,11 @@ async fn propose_external_proposal_from_command<
     cmd: Command,
     nns_function: NnsFunction,
     ic_agent: IcAgent,
-    old_agent: OldAgent,
     proposer: NeuronId,
 ) {
     let payload = cmd.payload(&ic_agent).await;
     let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
-        old_agent,
+        ic_agent.clone(),
         GOVERNANCE_CANISTER_ID,
         Some(proposer),
     ));
@@ -5614,7 +5107,7 @@ async fn propose_external_proposal_from_command<
     };
 }
 
-async fn propose_action_from_command<Command>(cmd: Command, agent: OldAgent, proposer: NeuronId)
+async fn propose_action_from_command<Command>(cmd: Command, agent: IcAgent, proposer: NeuronId)
 where
     Command: ProposalMetadata + ProposalTitle + ProposalAction,
 {
@@ -6186,7 +5679,7 @@ pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
 /// Submit a proposal to add a new node provider record
 async fn propose_to_add_or_remove_node_provider(
     cmd: ProposeToAddOrRemoveNodeProviderCmd,
-    agent: OldAgent,
+    agent: IcAgent,
     proposer: NeuronId,
 ) {
     let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
@@ -6343,7 +5836,7 @@ fn get_test_sender_if_set(current_sender: Sender, test_sender: Option<u8>) -> Se
 /// Submits a root proposal to upgrade the governance canister.
 async fn submit_root_proposal_to_upgrade_governance_canister(
     cmd: SubmitRootProposalToUpgradeGovernanceCanisterCmd,
-    agent: OldAgent,
+    agent: IcAgent,
 ) {
     let canister_client = RootCanisterClient(NnsCanisterClient::new(agent, ROOT_CANISTER_ID, None));
     let result = canister_client
@@ -6359,7 +5852,7 @@ async fn submit_root_proposal_to_upgrade_governance_canister(
 
 /// Returns the current list of pending root proposals to upgrade the governance
 /// canister.
-async fn get_pending_root_proposals_to_upgrade_governance_canister(agent: OldAgent) {
+async fn get_pending_root_proposals_to_upgrade_governance_canister(agent: IcAgent) {
     let canister_client = RootCanisterClient(NnsCanisterClient::new(agent, ROOT_CANISTER_ID, None));
     let proposals = canister_client
         .get_pending_root_proposals_to_upgrade_governance_canister()
@@ -6378,7 +5871,7 @@ async fn get_pending_root_proposals_to_upgrade_governance_canister(agent: OldAge
 /// Votes a root proposal to upgrade the governance canister.
 async fn vote_on_root_proposal_to_upgrade_governance_canister(
     cmd: VoteOnRootProposalToUpgradeGovernanceCanisterCmd,
-    agent: OldAgent,
+    agent: IcAgent,
 ) {
     let canister_client = RootCanisterClient(NnsCanisterClient::new(agent, ROOT_CANISTER_ID, None));
     let result = canister_client
@@ -6433,7 +5926,7 @@ async fn swap_node_in_subnet_directly(
 /// A client view of an NNS canister.
 struct NnsCanisterClient {
     /// The agent to talk to the IC.
-    agent: OldAgent,
+    agent: IcAgent,
 
     /// Canister ID of the handler.
     handler_id: CanisterId,
@@ -6445,7 +5938,7 @@ struct NnsCanisterClient {
 }
 
 impl NnsCanisterClient {
-    pub fn new(agent: OldAgent, handler_id: CanisterId, author: Option<NeuronId>) -> Self {
+    pub fn new(agent: IcAgent, handler_id: CanisterId, author: Option<NeuronId>) -> Self {
         Self {
             agent,
             handler_id,
@@ -6493,41 +5986,11 @@ fn parse_nns_public_key(
     }
 }
 
-/// Build a new canister client.
-/// `nns_public_key_pem` is the key used for response verification. If None mainnet public key is used.
-fn make_canister_client(
-    nns_urls: Vec<Url>,
-    verify_nns_responses: bool,
-    nns_public_key_pem_file: Option<PathBuf>,
-    sender: Sender,
-) -> OldAgent {
-    let nns_url = &nns_urls[0];
-    let agent = OldAgent::new(nns_url.clone(), sender);
-
-    if let Some(nns_public_key) = parse_nns_public_key(
-        nns_url.clone(),
-        verify_nns_responses,
-        nns_public_key_pem_file,
-    ) {
-        agent.with_nns_public_key(nns_public_key)
-    } else {
-        agent
-    }
-}
-
-fn make_ic_agent_client(
-    nns_urls: Vec<Url>,
-    verify_nns_responses: bool,
-    nns_public_key_pem_file: Option<PathBuf>,
-    sender: Sender,
-) -> ic_agent::Agent {
-    let nns_url = &nns_urls[0];
-
-    // Convert Sender to Identity
-    let identity: Box<dyn ic_agent::Identity> = match sender {
+/// Convert a Sender to an ic_agent Identity
+fn sender_to_identity(sender: Sender) -> Box<dyn ic_agent::Identity> {
+    match sender {
         Sender::Anonymous => Box::new(ic_agent::identity::AnonymousIdentity),
         Sender::SigKeys(SigKeys::Ed25519(keypair)) => {
-            // Convert Ed25519KeyPair to BasicIdentity
             let pem = keypair.to_pem();
             Box::new(
                 ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
@@ -6535,9 +5998,6 @@ fn make_ic_agent_client(
             )
         }
         Sender::SigKeys(SigKeys::EcdsaSecp256k1(_keypair)) => {
-            // Convert Secp256k1KeyPair to Secp256k1Identity
-            // Note: Secp256k1KeyPair doesn't have to_pem, so we need to get the raw bytes
-            // and reconstruct. For now, we'll panic as this is not commonly used.
             panic!(
                 "Secp256k1 keypairs are not yet supported for ic-agent conversion. Use Ed25519 or Anonymous."
             );
@@ -6547,20 +6007,21 @@ fn make_ic_agent_client(
                 "Unsupported sender type for ic-agent. Only Anonymous, Ed25519, and Secp256k1 are supported."
             );
         }
-    };
+    }
+}
 
-    let agent = ic_agent::Agent::builder()
+/// Build a new ic-agent Agent from an Identity
+fn make_agent_from_identity(
+    nns_urls: Vec<Url>,
+    identity: Box<dyn ic_agent::Identity>,
+) -> ic_agent::Agent {
+    let nns_url = &nns_urls[0];
+
+    ic_agent::Agent::builder()
         .with_url(nns_url.as_str())
         .with_boxed_identity(identity)
         .build()
-        .expect("Failed to build ic-agent");
-
-    // TODO: Handle NNS public key verification if needed
-    if verify_nns_responses || nns_public_key_pem_file.is_some() {
-        eprintln!("Warning: NNS public key verification not yet implemented for ic-agent");
-    }
-
-    agent
+        .expect("Failed to build ic-agent")
 }
 
 impl NnsCanisterClient {
@@ -6572,21 +6033,24 @@ impl NnsCanisterClient {
         let mut ids_to_try = vec![self.handler_id];
         ids_to_try.extend(ic_nns_constants::ALL_NNS_CANISTER_IDS.iter().cloned());
 
+        let method = msg.to_string();
+
         for canister_id in ids_to_try {
+            // Convert CanisterId to candid::Principal
+            let principal = candid::Principal::try_from(canister_id.get().as_slice())
+                .map_err(|e| format!("Failed to convert CanisterId to Principal: {:?}", e))?;
+
             let result = self
                 .agent
-                .execute_update(
-                    &canister_id,
-                    &canister_id,
-                    msg.to_string(),
-                    arguments.clone(),
-                    generate_nonce(),
-                )
+                .update(&principal, &method)
+                .with_arg(arguments.clone())
+                .call_and_wait()
                 .await;
 
             match result {
-                Ok(result) => return Ok(result),
-                Err(error_string) => {
+                Ok(response) => return Ok(Some(response)),
+                Err(agent_error) => {
+                    let error_string = format!("{:?}", agent_error);
                     if error_string.contains("has no update method") {
                         println!("Couldn't reach NNS canister at id: {canister_id:?}");
                         continue;
@@ -6597,7 +6061,7 @@ impl NnsCanisterClient {
         }
         Err(format!(
             "Could not find method: {} in any NNS canister",
-            msg.to_string()
+            method
         ))
     }
 }
