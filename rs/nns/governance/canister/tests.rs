@@ -23,7 +23,7 @@ use candid_parser::utils::{CandidSource, service_equal};
 #[test]
 fn test_implemented_interface_matches_declared_interface_exactly() {
     #[cfg(feature = "test")]
-    let declared_interface = include_str!("governance_test.did");
+    let declared_interface = include_str!("../governance_test_did.test.did");
     #[cfg(not(feature = "test"))]
     let declared_interface = include_str!("governance.did");
     let declared_interface = CandidSource::Text(declared_interface);

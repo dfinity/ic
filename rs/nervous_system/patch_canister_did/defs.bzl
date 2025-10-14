@@ -12,16 +12,13 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
         canister_test_did_patch: The patch file representing the differences between the main and test candid files.
     """
 
-    if not name.endswith("_test.did"):
-        fail("Name must end with '_test.did'")
-
-    canister_test_did = name
+    canister_test_did = name + ".test.did"
     canister_did_path = "$(location {})".format(canister_did)
     canister_test_did_patch_path = "$(location {})".format(canister_test_did_patch)
     target_base_name = native.package_name() + ":" + canister_test_did
 
     native.genrule(
-        name = canister_test_did,
+        name = name,
         srcs = [canister_did, canister_test_did_patch],
         outs = [canister_test_did],
         cmd = r"""
@@ -45,7 +42,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
     )
 
     native.sh_binary(
-        name = canister_test_did + "_generate_test_did",
+        name = name + "_generate_test_did",
         srcs = [
             "//rs/nervous_system/patch_canister_did:helper.sh",
         ],
@@ -64,7 +61,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
     )
 
     native.sh_binary(
-        name = canister_test_did + "_update_patch",
+        name = name + "_update_patch",
         srcs = [
             "//rs/nervous_system/patch_canister_did:helper.sh",
         ],
