@@ -146,12 +146,7 @@ impl OngoingStateSync {
                             self.handle_downloaded_chunk_result(chunk_id, result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
 
-                            if self.is_base_layer {
-                                let new_partial_state = self.chunks_to_download.next_xor_distance();
-                                *self.partial_state.write().unwrap() = new_partial_state;
-                            }
 
-                            info!(self.log, "STATE_SYNC: Finished downloading chunk {}", chunk_id);
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -194,7 +189,15 @@ impl OngoingStateSync {
         match result {
             // Received chunk
             Ok(()) => {
+                info!(
+                    self.log,
+                    "STATE_SYNC: Finished downloading chunk {}", chunk_id
+                );
                 self.chunks_to_download.download_finished(chunk_id);
+                if self.is_base_layer {
+                    let new_partial_state = self.chunks_to_download.next_xor_distance();
+                    *self.partial_state.write().unwrap() = new_partial_state;
+                }
             }
             Err(DownloadChunkError::NoContent) => {
                 if self.peer_state.remove(&peer_id).is_some() {
@@ -214,12 +217,19 @@ impl OngoingStateSync {
                 }
                 self.chunks_to_download.download_failed(chunk_id);
             }
-            Err(DownloadChunkError::Overloaded)
-            | Err(DownloadChunkError::Timeout)
-            | Err(DownloadChunkError::Cancelled) => {
+            Err(err) => {
+                // Err(DownloadChunkError::Overloaded)
+                // | Err(DownloadChunkError::Timeout)
+                // | Err(DownloadChunkError::Cancelled) => {
                 self.peer_state.entry(peer_id).and_modify(|peer| {
                     peer.deregister_download();
                 });
+
+                info!(
+                    self.log,
+                    "STATE_SYNC: Failed to download chunk {} from {}: {} ", chunk_id, peer_id, err
+                );
+
                 self.chunks_to_download.download_failed(chunk_id);
             }
         }

@@ -47,8 +47,8 @@ const TOTAL_NODES: usize = 13;
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
 
-const SIZE_LEVEL: usize = 1;
-const NUM_CANISTERS: usize = 4;
+const SIZE_LEVEL: usize = 12;
+const NUM_CANISTERS: usize = 8;
 
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
     "state_sync_duration_seconds_sum{status=\"ok\"}";
