@@ -32,9 +32,7 @@ use ic_types::{
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_request};
-use sandbox_safe_system_state::{
-    CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
-};
+use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -3897,11 +3895,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => match self.sandbox_safe_system_state.status {
-                CanisterStatusView::Running => Ok(1),
-                CanisterStatusView::Stopping => Ok(2),
-                CanisterStatusView::Stopped => Ok(3),
-            },
+            | ApiType::InspectMessage { .. } => Ok(self.sandbox_safe_system_state.status as u32),
         };
         trace_syscall!(self, CanisterStatus, result);
         result

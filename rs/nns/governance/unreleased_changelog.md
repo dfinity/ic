@@ -8,6 +8,7 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
+* Introduces two new proposals called `PauseCanisterMigrations` and `UnpauseCanisterMigrations`.
 
 ## Changed
 

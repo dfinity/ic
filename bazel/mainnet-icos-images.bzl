@@ -82,7 +82,7 @@ def get_mainnet_setupos_images():
             measurements = json.encode(info["dev_launch_measurements"]),
         )
 
-def get_mainnet_guestos_images(extract_guestos):
+def get_mainnet_guestos_images():
     versions = {
         "mainnet_latest_guest_img": MAINNET_LATEST,
         "mainnet_nns_guest_img": MAINNET_NNS,
@@ -93,28 +93,26 @@ def get_mainnet_guestos_images(extract_guestos):
         _get_mainnet_guestos_image(
             name = name,
             setupos_url = icos_image_download_url(info["version"], "setup-os", False),
-            extract_guestos = extract_guestos,
             measurements = json.encode(info["launch_measurements"]),
         )
 
         _get_mainnet_guestos_image(
             name = name + "_dev",
             setupos_url = icos_dev_image_download_url(info["version"], "setup-os", False),
-            extract_guestos = extract_guestos,
             measurements = json.encode(info["dev_launch_measurements"]),
         )
 
 _DEFS_CONTENTS = '''\
-def extract_image(name, extract_guestos, **kwargs):
+def extract_image(name, **kwargs):
     native.genrule(
         name = name,
         srcs = ["disk-img.tar.zst"],
         outs = [name + ".tar.zst"],
         cmd = """#!/bin/bash
-            $(location {extract_guestos}) --image $< $@
-        """.format(extract_guestos = extract_guestos),
+            $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
+        """,
         target_compatible_with = ["@platforms//os:linux"],
-        tools = [extract_guestos],
+        tools = ["@@//rs/ic_os/build_tools/partition_tools:extract-guestos"],
         **kwargs
     )
 '''
@@ -125,7 +123,7 @@ load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 package(default_visibility = ["//visibility:public"])
 
-extract_image("{name}", "{extract_guestos}")
+extract_image("{name}")
 
 write_file(
     name = "launch_measurements",
@@ -135,7 +133,6 @@ write_file(
 """
 
 _attrs = {
-    "extract_guestos": attr.label(mandatory = True, doc = "Tool used to extract a GuestOS image from a SetupOS image."),
     "setupos_url": attr.string(mandatory = True, doc = "URL to the SetupOS image to extract from"),
     "setupos_integrity": attr.string(doc = "Optional integrity for the image. If unset, it will be set after the image is downloaded."),
     "measurements": attr.string(mandatory = True, doc = "Launch measurements for the GuestOS version extracted."),
@@ -163,7 +160,7 @@ def _get_mainnet_guestos_image_impl(repository_ctx):
     )
 
     repository_ctx.file("defs.bzl", content = _DEFS_CONTENTS)
-    repository_ctx.file("BUILD.bazel", content = _BUILD_CONTENTS.format(name = repository_ctx.name, measurements = repository_ctx.attr.measurements, extract_guestos = repository_ctx.attr.extract_guestos))
+    repository_ctx.file("BUILD.bazel", content = _BUILD_CONTENTS.format(name = repository_ctx.name, measurements = repository_ctx.attr.measurements))
 
     new_attrs = _copy_attrs(repository_ctx, _attrs)
     new_attrs.update({"setupos_integrity": download_info.integrity})
