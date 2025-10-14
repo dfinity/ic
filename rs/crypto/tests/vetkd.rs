@@ -125,7 +125,7 @@ impl VetKDTestServer {
         rng: &mut R,
     ) -> Result<(), VetKdKeyVerificationError> {
         let (_verifier_id, verifier) = self.random_node(rng);
-        verifier.verify_encrypted_key(&ek, &vetkd_args)
+        verifier.verify_encrypted_key(ek, vetkd_args)
     }
 }
 
@@ -321,8 +321,8 @@ fn modify_n_random_shares<R: Rng + CryptoRng, F: Fn(&mut VetKdEncryptedKeyShare,
     assert!(shares.len() >= n);
 
     for node_id in shares.keys().copied().choose_multiple(rng, n) {
-        let mut share = shares.get_mut(&node_id).expect("Missing share");
-        modify(&mut share, rng);
+        let share = shares.get_mut(&node_id).expect("Missing share");
+        modify(share, rng);
     }
 }
 
