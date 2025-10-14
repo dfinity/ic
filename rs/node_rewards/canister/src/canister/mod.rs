@@ -10,8 +10,8 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     NodeProvidersMonthlyXdrRewards,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    DailyResults, GetNodeProviderRewardsCalculationResponse,
-    GetNodeProvidersRewardsCalculationRequest,
+    DailyResults, GetNodeProvidersRewardsCalculationRequest,
+    GetNodeProvidersRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
@@ -292,7 +292,7 @@ impl NodeRewardsCanister {
     pub fn get_node_providers_rewards_calculation(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsCalculationRequest,
-    ) -> GetNodeProviderRewardsCalculationResponse {
+    ) -> GetNodeProvidersRewardsCalculationResponse {
         let request_inner = GetNodeProvidersRewardsRequest {
             from_day: request.day,
             to_day: request.day,
@@ -305,7 +305,7 @@ impl NodeRewardsCanister {
             .daily_results
             .remove(&day)
             .ok_or("Could not find daily results for the requested day")?;
-        Ok(DailyResults::from(daily_results))
+        DailyResults::try_from(daily_results)
     }
 }
 
