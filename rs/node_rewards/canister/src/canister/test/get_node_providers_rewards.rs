@@ -317,9 +317,7 @@ fn test_get_node_providers_rewards() {
         to_day: to.into(),
     };
     let result_endpoint =
-        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
-            .now_or_never()
-            .unwrap();
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
 
     let expected = NodeProvidersRewards {
         rewards_xdr_permyriad: btreemap! {

@@ -4,7 +4,6 @@ use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
@@ -29,7 +28,7 @@ use rewards_calculation::performance_based_algorithm::results::RewardsCalculator
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{NodeMetricsDailyRaw, RewardableNode};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
@@ -38,13 +37,13 @@ use std::thread::LocalKey;
 mod test;
 
 #[cfg(target_arch = "wasm32")]
-fn current_time() -> Time {
+pub fn current_time() -> Time {
     let current_time = ic_cdk::api::time();
     Time::from_nanos_since_unix_epoch(current_time)
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
-fn current_time() -> Time {
+pub fn current_time() -> Time {
     ic_types::time::current_time()
 }
 
@@ -54,7 +53,7 @@ fn current_time() -> Time {
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
     metrics_manager: Rc<MetricsManager<VM>>,
-    last_metrics_update: RegistryVersion,
+    last_day_synced: RefCell<Option<NaiveDate>>,
 }
 
 /// Internal methods
@@ -64,9 +63,9 @@ impl NodeRewardsCanister {
         metrics_manager: Rc<MetricsManager<VM>>,
     ) -> Self {
         Self {
-            last_metrics_update: registry_client.get_latest_version(),
             registry_client,
             metrics_manager,
+            last_day_synced: RefCell::new(None),
         }
     }
 
@@ -95,50 +94,56 @@ impl NodeRewardsCanister {
         registry_client.sync_registry_stored().await
     }
 
-    pub async fn schedule_metrics_sync(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
-        let (registry_client, metrics_manager, pre_sync_version) = canister.with(|canister| {
+    pub async fn schedule_metrics_sync(
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+    ) -> Result<(), String> {
+        let (registry_client, metrics_manager) = canister.with(|canister| {
             (
                 canister.borrow().get_registry_client(),
                 canister.borrow().get_metrics_manager(),
-                canister.borrow().last_metrics_update,
             )
         });
-        let post_sync_version = registry_client.get_latest_version();
         let registry_querier = RegistryQuerier::new(registry_client.clone());
-
-        let mut subnets_list: HashSet<SubnetId> = HashSet::default();
-        let mut version = if pre_sync_version == ZERO_REGISTRY_VERSION {
-            // If the pre-sync version is 0, we consider all subnets from the post-sync version
-            post_sync_version
-        } else {
-            pre_sync_version
-        };
-        while version <= post_sync_version {
-            subnets_list.extend(registry_querier.subnets_list(version));
-
-            // Increment the version to sync the next one
-            version = version.increment();
-        }
-
-        metrics_manager
-            .update_subnets_metrics(subnets_list.into_iter().collect())
-            .await;
-        metrics_manager.retry_failed_subnets().await;
+        let version = registry_client.get_latest_version();
+        let subnets_list = registry_querier.subnets_list(version);
+        let last_day_synced: NaiveDate =
+            metrics_manager.update_subnets_metrics(subnets_list).await?;
         canister.with_borrow_mut(|canister| {
-            canister.last_metrics_update = post_sync_version;
+            canister
+                .last_day_synced
+                .borrow_mut()
+                .replace(last_day_synced)
         });
+
+        Ok(())
     }
 
-    fn validate_reward_period(from_date: &NaiveDate, to_date: &NaiveDate) -> Result<(), String> {
-        let today =
-            DateTime::from_timestamp_nanos(current_time().as_nanos_since_unix_epoch() as i64)
-                .date_naive();
+    fn validate_reward_period(
+        &self,
+        from_date: &NaiveDate,
+        to_date: &NaiveDate,
+    ) -> Result<(), String> {
+        let last_day_synced = match *self.last_day_synced.borrow() {
+            Some(date) => date,
+            None => return Err("Metrics have not been synced yet".to_string()),
+        };
+
+        if last_day_synced < *to_date {
+            return Err("Metrics and registry are not synced up to to_date".to_string());
+        }
+
         if from_date > to_date {
             return Err("from_date must be before to_date".to_string());
         }
+
+        let today =
+            DateTime::from_timestamp_nanos(current_time().as_nanos_since_unix_epoch() as i64)
+                .date_naive();
+
         if to_date >= &today {
             return Err("to_date must be earlier than today".to_string());
         }
+
         Ok(())
     }
 
@@ -148,7 +153,7 @@ impl NodeRewardsCanister {
     ) -> Result<RewardsCalculatorResults, String> {
         let start_day = NaiveDate::try_from(request.from_day)?;
         let end_day = NaiveDate::try_from(request.to_day)?;
-        Self::validate_reward_period(&start_day, &end_day)?;
+        self.validate_reward_period(&start_day, &end_day)?;
 
         RewardsCalculationV1::calculate_rewards(&start_day, &end_day, self)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))
@@ -262,20 +267,10 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub async fn get_node_providers_rewards(
+    pub fn get_node_providers_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        NodeRewardsCanister::schedule_registry_sync(canister)
-            .await
-            .map_err(|e| {
-                format!(
-                    "Could not sync registry store to latest version, \
-                    please try again later: {:?}",
-                    e
-                )
-            })?;
-        NodeRewardsCanister::schedule_metrics_sync(canister).await;
         let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
 
         let rewards_xdr_permyriad = result

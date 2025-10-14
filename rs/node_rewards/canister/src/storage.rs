@@ -10,7 +10,6 @@ use std::rc::Rc;
 const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBNETS_METRICS_MEMORY_ID: MemoryId = MemoryId::new(1);
 const LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID: MemoryId = MemoryId::new(2);
-const SUBNETS_TO_RETRY_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -30,7 +29,6 @@ thread_local! {
     pub static METRICS_MANAGER: Rc<MetricsManager<VM>> = {
         let metrics_manager = MetricsManager {
             client: Box::new(ICCanisterClient),
-            subnets_to_retry: RefCell::new(stable_btreemap_init(SUBNETS_TO_RETRY_MEMORY_ID)),
             subnets_metrics: RefCell::new(stable_btreemap_init(SUBNETS_METRICS_MEMORY_ID)),
             last_timestamp_per_subnet: RefCell::new(stable_btreemap_init(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID)),
         };
