@@ -673,7 +673,7 @@ pub trait IDkgBlockReader: Send + Sync {
         &self,
         transcript_ref: &TranscriptRef,
     ) -> Result<IDkgTranscript, TranscriptLookupError> {
-        self.transcript_as_ref(transcript_ref).map(|t| t.clone())
+        self.transcript_as_ref(transcript_ref).cloned()
     }
 
     /// Looks up the transcript for the given transcript ref.
