@@ -90,10 +90,7 @@ async fn get_node_providers_rewards_calculation_is_only_callable_in_nonreplicate
     .unwrap()
     .0
     .unwrap_err();
-    assert_eq!(
-        err,
-        "Could not calculate rewards: \"No metrics found for day 2021-05-06\""
-    );
+    assert_eq!(err, "Metrics and registry are not synced up");
 
     // Replicated update call is not allowed.
     let err = update_candid::<_, (GetNodeProvidersRewardsCalculationResponse,)>(

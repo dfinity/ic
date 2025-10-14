@@ -127,9 +127,9 @@ async fn partial_failures_are_handled_correctly() {
 
     let mm = MetricsManager::new_test(mock);
 
-    mm.update_subnets_metrics(vec![subnet_1, subnet_2])
-        .await
-        .unwrap();
+    let res = mm.update_subnets_metrics(vec![subnet_1, subnet_2]).await;
+
+    assert!(res.is_err());
 
     let key = SubnetMetricsKey {
         timestamp_nanos: 0,
