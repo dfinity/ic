@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
@@ -116,7 +116,7 @@ impl RoundSchedule {
     pub fn charge_idle_canisters(
         &self,
         canisters: &mut BTreeMap<CanisterId, CanisterState>,
-        fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
+        fully_executed_canister_ids: &mut HashSet<CanisterId>,
         round_id: ExecutionRound,
         is_first_iteration: bool,
     ) {
@@ -279,7 +279,7 @@ impl RoundSchedule {
 
     pub fn finish_canister_execution(
         canister: &mut CanisterState,
-        fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
+        fully_executed_canister_ids: &mut HashSet<CanisterId>,
         round_id: ExecutionRound,
         is_first_iteration: bool,
         rank: usize,
@@ -307,7 +307,7 @@ impl RoundSchedule {
     pub(crate) fn finish_round(
         &self,
         canister_states: &mut BTreeMap<CanisterId, CanisterState>,
-        fully_executed_canister_ids: BTreeSet<CanisterId>,
+        fully_executed_canister_ids: HashSet<CanisterId>,
     ) {
         let scheduler_cores = self.scheduler_cores;
         let number_of_canisters = canister_states.len();
@@ -315,6 +315,8 @@ impl RoundSchedule {
 
         // Charge canisters for full executions in this round.
         let mut total_charged_priority = 0;
+        // Note that the order of canisters in this iterator may not be
+        // deterministic as it is a HashSet.
         for canister_id in fully_executed_canister_ids {
             if let Some(canister) = canister_states.get_mut(&canister_id) {
                 total_charged_priority += 100 * multiplier;

@@ -49,7 +49,7 @@ use num_rational::Ratio;
 use prometheus::Histogram;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     str::FromStr,
     sync::Arc,
 };
@@ -430,7 +430,7 @@ impl SchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
-    ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
+    ) -> (ReplicatedState, BTreeSet<CanisterId>, HashSet<CanisterId>) {
         let cost_schedule = state.get_own_cost_schedule();
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -444,7 +444,7 @@ impl SchedulerImpl {
         let mut round_executed_canister_ids = BTreeSet::new();
         // The set of canisters marked as fully executed: have no messages to execute
         // or were scheduled first on a core.
-        let mut round_fully_executed_canister_ids = BTreeSet::new();
+        let mut round_fully_executed_canister_ids = HashSet::new();
 
         // Start iteration loop:
         //      - Execute subnet messages.
