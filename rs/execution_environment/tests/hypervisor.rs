@@ -11,9 +11,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterStatusResultV2, CanisterStatusType,
-    CanisterUpgradeOptions, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm,
-    SchnorrKeyId, VetKdCurve, VetKdKeyId,
+    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -10529,8 +10529,7 @@ fn reply_in_entry_point_and_callback() {
     // Make sure the callback was executed by stopping and starting the canister.
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
-    let res = test.canister_status(canister_id);
-    let canister_status = Decode!(&get_reply(res), CanisterStatusResultV2).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     assert_eq!(canister_status.status(), CanisterStatusType::Stopped);
     test.start_canister(canister_id).unwrap();
 
