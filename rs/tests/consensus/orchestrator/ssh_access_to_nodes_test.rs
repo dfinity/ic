@@ -399,7 +399,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     info!(logger, "Updating app subnet record...");
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
-        Some(vec![readonly_public_key]),
+        Some(vec![readonly_public_key.clone()]),
         Some(vec![backup_public_key]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
