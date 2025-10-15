@@ -4398,7 +4398,12 @@ async fn main() {
                     "Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal"
                 )
             }
-            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity_clone);
+            let ic_agent = make_agent_from_identity(
+                reachable_nns_urls.clone(),
+                identity_clone,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file.clone(),
+            );
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ChangeSubnetMembership,
