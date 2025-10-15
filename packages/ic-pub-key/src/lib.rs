@@ -423,9 +423,9 @@ impl DerivedPublicKey {
 /// * `key_1`: The production key used on mainnet
 /// * `test_key_1`: The test key used on mainnet
 /// * `pocketic_key_1`: The key used by PocketIC when a request to the management canister
-///                     uses `key_1`.
+///   uses `key_1`.
 /// * `pocketic_test_key_1`: The key used by PocketIC when a request to the management canister
-///                          uses `test_key_1`.
+///   uses `test_key_1`.
 /// * `dfx_test_key`: PocketIC specific test key
 pub fn derive_ecdsa_key(args: &EcdsaPublicKeyArgs) -> Result<EcdsaPublicKeyResult, Error> {
     let canister_id = args.canister_id.ok_or(Error::CanisterIdMissing)?;
@@ -454,9 +454,9 @@ pub fn derive_ecdsa_key(args: &EcdsaPublicKeyArgs) -> Result<EcdsaPublicKeyResul
 /// * `key_1`: The production key used on mainnet
 /// * `test_key_1`: The test key used on mainnet
 /// * `pocketic_key_1`: The key used by PocketIC when a request to the management canister
-///                     uses `key_1`.
+///   uses `key_1`.
 /// * `pocketic_test_key_1`: The key used by PocketIC when a request to the management canister
-///                          uses `test_key_1`.
+///   uses `test_key_1`.
 /// * `dfx_test_key`: PocketIC specific test key
 pub fn derive_schnorr_key(args: &SchnorrPublicKeyArgs) -> Result<SchnorrPublicKeyResult, Error> {
     let canister_id = args.canister_id.ok_or(Error::CanisterIdMissing)?;
