@@ -32,6 +32,19 @@ pub fn input_deduplication_test(env: TestEnv) {
             let canister_id = canister.canister_id();
             let ingress_expiry = expiry_time().as_nanos() as u64;
 
+            // Stable memory is initially empty.
+            let res = canister
+                .update(
+                    wasm()
+                        .stable_size()
+                        .int_to_blob()
+                        .append_and_reply()
+                        .build(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(res, 0_u32.to_le_bytes());
+
             // Update call body growing stable memory by 1 page.
             let update_body = |nonce: u64| {
                 let envelope = HttpRequestEnvelope {
