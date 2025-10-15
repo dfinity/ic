@@ -31,7 +31,6 @@ use ic_types::crypto::{
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
-use rand::{RngCore, SeedableRng, rngs::StdRng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
@@ -543,8 +542,4 @@ impl VetKdProtocol for CryptoReturningOk {
     ) -> Result<(), VetKdKeyVerificationError> {
         Ok(())
     }
-}
-
-pub fn mock_random_number_generator() -> Box<dyn RngCore> {
-    Box::new(StdRng::from_seed([0u8; 32]))
 }
