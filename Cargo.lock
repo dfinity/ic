@@ -12393,6 +12393,7 @@ dependencies = [
  "candid",
  "futures",
  "ic-agent",
+ "ic-management-canister-types-private",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",

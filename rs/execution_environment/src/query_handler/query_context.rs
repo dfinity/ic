@@ -374,6 +374,7 @@ impl<'a> QueryContext<'a> {
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
+        info!(self.log, "Executing query on method {:?}", method_name);
         if let WasmMethod::CompositeQuery(_) = &method_name
             && self.composite_queries == FlagStatus::Disabled
         {
@@ -458,6 +459,7 @@ impl<'a> QueryContext<'a> {
         };
         self.add_evaluated_canister_stats(canister.canister_id(), &stats);
         if let Some(query_stats) = self.local_query_execution_stats {
+            info!(self.log, "Query statistics for canister {}: {:?}", canister.canister_id(), stats);
             query_stats.set_epoch_from_height(self.state.height());
             query_stats.register_query_statistics(canister.canister_id(), &stats);
         }

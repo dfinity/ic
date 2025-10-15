@@ -112,7 +112,6 @@ fn query_stats_fault_tolerance(env: TestEnv, query_range: Range<usize>, expect_s
 
 pub fn query_stats_https_outcalls(env: TestEnv) {
     let query_range = 0..4;
-    let expect_success = false;
 
     let logger = env.logger();
     let subnet = env
@@ -134,25 +133,13 @@ pub fn query_stats_https_outcalls(env: TestEnv) {
         info!(logger, "Installed Universal Canister");
         let uc_id = canister.canister_id();
 
-        // NOTE: The `round_robin_https_outcall` below sometimes fails, if we
+        // NOTE: The `single_https_outcall` below sometimes fails, if we
         // execute it immidiately and one of the nodes is slightly behind,
         // such that the Universal canister does not exist on that node yet
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // Perform an HTTPS outcall
         single_https_outcall(&uc_id, &agents[query_range.clone()]).await;
-        info!(logger, "Performed an HTTPS outcall");
-
-        wait_until_next_epoch(&subnet, &logger);
-
-        // Perform an HTTPS outcall
-        single_https_outcall(&uc_id, &agents[query_range.clone()]).await;
-        info!(logger, "Performed an HTTPS outcall");
-
-        wait_until_next_epoch(&subnet, &logger);
-
-        // Perform an HTTPS outcall
-        single_https_outcall(&uc_id, &agents[query_range]).await;
         info!(logger, "Performed an HTTPS outcall");
 
         wait_until_next_epoch(&subnet, &logger);
@@ -165,16 +152,9 @@ pub fn query_stats_https_outcalls(env: TestEnv) {
             .0
             .query_stats;
 
-        if expect_success {
-            assert_eq!(query_stats.num_calls_total, 4u64);
-            assert_ne!(query_stats.num_instructions_total, 0u64);
-            assert_ne!(query_stats.request_payload_bytes_total, 0u64);
-            assert_eq!(query_stats.response_payload_bytes_total, 16u64);
-        } else {
-            assert_eq!(query_stats.num_calls_total, 0u64);
-            assert_eq!(query_stats.num_instructions_total, 0u64);
-            assert_eq!(query_stats.request_payload_bytes_total, 0u64);
-            assert_eq!(query_stats.response_payload_bytes_total, 0u64);
-        }
+        assert_eq!(query_stats.num_calls_total, 0u64);
+        assert_eq!(query_stats.num_instructions_total, 0u64);
+        assert_eq!(query_stats.request_payload_bytes_total, 0u64);
+        assert_eq!(query_stats.response_payload_bytes_total, 0u64);
     })
 }

@@ -99,15 +99,16 @@ pub(crate) async fn round_robin_query_call(canister: &Principal, agents: &[Agent
 }
 
 pub(crate) async fn single_https_outcall(canister: &Principal, agents: &[Agent]) {
-    let payload = wasm()
-        .set_transform(wasm().append_and_reply())
-        .append_and_reply();
     agents
         .first()
         .unwrap()
         .update(canister, "update")
-        .with_arg(payload)
-        .call()
+        .with_arg(
+            wasm()
+                .set_transform(wasm().message_payload().append_and_reply())
+                .reply()
+        )
+        .call_and_wait()
         .await
         .unwrap();
 
@@ -139,7 +140,7 @@ pub(crate) async fn single_https_outcall(canister: &Principal, agents: &[Agent])
                     call_args().other_side(arg.encode()),
                     Cycles::new(10_000_000_000),
                 )
-                .append_and_reply(),
+                .reply(),
         )
         .call_and_wait()
         .await
