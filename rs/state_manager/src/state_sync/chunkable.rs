@@ -264,6 +264,10 @@ impl IncompleteState {
         })
     }
 
+    /// Creates all the directories listed in the manifest.
+    /// Returns the number of directories containing files.
+    /// This must be called before hardlinking files because
+    /// the parent directory of the destination file must exist before hardlinking.
     pub(crate) fn preallocate_layout_directories(
         log: &ReplicaLogger,
         root: &Path,
@@ -286,6 +290,12 @@ impl IncompleteState {
             })
             .collect::<HashSet<_>>();
 
+        info!(
+            log,
+            "state sync: preallocate_layout_directories for {} unique directories",
+            unique_dirs.len(),
+        );
+
         for dir in &unique_dirs {
             let path = root.join(dir);
             std::fs::create_dir_all(&path).unwrap_or_else(|err| {
@@ -300,9 +310,8 @@ impl IncompleteState {
         unique_dirs.len()
     }
 
-    /// Creates all the files listed in the manifest and resizes them to their
-    /// expected sizes.  This way we won't have to worry about creating parent
-    /// directories when we receive chunks.
+    /// Creates the files listed in the manifest and resizes them to their expected sizes.
+    /// If a diff script is provided, files scheduled to be hardlinked will be skipped during file creation and resizing.
     pub(crate) fn preallocate_layout_files(
         log: &ReplicaLogger,
         root: &Path,
@@ -316,6 +325,15 @@ impl IncompleteState {
             .step_duration
             .with_label_values(&[LABEL_PREALLOCATE_FILES])
             .start_timer();
+
+        let num_files_to_hardlink = diff_script.map_or(0, |ds| ds.copy_files.len());
+        info!(
+            log,
+            "state sync: preallocate_layout_files for {} out of {} files ({} files to be hardlinked)",
+            manifest.file_table.len() - num_files_to_hardlink,
+            manifest.file_table.len(),
+            num_files_to_hardlink,
+        );
 
         let mut by_parent: HashMap<PathBuf, Vec<&FileInfo>> =
             HashMap::with_capacity(unique_dirs_size);
@@ -420,6 +438,10 @@ impl IncompleteState {
 
         // hard_link() requires the destination to not exist.
         if dst.exists() {
+            debug_assert!(
+                false,
+                "destination file should not exist as we don't preallocate it"
+            );
             std::fs::remove_file(dst)?;
         }
 
@@ -1191,6 +1213,17 @@ impl IncompleteState {
                 validate_data,
                 &mut fetch_chunks,
             );
+
+            #[cfg(debug_assertions)]
+            {
+                // All files should be present with the expected size before copying chunks,
+                //either as a result of preallocation or hardlinking
+                for file in manifest_new.file_table.iter() {
+                    let path = self.root.join(&file.relative_path);
+                    let size = std::fs::metadata(&path).expect("file should exist").len();
+                    debug_assert_eq!(size, file.size_bytes);
+                }
+            }
 
             self.copy_chunks(
                 &self.log,
