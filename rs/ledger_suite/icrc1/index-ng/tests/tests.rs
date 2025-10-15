@@ -1,6 +1,6 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
+    get_logs, index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
     ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
@@ -9,7 +9,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
-    InitArg as IndexInitArg, ListSubaccountsArgs, Status, SyncStatus, TransactionWithId,
+    InitArg as IndexInitArg, ListSubaccountsArgs, Status, TransactionWithId,
 };
 use ic_icrc1_ledger::{
     ChangeFeeCollector, LedgerArgument, Tokens, UpgradeArgs as LedgerUpgradeArgs,
@@ -85,14 +85,6 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .0
         .to_u64()
         .expect("Balance must be a u64!")
-}
-
-fn status(env: &StateMachine, canister_id: CanisterId) -> Status {
-    let res = env
-        .execute_ingress(canister_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to query index status")
-        .bytes();
-    Decode!(&res, Status).expect("Failed to decode index status response")
 }
 
 fn index_get_blocks(
@@ -532,17 +524,18 @@ fn verify_unknown_block_handling(
         bad_block_index
     );
 
-    let status = status(env, index_id);
-    match status.sync_status {
-        SyncStatus::Syncing => assert!(bad_block_index >= NUM_BLOCKS),
-        SyncStatus::NotSyncing(sync_error) => {
-            assert!(bad_block_index < NUM_BLOCKS);
-            assert!(sync_error.error_msg.starts_with(&format!(
-                "Block at index {} has unknown fields.",
-                bad_block_index
-            )));
+    let logs = get_logs(env, index_id);
+    let mut found_error = false;
+    for entry in logs.entries {
+        found_error = entry.message.contains(&format!(
+            "Block at index {} has unknown fields.",
+            bad_block_index
+        ));
+        if found_error {
+            break;
         }
-    };
+    }
+    assert_eq!(found_error, bad_block_index < NUM_BLOCKS);
 }
 
 #[test]

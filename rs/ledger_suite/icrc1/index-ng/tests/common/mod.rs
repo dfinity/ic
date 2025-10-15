@@ -299,7 +299,7 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
+pub fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
     let request = HttpRequest {
         method: "".to_string(),
         url: "/logs".to_string(),

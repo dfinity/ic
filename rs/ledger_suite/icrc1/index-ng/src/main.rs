@@ -13,8 +13,7 @@ use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksMethod, IndexArg,
-    InitArg, ListSubaccountsArgs, Log, LogEntry, Status, SyncError, SyncStatus, TransactionWithId,
-    UpgradeArg,
+    InitArg, ListSubaccountsArgs, Log, LogEntry, Status, TransactionWithId, UpgradeArg,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
@@ -1121,18 +1120,7 @@ fn icrc1_balance_of(account: Account) -> Nat {
 #[query]
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len().into());
-    let sync_status = if sync_active() {
-        SyncStatus::Syncing
-    } else {
-        let error_msg = SYNC_ERROR
-            .with(|error| error.borrow().clone())
-            .unwrap_or_default();
-        SyncStatus::NotSyncing(SyncError { error_msg })
-    };
-    Status {
-        num_blocks_synced,
-        sync_status,
-    }
+    Status { num_blocks_synced }
 }
 
 fn sync_active() -> bool {
