@@ -7615,6 +7615,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
+ "mockall",
  "num-traits",
  "phantom_newtype",
  "prometheus 0.13.4",
