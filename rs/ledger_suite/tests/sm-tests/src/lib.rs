@@ -5130,6 +5130,7 @@ pub mod archiving {
     use ic_ledger_canister_core::ledger::MAX_BLOCKS_TO_ARCHIVE;
     use ic_ledger_canister_core::range_utils;
     use ic_ledger_suite_state_machine_helpers::icrc3_get_blocks;
+    use ic_state_machine_tests::StateMachineBuilder;
     use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::messages::MessageId;
     use icp_ledger::{GetEncodedBlocksResult, QueryEncodedBlocksResponse};
@@ -5218,6 +5219,110 @@ pub mod archiving {
         assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
+    }
+
+    /// Verify that archiving is skipped but transactions succeed if cycles_to_create_archive is
+    /// less than the cost of creating a canister.
+    pub fn test_archiving_skipped_if_cycles_to_create_archive_less_than_cost<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        const NUM_BLOCKS_TO_ARCHIVE: usize = 1_000;
+        const NUM_INITIAL_BALANCES: u64 = 70_000;
+        const TRIGGER_THRESHOLD: usize = 2_000;
+        const EXPECTED_CREATE_CANISTER_ERROR: &str =
+            "only 0 cycles were received with the create_canister request";
+        let p1 = PrincipalId::new_user_test_id(1);
+        let p2 = PrincipalId::new_user_test_id(2);
+        let archive_controller = PrincipalId::new_user_test_id(1_000_000);
+        let mut initial_balances = vec![];
+        for i in 0..NUM_INITIAL_BALANCES {
+            initial_balances.push((
+                Account::from(PrincipalId::new_user_test_id(i).0),
+                10_000_000,
+            ));
+        }
+
+        let env = StateMachineBuilder::new()
+            .with_subnet_type(SubnetType::Application)
+            .build();
+        let args = encode_init_args(InitArgs {
+            archive_options: ArchiveOptions {
+                trigger_threshold: TRIGGER_THRESHOLD,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: archive_controller,
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
+            },
+            ..init_args(initial_balances)
+        });
+        let args = Encode!(&args).unwrap();
+        let ledger_id = env
+            .install_canister_with_cycles(
+                ledger_wasm.clone(),
+                args,
+                None,
+                Cycles::new(
+                    DEFAULT_CYCLES_FOR_ARCHIVE_CREATION
+                        .checked_mul(100)
+                        .unwrap() as u128,
+                ),
+            )
+            .unwrap();
+
+        // Assert no archives exist.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+
+        // Send a transfer that should trigger an attempt to spawn an archive.
+        send_transfer(
+            &env,
+            ledger_id,
+            p1.0,
+            &TransferArg {
+                from_subaccount: None,
+                to: p2.0.into(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(10_000u64),
+            },
+        )
+        .expect("transfer should succeed");
+
+        // Assert no archive was spawned.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        // Verify that a new block was created.
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES + 1);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+        // Verify that the expected create_canister error was logged.
+        let logs = env.canister_log(ledger_id);
+        let mut create_canister_error_found = false;
+        for entry in logs.records() {
+            let log_message = String::from_utf8(entry.content.clone()).unwrap();
+            if log_message.contains(EXPECTED_CREATE_CANISTER_ERROR) {
+                create_canister_error_found = true;
+                break;
+            }
+        }
+        assert!(
+            create_canister_error_found,
+            "No error log message containing '{}' was found in the ledger logs",
+            EXPECTED_CREATE_CANISTER_ERROR
+        );
     }
 
     /// Verify that archiving fails if the ledger does not have enough cycles to spawn the archive.

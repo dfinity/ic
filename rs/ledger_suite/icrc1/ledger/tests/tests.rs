@@ -613,6 +613,16 @@ fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach() {
     );
 }
 
+#[test]
+fn test_archiving_skipped_if_cycles_to_create_archive_less_than_cost() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_skipped_if_cycles_to_create_archive_less_than_cost(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
 fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgument {
     LedgerArgument::Upgrade(Some(UpgradeArgs {
         metadata: None,
