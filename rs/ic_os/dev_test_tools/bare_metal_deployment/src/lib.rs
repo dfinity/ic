@@ -62,20 +62,6 @@ impl BareMetalIpmiSession {
     /// Injects the provided SSH public key into the baremetal host by logging in via IPMI SOL
     /// The key must be provided in OpenSSH format (e.g. "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAr...")
     pub fn inject_ssh_key(&mut self, ssh_public_key: &str) -> Result<()> {
-        for _ in 0..3 {
-            match self.inject_ssh_key_impl(ssh_public_key) {
-                Ok(()) => return Ok(()),
-                Err(e) => {
-                    eprintln!("Attempt to inject SSH key failed: {e}. Retrying...");
-                    std::thread::sleep(Duration::from_secs(20));
-                }
-            }
-        }
-
-        bail!("Failed to inject SSH key after multiple attempts");
-    }
-
-    fn inject_ssh_key_impl(&mut self, ssh_public_key: &str) -> Result<()> {
         self.get_to_login_prompt()?;
 
         // Send "root" and wait for password
