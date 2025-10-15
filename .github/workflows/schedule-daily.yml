@@ -29,16 +29,6 @@ jobs:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
-      - &generate-bazel-invocation-ids
-        name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
       - &backup-pod-access
         name: Set up backup pod access
         run: |
@@ -86,12 +76,9 @@ jobs:
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
           launch_bare_metal() {
-            local invocation_id="$1"
-            shift
 
             # shellcheck disable=SC2046,SC2086
             bazel --output_base=/var/tmp/bazel-output run \
-              --invocation_id="$invocation_id" \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
                 --csv_filename "$(realpath file1)" \
@@ -125,15 +112,12 @@ jobs:
     steps:
       - *checkout
       - *backup-pod-access
-      - *generate-bazel-invocation-ids
-
       - name: Run FI Tests Nightly
         uses: ./.github/actions/bazel
         with:
           run: |
             bazel test \
               --config=stamped \
-              --invocation_id="${{  fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=fi_tests_nightly \
               //rs/ledger_suite/... \
               --test_env=SSH_AUTH_SOCK \
@@ -149,8 +133,6 @@ jobs:
     steps:
       - *checkout
       - *backup-pod-access
-      - *generate-bazel-invocation-ids
-
       - name: Run NNS Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -158,7 +140,6 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=nns_tests_nightly \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going
@@ -179,8 +160,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - *checkout
-      - *generate-bazel-invocation-ids
-
       - name: Run PocketIC Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -188,7 +167,6 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=pocketic_tests_nightly \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //rs/pocket_ic_server/... \
               --test_env=SSH_AUTH_SOCK \
               --keep_going
@@ -209,8 +187,6 @@ jobs:
     timeout-minutes: 480
     steps:
       - *checkout
-      - *generate-bazel-invocation-ids
-
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel
@@ -231,7 +207,6 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=system_test_benchmark \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --//bazel:enable_upload_perf_systest_results=True \
               --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \

@@ -13,6 +13,7 @@ use crate::{
         split_governance_proto,
     },
     is_known_neuron_voting_history_enabled, is_neuron_follow_restrictions_enabled,
+    is_set_subnet_operational_level_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -95,8 +96,8 @@ use ic_nervous_system_rate_limits::{
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
@@ -593,6 +594,11 @@ impl NnsFunction {
             NnsFunction::SubnetRentalRequest => {
                 (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
             }
+            NnsFunction::PauseCanisterMigrations => (MIGRATION_CANISTER_ID, "disable_api"),
+            NnsFunction::UnpauseCanisterMigrations => (MIGRATION_CANISTER_ID, "enable_api"),
+            NnsFunction::SetSubnetOperationalLevel => {
+                (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
+            }
             NnsFunction::BlessReplicaVersion
             | NnsFunction::RetireReplicaVersion
             | NnsFunction::UpdateElectedHostosVersions
@@ -654,7 +660,8 @@ impl NnsFunction {
             | NnsFunction::RecoverSubnet
             | NnsFunction::RemoveNodesFromSubnet
             | NnsFunction::ChangeSubnetMembership
-            | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
+            | NnsFunction::UpdateConfigOfSubnet
+            | NnsFunction::SetSubnetOperationalLevel => Topic::SubnetManagement,
             NnsFunction::ReviseElectedGuestosVersions
             | NnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
             NnsFunction::DeployHostosToSomeNodes
@@ -685,6 +692,9 @@ impl NnsFunction {
             | NnsFunction::BitcoinSetConfig => Topic::ProtocolCanisterManagement,
             NnsFunction::AddSnsWasm | NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 Topic::ServiceNervousSystemManagement
+            }
+            NnsFunction::PauseCanisterMigrations | NnsFunction::UnpauseCanisterMigrations => {
+                Topic::ProtocolCanisterManagement
             }
         };
         Ok(topic)
@@ -5116,6 +5126,15 @@ impl Governance {
                 format!("Invalid NnsFunction id: {}", update.nns_function),
             )
         })?;
+
+        if !is_set_subnet_operational_level_enabled()
+            && nns_function == NnsFunction::SetSubnetOperationalLevel
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "SetSubnetOperationalLevel proposals are not enabled yet.".to_string(),
+            ));
+        }
 
         let invalid_proposal_error = |error_message: String| -> GovernanceError {
             GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)

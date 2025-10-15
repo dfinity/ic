@@ -29,9 +29,10 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
+    CanisterUpgradeOptions, EmptyBlob, InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2,
+    MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
+    UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -783,9 +784,17 @@ impl ExecutionTest {
     }
 
     /// Returns the canister status by canister id.
-    pub fn canister_status(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+    pub fn canister_status(
+        &mut self,
+        canister_id: CanisterId,
+    ) -> Result<CanisterStatusResultV2, UserError> {
         let payload = CanisterIdRecord::from(canister_id).encode();
-        self.subnet_message(Method::CanisterStatus, payload)
+        let result = self.subnet_message(Method::CanisterStatus, payload);
+        match result {
+            Ok(WasmResult::Reply(bytes)) => Ok(CanisterStatusResultV2::decode(&bytes).unwrap()),
+            Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
+            Err(err) => Err(err),
+        }
     }
 
     /// Updates the freezing threshold of the given canister.
@@ -1122,7 +1131,6 @@ impl ExecutionTest {
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
@@ -2107,11 +2115,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_deterministic_time_slicing_disabled(mut self) -> Self {
-        self.execution_config.deterministic_time_slicing = FlagStatus::Disabled;
-        self
-    }
-
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
         self
@@ -2574,7 +2577,6 @@ impl ExecutionTestBuilder {
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_message,
@@ -2583,7 +2585,6 @@ impl ExecutionTestBuilder {
                     .max_instructions_per_slice,
             ),
             install_code_instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_install_code,
