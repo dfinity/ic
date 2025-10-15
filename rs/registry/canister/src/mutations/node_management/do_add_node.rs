@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{common::LOG_PREFIX, rate_limits, registry::Registry};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
@@ -25,6 +25,7 @@ use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
+use rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 
 impl Registry {
     /// Adds a new node to the registry.
@@ -61,6 +62,12 @@ impl Registry {
         // (We use the http endpoint to be in line with what is used by the
         // release dashboard.)
         let http_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
+
+        // 2a. Check IP-based rate limiting (1 node addition per day per IP)
+        let ip_addr = http_endpoint.ip_addr.clone();
+        let ip_reservation = try_reserve_add_node_capacity(now, ip_addr.clone())
+            .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
+
         let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
         let mut mutations = Vec::new();
         let num_removed_nodes = nodes_with_same_ip.len() as u64;
@@ -188,6 +195,11 @@ impl Registry {
 
         if let Err(e) = self.commit_used_capacity_for_node_operator_operation(now, reservation) {
             println!("{LOG_PREFIX}do_add_node did not use reservation capacity: {e}");
+        }
+
+        // 11. Commit IP-based rate limiter reservation
+        if let Err(e) = commit_add_node_capacity(now, ip_reservation) {
+            println!("{LOG_PREFIX}do_add_node did not use IP reservation capacity: {e}");
         }
 
         Ok(node_id)
@@ -332,6 +344,7 @@ mod tests {
     use lazy_static::lazy_static;
     use maplit::btreemap;
     use prost::Message;
+    use rate_limits::get_available_add_node_capacity;
     use std::str::FromStr;
 
     /// Prepares the payload to add a new node, for tests.
@@ -1102,6 +1115,113 @@ mod tests {
         assert_eq!(
             error,
             "Rate Limit Capacity exceeded. Please wait and try again later."
+        );
+    }
+
+    #[test]
+    fn test_ip_rate_limiting_for_add_node() {
+        use crate::rate_limits;
+
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+
+        // Add node operator record with sufficient allowance
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 10, // Enough for multiple nodes
+            ..Default::default()
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        // Prepare payloads with the same IP address
+        let (payload_1, _) = prepare_add_node_payload(1);
+        let (mut payload_2, _) = prepare_add_node_payload(2);
+        payload_2.http_endpoint.clone_from(&payload_1.http_endpoint);
+
+        let now = now_system_time();
+        let test_ip = connection_endpoint_from_string(&payload_1.http_endpoint).ip_addr;
+
+        // Check that we start with capacity available
+        let initial_capacity = get_available_add_node_capacity(test_ip.clone(), now);
+        assert_eq!(initial_capacity, 1, "Should start with 1 capacity");
+
+        // Act: Add first node with a specific IP - should succeed
+        let result_1 = registry.do_add_node_(payload_1.clone(), node_operator_id, now);
+        assert!(result_1.is_ok(), "First node addition should succeed");
+
+        // Check that capacity is now exhausted
+        let after_first_capacity = get_available_add_node_capacity(test_ip.clone(), now);
+        assert_eq!(
+            after_first_capacity, 0,
+            "Capacity should be exhausted after first node"
+        );
+
+        // Act: Try to add second node with the same IP immediately - should fail
+        let result_2 = registry.do_add_node_(payload_2.clone(), node_operator_id, now);
+        assert!(
+            result_2.is_err(),
+            "Second node addition should fail due to rate limiting"
+        );
+        let err_msg = result_2.unwrap_err();
+        assert!(
+            err_msg.contains("Capacity exceeded") || err_msg.contains("Rate"),
+            "Error message should mention rate/capacity limit, got: {err_msg}"
+        );
+
+        // Act: Try again after 24 hours - should succeed
+        let one_day_later = now + std::time::Duration::from_secs(86401);
+        let after_day_capacity = get_available_add_node_capacity(test_ip.clone(), one_day_later);
+        assert_eq!(
+            after_day_capacity, 1,
+            "Capacity should be restored after 24 hours"
+        );
+
+        let result_3 = registry.do_add_node_(payload_2.clone(), node_operator_id, one_day_later);
+        assert!(
+            result_3.is_ok(),
+            "Node addition should succeed after 24 hours"
+        );
+    }
+
+    #[test]
+    fn test_ip_rate_limiting_different_ips() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+
+        // Add node operator record with sufficient allowance
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 10,
+            ..Default::default()
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        // Prepare payloads with different IP addresses
+        let (payload_1, _) = prepare_add_node_payload(1);
+        let (payload_2, _) = prepare_add_node_payload(2);
+
+        assert_ne!(
+            payload_1.http_endpoint, payload_2.http_endpoint,
+            "Payloads should have different IPs"
+        );
+
+        let now = now_system_time();
+
+        // Act: Add first node
+        let result_1 = registry.do_add_node_(payload_1, node_operator_id, now);
+        assert!(result_1.is_ok(), "First node addition should succeed");
+
+        // Act: Add second node with different IP immediately - should succeed
+        let result_2 = registry.do_add_node_(payload_2, node_operator_id, now);
+        assert!(
+            result_2.is_ok(),
+            "Second node addition with different IP should succeed"
         );
     }
 }

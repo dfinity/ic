@@ -6,7 +6,8 @@ use crate::storage::{
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_rate_limits::{
-    RateLimiter, RateLimiterConfig, RateLimiterError, Reservation, StableMemoryCapacityStorage,
+    InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError, Reservation,
+    StableMemoryCapacityStorage,
 };
 use ic_stable_structures::{DefaultMemoryImpl, memory_manager::VirtualMemory};
 use std::time::SystemTime;
@@ -24,6 +25,9 @@ const NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY: u64 = 20;
 const NODE_OPERATOR_MAX_SPIKE: u64 = NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY * 7;
 pub const NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
+
+const ADD_NODE_IP_CAPACITY: u64 = 4;
+const ADD_NODE_IP_REFILL_INTERVAL_SECONDS: u64 = ONE_DAY_SECONDS / 4;
 
 /// Creates a rate limiter configuration for node providers
 fn create_node_provider_rate_limiter_config() -> RateLimiterConfig {
@@ -45,6 +49,17 @@ fn create_node_operator_rate_limiter_config() -> RateLimiterConfig {
     }
 }
 
+/// Creates a rate limiter configuration for add_node IP-based limiting
+/// Limits to 1 node addition per day per IP address
+fn create_add_node_ip_rate_limiter_config() -> RateLimiterConfig {
+    RateLimiterConfig {
+        add_capacity_amount: 1,
+        add_capacity_interval: Duration::from_secs(ADD_NODE_IP_REFILL_INTERVAL_SECONDS),
+        max_capacity: ADD_NODE_IP_CAPACITY,
+        max_reservations: ADD_NODE_IP_CAPACITY * 2,
+    }
+}
+
 thread_local! {
     static NODE_PROVIDER_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
@@ -59,6 +74,14 @@ thread_local! {
         create_node_operator_rate_limiter_config(),
         get_node_operator_rate_limiter_memory(),
     ));
+
+    /// IP-based rate limiter for add_node operations.
+    /// Stored in heap memory (not stable memory).
+    /// Limits to 1 node addition per day per IP address.
+    static ADD_NODE_IP_RATE_LIMITER: RefCell<InMemoryRateLimiter<String>> =
+        RefCell::new(InMemoryRateLimiter::new_in_memory(
+            create_add_node_ip_rate_limiter_config(),
+        ));
 }
 
 fn node_provider_key(node_provider: PrincipalId) -> String {
@@ -79,6 +102,10 @@ fn with_node_operator_rate_limiter<R>(
     f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
 ) -> R {
     NODE_OPERATOR_RATE_LIMITER.with_borrow_mut(f)
+}
+
+fn with_add_node_ip_rate_limiter<R>(f: impl FnOnce(&mut InMemoryRateLimiter<String>) -> R) -> R {
+    ADD_NODE_IP_RATE_LIMITER.with_borrow_mut(f)
 }
 
 pub struct RateLimitReservation {
@@ -178,6 +205,29 @@ impl Registry {
             rate_limiter.get_available_capacity(node_operator_key(node_operator_id), now)
         })
     }
+}
+
+/// Try to reserve capacity for an add_node operation based on IP address.
+/// Each IP address can add 1 node per day.
+pub fn try_reserve_add_node_capacity(
+    now: SystemTime,
+    ip_addr: String,
+) -> Result<Reservation<String>, RateLimiterError> {
+    with_add_node_ip_rate_limiter(|rate_limiter| rate_limiter.try_reserve(now, ip_addr, 1))
+}
+
+/// Commit the reserved capacity for an add_node operation.
+pub fn commit_add_node_capacity(
+    now: SystemTime,
+    reservation: Reservation<String>,
+) -> Result<(), RateLimiterError> {
+    with_add_node_ip_rate_limiter(|rate_limiter| rate_limiter.commit(now, reservation))
+}
+
+/// Get available capacity for an IP address (for testing).
+#[cfg(test)]
+pub fn get_available_add_node_capacity(ip_addr: String, now: SystemTime) -> u64 {
+    with_add_node_ip_rate_limiter(|rate_limiter| rate_limiter.get_available_capacity(ip_addr, now))
 }
 
 #[cfg(test)]
