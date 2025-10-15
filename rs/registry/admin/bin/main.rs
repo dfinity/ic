@@ -10,14 +10,13 @@ use cycles_minting_canister::{
     UpdateSubnetTypeArgs,
 };
 use helpers::{
-    get_node_record_pb, get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details,
+    get_node_record_pb, get_proposer_and_identity, get_subnet_ids, get_subnet_record_with_details,
     parse_proposal_url, shortened_pid_string, shortened_subnet_string,
 };
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
-use ic_canister_client::Sender;
-use ic_canister_client_sender::SigKeys;
 // Type alias for clarity
 type IcAgent = ic_agent::Agent;
+use ic_agent::Identity;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
@@ -68,7 +67,6 @@ use ic_nns_governance_api::{
     },
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
-use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
@@ -156,6 +154,7 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -166,7 +165,6 @@ use std::{
     path::{Path, PathBuf},
     process::exit,
     str::FromStr,
-    sync::Arc,
     time::SystemTime,
 };
 use types::{
@@ -3954,11 +3952,11 @@ async fn main() {
         );
     }
 
-    let sender = if opts.secret_key_pem.is_some() || opts.use_hsm {
-        // Make sure to let the user know that we only actually use the sender
+    let identity: Arc<dyn Identity> = if opts.secret_key_pem.is_some() || opts.use_hsm {
+        // Make sure to let the user know that we only actually use the identity
         // in methods that go through the NNS handlers and not for other methods.
         //
-        // TODO(NNS1-486): Remove ic-admin command whitelist for sender
+        // TODO(NNS1-486): Remove ic-admin command whitelist for identity
         match opts.subcmd {
             SubCommand::ProposeToAddApiBoundaryNodes(_) => (),
             SubCommand::ProposeToAddFirewallRules(_) => (),
@@ -4020,29 +4018,22 @@ async fn main() {
         if opts.secret_key_pem.is_some() {
             let secret_key_path = opts.secret_key_pem.unwrap();
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
-            let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
-            Sender::SigKeys(sig_keys)
-        } else if opts.use_hsm {
-            make_hsm_sender(
-                &opts.hsm_slot.expect(
-                    "HSM slot must also be provided for --use-hsm; use --hsm-slot or see --help.",
-                ),
-                &opts.hsm_key_id.expect(
-                    "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
-                ),
-                &opts.hsm_pin.expect(
-                    "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
-                ),
+            Arc::new(
+                ic_agent::identity::BasicIdentity::from_pem(contents.as_bytes())
+                    .expect("Failed to parse PEM file as BasicIdentity"),
             )
+        } else if opts.use_hsm {
+            panic!(
+                "HSM support not yet implemented for ic-agent. Please use --secret-key-pem with an Ed25519 key."
+            );
         } else {
-            Sender::Anonymous
+            Arc::new(ic_agent::identity::AnonymousIdentity)
         }
     } else {
-        Sender::Anonymous
+        Arc::new(ic_agent::identity::AnonymousIdentity)
     };
 
-    let identity = sender_to_identity(sender.clone());
-    let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
+    let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity.clone());
     let registry_canister = RegistryCanister::new_with_agent(ic_agent);
 
     match opts.subcmd {
@@ -4231,8 +4222,7 @@ async fn main() {
             }
         }
         SubCommand::ProposeToDeployGuestosToAllSubnetNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4294,8 +4284,7 @@ async fn main() {
             }
         }
         SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4307,8 +4296,7 @@ async fn main() {
         }
         SubCommand::ProposeToCreateSubnet(mut cmd) => {
             cmd.apply_defaults_for_unset_fields();
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4319,13 +4307,12 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToCreateServiceNervousSystem(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_to_create_service_nervous_system(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToChangeSubnetMembership(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let (proposer, identity_clone) = cmd.proposer_and_identity(identity.clone());
             if !opts.silence_notices {
                 println!(
                     "Notice: invoking this command can undesirably worsen the decentralization."
@@ -4334,8 +4321,7 @@ async fn main() {
                     "Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal"
                 )
             }
-            let identity = sender_to_identity(sender.clone());
-            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity_clone);
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ChangeSubnetMembership,
@@ -4345,8 +4331,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUpdateRecoveryCup(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4357,8 +4342,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUpdateSubnet(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4369,8 +4353,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToAddNnsCanister(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4381,14 +4364,12 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToChangeNnsCanister(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToHardResetNnsRootToVersion(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_external_proposal_from_command::<
                 HardResetNnsRootToVersionPayload,
@@ -4402,8 +4383,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUninstallCode(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4414,8 +4394,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUpdateXdrIcpConversionRate(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4426,20 +4405,17 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToStartCanister(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToStopCanister(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4450,8 +4426,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToSetAuthorizedSubnetworks(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4462,8 +4437,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUpdateSubnetType(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4474,8 +4448,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToChangeSubnetTypeAssignment(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4497,8 +4470,7 @@ async fn main() {
             store_subnet_pk(&registry_canister, cmd.subnet, cmd.target_path.as_path()).await;
         }
         SubCommand::ProposeToRemoveNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4509,8 +4481,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToAddNodeOperator(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4563,8 +4534,7 @@ async fn main() {
             update_registry_local_store(reachable_nns_urls, cmd).await;
         }
         SubCommand::ProposeToUpdateNodeOperatorConfig(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4585,8 +4555,7 @@ async fn main() {
             println!("{firewall_config:#?}");
         }
         SubCommand::ProposeToSetFirewallConfig(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4600,8 +4569,7 @@ async fn main() {
             if cmd.test {
                 test_add_firewall_rules(cmd, &registry_canister).await;
             } else {
-                let (proposer, sender) = cmd.proposer_and_sender(sender);
-                let identity = sender_to_identity(sender);
+                let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
                 let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
                 propose_external_proposal_from_command(
                     cmd,
@@ -4616,8 +4584,7 @@ async fn main() {
             if cmd.test {
                 test_remove_firewall_rules(cmd, &registry_canister).await;
             } else {
-                let (proposer, sender) = cmd.proposer_and_sender(sender);
-                let identity = sender_to_identity(sender);
+                let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
                 let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
                 propose_external_proposal_from_command(
                     cmd,
@@ -4632,8 +4599,7 @@ async fn main() {
             if cmd.test {
                 test_update_firewall_rules(cmd, &registry_canister).await;
             } else {
-                let (proposer, sender) = cmd.proposer_and_sender(sender);
-                let identity = sender_to_identity(sender);
+                let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
                 let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
                 propose_external_proposal_from_command(
                     cmd,
@@ -4654,9 +4620,8 @@ async fn main() {
             get_firewall_ruleset_hash(cmd);
         }
         SubCommand::ProposeToAddOrRemoveNodeProvider(cmd) => {
-            let (proposer, sender) =
-                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) =
+                get_proposer_and_identity(cmd.proposer, identity.clone(), cmd.test_neuron_proposer);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_to_add_or_remove_node_provider(cmd, ic_agent, proposer).await
         }
@@ -4665,8 +4630,7 @@ async fn main() {
             println!("{latest_version}")
         }
         SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(cmd) => {
-            let sender = get_test_sender_if_set(sender, cmd.test_user_proposer);
-            let identity = sender_to_identity(sender);
+            let identity = get_test_identity_if_set(identity.clone(), cmd.test_user_proposer);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             submit_root_proposal_to_upgrade_governance_canister(cmd, ic_agent).await
         }
@@ -4674,13 +4638,11 @@ async fn main() {
             swap_node_in_subnet_directly(registry_canister, cmd).await;
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
-            let identity = sender_to_identity(sender);
-            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
+            let ic_agent = make_agent_from_identity(reachable_nns_urls, identity.clone());
             get_pending_root_proposals_to_upgrade_governance_canister(ic_agent).await
         }
         SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(cmd) => {
-            let sender = get_test_sender_if_set(sender, cmd.test_user_voter);
-            let identity = sender_to_identity(sender);
+            let identity = get_test_identity_if_set(identity.clone(), cmd.test_user_voter);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             vote_on_root_proposal_to_upgrade_governance_canister(cmd, ic_agent).await
         }
@@ -4695,8 +4657,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToAddOrRemoveDataCenters(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4749,8 +4710,7 @@ async fn main() {
             );
         }
         SubCommand::ProposeToUpdateNodeRewardsTable(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4761,8 +4721,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4773,8 +4732,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4795,7 +4753,6 @@ async fn main() {
             .await;
         }
         SubCommand::GetMonthlyNodeProviderRewards => {
-            let identity = sender_to_identity(sender);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
                 ic_agent,
@@ -4807,8 +4764,7 @@ async fn main() {
             println!("{response:?}");
         }
         SubCommand::ProposeToRemoveNodeOperators(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4819,8 +4775,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToRerouteCanisterRanges(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4831,8 +4786,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToPrepareCanisterMigration(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4843,8 +4797,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToCompleteCanisterMigration(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4863,8 +4816,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToAddWasmToSnsWasm(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4875,8 +4827,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4887,8 +4838,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToUpdateSnsDeployWhitelist(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4899,10 +4849,8 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(cmd) => {
-            let (proposer, sender) =
-                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
-
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) =
+                get_proposer_and_identity(cmd.proposer, identity.clone(), cmd.test_neuron_proposer);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             // Custom rendering to make it easier to debug your command
             if cmd.is_dry_run() {
@@ -4920,9 +4868,8 @@ async fn main() {
             .await
         }
         SubCommand::ProposeToSetBitcoinConfig(cmd) => {
-            let (proposer, sender) =
-                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) =
+                get_proposer_and_identity(cmd.proposer, identity.clone(), cmd.test_neuron_proposer);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_external_proposal_from_command::<
                 BitcoinSetConfigProposal,
@@ -4931,8 +4878,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToReviseElectedHostosVersions(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4943,8 +4889,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToDeployHostosToSomeNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4979,8 +4924,7 @@ async fn main() {
             }
         }
         SubCommand::ProposeToAddApiBoundaryNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -4991,8 +4935,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToRemoveApiBoundaryNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -5003,8 +4946,7 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -5033,8 +4975,7 @@ async fn main() {
             );
         }
         SubCommand::ProposeToRentSubnet(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender.clone());
+            let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
             let ic_agent = make_agent_from_identity(reachable_nns_urls.clone(), identity);
             propose_external_proposal_from_command(
                 cmd,
@@ -5045,14 +4986,12 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToFulfillSubnetRentalRequest(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            let identity = sender_to_identity(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
             let ic_agent = make_agent_from_identity(reachable_nns_urls, identity);
             propose_action_from_command(cmd, ic_agent, proposer).await;
         }
@@ -6066,17 +6005,44 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
     eprintln!("Finished update.");
 }
 
-/// Returns a sender corresponding to a `test_sender`, or `current_sender` if
+/// Returns an identity corresponding to a `test_identity`, or `current_identity` if
 /// not set.
-fn get_test_sender_if_set(current_sender: Sender, test_sender: Option<u8>) -> Sender {
-    match test_sender {
-        None => current_sender,
-        Some(1) => Sender::from_keypair(&TEST_USER1_KEYPAIR),
-        Some(2) => Sender::from_keypair(&TEST_USER2_KEYPAIR),
-        Some(3) => Sender::from_keypair(&TEST_USER3_KEYPAIR),
-        Some(4) => Sender::from_keypair(&TEST_USER4_KEYPAIR),
+fn get_test_identity_if_set(
+    current_identity: Arc<dyn ic_agent::Identity>,
+    test_identity: Option<u8>,
+) -> Arc<dyn ic_agent::Identity> {
+    match test_identity {
+        None => current_identity,
+        Some(1) => {
+            let pem = TEST_USER1_KEYPAIR.to_pem();
+            Arc::new(
+                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                    .expect("Failed to create BasicIdentity from test keypair"),
+            )
+        }
+        Some(2) => {
+            let pem = TEST_USER2_KEYPAIR.to_pem();
+            Arc::new(
+                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                    .expect("Failed to create BasicIdentity from test keypair"),
+            )
+        }
+        Some(3) => {
+            let pem = TEST_USER3_KEYPAIR.to_pem();
+            Arc::new(
+                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                    .expect("Failed to create BasicIdentity from test keypair"),
+            )
+        }
+        Some(4) => {
+            let pem = TEST_USER4_KEYPAIR.to_pem();
+            Arc::new(
+                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                    .expect("Failed to create BasicIdentity from test keypair"),
+            )
+        }
         _ => {
-            panic!("Invalid test user sender value. Must be [1, 4].");
+            panic!("Invalid test user identity value. Must be [1, 4].");
         }
     }
 }
@@ -6234,40 +6200,16 @@ fn parse_nns_public_key(
     }
 }
 
-/// Convert a Sender to an ic_agent Identity
-fn sender_to_identity(sender: Sender) -> Box<dyn ic_agent::Identity> {
-    match sender {
-        Sender::Anonymous => Box::new(ic_agent::identity::AnonymousIdentity),
-        Sender::SigKeys(SigKeys::Ed25519(keypair)) => {
-            let pem = keypair.to_pem();
-            Box::new(
-                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
-                    .expect("Failed to create BasicIdentity from Ed25519 keypair"),
-            )
-        }
-        Sender::SigKeys(SigKeys::EcdsaSecp256k1(_keypair)) => {
-            panic!(
-                "Secp256k1 keypairs are not yet supported for ic-agent conversion. Use Ed25519 or Anonymous."
-            );
-        }
-        _ => {
-            panic!(
-                "Unsupported sender type for ic-agent. Only Anonymous, Ed25519, and Secp256k1 are supported."
-            );
-        }
-    }
-}
-
 /// Build a new ic-agent Agent from an Identity
 fn make_agent_from_identity(
     nns_urls: Vec<Url>,
-    identity: Box<dyn ic_agent::Identity>,
+    identity: Arc<dyn ic_agent::Identity>,
 ) -> ic_agent::Agent {
     let nns_url = &nns_urls[0];
 
     ic_agent::Agent::builder()
         .with_url(nns_url.as_str())
-        .with_boxed_identity(identity)
+        .with_arc_identity(identity)
         .build()
         .expect("Failed to build ic-agent")
 }
