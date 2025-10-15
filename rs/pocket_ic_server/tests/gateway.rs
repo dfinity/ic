@@ -486,7 +486,7 @@ fn test_gateway_invalid_forward_to() {
             https_config: None,
         };
         let client = Client::builder()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(300)) // same as bazel test timeout for this test
             .build()
             .unwrap();
         let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
