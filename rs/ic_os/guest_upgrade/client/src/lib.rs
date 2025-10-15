@@ -38,7 +38,7 @@ const NNS_PUBLIC_KEY_PATH: &str = "/opt/ic/share/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 pub type CanOpenStore =
-Box<dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
+    Box<dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
 
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
@@ -116,7 +116,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
                 &server_public_key_der,
             )
             .await
-                .context("Failed to retrieve disk encryption key")
+            .context("Failed to retrieve disk encryption key")
         };
 
         let _ignored = upgrade_service_client

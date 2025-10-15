@@ -415,7 +415,7 @@ fn test_can_open_store_with_previous_key() {
         &fixture.previous_key_path,
         &mut sev_fw,
     )
-        .expect("can_open_store returned error");
+    .expect("can_open_store returned error");
     assert!(
         result,
         "Expected can_open_store to return true when previous key works"
@@ -437,7 +437,7 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
             device_path: &fixture.device.path().unwrap(),
         },
     )
-        .unwrap();
+    .unwrap();
 
     format_crypt_device(&fixture.device.path().unwrap(), sev_key.as_bytes()).unwrap();
 
@@ -448,7 +448,7 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
         &fixture.previous_key_path,
         &mut sev_fw,
     )
-        .expect("can_open_store returned error");
+    .expect("can_open_store returned error");
     assert!(
         result,
         "Expected can_open_store to return true when derived SEV key works"
@@ -471,7 +471,7 @@ fn test_cannot_open_store_when_no_key_works() {
         &fixture.previous_key_path,
         &mut sev_fw,
     )
-        .expect("can_open_store returned error");
+    .expect("can_open_store returned error");
     assert!(
         !result,
         "Expected can_open_store to return false when no key can open the device"
