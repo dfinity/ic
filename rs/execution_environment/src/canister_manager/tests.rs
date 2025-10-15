@@ -110,6 +110,8 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const T: u128 = 1_000_000_000_000;
+
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -1406,6 +1408,10 @@ fn get_canister_status_of_self() {
 
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+
+    // The canister should not control itself in this test.
+    assert!(!status.controllers().contains(&canister_id.get()));
+
     assert_eq!(status.status(), CanisterStatusType::Running);
     assert!(status.cycles() <= INITIAL_CYCLES.get());
     assert!(status.cycles() >= INITIAL_CYCLES.get() - 100_000_000_000);
@@ -1652,18 +1658,126 @@ fn set_controller_with_incorrect_controller() {
 }
 
 #[test]
-fn set_controller_with_correct_controller() {
+fn test_create_canister_with_controllers() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(100 * T)
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let create_canister_with_controllers =
+        |test: &mut ExecutionTest, controllers: Vec<PrincipalId>| {
+            let settings = CanisterSettingsArgsBuilder::new()
+                .with_controllers(controllers.clone())
+                .build();
+            let create_canister_args = CreateCanisterArgs {
+                settings: Some(settings),
+                sender_canister_version: None,
+            };
+            let call_args = CallArgs::default().other_side(create_canister_args.encode());
+            let res = test.ingress(
+                canister_id,
+                "update",
+                wasm()
+                    .call_with_cycles(IC_00, Method::CreateCanister, call_args, Cycles::from(T))
+                    .build(),
+            );
+            let new_canister_id = CanisterIdRecord::decode(&get_reply(res))
+                .unwrap()
+                .get_canister_id();
+
+            assert_eq!(
+                *test.canister_state(new_canister_id).controllers(),
+                controllers.into_iter().collect::<BTreeSet<_>>()
+            );
+        };
+
+    create_canister_with_controllers(&mut test, vec![]);
+    create_canister_with_controllers(&mut test, vec![user_test_id(0).get()]);
+    create_canister_with_controllers(&mut test, (0..10).map(|i| user_test_id(i).get()).collect());
+}
+
+#[test]
+fn test_set_controllers_via_update_settings() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let update_settings_with_controllers =
+        |test: &mut ExecutionTest, controllers: Vec<PrincipalId>| {
+            let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+            test.canister_update_controller(canister_id, controllers.clone())
+                .unwrap();
+
+            // List of controllers should have been updated to the new controllers.
+            assert_eq!(
+                *test.canister_state(canister_id).controllers(),
+                controllers.into_iter().collect::<BTreeSet<_>>()
+            );
+        };
+
+    update_settings_with_controllers(&mut test, vec![]);
+    update_settings_with_controllers(&mut test, vec![user_test_id(0).get()]);
+    update_settings_with_controllers(&mut test, (0..10).map(|i| user_test_id(i).get()).collect());
+}
+
+#[test]
+fn test_set_controllers_to_self() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-    let new_controller = user_test_id(10).get();
-    test.set_controller(canister_id, new_controller).unwrap();
+    test.canister_update_controller(canister_id, vec![canister_id.get()])
+        .unwrap();
 
-    // List of controllers should have been updated to the new_controller.
+    // List of controllers should have been updated to the new controller.
     assert_eq!(
-        test.canister_state(canister_id).controllers(),
-        &btreeset! {new_controller}
+        *test.canister_state(canister_id).controllers(),
+        btreeset! {canister_id.get()}
+    );
+}
+
+#[test]
+fn duplicate_controllers() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let controllers = vec![
+        test.user_id().get(),
+        user_test_id(42).get(),
+        user_test_id(42).get(),
+    ];
+    test.canister_update_controller(canister_id, controllers.clone())
+        .unwrap();
+
+    // List of controllers should have been updated to the new controllers.
+    assert_eq!(
+        *test.canister_state(canister_id).controllers(),
+        controllers.into_iter().collect::<BTreeSet<_>>()
+    );
+
+    // Canister status omits duplicates.
+    let status = test.canister_status(canister_id).unwrap();
+    assert_eq!(
+        status.controllers(),
+        vec![test.user_id().get(), user_test_id(42).get()]
+    );
+}
+
+#[test]
+fn too_many_controllers() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let controllers: Vec<_> = (0..11).map(|i| user_test_id(i).get()).collect();
+    let err = test
+        .canister_update_controller(canister_id, controllers.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert!(
+        err.description()
+            .contains("The number of elements exceeds maximum allowed 10")
     );
 }
 
