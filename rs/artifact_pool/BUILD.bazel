@@ -6,12 +6,12 @@ package(default_visibility = ["//visibility:public"])
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/limits",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/consensus",
-    "//rs/crypto/test_utils/crypto_returning_ok",
-    "//rs/test_utilities/logger",  
+    "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",

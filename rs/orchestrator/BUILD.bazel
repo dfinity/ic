@@ -103,6 +103,7 @@ rust_test(
         # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/crypto_returning_ok",
         "//rs/crypto/test_utils/ni-dkg",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",
@@ -112,7 +113,6 @@ rust_test(
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
         "//rs/test_utilities/consensus",
-        "//rs/crypto/test_utils/crypto_returning_ok",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
