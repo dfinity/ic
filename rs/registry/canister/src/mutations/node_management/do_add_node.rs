@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, rate_limits, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
@@ -20,12 +20,12 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
+use crate::rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
-use rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 
 impl Registry {
     /// Adds a new node to the registry.
@@ -327,6 +327,7 @@ mod tests {
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
     use crate::mutations::common::test::TEST_NODE_ID;
+    use crate::rate_limits::get_available_add_node_capacity;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -344,7 +345,6 @@ mod tests {
     use lazy_static::lazy_static;
     use maplit::btreemap;
     use prost::Message;
-    use rate_limits::get_available_add_node_capacity;
     use std::str::FromStr;
 
     /// Prepares the payload to add a new node, for tests.
@@ -1120,8 +1120,6 @@ mod tests {
 
     #[test]
     fn test_ip_rate_limiting_for_add_node() {
-        use crate::rate_limits;
-
         // Arrange
         let mut registry = invariant_compliant_registry(0);
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
