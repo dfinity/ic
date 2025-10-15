@@ -7,7 +7,7 @@ use crate::{ProposalTitle, SubnetDescriptor};
 use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
-use ic_agent::Identity;
+use ic_agent::{Agent, Identity};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -354,7 +354,7 @@ impl ProposeToUpdateSubnetCmd {
 
 #[async_trait]
 impl ProposalPayload<do_update_subnet::UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
-    async fn payload(&self, agent: &ic_agent::Agent) -> do_update_subnet::UpdateSubnetPayload {
+    async fn payload(&self, agent: &Agent) -> do_update_subnet::UpdateSubnetPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         let subnet_record = get_subnet_record(&registry_canister, subnet_id).await;

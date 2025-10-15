@@ -17,6 +17,7 @@ use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 // Type alias for clarity
 type IcAgent = ic_agent::Agent;
 use ic_agent::Identity;
+use ic_agent::identity::{AnonymousIdentity, BasicIdentity, Secp256k1Identity};
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
@@ -4022,7 +4023,7 @@ async fn main() {
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
 
             // Try to parse as Ed25519 (BasicIdentity) first
-            if let Ok(identity) = ic_agent::identity::BasicIdentity::from_pem(contents.as_bytes()) {
+            if let Ok(identity) = BasicIdentity::from_pem(contents.as_bytes()) {
                 Arc::new(identity)
             }
             // Try to parse as Secp256k1 with RFC 5915 format (EC PRIVATE KEY)
@@ -4031,9 +4032,7 @@ async fn main() {
                 let sec1_bytes = secp_key.serialize_sec1();
                 let k256_key = k256::SecretKey::from_slice(&sec1_bytes)
                     .expect("Failed to convert Secp256k1 key to k256::SecretKey");
-                Arc::new(ic_agent::identity::Secp256k1Identity::from_private_key(
-                    k256_key,
-                ))
+                Arc::new(Secp256k1Identity::from_private_key(k256_key))
             }
             // Try to parse as Secp256k1 with PKCS#8 format (PRIVATE KEY)
             else if let Ok(secp_key) = Secp256k1PrivateKey::deserialize_pkcs8_pem(&contents) {
@@ -4041,9 +4040,7 @@ async fn main() {
                 let sec1_bytes = secp_key.serialize_sec1();
                 let k256_key = k256::SecretKey::from_slice(&sec1_bytes)
                     .expect("Failed to convert Secp256k1 key to k256::SecretKey");
-                Arc::new(ic_agent::identity::Secp256k1Identity::from_private_key(
-                    k256_key,
-                ))
+                Arc::new(Secp256k1Identity::from_private_key(k256_key))
             } else {
                 panic!(
                     "Failed to parse PEM file. Tried Ed25519 (BasicIdentity), Secp256k1 RFC5915, and Secp256k1 PKCS#8 formats."
@@ -4079,10 +4076,10 @@ async fn main() {
                 .expect("Failed to create HardwareIdentity from HSM"),
             )
         } else {
-            Arc::new(ic_agent::identity::AnonymousIdentity)
+            Arc::new(AnonymousIdentity)
         }
     } else {
-        Arc::new(ic_agent::identity::AnonymousIdentity)
+        Arc::new(AnonymousIdentity)
     };
 
     let ic_agent = make_agent_from_identity(
@@ -6320,36 +6317,36 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
 /// Returns an identity corresponding to a `test_identity`, or `current_identity` if
 /// not set.
 fn get_test_identity_if_set(
-    current_identity: Arc<dyn ic_agent::Identity>,
+    current_identity: Arc<dyn Identity>,
     test_identity: Option<u8>,
-) -> Arc<dyn ic_agent::Identity> {
+) -> Arc<dyn Identity> {
     match test_identity {
         None => current_identity,
         Some(1) => {
             let pem = TEST_USER1_KEYPAIR.to_pem();
             Arc::new(
-                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                BasicIdentity::from_pem(pem.as_bytes())
                     .expect("Failed to create BasicIdentity from test keypair"),
             )
         }
         Some(2) => {
             let pem = TEST_USER2_KEYPAIR.to_pem();
             Arc::new(
-                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                BasicIdentity::from_pem(pem.as_bytes())
                     .expect("Failed to create BasicIdentity from test keypair"),
             )
         }
         Some(3) => {
             let pem = TEST_USER3_KEYPAIR.to_pem();
             Arc::new(
-                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                BasicIdentity::from_pem(pem.as_bytes())
                     .expect("Failed to create BasicIdentity from test keypair"),
             )
         }
         Some(4) => {
             let pem = TEST_USER4_KEYPAIR.to_pem();
             Arc::new(
-                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+                BasicIdentity::from_pem(pem.as_bytes())
                     .expect("Failed to create BasicIdentity from test keypair"),
             )
         }
@@ -6515,13 +6512,13 @@ fn parse_nns_public_key(
 /// Build a new ic-agent Agent from an Identity
 fn make_agent_from_identity(
     nns_urls: Vec<Url>,
-    identity: Arc<dyn ic_agent::Identity>,
+    identity: Arc<dyn Identity>,
     verify_nns_responses: bool,
     nns_public_key_pem_file: Option<PathBuf>,
-) -> ic_agent::Agent {
+) -> IcAgent {
     let nns_url = &nns_urls[0];
 
-    let agent = ic_agent::Agent::builder()
+    let agent = IcAgent::builder()
         .with_url(nns_url.as_str())
         .with_arc_identity(identity)
         .build()

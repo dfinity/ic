@@ -3,6 +3,7 @@
 use crate::helpers::get_subnet_ids;
 use async_trait::async_trait;
 use candid::CandidType;
+use ic_agent::{Agent, Identity};
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance_api::ProposalActionRequest;
 use ic_protobuf::registry::{
@@ -17,6 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{
     convert::{From, TryFrom, TryInto},
     net::{Ipv4Addr, Ipv6Addr},
@@ -196,10 +198,7 @@ impl From<ProvisionalWhitelistProto> for ProvisionalWhitelistRecord {
 pub trait ProposalMetadata {
     fn summary(&self) -> String;
     fn url(&self) -> String;
-    fn proposer_and_identity(
-        &self,
-        identity: std::sync::Arc<dyn ic_agent::Identity>,
-    ) -> (NeuronId, std::sync::Arc<dyn ic_agent::Identity>);
+    fn proposer_and_identity(&self, identity: Arc<dyn Identity>) -> (NeuronId, Arc<dyn Identity>);
     fn is_dry_run(&self) -> bool;
     fn is_json(&self) -> bool;
 }
@@ -254,12 +253,9 @@ pub enum LogVisibility {
 
 /// Trait to extract the payload for each proposal type.
 /// This trait is async as building some payloads requires async calls.
-///
-/// Note: Uses `ic_agent::Agent` (not `ic_canister_client::Agent`) because
-/// this is primarily used for `RegistryCanister` which now uses ic-agent.
 #[async_trait]
 pub trait ProposalPayload<T: CandidType> {
-    async fn payload(&self, agent: &ic_agent::Agent) -> T;
+    async fn payload(&self, agent: &Agent) -> T;
 }
 
 #[async_trait]

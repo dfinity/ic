@@ -3,6 +3,7 @@ use crate::{
     types::{NodeDetails, SubnetRecord},
 };
 use ic_agent::Identity;
+use ic_agent::identity::{AnonymousIdentity, BasicIdentity};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::{
@@ -15,6 +16,7 @@ use ic_registry_transport::Error;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use prost::Message;
+use std::sync::Arc;
 use std::{convert::TryFrom, fs::read_to_string, path::PathBuf};
 use url::Url;
 
@@ -94,15 +96,15 @@ pub(crate) fn parse_proposal_url(url: &Option<Url>) -> String {
 /// the `NeuronId` and `Identity` passed as argument.
 pub(crate) fn get_proposer_and_identity(
     proposer: Option<NeuronId>,
-    identity: std::sync::Arc<dyn ic_agent::Identity>,
+    identity: Arc<dyn Identity>,
     use_test_neuron: bool,
-) -> (NeuronId, std::sync::Arc<dyn ic_agent::Identity>) {
+) -> (NeuronId, Arc<dyn Identity>) {
     if use_test_neuron {
         let pem = TEST_NEURON_1_OWNER_KEYPAIR.to_pem();
         return (
             NeuronId(TEST_NEURON_1_ID),
-            std::sync::Arc::new(
-                ic_agent::identity::BasicIdentity::from_pem(pem.as_bytes())
+            Arc::new(
+                BasicIdentity::from_pem(pem.as_bytes())
                     .expect("Failed to create BasicIdentity from test keypair"),
             ),
         );
@@ -112,7 +114,7 @@ pub(crate) fn get_proposer_and_identity(
         .sender()
         .expect("Identity must have a sender principal");
     assert!(
-        principal != ic_agent::identity::AnonymousIdentity.sender().unwrap(),
+        principal != AnonymousIdentity.sender().unwrap(),
         "Must specify a keypair to submit a proposal that corresponds to the owner of a neuron."
     );
     (proposer, identity)
