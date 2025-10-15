@@ -17555,12 +17555,22 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-cdk",
- "ic-error-types 0.2.0",
  "ic-types",
+ "ic-types-test-utils",
+ "messaging-test-utils",
  "proptest",
- "rand 0.8.5",
  "serde",
  "serde_bytes",
+ "test-strategy 0.4.0",
+]
+
+[[package]]
+name = "messaging-test-utils"
+version = "0.9.0"
+dependencies = [
+ "ic-types",
+ "messaging-test",
+ "proptest",
 ]
 
 [[package]]

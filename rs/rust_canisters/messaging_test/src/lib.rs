@@ -2,12 +2,6 @@ use candid::{CandidType, Decode, Encode};
 use ic_base_types::CanisterId;
 use serde::{Deserialize, Serialize};
 
-/// The additional overhead from the 2nd encoding when the payload is extended with a padding.
-const PADDED_PAYLOAD_CANDID_HEADER_SIZE: usize = 26;
-
-/// The minimal payload size attached to a call, including the extra bytes due to the padding.
-pub const MINIMUM_MESSAGE_PAYLOAD_SIZE: usize = 95;
-
 /// Includes all the information for a call to this canister.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
 pub struct Call {
@@ -24,7 +18,7 @@ pub struct Call {
 }
 
 /// The message sent to this canister by an ingress or an inter canister message.
-#[derive(Serialize, Deserialize, CandidType, Debug)]
+#[derive(Serialize, Deserialize, CandidType, Debug, Eq, PartialEq)]
 pub struct Message {
     /// The call index for this call, i.e. a strictly increasing integer (with each call).
     pub call_index: u32,
@@ -34,22 +28,13 @@ pub struct Message {
     pub downstream_calls: Vec<Call>,
 }
 
-/// A `Message` encoded with Candid and some padding to reach a target payload size.
-#[derive(Serialize, Deserialize, CandidType)]
-struct MessageWithPadding {
-    #[serde(with = "serde_bytes")]
-    message: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    padding: Vec<u8>,
-}
-
-/// Reply type (Reply, padding)
+/// Includes all the information for a response from this canister.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
 pub enum Response {
     /// The call to `respondent` was successful.
     Success {
-        bytes_received: u32,
-        bytes_sent_back: u32,
+        bytes_received_on_call: u32,
+        bytes_sent_on_reply: u32,
         downstream_responses: Vec<(CanisterId, Response)>,
     },
     /// A synchronous reject occurred, i.e. perform call failed.
@@ -61,28 +46,25 @@ pub enum Response {
     },
 }
 
+/// The reply received from this canister to an ingress or an inter canister message.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
 pub struct Reply {
+    pub bytes_received_on_call: u32,
     pub downstream_responses: Vec<(CanisterId, Response)>,
-}
-
-/// A `Reply` encoded with Candid and some padding to reach a target payload size.
-#[derive(Serialize, Deserialize, CandidType)]
-struct ReplyWithPadding {
-    #[serde(with = "serde_bytes")]
-    reply: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    padding: Vec<u8>,
 }
 
 /// Encodes a message of type `T` using Candid and appropriate padding
 /// to result in a blob of exactly `target_bytes_count` bytes if possible.
-pub fn encode_x<T>(msg: &T, target_bytes_count: usize) -> Vec<u8>
+///
+/// Returns the encoded blob and the bytes count of the contained candid
+/// encoded payload.
+pub fn encode<T>(msg: &T, target_bytes_count: usize) -> (Vec<u8>, u32)
 where
     T: Serialize + for<'a> Deserialize<'a> + CandidType,
 {
     // Encode `msg` in Candid as usual.
     let mut payload = candid::Encode!(msg).expect("candid encoding failed");
+    let payload_size_bytes = payload.len();
 
     // Create bytes vector [payload.len(); payload; padding].
     let mut bytes = Vec::with_capacity(std::cmp::max(target_bytes_count, payload.len() + 4));
@@ -90,68 +72,24 @@ where
     bytes.append(&mut payload);
     bytes.resize(bytes.capacity(), 13_u8);
 
-    bytes
+    (bytes, payload_size_bytes as u32)
 }
 
 /// Decodes a blob into a type `T`, discarding any possible padding.
-pub fn decode_x<T>(blob: Vec<u8>) -> T
+///
+/// Returns the decoded type `T`, the bytes count of the blob and the
+/// bytes count of the contained candid encoded payload.
+pub fn decode<T>(blob: Vec<u8>) -> (T, u32, u32)
 where
     T: Serialize + for<'a> Deserialize<'a> + CandidType,
 {
+    let blob_bytes_count = blob.len() as u32;
     let payload_bytes_count = u32::from_le_bytes(<[u8; 4]>::try_from(&blob[0..4]).unwrap());
-    candid::Decode!(&blob[4..(payload_bytes_count as usize)], T).unwrap()
-}
-
-/// Encodes a `Message` such that the resulting blob has a target size.
-pub fn encode_message(msg: &Message, target_bytes_count: usize) -> Vec<u8> {
-    let message = candid::Encode!(msg).expect("encoding message failed");
-    let padding = vec![
-        13_u8;
-        target_bytes_count
-            .saturating_sub(message.len() + PADDED_PAYLOAD_CANDID_HEADER_SIZE)
-    ];
-    let result = candid::Encode!(&MessageWithPadding { message, padding })
-        .expect("encoding with padding failed");
-    if target_bytes_count >= MINIMUM_MESSAGE_PAYLOAD_SIZE {
-        //assert_eq!(result.len(), target_bytes_count);
-    }
-    result
-}
-
-/// Decodes a `Message` extended with a padding; ignores the padding and returns the decoded `Message`.
-pub fn decode_message(blob: Vec<u8>) -> (Message, u32) {
-    let bytes_count = blob.len() as u32;
-    let MessageWithPadding { message, .. } = candid::Decode!(blob.as_slice(), MessageWithPadding)
-        .expect("failed to decode message with padding");
     (
-        candid::Decode!(message.as_slice(), Message).expect("failed to decode Message"),
-        bytes_count,
+        candid::Decode!(&blob[4..(4 + payload_bytes_count as usize)], T).unwrap(),
+        blob_bytes_count,
+        payload_bytes_count,
     )
-}
-
-/// Encodes a `Reply` such that the resulting blob has a target size.
-pub fn encode_reply(
-    downstream_responses: Vec<(CanisterId, Response)>,
-    target_bytes_count: usize,
-) -> Vec<u8> {
-    let reply = candid::Encode!(&Reply {
-        downstream_responses
-    })
-    .expect("encoding reply with padding failed");
-    let padding = vec![
-        17_u8;
-        target_bytes_count
-            .saturating_sub(reply.len() + PADDED_PAYLOAD_CANDID_HEADER_SIZE)
-    ];
-
-    candid::Encode!(&ReplyWithPadding { reply, padding }).expect("failed to encode reply")
-}
-
-/// Decodes a `Reply`, ignoring the padding.
-pub fn decode_reply(blob: Vec<u8>) -> Reply {
-    let ReplyWithPadding { reply, .. } = candid::Decode!(blob.as_slice(), ReplyWithPadding)
-        .expect("failed to decode reply with padding");
-    candid::Decode!(reply.as_slice(), Reply).expect("failed to decode reply")
 }
 
 // Enable Candid export.

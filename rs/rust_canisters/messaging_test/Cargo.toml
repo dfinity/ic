@@ -12,9 +12,14 @@ candid = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-types = { path = "../../types/types" }
-proptest = { workspace = true }
-rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+
+[dev-dependencies]
+canister-test = { path = "../canister_test" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+messaging-test-utils = { path = "./utils" }
+proptest = { workspace = true }
+test-strategy = "0.4.0"

@@ -1,7 +1,5 @@
 use ic_base_types::{CanisterId, PrincipalId};
-use messaging_test::{
-    Message, Response, decode_message, decode_reply, encode_message, encode_reply,
-};
+use messaging_test::{Message, Reply, Response, decode, encode};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
@@ -14,13 +12,13 @@ thread_local! {
 }
 
 /// No-op encoder used to prevent encoding with candid by default
-/// (The canister manually encodes the reply with extra arguments himself).
+/// (The canister manually encodes the reply with a target byte size).
 fn no_op(bytes: Vec<u8>) -> Vec<u8> {
     bytes
 }
 
-#[ic_cdk::update(decode_with = "decode_message", encode_with = "no_op")]
-async fn pulse((msg, bytes_received): (Message, u32)) -> Vec<u8> {
+#[ic_cdk::update(decode_with = "decode", encode_with = "no_op")]
+async fn pulse((msg, bytes_received, _): (Message, u32, u32)) -> Vec<u8> {
     // Check for sequence errors if this is an inter canister call.
     if let Ok(caller) = CanisterId::try_from_principal_id(PrincipalId(ic_cdk::api::msg_caller())) {
         INCOMING_CALL_INDICES.with_borrow_mut(|incoming_call_indices| {
@@ -45,17 +43,20 @@ async fn pulse((msg, bytes_received): (Message, u32)) -> Vec<u8> {
 
     // Generate futures for all downstream calls.
     let futures = msg.downstream_calls.into_iter().map(|call| {
-        let msg = Message {
-            call_index: CALL_INDEX.replace(CALL_INDEX.get() + 1),
-            reply_bytes: call.reply_bytes,
-            downstream_calls: call.downstream_calls,
-        };
+        let (payload, _) = encode(
+            &Message {
+                call_index: CALL_INDEX.replace(CALL_INDEX.get() + 1),
+                reply_bytes: call.reply_bytes,
+                downstream_calls: call.downstream_calls,
+            },
+            call.call_bytes as usize,
+        );
         match call.timeout_secs {
             Some(timeout_secs) => ic_cdk::call::Call::bounded_wait(call.receiver.into(), "pulse")
                 .change_timeout(timeout_secs),
             None => ic_cdk::call::Call::unbounded_wait(call.receiver.into(), "pulse"),
         }
-        .take_raw_args(encode_message(&msg, call.call_bytes as usize))
+        .take_raw_args(payload)
         .into_future()
     });
 
@@ -64,12 +65,10 @@ async fn pulse((msg, bytes_received): (Message, u32)) -> Vec<u8> {
         .into_iter()
         .map(|reply| match reply {
             Ok(reply) => {
-                let bytes = reply.into_bytes();
-                let bytes_sent_back = bytes.len() as u32;
-                let reply = decode_reply(bytes);
+                let (reply, bytes_sent_on_reply, _): (Reply, u32, u32) = decode(reply.into_bytes());
                 Response::Success {
-                    bytes_received,
-                    bytes_sent_back,
+                    bytes_received_on_call: bytes_received,
+                    bytes_sent_on_reply,
                     downstream_responses: reply.downstream_responses,
                 }
             }
@@ -84,10 +83,11 @@ async fn pulse((msg, bytes_received): (Message, u32)) -> Vec<u8> {
         });
 
     // Collect the respondents together with the responses; encode them.
-    encode_reply(
-        respondents.into_iter().zip(results).collect::<Vec<_>>(),
+    let (payload, _) = encode(
+        &respondents.into_iter().zip(results).collect::<Vec<_>>(),
         msg.reply_bytes as usize,
-    )
+    );
+    payload
 }
 
 fn main() {}
