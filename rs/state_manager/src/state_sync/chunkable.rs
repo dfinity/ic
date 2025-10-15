@@ -1,7 +1,8 @@
 use crate::{
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_FETCH,
     LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
+    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_PREALLOCATE_DIRECTORIES,
+    LABEL_PREALLOCATE_FILES, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
     StateSyncMetrics, StateSyncRefs,
     manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
     state_sync::StateSync,
@@ -267,7 +268,13 @@ impl IncompleteState {
         log: &ReplicaLogger,
         root: &Path,
         manifest: &Manifest,
+        metrics: &StateSyncMetrics,
     ) -> usize {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE_DIRECTORIES])
+            .start_timer();
+
         let unique_dirs = manifest
             .file_table
             .iter()
@@ -298,8 +305,14 @@ impl IncompleteState {
         root: &Path,
         unique_dirs_size: usize,
         manifest: &Manifest,
+        metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
     ) {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE_FILES])
+            .start_timer();
+
         let mut by_parent: HashMap<PathBuf, Vec<&FileInfo>> =
             HashMap::with_capacity(unique_dirs_size);
         for file in manifest.file_table.iter() {
@@ -344,8 +357,8 @@ impl IncompleteState {
             .with_label_values(&[LABEL_PREALLOCATE])
             .start_timer();
 
-        let unique_dirs_size = Self::preallocate_layout_directories(log, root, manifest);
-        Self::preallocate_layout_files(log, root, unique_dirs_size, manifest, thread_pool);
+        let unique_dirs_size = Self::preallocate_layout_directories(log, root, manifest, metrics);
+        Self::preallocate_layout_files(log, root, unique_dirs_size, manifest, metrics, thread_pool);
     }
 
     /// Marks the source file as readonly and creates a hard link to the destination.
