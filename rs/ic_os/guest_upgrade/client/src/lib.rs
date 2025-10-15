@@ -4,7 +4,7 @@ use attestation::attestation_package::generate_attestation_package;
 use attestation::custom_data::DerEncodedCustomData;
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
-use config_types::{GuestOSConfig, GuestVMType};
+use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
