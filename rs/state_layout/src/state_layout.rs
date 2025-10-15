@@ -33,6 +33,13 @@ use std::convert::{From, TryFrom, identity};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::{Error, Write};
+
+/// Result of marking files readonly, containing counts for monitoring
+#[derive(Debug, Clone)]
+pub struct ReadonlyMarkingResult {
+    pub files_traversed: usize,
+    pub files_made_readonly: usize,
+}
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -628,8 +635,17 @@ impl StateLayout {
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
             let cp_layout = self.checkpoint_verified(height)?;
-            cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
+            let result = cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
+
+            info!(
+                &self.log,
+                "Marked checkpoint files readonly: made {} files readonly out of {} traversed for checkpoint {}",
+                result.files_made_readonly,
+                result.files_traversed,
+                height
+            );
         }
+
         Ok(())
     }
 
@@ -1792,10 +1808,11 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     /// Recursively set permissions to readonly for all files under the checkpoint
     /// except for the unverified checkpoint marker file.
+    /// Returns counts of files traversed and files made readonly for monitoring.
     pub fn mark_files_readonly_and_sync(
         &self,
         mut thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<ReadonlyMarkingResult, LayoutError> {
         let checkpoint_path = self.raw_path();
         let convert_io_err = |err: std::io::Error| -> LayoutError {
             LayoutError::IoError {
@@ -1814,17 +1831,24 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         // since another thread might also be validating the checkpoint and may have already deleted the marker.
         // Marking the unverified marker as read-only is unnecessary for this function's purpose and may cause an error.
         paths.retain(|p| p != &self.unverified_checkpoint_marker());
+
+        let files_traversed = paths.len();
+
         let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
-            mark_readonly_if_file(p)?;
+            let was_made_readonly = mark_readonly_if_file(p)?;
             #[cfg(not(target_os = "linux"))]
             sync_path(p)?;
-            Ok::<(), std::io::Error>(())
+            Ok::<bool, std::io::Error>(was_made_readonly)
         });
 
-        results
+        let files_made_readonly = results
             .into_iter()
-            .try_for_each(identity)
-            .map_err(convert_io_err)?;
+            .collect::<Result<Vec<bool>, std::io::Error>>()
+            .map_err(convert_io_err)?
+            .iter()
+            .filter(|&&was_made| was_made)
+            .count();
+
         #[cfg(target_os = "linux")]
         {
             let f = std::fs::File::open(checkpoint_path).map_err(convert_io_err)?;
@@ -1835,7 +1859,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
                 }
             }
         }
-        Ok(())
+        Ok(ReadonlyMarkingResult {
+            files_traversed,
+            files_made_readonly,
+        })
     }
 }
 
@@ -1904,7 +1931,7 @@ impl CheckpointLayout<ReadOnly> {
         &self,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
-        self.mark_files_readonly_and_sync(thread_pool)?;
+        let _result = self.mark_files_readonly_and_sync(thread_pool)?;
         self.remove_unverified_checkpoint_marker()
     }
 }
@@ -2428,7 +2455,8 @@ where
             path: self.path.clone(),
             message: "failed to mark protobuf as readonly".to_string(),
             io_err: err,
-        })
+        })?;
+        Ok(())
     }
 }
 
@@ -2618,7 +2646,8 @@ where
             path: self.path.clone(),
             message: "failed to mark wasm binary as readonly".to_string(),
             io_err: err,
-        })
+        })?;
+        Ok(())
     }
 
     /// Removes the file if it exists, else does nothing.
@@ -2644,7 +2673,10 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
+/// Marks a file as readonly if it's not already readonly.
+/// Returns true if the file was actually made readonly (was writable before),
+/// false if the file was already readonly or is a directory.
+fn mark_readonly_if_file(path: &Path) -> std::io::Result<bool> {
     let metadata = path.metadata()?;
     if !metadata.is_dir() {
         let mut permissions = metadata.permissions();
@@ -2660,9 +2692,10 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
                     ),
                 )
             })?;
+            return Ok(true);
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 fn dir_list_recursive(

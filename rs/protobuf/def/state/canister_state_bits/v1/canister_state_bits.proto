@@ -23,6 +23,10 @@ message CallContext {
     types.v1.UserId user_id = 1;
     string method_name = 2;
   }
+  message Query {
+    types.v1.UserId user_id = 1;
+    string method_name = 2;
+  }
   message CanisterUpdateOrQuery {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;

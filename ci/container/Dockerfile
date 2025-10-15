@@ -60,14 +60,6 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
-ARG nvm_version=v0.39.1
-ARG dependency_mgmt_nns_dapp_node_version=18.20.5
-ARG dependency_mgmt_default_node_version=20
-ARG dependency_mgmt_oisy_wallet_node_version=22.11.0
-ENV NVM_DIR=/opt/nvm
-RUN mkdir $NVM_DIR && \
-    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
-
 # Add cocogitto
 ARG COCOGITTO_VERSION="5.4.0"
 ARG COCOGITTO_BIN="/usr/local/bin/cog"
@@ -115,11 +107,6 @@ ARG KUBECTL_VERSION="1.22.17"
 RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
     echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
     chmod +x "${KUBECTL_BIN}"
-
-RUN . /opt/nvm/nvm.sh && \
-    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
-    nvm install ${dependency_mgmt_default_node_version} && \
-    nvm install ${dependency_mgmt_oisy_wallet_node_version}
 
 # Create user groups needed for github actions runner
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \

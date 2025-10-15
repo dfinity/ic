@@ -90,6 +90,14 @@ type RetrieveDogeWithApprovalError = variant {
 };
 
 service : (minter_arg : MinterArg) -> {
+    // Returns the Dogecoin address to which the owner should send DOGE
+    // before converting the amount to ckDOGE using the [update_balance]
+    // endpoint.
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    // The resolved owner must be a non-anonymous principal.
+    get_doge_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
+
     // Submits a request to convert ckDOGE to DOGE.
     //
     // # Note

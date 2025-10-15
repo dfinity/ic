@@ -405,7 +405,12 @@ where
     /// Adds a WASM to the canister's storage, validating that the expected hash matches that of the
     /// provided WASM bytecode.
     pub fn add_wasm(&mut self, add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
-        let wasm = add_wasm_payload.wasm.expect("Wasm is required");
+        let AddWasmRequest {
+            wasm,
+            hash,
+            skip_update_latest_version,
+        } = add_wasm_payload;
+        let wasm = wasm.expect("Wasm is required");
 
         let sns_canister_type = match wasm.checked_sns_canister_type() {
             Ok(canister_type) => canister_type,
@@ -421,8 +426,9 @@ where
             }
         };
 
-        let hash = vec_to_hash(add_wasm_payload.hash)
-            .expect("Hash provided was not 32 bytes (i.e. [u8;32])");
+        let hash = vec_to_hash(hash).expect("Hash provided was not 32 bytes (i.e. [u8;32])");
+
+        let skip_update_latest_version = skip_update_latest_version.unwrap_or(false);
 
         if hash != wasm.sha256_hash() {
             return AddWasmResponse {
@@ -469,20 +475,25 @@ where
             }
         };
 
-        // Get the new latest version.
-        // This function is fallible (as it checks for cycles in the upgrade path), but it has no side-effects.
-        // So we want to try it first, and only if it succeeds, proceed to write the WASM to stable memory.
-        let new_latest_version = self
-            .upgrade_path
-            .get_new_latest_version(sns_canister_type, &hash);
-        let new_latest_version = match new_latest_version {
-            Ok(new_latest_version) => new_latest_version,
-            Err(err) => {
-                return AddWasmResponse {
-                    result: Some(add_wasm_response::Result::Error(SnsWasmError {
-                        message: err,
-                    })),
-                };
+        // Get the new latest version unless skip_update_latest_version is true.
+        let new_latest_version = if skip_update_latest_version {
+            None
+        } else {
+            // This function is fallible (as it checks for cycles in the upgrade path), but it has no side-effects.
+            // So we want to try it first, and only if it succeeds, proceed to write the WASM to stable memory.
+            let maybe_new_latest_version = self
+                .upgrade_path
+                .get_new_latest_version(sns_canister_type, &hash);
+
+            match maybe_new_latest_version {
+                Ok(new_latest_version) => Some(new_latest_version),
+                Err(err) => {
+                    return AddWasmResponse {
+                        result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                            message: err,
+                        })),
+                    };
+                }
             }
         };
 
@@ -498,7 +509,9 @@ where
                     },
                 );
 
-                self.upgrade_path.add_wasm(new_latest_version);
+                if let Some(new_latest_version) = new_latest_version {
+                    self.upgrade_path.add_wasm(new_latest_version);
+                }
 
                 add_wasm_response::Result::Hash(hash.to_vec())
             }
@@ -2305,6 +2318,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(root),
             hash: root_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         added_versions.push(SnsVersion {
@@ -2320,6 +2334,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(governance),
             hash: governance_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         added_versions.push(SnsVersion {
@@ -2335,6 +2350,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(ledger),
             hash: ledger_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         added_versions.push(SnsVersion {
@@ -2349,6 +2365,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(swap),
             hash: swap_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         added_versions.push(SnsVersion {
@@ -2364,6 +2381,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(archive),
             hash: archive_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         added_versions.push(SnsVersion {
@@ -2379,6 +2397,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(index),
             hash: index_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         added_versions.push(SnsVersion {
@@ -2448,6 +2467,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: expected_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         let bad_hash = Sha256::hash("something_else".as_bytes());
@@ -2476,6 +2496,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: expected_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         // When given non-existent hash, return None
@@ -2510,6 +2531,7 @@ mod test {
         let response = canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
         assert_eq!(
             response.result.unwrap(),
@@ -2522,6 +2544,7 @@ mod test {
         } = canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         })
         else {
             panic!("Expected to fail to add duplicate version");
@@ -2537,6 +2560,7 @@ mod test {
             let response = canister.add_wasm(AddWasmRequest {
                 wasm: Some(wasm),
                 hash: wasm_hash.clone(),
+                skip_update_latest_version: Some(false),
             });
             assert_eq!(
                 response.result.unwrap(),
@@ -2550,6 +2574,7 @@ mod test {
         } = canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         })
         else {
             panic!("Expected to fail to add duplicate version");
@@ -2568,6 +2593,7 @@ mod test {
         let response = canister.add_wasm(AddWasmRequest {
             wasm: Some(unspecified_canister_wasm.clone()),
             hash: unspecified_canister_wasm.sha256_hash().to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         assert_eq!(
@@ -2592,6 +2618,7 @@ mod test {
         let response = canister.add_wasm(AddWasmRequest {
             wasm: Some(invalid_canister_type_wasm.clone()),
             hash: invalid_canister_type_wasm.sha256_hash().to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         assert_eq!(
@@ -2615,6 +2642,7 @@ mod test {
         let failure = canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: bad_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
         assert_eq!(
             failure.result.unwrap(),
@@ -2633,6 +2661,7 @@ mod test {
         let success = canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm),
             hash: valid_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         assert_eq!(
@@ -2708,6 +2737,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(governance),
             hash: governance_wasm_hash,
+            skip_update_latest_version: Some(false),
         });
 
         // 3. Validate that the governance canister is known
@@ -2742,6 +2772,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(governance),
             hash: governance_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         let ledger = SnsWasm {
@@ -2755,6 +2786,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(ledger),
             hash: ledger_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         let second_version = SnsVersion {
@@ -2866,6 +2898,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(governance),
             hash: governance_wasm_hash.clone(),
+            skip_update_latest_version: Some(false),
         });
 
         let ledger = SnsWasm {
@@ -2876,6 +2909,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(ledger),
             hash: ledger_wasm_hash,
+            skip_update_latest_version: Some(false),
         });
 
         let second_version = SnsVersion {
@@ -3111,6 +3145,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: valid_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         // Add a Root WASM
@@ -3119,6 +3154,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: valid_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         // Add a Ledger WASM
@@ -3127,6 +3163,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: valid_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         // Add a Swap WASM
@@ -3135,6 +3172,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: valid_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         // Add an Archive WASM
@@ -3143,6 +3181,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
             hash: valid_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         // Add an Index WASM
@@ -3151,6 +3190,7 @@ mod test {
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm),
             hash: valid_hash.to_vec(),
+            skip_update_latest_version: Some(false),
         });
 
         // Assert that the upgrade path was constructed as expected
@@ -3260,6 +3300,157 @@ mod test {
                 some_principal
             ),
             expected_next_sns_version6.into()
+        );
+    }
+
+    #[test]
+    fn test_reconfigure_previous_upgrade_path_for_specific_sns() {
+        // In this test, we use a combination of (1) add_wasm without updating latest version and
+        // (2) insert_upgrade_path_entries to reconfigure a previous upgrade path for a specific SNS
+        let mut canister = new_wasm_canister();
+        let normal_governance_canister_id = CanisterId::from_u64(1);
+        let special_governance_canister_id = CanisterId::from_u64(1000);
+        // Prepare the deployed SNS list for the test, since inserting custom upgrade path entries
+        // requires a deployed SNS.
+        canister.deployed_sns_list.push(DeployedSns {
+            root_canister_id: Some(CanisterId::from_u64(999).into()),
+            governance_canister_id: Some(special_governance_canister_id.get()),
+            ledger_canister_id: Some(CanisterId::from_u64(1001).into()),
+            swap_canister_id: Some(CanisterId::from_u64(1002).into()),
+            index_canister_id: Some(CanisterId::from_u64(1003).into()),
+        });
+
+        let mut add_wasm_and_return_hash =
+            |sns_type: SnsCanisterType, id: u32, skip_update_latest_version: bool| {
+                let wasm = SnsWasm {
+                    canister_type: sns_type as i32,
+                    ..small_valid_wasm_with_id(format!("{} {}", sns_type.as_str_name(), id))
+                };
+                let hash = wasm.sha256_hash();
+                let response = canister.add_wasm(AddWasmRequest {
+                    wasm: Some(wasm),
+                    hash: hash.to_vec(),
+                    skip_update_latest_version: Some(skip_update_latest_version),
+                });
+
+                assert_eq!(
+                    response,
+                    AddWasmResponse {
+                        result: Some(add_wasm_response::Result::Hash(hash.to_vec())),
+                    }
+                );
+
+                hash.to_vec()
+            };
+
+        // Below is the "normal" upgrade path
+        let governance_1_hash = add_wasm_and_return_hash(SnsCanisterType::Governance, 1, false);
+        let root_1_hash = add_wasm_and_return_hash(SnsCanisterType::Root, 1, false);
+        let ledger_1_hash = add_wasm_and_return_hash(SnsCanisterType::Ledger, 1, false);
+        let swap_1_hash = add_wasm_and_return_hash(SnsCanisterType::Swap, 1, false);
+        let archive_1_hash = add_wasm_and_return_hash(SnsCanisterType::Archive, 1, false);
+        let index_1_hash = add_wasm_and_return_hash(SnsCanisterType::Index, 1, false);
+        let governance_2_hash = add_wasm_and_return_hash(SnsCanisterType::Governance, 2, false);
+
+        let basic_version = SnsVersion {
+            governance_wasm_hash: governance_1_hash,
+            root_wasm_hash: root_1_hash,
+            ledger_wasm_hash: ledger_1_hash,
+            swap_wasm_hash: swap_1_hash,
+            archive_wasm_hash: archive_1_hash,
+            index_wasm_hash: index_1_hash,
+        };
+        // Add a "special" root wasm that is not in the normal upgrade path.
+        let root_2_hash = add_wasm_and_return_hash(SnsCanisterType::Root, 2, true);
+
+        // Assert that the upgrade path for the normal governance canister does not contain the
+        // special wasm, even before the insert_upgrade_path_entries call.
+        assert_eq!(
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: Some(SnsVersion {
+                        governance_wasm_hash: governance_2_hash.clone(),
+                        ..basic_version.clone()
+                    }),
+                    governance_canister_id: Some(normal_governance_canister_id.get()),
+                },
+                PrincipalId::new_user_test_id(1),
+            ),
+            GetNextSnsVersionResponse { next_version: None }
+        );
+
+        let response = canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![
+                SnsUpgrade {
+                    current_version: Some(basic_version.clone()),
+                    next_version: Some(SnsVersion {
+                        root_wasm_hash: root_2_hash.clone(),
+                        ..basic_version.clone()
+                    }),
+                },
+                SnsUpgrade {
+                    current_version: Some(SnsVersion {
+                        root_wasm_hash: root_2_hash.clone(),
+                        ..basic_version.clone()
+                    }),
+                    next_version: Some(SnsVersion {
+                        root_wasm_hash: root_2_hash.clone(),
+                        governance_wasm_hash: governance_2_hash.clone(),
+                        ..basic_version.clone()
+                    }),
+                },
+            ],
+            sns_governance_canister_id: Some(special_governance_canister_id.get()),
+        });
+        assert_eq!(response, InsertUpgradePathEntriesResponse { error: None });
+
+        // Assert that the upgrade path for the normal governance canister.
+        let normal_upgrade_steps = canister
+            .list_upgrade_steps(ListUpgradeStepsRequest {
+                starting_at: Some(basic_version.clone()),
+                sns_governance_canister_id: Some(normal_governance_canister_id.get()),
+                limit: 0,
+            })
+            .steps
+            .into_iter()
+            .map(|step| step.version.unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            normal_upgrade_steps,
+            vec![
+                basic_version.clone(),
+                SnsVersion {
+                    governance_wasm_hash: governance_2_hash.clone(),
+                    ..basic_version.clone()
+                },
+            ]
+        );
+
+        // Assert that the upgrade path for the special governance canister.
+        let special_upgrade_steps = canister
+            .list_upgrade_steps(ListUpgradeStepsRequest {
+                starting_at: Some(basic_version.clone()),
+                sns_governance_canister_id: Some(special_governance_canister_id.get()),
+                limit: 0,
+            })
+            .steps
+            .into_iter()
+            .map(|step| step.version.unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            special_upgrade_steps,
+            vec![
+                basic_version.clone(),
+                SnsVersion {
+                    root_wasm_hash: root_2_hash.clone(),
+                    ..basic_version.clone()
+                },
+                SnsVersion {
+                    root_wasm_hash: root_2_hash.clone(),
+                    governance_wasm_hash: governance_2_hash.clone(),
+                    ..basic_version.clone()
+                },
+            ]
         );
     }
 
@@ -5181,6 +5372,7 @@ mod test {
             canister.add_wasm(AddWasmRequest {
                 wasm: Some(wasm.clone()),
                 hash: hash.to_vec(),
+                skip_update_latest_version: Some(false),
             });
 
             // Run code under test
@@ -5216,6 +5408,7 @@ mod test {
                 let response = canister.add_wasm(AddWasmRequest {
                     wasm: Some(wasm.clone()),
                     hash: hash.to_vec(),
+                    skip_update_latest_version: Some(false),
                 });
                 use add_wasm_response::Result;
                 assert_eq!(response, AddWasmResponse {
@@ -5266,6 +5459,7 @@ mod test {
             canister.add_wasm(AddWasmRequest {
                 wasm: Some(wasm.clone()),
                 hash: hash.clone(),
+                skip_update_latest_version: Some(false),
             });
 
             // Run code under test
@@ -5316,6 +5510,7 @@ mod test {
             canister.add_wasm(AddWasmRequest {
                 wasm: Some(wasm.clone()),
                 hash: hash.clone(),
+                skip_update_latest_version: Some(false),
             });
 
             // Run code under test
@@ -5365,6 +5560,7 @@ mod test {
             canister.add_wasm(AddWasmRequest {
                 wasm: Some(wasm.clone()),
                 hash: hash.clone(),
+                skip_update_latest_version: Some(false),
             });
 
             // Run code under test

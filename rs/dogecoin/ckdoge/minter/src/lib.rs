@@ -1,11 +1,17 @@
+pub mod address;
 pub mod candid_api;
 pub mod lifecycle;
+pub mod updates;
 
+use crate::address::DogecoinAddress;
+use crate::lifecycle::init::Network;
 use async_trait::async_trait;
 use candid::Principal;
+use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::state::CkBtcMinterState;
+use ic_ckbtc_minter::updates::retrieve_btc::BtcAddressCheckStatus;
 use ic_ckbtc_minter::{
-    CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse, Network, Utxo,
+    CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse, Utxo,
     management::CallError, tx, updates::update_balance::UpdateBalanceError,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
@@ -56,7 +62,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
     async fn send_transaction(
         &self,
         _transaction: &tx::SignedTransaction,
-        _network: Network,
+        _network: ic_ckbtc_minter::Network,
     ) -> Result<(), CallError> {
         todo!()
     }
@@ -71,5 +77,32 @@ impl CanisterRuntime for DogeCanisterRuntime {
         if state.ecdsa_key_name.is_empty() {
             ic_cdk::trap("ecdsa_key_name is not set");
         }
+    }
+
+    fn parse_address(
+        &self,
+        address: &str,
+        network: ic_ckbtc_minter::Network,
+    ) -> Result<BitcoinAddress, String> {
+        let doge_network = Network::from(network);
+        let doge_address =
+            DogecoinAddress::parse(address, &doge_network).map_err(|e| e.to_string())?;
+
+        // This conversion is a hack to use the same type of address as in RetrieveBtcRequest,
+        // since this type is used both in the event logs (event `AcceptedRetrieveBtcRequest`)
+        // and in the minter state (field `pending_retrieve_btc_requests`)
+        Ok(match doge_address {
+            DogecoinAddress::P2pkh(bytes) => BitcoinAddress::P2pkh(bytes),
+            DogecoinAddress::P2sh(bytes) => BitcoinAddress::P2sh(bytes),
+        })
+    }
+
+    async fn check_address(
+        &self,
+        _btc_checker_principal: Option<Principal>,
+        _address: String,
+    ) -> Result<BtcAddressCheckStatus, CallError> {
+        // No OFAC checklist for Dogecoin addresses
+        Ok(BtcAddressCheckStatus::Clean)
     }
 }

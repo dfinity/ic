@@ -1,10 +1,12 @@
 use ic_cdk::{init, post_upgrade, update};
 use ic_ckbtc_minter::state::eventlog::EventType;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
+use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME,
     candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
     lifecycle::init::MinterArg,
+    updates,
 };
 
 #[init]
@@ -36,14 +38,22 @@ fn post_upgrade() {
 }
 
 #[update]
+async fn get_doge_address(args: GetDogeAddressArgs) -> String {
+    updates::get_doge_address(args).await.unwrap()
+}
+
+#[update]
 async fn retrieve_doge_with_approval(
     args: RetrieveDogeWithApprovalArgs,
 ) -> Result<RetrieveDogeOk, RetrieveDogeWithApprovalError> {
     check_anonymous_caller();
-    let result = ic_ckbtc_minter::updates::retrieve_btc::retrieve_btc_with_approval(args.into())
-        .await
-        .map(RetrieveDogeOk::from)
-        .map_err(RetrieveDogeWithApprovalError::from);
+    let result = ic_ckbtc_minter::updates::retrieve_btc::retrieve_btc_with_approval(
+        args.into(),
+        &DOGECOIN_CANISTER_RUNTIME,
+    )
+    .await
+    .map(RetrieveDogeOk::from)
+    .map_err(RetrieveDogeWithApprovalError::from);
     check_postcondition(result)
 }
 

@@ -131,6 +131,13 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 method_name,
             ),
             pb::call_context::CallOrigin::SystemTask { .. } => Self::SystemTask,
+            pb::call_context::CallOrigin::UserQuery(pb::call_context::Query {
+                user_id,
+                method_name: _,
+            }) => Self::Query(user_id_try_from_protobuf(try_from_option_field(
+                user_id,
+                "CallOrigin::UserQuery::user_id",
+            )?)?),
         };
         Ok(call_origin)
     }

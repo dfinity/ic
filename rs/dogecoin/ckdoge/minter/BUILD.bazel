@@ -21,9 +21,31 @@ rust_library(
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+        "@crate_index//:bs58",
         "@crate_index//:candid",
+        "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
+        "@crate_index//:sha2",
+    ],
+)
+
+filegroup(
+    name = "test_vectors",
+    srcs = glob(["test_vectors/**"]),
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ckdoge_minter_lib",
+    data = [":test_vectors"],
+    env = {
+        "TEST_VECTORS": "$(locations :test_vectors)",
+    },
+    deps = [
+        # Keep sorted.
+        "@crate_index//:assert_matches",
+        "@crate_index//:serde_json",
     ],
 )
 

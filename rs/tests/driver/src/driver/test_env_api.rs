@@ -144,10 +144,6 @@ use crate::{
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
-    k8s::{
-        tnet::TNet,
-        virtualmachine::{destroy_vm, restart_vm, start_vm},
-    },
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
     util::{block_on, create_agent},
 };
@@ -1267,12 +1263,6 @@ impl HasGroupSetup for TestEnv {
                     )
                     .unwrap();
                 }
-                InfraProvider::K8s => {
-                    let mut tnet =
-                        TNet::new(&group_base_name.replace('_', "-")).expect("new tnet failed");
-                    block_on(tnet.create()).expect("failed creating tnet");
-                    tnet.write_attribute(self);
-                }
             };
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
@@ -1945,7 +1935,6 @@ pub struct HostedVm {
     farm: Farm,
     group_name: String,
     vm_name: String,
-    k8s: bool,
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
@@ -1953,33 +1942,21 @@ pub struct HostedVm {
 /// unsuccessful.
 impl VmControl for HostedVm {
     fn kill(&self) {
-        if self.k8s {
-            block_on(destroy_vm(&self.vm_name)).expect("could not kill VM");
-        } else {
-            self.farm
-                .destroy_vm(&self.group_name, &self.vm_name)
-                .expect("could not kill VM");
-        }
+        self.farm
+            .destroy_vm(&self.group_name, &self.vm_name)
+            .expect("could not kill VM");
     }
 
     fn reboot(&self) {
-        if self.k8s {
-            block_on(restart_vm(&self.vm_name)).expect("could not reboot VM");
-        } else {
-            self.farm
-                .reboot_vm(&self.group_name, &self.vm_name)
-                .expect("could not reboot VM");
-        }
+        self.farm
+            .reboot_vm(&self.group_name, &self.vm_name)
+            .expect("could not reboot VM");
     }
 
     fn start(&self) {
-        if self.k8s {
-            block_on(start_vm(&self.vm_name)).expect("could not start VM");
-        } else {
-            self.farm
-                .start_vm(&self.group_name, &self.vm_name)
-                .expect("could not start VM");
-        }
+        self.farm
+            .start_vm(&self.group_name, &self.vm_name)
+            .expect("could not start VM");
     }
 }
 
@@ -1999,25 +1976,11 @@ where
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, env.logger());
 
-        let mut vm_name = self.vm_name();
-        let mut k8s = false;
-        if InfraProvider::read_attribute(&env) == InfraProvider::K8s {
-            k8s = true;
-            let tnet = TNet::read_attribute(&env);
-            let tnet_node = tnet
-                .nodes
-                .iter()
-                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
-                .expect("tnet doesn't have this node")
-                .clone();
-            vm_name = tnet_node.name.expect("nameless node");
-        }
-
+        let vm_name = self.vm_name();
         Box::new(HostedVm {
             farm,
             group_name: pot_setup.infra_group_name,
             vm_name,
-            k8s,
         })
     }
 }
@@ -2395,18 +2358,12 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = self.get_farm_url().unwrap();
-            let farm = Farm::new(farm_base_url, log);
-            let group_setup = GroupSetup::read_attribute(&env);
-            let group_name = group_setup.infra_group_name;
-            farm.create_playnet_dns_records(&group_name, dns_records)
-                .expect("Failed to create playnet DNS records")
-        } else {
-            let tnet = TNet::read_attribute(&env);
-            block_on(tnet.create_playnet_dns_records(dns_records))
-                .expect("Failed to acquire a certificate for a playnet")
-        }
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.create_playnet_dns_records(&group_name, dns_records)
+            .expect("Failed to create playnet DNS records")
     }
 }
 
@@ -2423,18 +2380,12 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = self.get_farm_url().unwrap();
-            let farm = Farm::new(farm_base_url, log);
-            let group_setup = GroupSetup::read_attribute(&env);
-            let group_name = group_setup.infra_group_name;
-            farm.acquire_playnet_certificate(&group_name)
-                .expect("Failed to acquire a certificate for a playnet")
-        } else {
-            let tnet = TNet::from_env(&env);
-            block_on(tnet.acquire_playnet_certificate())
-                .expect("Failed to acquire a certificate for a playnet")
-        }
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.acquire_playnet_certificate(&group_name)
+            .expect("Failed to acquire a certificate for a playnet")
     }
 }
 

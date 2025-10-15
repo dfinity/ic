@@ -6,9 +6,8 @@ This script monitors available space on the filesystem and triggers expansion
 if it drops below a certain threshold.
 
 Expansion is performed by extending the underlying logical volume first, and
-then performing an online resize operation on the target filesystem. Both
-xfs and ext4 filesystems are supported by this script (even though only
-xfs is used at present).
+then performing an online resize operation on the target filesystem. Only xfs
+is supported at present.
 """
 
 import json
@@ -97,14 +96,7 @@ def get_fsfree(path):
     return st.f_bsize * st.f_bavail // 1048576
 
 
-def get_fstype(blkdev):
-    lines = subprocess.Popen(["blkid", "-o", "udev", blkdev], stdout=subprocess.PIPE).stdout.read().split(b"\n")
-    kvs = [line.decode("utf-8").split("=") for line in lines if line]
-    fields = {kv[0]: kv[1] for kv in kvs}
-    return fields["ID_FS_TYPE"]
-
-
-def expand_lv(device_name, lv_name, fs_type, mount_point, fs_free, required_avail, expand_size):
+def expand_lv(device_name, lv_name, mount_point, fs_free, required_avail, expand_size):
     sys.stderr.write(
         "Free space on %s is %d MiB -- below %d MiB, expanding by %d MiB\n"
         % (device_name, fs_free, required_avail, expand_size)
@@ -116,16 +108,10 @@ def expand_lv(device_name, lv_name, fs_type, mount_point, fs_free, required_avai
 
     # Expand the filesystem to utilize the space that is now available
     # in the logical volume.
-    if fs_type == "xfs":
-        grow_cmd = ["xfs_growfs", mount_point]
-    elif fs_type == "ext4":
-        grow_cmd = ["resize2fs", device_name]
-    subprocess.run(grow_cmd, check=True)
+    subprocess.run(["xfs_growfs", mount_point], check=True)
 
 
 def main():
-    # File system type is not going to change, fetch only once.
-    fs_type = get_fstype(DEVICE_NAME)
     # Total VG and LV sizes change only if we call lvextend below.
     vg_size, vg_free = get_vg_size_and_free(VG_NAME)
     lv_size = get_lv_size(VG_NAME, LV_NAME)
@@ -145,7 +131,7 @@ def main():
             if fs_free < required_chunk_size:
                 # ...expand by half a "chunk", or what space remains.
                 expand_size = int(min(vg_size * 0.05, available, vg_free))
-                expand_lv(DEVICE_NAME, LV_NAME, fs_type, MOUNT_POINT, fs_free, required_chunk_size, expand_size)
+                expand_lv(DEVICE_NAME, LV_NAME, MOUNT_POINT, fs_free, required_chunk_size, expand_size)
 
                 # Now the volume group available size changed, query it again.
                 vg_size, vg_free = get_vg_size_and_free(VG_NAME)

@@ -19,6 +19,7 @@ rust_library(
         "//packages/pocket-ic",
         "//rs/dogecoin/ckdoge/minter:ckdoge_minter_lib",
         "//rs/ledger_suite/icrc1/ledger",
+        "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ic-management-canister-types",
     ],

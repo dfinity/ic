@@ -70,7 +70,6 @@ system_test_nns(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =

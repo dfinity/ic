@@ -44,9 +44,9 @@ const IC_ROOT_KEY: &[u8; 133] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x
 /// The information that canisters can see about their own status.
 #[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterStatusView {
-    Running,
-    Stopping,
-    Stopped,
+    Running = 1,
+    Stopping = 2,
+    Stopped = 3,
 }
 
 impl CanisterStatusView {
@@ -508,8 +508,10 @@ impl SystemStateModifications {
             system_state.global_timer = new_global_timer;
         }
 
-        // Append canister log.
-        system_state.canister_log.append(&mut self.canister_log);
+        // Append delta log to the total canister log.
+        system_state
+            .canister_log
+            .append_delta_log(&mut self.canister_log);
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
