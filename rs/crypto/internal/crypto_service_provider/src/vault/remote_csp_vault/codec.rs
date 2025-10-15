@@ -371,9 +371,10 @@ impl CspVaultMethod {
             CspVaultMethod::IdkgVerifyDealingPrivate => {
                 (MetricsDomain::IdkgProtocol, "idkg_verify_dealing_private")
             }
-            CspVaultMethod::IdkgVerifyDealingPrivateBatch => {
-                (MetricsDomain::IdkgProtocol, "idkg_verify_dealing_private_batch")
-            }
+            CspVaultMethod::IdkgVerifyDealingPrivateBatch => (
+                MetricsDomain::IdkgProtocol,
+                "idkg_verify_dealing_private_batch",
+            ),
             CspVaultMethod::IdkgLoadTranscript => {
                 (MetricsDomain::IdkgProtocol, "idkg_load_transcript")
             }

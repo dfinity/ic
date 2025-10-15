@@ -107,6 +107,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:rayon",
     "@crate_index//:rsa",
     "@crate_index//:sha2",
     "@crate_index//:simple_asn1",

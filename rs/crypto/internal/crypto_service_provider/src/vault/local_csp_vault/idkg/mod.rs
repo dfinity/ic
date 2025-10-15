@@ -45,7 +45,7 @@ use std::convert::TryFrom;
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     IDkgProtocolCspVault for LocalCspVault<R, S, C, P>
 {
     fn idkg_create_dealing(
@@ -147,16 +147,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         receiver_key_id: Vec<KeyId>,
         context_data: Vec<Vec<u8>>,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        use rayon::prelude::*;
+
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private_batch");
         let start_time = self.metrics.now();
         let result = (0..algorithm_id.len())
-            .into_iter()
+            .into_par_iter()
             .map(|i| {
-                let internal_dealing = IDkgDealingInternal::deserialize(dealing[i].as_ref()).map_err(|e| {
-                    IDkgVerifyDealingPrivateError::InvalidArgument(format!(
-                        "failed to deserialize internal dealing: {e:?}"
-                    ))
-                })?;
+                let internal_dealing = IDkgDealingInternal::deserialize(dealing[i].as_ref())
+                    .map_err(|e| {
+                        IDkgVerifyDealingPrivateError::InvalidArgument(format!(
+                            "failed to deserialize internal dealing: {e:?}"
+                        ))
+                    })?;
                 self.idkg_verify_dealing_private_internal(
                     algorithm_id[i],
                     &internal_dealing,
@@ -313,7 +316,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     LocalCspVault<R, S, C, P>
 {
     fn idkg_create_dealing_internal(

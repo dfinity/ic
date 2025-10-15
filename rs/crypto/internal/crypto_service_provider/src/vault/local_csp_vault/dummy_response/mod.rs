@@ -4,7 +4,7 @@ use crate::{LocalCspVault, secret_key_store::SecretKeyStore};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use rand::{CryptoRng, Rng};
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     DummySizedRandomResponseGenerator for LocalCspVault<R, S, C, P>
 {
     fn dummy_response(

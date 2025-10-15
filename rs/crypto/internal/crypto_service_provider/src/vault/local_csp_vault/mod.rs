@@ -76,7 +76,7 @@ use std::sync::Arc;
 ///
 /// [1]: https://medium.com/digitalfrontiers/rust-dynamic-dispatching-deep-dive-236a5896e49b
 pub struct LocalCspVault<
-    R: Rng + CryptoRng,
+    R: Rng + CryptoRng + Send + Sync,
     S: SecretKeyStore,
     C: SecretKeyStore,
     P: PublicKeyStore,
@@ -132,7 +132,7 @@ impl ProdLocalCspVault {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     LocalCspVault<R, S, C, P>
 {
     pub fn set_timestamp(&self, public_key: &mut PublicKey) {
@@ -145,7 +145,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 }
 
 // CRP-1248: inline the following methods
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     LocalCspVault<R, S, C, P>
 {
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
