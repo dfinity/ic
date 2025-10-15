@@ -15,10 +15,7 @@ use crate::{
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
-use guest_upgrade_server::{
-    DiskEncryptionKeyExchangeServerAgent,
-    orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator,
-};
+use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
     Config,
     metrics::{Config as MetricsConfig, Exporter},
