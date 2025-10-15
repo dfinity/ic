@@ -13899,6 +13899,8 @@ async fn test_follow_private_neuron_fails() {
     );
 
     // Make a proposal to have neuron 3 follow neuron 1.
+    // This proposal should fail because neuron 3 has neither the same
+    // controller as neuron 1 nor is its controller a hot key of neuron 1.
     gov.make_proposal(
         &NeuronId { id: MANAGER_ID },
         &principal(MANAGER_ID),
@@ -14051,7 +14053,7 @@ async fn test_follow_public_neuron_succeeds() {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 3 })),
                 id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
-                    topic: Topic::ExchangeRate as i32,
+                    topic: Topic::SubnetRental as i32,
                     followees: [NeuronId { id: 1 }].to_vec(),
                 })),
             }))),
@@ -14072,7 +14074,7 @@ async fn test_follow_public_neuron_succeeds() {
         gov.get_full_neuron(&NeuronId { id: 3 }, &principal(NEURON_3_CONTROLLER))
             .unwrap()
             .followees
-            .get(&(Topic::ExchangeRate as i32))
+            .get(&(Topic::SubnetRental as i32))
             .unwrap()
             .followees
             .contains(&NeuronId { id: 1 })
