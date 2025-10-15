@@ -20,8 +20,6 @@ ic-admin-derive = { path = "../admin-derive" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }
-ic-canister-client = { path = "../../canister_client" }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }

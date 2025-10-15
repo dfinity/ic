@@ -46,8 +46,6 @@ rust_binary(
         # Keep sorted.
         ":admin",
         ":build_script",
-        "//rs/canister_client",
-        "//rs/canister_client/sender",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/http_utils",
