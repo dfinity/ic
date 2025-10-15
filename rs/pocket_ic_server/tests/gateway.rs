@@ -485,7 +485,10 @@ fn test_gateway_invalid_forward_to() {
             domains: None,
             https_config: None,
         };
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .build()
+            .unwrap();
         let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
         let res = client
             .post(create_gateway_endpoint)
