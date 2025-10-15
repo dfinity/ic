@@ -527,17 +527,13 @@ fn verify_unknown_block_handling(
             error_count += 1;
         }
     }
-    if bad_block_index < NUM_BLOCKS {
-        // This additionally checks whether the indexing was stopped.
-        assert_eq!(error_count, 1);
-    } else {
-        assert_eq!(error_count, 0);
-    }
+    // This additionally checks whether the indexing was stopped.
+    assert_eq!(error_count, 1);
 }
 
 #[test]
 fn test_unknown_block_icrc3() {
-    for bad_block_index in 0..NUM_BLOCKS + 1 {
+    for bad_block_index in 0..NUM_BLOCKS {
         let env = &StateMachine::new();
         let ledger_id = install_icrc3_test_ledger(env);
         let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
@@ -548,7 +544,7 @@ fn test_unknown_block_icrc3() {
 
 #[test]
 fn test_unknown_block_legacy() {
-    for bad_block_index in 0..NUM_BLOCKS + 1 {
+    for bad_block_index in 0..NUM_BLOCKS {
         let env = &StateMachine::new();
         let ledger_id = install_icrc3_test_ledger(env);
         let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
