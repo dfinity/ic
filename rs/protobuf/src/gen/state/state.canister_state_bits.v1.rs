@@ -35,13 +35,6 @@ pub mod call_context {
         pub method_name: ::prost::alloc::string::String,
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Query {
-        #[prost(message, optional, tag = "1")]
-        pub user_id: ::core::option::Option<super::super::super::super::types::v1::UserId>,
-        #[prost(string, tag = "2")]
-        pub method_name: ::prost::alloc::string::String,
-    }
-    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct CanisterUpdateOrQuery {
         #[prost(message, optional, tag = "1")]
         pub canister_id: ::core::option::Option<super::super::super::super::types::v1::CanisterId>,
