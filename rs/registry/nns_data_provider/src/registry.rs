@@ -5,8 +5,9 @@ use rand::seq::SliceRandom;
 use std::time::Duration;
 use url::Url;
 
-use ic_agent::Agent;
 use ic_agent::agent::AgentBuilder;
+use ic_agent::identity::AnonymousIdentity;
+use ic_agent::{Agent, AgentError};
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
@@ -50,7 +51,7 @@ impl GetChunk for AgentBasedGetChunk<'_> {
             .with_arg(request)
             .call()
             .await
-            .map_err(|e| new_err(e))?;
+            .map_err(new_err)?;
 
         // Extract chunk from get_chunk call.
         let Chunk { content } = Decode!(&get_chunk_response, Result<Chunk, String>)
@@ -109,11 +110,11 @@ impl RegistryCanister {
                 .map(|url| {
                     Agent::builder()
                         .with_url(url.as_str())
-                        .with_identity(ic_agent::identity::AnonymousIdentity)
+                        .with_identity(AnonymousIdentity)
                         .build()
                         .expect("Failed to build agent")
                 })
-                .map(|agent| f(agent))
+                .map(f)
                 .collect(),
         }
     }
@@ -135,7 +136,7 @@ impl RegistryCanister {
                 .map(|url| {
                     let builder = Agent::builder()
                         .with_url(url.as_str())
-                        .with_identity(ic_agent::identity::AnonymousIdentity);
+                        .with_identity(AnonymousIdentity);
                     f(builder).build().expect("Failed to build agent")
                 })
                 .collect(),
@@ -367,7 +368,7 @@ pub fn registry_deltas_to_registry_records(
 }
 
 async fn deserialize_and_dechunk_get_value_result(
-    result: Result<Vec<u8>, ic_agent::AgentError>,
+    result: Result<Vec<u8>, AgentError>,
     // This is used if dechunkification is needed.
     registry_canister_id: CanisterId,
     // The following arguments are mostly so that error messages will contain
