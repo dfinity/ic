@@ -16,6 +16,7 @@ use ic_config::{
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
@@ -115,7 +116,6 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
-use ic_test_utilities_crypto::CryptoReturningOk;
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
     fetch_int_gauge_vec,

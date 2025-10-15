@@ -16,7 +16,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/test_utilities/consensus",
-    "//rs/test_utilities/crypto",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/test_utilities/types",
     "//rs/types/types",
 ]

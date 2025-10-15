@@ -722,7 +722,7 @@ mod tests {
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities_crypto::CryptoReturningOk;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };

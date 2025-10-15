@@ -16,7 +16,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::IDkgStatsNoOp;
-use ic_test_utilities_crypto::CryptoReturningOk;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry_non_final};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

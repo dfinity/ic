@@ -34,16 +34,6 @@ use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
-fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
-    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
-}
-
-fn empty_ni_dkg_dealing() -> NiDkgDealing {
-    NiDkgDealing {
-        internal_dealing: empty_ni_dkg_csp_dealing(),
-    }
-}
-
 pub use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts_with_committee;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types_test_utils::ids::NODE_1;
@@ -541,5 +531,15 @@ impl VetKdProtocol for CryptoReturningOk {
         _args: &VetKdArgs,
     ) -> Result<(), VetKdKeyVerificationError> {
         Ok(())
+    }
+}
+
+fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
+    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
+}
+
+fn empty_ni_dkg_dealing() -> NiDkgDealing {
+    NiDkgDealing {
+        internal_dealing: empty_ni_dkg_csp_dealing(),
     }
 }

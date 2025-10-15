@@ -1959,7 +1959,7 @@ pub mod test {
             fake_state_with_signature_requests,
         },
     };
-    use ic_test_utilities_crypto::CryptoReturningOk;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{

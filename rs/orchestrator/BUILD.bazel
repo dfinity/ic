@@ -111,7 +111,7 @@ rust_test(
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
         "//rs/test_utilities/consensus",
-        "//rs/test_utilities/crypto",
+        "//rs/crypto/test_utils/crypto_returning_ok",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",

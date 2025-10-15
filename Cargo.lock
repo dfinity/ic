@@ -6451,6 +6451,7 @@ dependencies = [
  "criterion",
  "ic-config",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
@@ -6460,7 +6461,6 @@ dependencies = [
  "ic-test-artifact-pool",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-time",
@@ -7601,6 +7601,7 @@ dependencies = [
  "ic-crypto-prng",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
@@ -7633,7 +7634,6 @@ dependencies = [
  "ic-test-artifact-pool",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
@@ -7669,6 +7669,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-consensus-mocks",
  "ic-consensus-utils",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
@@ -7677,7 +7678,6 @@ dependencies = [
  "ic-replicated-state",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-logger",
  "ic-test-utilities-types",
  "ic-types",
@@ -7714,6 +7714,7 @@ dependencies = [
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -7730,7 +7731,6 @@ dependencies = [
  "ic-test-artifact-pool",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
@@ -7754,6 +7754,7 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-error-types 0.2.0",
@@ -7771,7 +7772,6 @@ dependencies = [
  "ic-test-artifact-pool",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
@@ -7825,6 +7825,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus-utils",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -7836,7 +7837,6 @@ dependencies = [
  "ic-test-artifact-pool",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
@@ -8748,6 +8748,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-test-utils-crypto-returning-ok"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-internal-types",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-ni-dkg",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-registry-client-fake",
+ "ic-registry-proto-data-provider",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "ic-crypto-test-utils-csp"
 version = "0.9.0"
 dependencies = [
@@ -9575,6 +9594,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-tree-hash",
@@ -9602,7 +9622,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
@@ -14097,6 +14116,7 @@ dependencies = [
  "ic-consensus-utils",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
@@ -14132,7 +14152,6 @@ dependencies = [
  "ic-state-manager",
  "ic-test-state-machine-client",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-test-utilities-time",
@@ -14459,6 +14478,7 @@ dependencies = [
  "ic-config",
  "ic-consensus-dkg",
  "ic-consensus-utils",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
@@ -14467,7 +14487,6 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-replicated-state",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-types",
  "ic-types",
 ]
@@ -14557,25 +14576,6 @@ dependencies = [
  "prost 0.13.4",
  "serde",
  "strum 0.26.3",
-]
-
-[[package]]
-name = "ic-test-utilities-crypto"
-version = "0.9.0"
-dependencies = [
- "ic-crypto-interfaces-sig-verification",
- "ic-crypto-internal-types",
- "ic-crypto-temp-crypto",
- "ic-crypto-test-utils-canister-threshold-sigs",
- "ic-crypto-test-utils-ni-dkg",
- "ic-interfaces",
- "ic-interfaces-registry",
- "ic-registry-client-fake",
- "ic-registry-proto-data-provider",
- "ic-test-utilities-types",
- "ic-types",
- "ic-types-test-utils",
- "rand 0.8.5",
 ]
 
 [[package]]
@@ -18609,6 +18609,7 @@ dependencies = [
  "ic-crypto-node-key-generation",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
@@ -18637,7 +18638,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-sys",
  "ic-test-utilities-consensus",
- "ic-test-utilities-crypto",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",

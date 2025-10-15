@@ -46,7 +46,7 @@ DEPENDENCIES = [
     "//rs/state_layout",
     "//rs/state_manager",
     "//rs/test_utilities/consensus",
-    "//rs/test_utilities/crypto",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",

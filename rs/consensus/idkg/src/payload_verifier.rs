@@ -708,7 +708,7 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{MasterPublicKeyId, Payload, SignWithECDSAReply};
     use ic_test_utilities_consensus::idkg::*;
-    use ic_test_utilities_crypto::CryptoReturningOk;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         Height,
