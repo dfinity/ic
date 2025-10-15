@@ -40,6 +40,18 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
         }
     };
 
+    if !guestos_config
+        .icos_settings
+        .enable_trusted_execution_environment
+    {
+        // Let's double-check that TEE is also enabled in the config
+        eprintln!(
+            "enable_trusted_execution_environment in ICOSSettings is false but SEV is \
+             active, this should never happen!"
+        );
+        return None;
+    }
+
     let trusted_execution_config = match guestos_config.trusted_execution_environment_config {
         Some(config) => config,
         None => {
