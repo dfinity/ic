@@ -635,6 +635,33 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     }
 
     #[instrument(skip_all)]
+    fn idkg_verify_dealing_private_batch(
+        &self,
+        algorithm_id: Vec<AlgorithmId>,
+        dealing: Vec<IDkgDealingInternalBytes>,
+        dealer_index: Vec<NodeIndex>,
+        receiver_index: Vec<NodeIndex>,
+        receiver_key_id: Vec<KeyId>,
+        context_data: Vec<Vec<u8>>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        let context_data = context_data.into_iter().map(|c| ByteBuf::from(c)).collect();
+        self.tokio_block_on(self.tarpc_csp_client.idkg_verify_dealing_private_batch(
+            context_with_timeout(self.rpc_timeout),
+            algorithm_id,
+            dealing,
+            dealer_index,
+            receiver_index,
+            receiver_key_id,
+            context_data,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(IDkgVerifyDealingPrivateError::TransientInternalError {
+                internal_error: rpc_error.to_string(),
+            })
+        })
+    }
+
+    #[instrument(skip_all)]
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,

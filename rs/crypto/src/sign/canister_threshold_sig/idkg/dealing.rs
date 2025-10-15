@@ -141,6 +141,65 @@ pub fn verify_dealing_private(
     )
 }
 
+pub fn verify_dealing_private_batch(
+    vault: &Arc<dyn CspVault>,
+    self_node_id: &NodeId,
+    registry: &dyn RegistryClient,
+    params: &IDkgTranscriptParams,
+    signed_dealings: &[SignedIDkgDealing],
+) -> Result<(), IDkgVerifyDealingPrivateError> {
+    let mut algorithm_ids = vec![];
+    let mut dealing_bytes = vec![];
+    let mut dealer_indexes = vec![];
+    let mut receiver_indexes = vec![];
+    let mut key_ids = vec![];
+    let mut params_batch = vec![];
+
+    for signed_dealing in signed_dealings.iter() {
+        if signed_dealing.idkg_dealing().transcript_id != params.transcript_id() {
+            return Err(IDkgVerifyDealingPrivateError::InvalidArgument(format!(
+                "mismatching transcript IDs in dealing ({:?}) and params ({:?})",
+                signed_dealing.idkg_dealing().transcript_id,
+                params.transcript_id(),
+            )));
+        }
+        let dealer_index = params
+            .dealer_index(signed_dealing.dealer_id())
+            .ok_or_else(|| {
+                IDkgVerifyDealingPrivateError::InvalidArgument(format!(
+                    "failed to determine dealer index: node {:?} is not a dealer",
+                    signed_dealing.dealer_id()
+                ))
+            })?;
+        let self_receiver_index = params
+            .receiver_index(*self_node_id)
+            .ok_or(IDkgVerifyDealingPrivateError::NotAReceiver)?;
+        let self_mega_pubkey = retrieve_mega_public_key_from_registry(
+            self_node_id,
+            registry,
+            params.registry_version(),
+        )?;
+
+        algorithm_ids.push(params.algorithm_id());
+        dealing_bytes.push(IDkgDealingInternalBytes::from(
+            signed_dealing.idkg_dealing().dealing_to_bytes(),
+        ));
+        dealer_indexes.push(dealer_index);
+        receiver_indexes.push(self_receiver_index);
+        key_ids.push(key_id_from_mega_public_key_or_panic(&self_mega_pubkey));
+        params_batch.push(params.context_data());
+    }
+
+    vault.idkg_verify_dealing_private_batch(
+        algorithm_ids,
+        dealing_bytes,
+        dealer_indexes,
+        receiver_indexes,
+        key_ids,
+        params_batch,
+    )
+}
+
 impl From<MegaKeyFromRegistryError> for IDkgVerifyDealingPrivateError {
     fn from(mega_key_from_registry_error: MegaKeyFromRegistryError) -> Self {
         type Mkfre = MegaKeyFromRegistryError;

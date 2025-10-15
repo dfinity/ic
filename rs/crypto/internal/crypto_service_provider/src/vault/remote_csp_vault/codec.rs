@@ -307,6 +307,7 @@ enum CspVaultMethod {
     TlsSign,
     IdkgCreateDealing,
     IdkgVerifyDealingPrivate,
+    IdkgVerifyDealingPrivateBatch,
     IdkgLoadTranscript,
     IdkgLoadTranscriptWithOpenings,
     IdkgRetainActiveKeys,
@@ -370,6 +371,10 @@ impl CspVaultMethod {
             CspVaultMethod::IdkgVerifyDealingPrivate => {
                 (MetricsDomain::IdkgProtocol, "idkg_verify_dealing_private")
             }
+            CspVaultMethod::IdkgVerifyDealingPrivateBatch => (
+                MetricsDomain::IdkgProtocol,
+                "idkg_verify_dealing_private_batch",
+            ),
             CspVaultMethod::IdkgLoadTranscript => {
                 (MetricsDomain::IdkgProtocol, "idkg_load_transcript")
             }
@@ -427,6 +432,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::TlsSign { .. } => Method::TlsSign,
             Req::IdkgCreateDealing { .. } => Method::IdkgCreateDealing,
             Req::IdkgVerifyDealingPrivate { .. } => Method::IdkgVerifyDealingPrivate,
+            Req::IdkgVerifyDealingPrivateBatch { .. } => Method::IdkgVerifyDealingPrivateBatch,
             Req::IdkgLoadTranscript { .. } => Method::IdkgLoadTranscript,
             Req::IdkgLoadTranscriptWithOpenings { .. } => Method::IdkgLoadTranscriptWithOpenings,
             Req::IdkgRetainActiveKeys { .. } => Method::IdkgRetainActiveKeys,
@@ -468,6 +474,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::TlsSign { .. } => Method::TlsSign,
             Resp::IdkgCreateDealing { .. } => Method::IdkgCreateDealing,
             Resp::IdkgVerifyDealingPrivate { .. } => Method::IdkgVerifyDealingPrivate,
+            Resp::IdkgVerifyDealingPrivateBatch { .. } => Method::IdkgVerifyDealingPrivateBatch,
             Resp::IdkgLoadTranscript { .. } => Method::IdkgLoadTranscript,
             Resp::IdkgLoadTranscriptWithOpenings { .. } => Method::IdkgLoadTranscriptWithOpenings,
             Resp::IdkgRetainActiveKeys { .. } => Method::IdkgRetainActiveKeys,

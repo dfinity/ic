@@ -177,6 +177,15 @@ pub trait TarpcCspVault {
         context_data: ByteBuf,
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
+    async fn idkg_verify_dealing_private_batch(
+        algorithm_id: Vec<AlgorithmId>,
+        dealing: Vec<IDkgDealingInternalBytes>,
+        dealer_index: Vec<NodeIndex>,
+        receiver_index: Vec<NodeIndex>,
+        receiver_key_id: Vec<KeyId>,
+        context_data: Vec<ByteBuf>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError>;
+
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(
         algorithm_id: AlgorithmId,

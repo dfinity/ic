@@ -563,6 +563,15 @@ pub mod internal {
                 .verify_dealing_private(params, signed_dealing)
         }
 
+        fn verify_dealing_private_batch(
+            &self,
+            params: &IDkgTranscriptParams,
+            signed_dealings: &[SignedIDkgDealing],
+        ) -> Result<(), IDkgVerifyDealingPrivateError> {
+            self.crypto_component
+                .verify_dealing_private_batch(params, signed_dealings)
+        }
+
         fn verify_initial_dealings(
             &self,
             params: &IDkgTranscriptParams,

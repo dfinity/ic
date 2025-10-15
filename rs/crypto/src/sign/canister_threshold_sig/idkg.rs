@@ -314,6 +314,45 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         result
     }
 
+    fn verify_dealing_private_batch(
+        &self,
+        params: &IDkgTranscriptParams,
+        signed_dealings: &[SignedIDkgDealing],
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        let log_id = get_log_id(&self.logger);
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "IDkgProtocol",
+            crypto.method_name => "verify_dealing_private_batch",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealing => format!("{:?}", signed_dealings),
+        );
+        let start_time = self.metrics.now();
+        let result = dealing::verify_dealing_private_batch(
+            &self.vault,
+            &self.node_id,
+            self.registry_client.as_ref(),
+            params,
+            signed_dealings,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::IdkgProtocol,
+            MetricsScope::Full,
+            "verify_dealing_private_batch",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
     fn verify_initial_dealings(
         &self,
         params: &IDkgTranscriptParams,

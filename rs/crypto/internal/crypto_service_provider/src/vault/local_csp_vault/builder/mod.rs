@@ -65,7 +65,7 @@ impl ProdLocalCspVault {
 
 impl<R, S, C, P> LocalCspVaultBuilder<R, S, C, P>
 where
-    R: Rng + CryptoRng + 'static,
+    R: Rng + CryptoRng + Send + Sync + 'static,
     S: SecretKeyStore + 'static,
     C: SecretKeyStore + 'static,
     P: PublicKeyStore + 'static,
@@ -221,7 +221,7 @@ mod test_utils {
 
     impl<R, S, C, P> LocalCspVaultBuilder<R, S, C, P>
     where
-        R: Rng + CryptoRng + 'static,
+        R: Rng + CryptoRng + Send + Sync + 'static,
         S: SecretKeyStore + 'static,
         C: SecretKeyStore + 'static,
         P: PublicKeyStore + 'static,

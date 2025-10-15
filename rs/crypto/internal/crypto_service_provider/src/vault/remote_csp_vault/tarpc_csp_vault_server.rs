@@ -377,6 +377,67 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
+    async fn idkg_verify_dealing_private_batch(
+        self,
+        _: context::Context,
+        algorithm_id: Vec<AlgorithmId>,
+        dealing: Vec<IDkgDealingInternalBytes>,
+        dealer_index: Vec<NodeIndex>,
+        receiver_index: Vec<NodeIndex>,
+        receiver_key_id: Vec<KeyId>,
+        context_data: Vec<ByteBuf>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        // let futs = (0..algorithm_id.len()).map(|i|
+        //     {
+        //         let vault = self.local_csp_vault.clone();
+        //         let algorithm_id = algorithm_id[i].clone();
+        //         let dealing = dealing[i].clone();
+        //         let dealer_index =  dealer_index[i].clone();
+        //         let receiver_index = receiver_index[i].clone();
+        //         let receiver_key_id = receiver_key_id[i].clone();
+        //         let context_data = context_data[i].clone().into_vec();
+        //     execute_on_thread_pool(&self.thread_pool, move || {
+        //     vault.idkg_verify_dealing_private(
+        //         algorithm_id,
+        //         dealing,
+        //         dealer_index,
+        //         receiver_index,
+        //         receiver_key_id,
+        //         context_data,
+        //     )})}
+        // );
+        // for r in futures::future::join_all(futs).await { r?;}
+        // Ok(()) 
+        
+        // use rayon::prelude::*;
+
+        //     (0..algorithm_id.len()).into_par_iter().map(|i|
+
+        // {let vault = self.local_csp_vault.clone();
+        //     vault.idkg_verify_dealing_private(
+        //         algorithm_id[i].clone(),
+        //         dealing[i].clone(),
+        //         dealer_index[i].clone(),
+        //         receiver_index[i].clone(),
+        //         receiver_key_id[i].clone(),
+        //         context_data[i].to_vec(),
+        //     )}).collect::<Result<Vec<()>, IDkgVerifyDealingPrivateError>>().map(|_| ())
+
+        let vault = self.local_csp_vault;
+        let context_data = context_data.into_iter().map(|c| c.into_vec()).collect();
+        let job = move || {
+            vault.idkg_verify_dealing_private_batch(
+                algorithm_id,
+                dealing,
+                dealer_index,
+                receiver_index,
+                receiver_key_id,
+                context_data,
+            )
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
+
     async fn idkg_load_transcript(
         self,
         _: context::Context,
@@ -647,8 +708,8 @@ impl<C: CspVault> TarpcCspVaultServerImplBuilder<C> {
                     .thread_name(|i| format!("ic-crypto-csp-{i}"))
                     .num_threads(
                         std::thread::available_parallelism()
-                            .expect("obtaining the number of available cores should never fail")
-                            .get(),
+                        .expect("obtaining the number of available cores should never fail")
+                        .get(),
                     )
                     .build()
                     .expect("failed to instantiate a thread pool"),

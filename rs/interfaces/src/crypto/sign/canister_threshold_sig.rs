@@ -254,6 +254,12 @@ pub trait IDkgProtocol {
         signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
+    fn verify_dealing_private_batch(
+        &self,
+        params: &IDkgTranscriptParams,
+        signed_dealing: &[SignedIDkgDealing],
+    ) -> Result<(), IDkgVerifyDealingPrivateError>;
+
     /// Verifies initial dealings for XNet resharing.
     ///
     /// Verification ensures that

@@ -768,6 +768,17 @@ pub trait IDkgProtocolCspVault {
         context_data: Vec<u8>,
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
+    /// See [`CspIDkgProtocol::idkg_verify_dealing_private`].
+    fn idkg_verify_dealing_private_batch(
+        &self,
+        algorithm_id: Vec<AlgorithmId>,
+        dealing: Vec<IDkgDealingInternalBytes>,
+        dealer_index: Vec<NodeIndex>,
+        receiver_index: Vec<NodeIndex>,
+        receiver_key_id: Vec<KeyId>,
+        context_data: Vec<Vec<u8>>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError>;
+
     /// Compute secret from transcript and store in SKS, generating complaints
     /// if necessary.
     fn idkg_load_transcript(

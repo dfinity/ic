@@ -11,7 +11,7 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     PublicRandomSeedGenerator for LocalCspVault<R, S, C, P>
 {
     fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError> {
