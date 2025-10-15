@@ -12354,7 +12354,6 @@ name = "ic-pub-key"
 version = "0.1.0"
 dependencies = [
  "hex",
- "hex-literal 0.4.1",
  "ic-ed25519 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-management-canister-types",
  "ic-secp256k1 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
