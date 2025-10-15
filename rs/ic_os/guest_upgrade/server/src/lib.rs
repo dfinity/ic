@@ -14,6 +14,7 @@ use tokio::sync::watch;
 use vsock_lib::VSockClient;
 use vsock_lib::protocol::Command;
 
+pub mod orchestrator;
 mod server;
 mod service;
 mod tls;
