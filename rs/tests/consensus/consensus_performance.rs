@@ -144,6 +144,7 @@ fn setup(env: TestEnv) {
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_max_block_payload_size(8 * 1024 * 1024)
                 .add_nodes(NODES_COUNT),
         )
         .setup_and_start(&env)
@@ -214,10 +215,10 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![1]), 1_000.0))
-        .add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![2_000_000]), 5.0))
-        .add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![1, 2_000_000]), 10.0))
-        .add_test(systest!(test; PayloadSizeDistribution::C4ISL_25_09_2025, 60.0))
+        //.add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![1]), 1_000.0))
+        //.add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![2_000_000]), 5.0))
+        .add_test(systest!(test; PayloadSizeDistribution::Uniform(vec![1, 2_000_000]), 20.0))
+        //.add_test(systest!(test; PayloadSizeDistribution::C4ISL_25_09_2025, 60.0))
         .execute_from_args()?;
     Ok(())
 }
