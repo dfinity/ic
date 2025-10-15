@@ -5383,6 +5383,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
+ "config",
  "config_types",
  "der 0.7.9",
  "guest_upgrade_shared",
@@ -18482,6 +18483,7 @@ dependencies = [
  "env-file-reader",
  "exec",
  "get_if_addrs",
+ "guest_upgrade_server",
  "hex",
  "http-body-util",
  "hyper 1.6.0",
