@@ -477,19 +477,10 @@ fn verify_unknown_block_handling(
         subaccount: None,
     };
 
-    let mut prev_hash = None;
-
     for i in 0..NUM_BLOCKS {
-        let block = if let Some(prev_hash) = prev_hash {
-            BlockBuilder::new(i, i)
-                .with_parent_hash(prev_hash)
-                .mint(TEST_ACCOUNT, Tokens::from(1u64))
-                .build()
-        } else {
-            BlockBuilder::new(i, i)
-                .mint(TEST_ACCOUNT, Tokens::from(1u64))
-                .build()
-        };
+        let block = BlockBuilder::new(i, i)
+            .mint(TEST_ACCOUNT, Tokens::from(1u64))
+            .build();
         let block = if i == bad_block_index {
             let mut bad_block = match block {
                 ICRC3Value::Map(btree_map) => btree_map,
@@ -500,7 +491,6 @@ fn verify_unknown_block_handling(
         } else {
             block
         };
-        prev_hash = Some(block.clone().hash().to_vec());
         add_block(env, ledger_id, &block).expect("failed adding block to the ledger");
     }
 
