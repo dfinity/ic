@@ -114,9 +114,6 @@ thread_local! {
 
     /// The ID of the block sync timer. `None` means the sync is stopped due to an error.
     static TIMER_ID: RefCell<Option<TimerId>> = const { RefCell::new(None) };
-
-    /// The description of the error encountered during block sync.
-    static SYNC_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -219,6 +216,11 @@ impl Storable for AccountDataType {
 #[derive(Clone, Debug, Default)]
 struct Cache {
     pub get_blocks_method: Option<GetBlocksMethod>,
+}
+
+struct SyncError {
+    message: String,
+    retriable: bool,
 }
 
 #[test]
@@ -450,7 +452,7 @@ where
         .map_err(|err| format!("failed to candid decode the output: {err}"))
 }
 
-async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, ()> {
+async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, SyncError> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = GetBlocksRequest {
         start: Nat::from(start),
@@ -468,15 +470,18 @@ async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, ()> {
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            log!(P0, "[get_blocks_from_ledger] failed to get blocks: {}", err);
-            Err(())
+            let message = format!("[get_blocks_from_ledger] failed to get blocks: {}", err);
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
 
 async fn get_blocks_from_archive(
     archived: &ArchivedRange<QueryBlockArchiveFn>,
-) -> Result<BlockRange, ()> {
+) -> Result<BlockRange, SyncError> {
     let req = GetBlocksRequest {
         start: archived.start.clone(),
         length: archived.length.clone(),
@@ -492,17 +497,16 @@ async fn get_blocks_from_archive(
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
-                "[get_blocks_from_archive] failed to get blocks: {}",
-                err
-            );
-            Err(())
+            let message = format!("[get_blocks_from_archive] failed to get blocks: {}", err);
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
 
-async fn icrc3_get_blocks_from_ledger(start: u64) -> Result<GetBlocksResult, ()> {
+async fn icrc3_get_blocks_from_ledger(start: u64) -> Result<GetBlocksResult, SyncError> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = vec![GetBlocksRequest {
         start: Nat::from(start),
@@ -520,17 +524,21 @@ async fn icrc3_get_blocks_from_ledger(start: u64) -> Result<GetBlocksResult, ()>
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
+            let message = format!(
                 "[icrc3_get_blocks_from_ledger] failed to get blocks: {}",
                 err
             );
-            Err(())
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
 
-async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Result<GetBlocksResult, ()> {
+async fn icrc3_get_blocks_from_archive(
+    archived: &ArchivedBlocks,
+) -> Result<GetBlocksResult, SyncError> {
     let res = measured_call(
         "build_index.icrc3_get_blocks_from_archive.encode",
         "build_index.icrc3_get_blocks_from_archive.decode",
@@ -542,12 +550,14 @@ async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Result<GetB
     match res {
         Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
+            let message = format!(
                 "[icrc3_get_blocks_from_archive] failed to get blocks: {}",
                 err
             );
-            Err(())
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
@@ -582,24 +592,34 @@ pub async fn build_index() -> Option<()> {
         GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
         GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
     };
-    if let Ok(num_indexed) = num_indexed {
-        assert!(
-            sync_active(),
-            "Indexing succeeded but the sync timer is stopped."
-        );
-        let retrieve_blocks_from_ledger_interval =
-            with_state(|state| state.retrieve_blocks_from_ledger_interval());
-        log!(
-            P1,
-            "Indexed: {} waiting : {:?}",
-            num_indexed,
-            retrieve_blocks_from_ledger_interval
-        );
-    }
+    match num_indexed {
+        Ok(num_indexed) => {
+            let retrieve_blocks_from_ledger_interval =
+                with_state(|state| state.retrieve_blocks_from_ledger_interval());
+            log!(
+                P1,
+                "Indexed: {} waiting : {:?}",
+                num_indexed,
+                retrieve_blocks_from_ledger_interval
+            );
+        }
+        Err(error) => {
+            log!(P0, "{}", error.message);
+            ic_cdk::eprintln!("{}", error.message);
+            if !error.retriable {
+                let timer_id = TIMER_ID
+                    .with(|tid| *tid.borrow())
+                    .expect("Sync is running even though timer id is None");
+                ic_cdk_timers::clear_timer(timer_id);
+                TIMER_ID.with(|tid| *tid.borrow_mut() = None);
+            }
+        }
+    };
+
     Some(())
 }
 
-async fn fetch_blocks_via_get_blocks() -> Result<u64, ()> {
+async fn fetch_blocks_via_get_blocks() -> Result<u64, SyncError> {
     let mut num_indexed = 0;
     let next_id = with_blocks(|blocks| blocks.len());
     let res = get_blocks_from_ledger(next_id).await?;
@@ -624,7 +644,7 @@ async fn fetch_blocks_via_get_blocks() -> Result<u64, ()> {
     Ok(num_indexed as u64)
 }
 
-async fn fetch_blocks_via_icrc3() -> Result<u64, ()> {
+async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
     // The current number of blocks is also the id of the next
     // block to query from the Ledger.
     let previous_num_blocks = with_blocks(|blocks| blocks.len());
@@ -653,8 +673,10 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, ()> {
                     "[fetch_blocks_via_icrc3]: wrong start index in archive args. Expected: {} actual: {}",
                     expected_id, arg.start,
                 );
-                stop_timer_with_error(error);
-                return Err(());
+                return Err(SyncError {
+                    message: error,
+                    retriable: false,
+                });
             }
 
             let archived = ArchivedBlocks {
@@ -671,8 +693,10 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, ()> {
                     arg.clone(),
                     res.archived_blocks,
                 );
-                stop_timer_with_error(error);
-                return Err(());
+                return Err(SyncError {
+                    message: error,
+                    retriable: false,
+                });
             }
 
             // change `arg` for the next iteration
@@ -703,50 +727,47 @@ fn set_build_index_timer(after: Duration) {
     TIMER_ID.with(|tid| *tid.borrow_mut() = Some(timer_id));
 }
 
-fn stop_timer_with_error(error: String) {
-    log!(P0, "{}", error);
-    ic_cdk::eprintln!("{}", error);
-    if let Some(timer_id) = TIMER_ID.with(|tid| *tid.borrow()) {
-        ic_cdk_timers::clear_timer(timer_id);
-        TIMER_ID.with(|tid| *tid.borrow_mut() = None);
-    }
-    SYNC_ERROR.with(|sync_error| *sync_error.borrow_mut() = Some(error));
-}
-
-fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()> {
+fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), SyncError> {
     measure_span(&PROFILING_DATA, "append_blocks", move || {
-        assert!(
-            sync_active(),
-            "Trying to append a block, even though the sync is stopped."
-        );
         let original_block = block.clone();
 
         let block = match generic_block_to_encoded_block(block) {
             Ok(block) => block,
             Err(e) => {
-                stop_timer_with_error(format!(
-                    "Unable to decode generic block at index {block_index}. Error: {e}"
-                ));
-                return Err(());
+                let message = format!(
+                    "Unable to decode generic block at index {block_index}: {}. Error: {e}",
+                    original_block
+                );
+                return Err(SyncError {
+                    message,
+                    retriable: false,
+                });
             }
         };
 
         let decoded_block = match Block::<Tokens>::decode(block.clone()) {
             Ok(block) => block,
             Err(e) => {
-                stop_timer_with_error(format!(
-                    "Unable to decode encoded block at index {block_index}. Error: {e}"
-                ));
-                return Err(());
+                let message = format!(
+                    "Unable to decode encoded block at index {block_index}: {}. Error: {e}",
+                    original_block
+                );
+                return Err(SyncError {
+                    message,
+                    retriable: false,
+                });
             }
         };
         let decoded_value = encoded_block_to_generic_block(&decoded_block.clone().encode());
         if original_block.hash() != decoded_value.hash() {
-            stop_timer_with_error(format!(
+            let message = format!(
                 "Block at index {block_index} has unknown fields. Original block: {}, decoded block: {}.",
                 original_block, decoded_value
-            ));
-            return Err(());
+            );
+            return Err(SyncError {
+                message,
+                retriable: false,
+            });
         }
 
         // append the encoded block to the block log
@@ -773,7 +794,7 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), ()
     })
 }
 
-fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), ()> {
+fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
@@ -784,7 +805,7 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), ()> {
     Ok(())
 }
 
-fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), ()> {
+fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
     let mut blocks = vec![];
     let start_id = with_blocks(|blocks| blocks.len());
     for BlockWithId { id, block } in new_blocks {
@@ -795,8 +816,10 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), ()> {
                 "[fetch_blocks_via_icrc3]: wrong block index returned by ledger. Expected: {} actual: {}",
                 expected_id, id
             );
-            stop_timer_with_error(error);
-            return Err(());
+            return Err(SyncError {
+                message: error,
+                retriable: false,
+            });
         }
         // This conversion is safe as `Value`
         // can represent any `ICRC3Value`.
@@ -1121,10 +1144,6 @@ fn icrc1_balance_of(account: Account) -> Nat {
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len().into());
     Status { num_blocks_synced }
-}
-
-fn sync_active() -> bool {
-    TIMER_ID.with(|tid| *tid.borrow()).is_some()
 }
 
 #[query]
