@@ -628,7 +628,12 @@ where
         &MetricsRegistry,
         Arc<StateManagerImpl>,
         StateSync,
-        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
+        Box<
+            dyn Fn(
+                StateManagerImpl,
+                Option<Height>,
+            ) -> (MetricsRegistry, Arc<StateManagerImpl>, StateSync),
+        >,
     ),
 {
     let tmp = tmpdir("sm");
@@ -651,12 +656,12 @@ where
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             ));
+            let state_sync = StateSync::new(state_manager.clone(), log.clone());
 
-            (metrics_registry, state_manager)
+            (metrics_registry, state_manager, state_sync)
         };
 
-        let (metrics_registry, state_manager) = make_state_manager(None);
-        let state_sync = StateSync::new(state_manager.clone(), log.clone());
+        let (metrics_registry, state_manager, state_sync) = make_state_manager(None);
 
         let restart_fn = Box::new(move |state_manager, starting_height| {
             drop(state_manager);
