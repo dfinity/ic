@@ -355,7 +355,7 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
             );
         }
     }
-    // Veify there are no errors in the index log.
+    // Verify there are no errors in the index log.
     assert!(get_logs(env, index_id).entries.is_empty());
 }
 
