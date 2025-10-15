@@ -712,6 +712,12 @@ http_file(
     url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.4.0/evm_rpc.wasm.gz",
 )
 
+http_file(
+    name = "hotfix_sns_root.wasm.gz",
+    sha256 = "bab82425c5fca66d2f49d70bc9a9646d50f6db17a93327c52a77d3f3c8e1ff0c",
+    url = "https://download.dfinity.systems/ic/fff1198cbeb70ef743cc9e861afc0cc11dbd204a/canisters/sns-root-canister.wasm.gz",
+)
+
 http_archive(
     name = "haskell-candid",
     sha256 = "bd9d67c3f719ac4cfb5ba339b52dd8ee985b11029a53e97b3cd555334f28d1e3",

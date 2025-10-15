@@ -84,7 +84,9 @@ pub async fn test_sns_upgrade_legacy(sns_canisters_to_upgrade: Vec<SnsCanisterTy
         };
 
         let wasm = ensure_sns_wasm_gzipped(wasm);
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 
@@ -110,7 +112,9 @@ pub async fn test_sns_upgrade_legacy(sns_canisters_to_upgrade: Vec<SnsCanisterTy
         };
 
         let wasm = ensure_sns_wasm_gzipped(wasm);
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 

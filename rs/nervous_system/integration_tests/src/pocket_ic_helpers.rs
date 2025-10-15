@@ -8,6 +8,7 @@ use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::{
     ProgressNetwork,
     helpers::nns as nns_agent_helpers,
+    nns::governance::insert_sns_wasm_upgrade_path_entries,
     pocketic_impl::{PocketIcAgent, PocketIcCallError},
     sns::Sns,
 };
@@ -56,7 +57,9 @@ use ic_sns_swap::pb::v1::{
     Lifecycle, NewSaleTicketResponse, RefreshBuyerTokensResponse,
 };
 use ic_sns_test_utils::itest_helpers::populate_canister_ids;
-use ic_sns_wasm::pb::v1::{GetDeployedSnsByProposalIdResponse, SnsCanisterType, SnsWasm};
+use ic_sns_wasm::pb::v1::{
+    GetDeployedSnsByProposalIdResponse, SnsCanisterType, SnsUpgrade, SnsWasm,
+};
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -246,13 +249,42 @@ impl SnsWasmCanistersInstaller {
         &self,
         pocket_ic: &PocketIc,
         wasm: SnsWasm,
+        skip_update_latest_version: bool,
     ) -> Result<ProposalInfo, String> {
         let neuron_id = self.neuron_id.unwrap_or(NeuronId {
             id: TEST_NEURON_1_ID,
         });
         let principal_id = self.principal_id.unwrap_or(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let agent = PocketIcAgent::new(pocket_ic, principal_id);
-        nns_agent_helpers::add_wasm_via_nns_proposal(&agent, neuron_id, wasm).await
+        nns_agent_helpers::add_wasm_via_nns_proposal(
+            &agent,
+            neuron_id,
+            wasm,
+            skip_update_latest_version,
+        )
+        .await
+    }
+
+    pub async fn insert_sns_wasm_upgrade_path_entries_via_nns_proposal(
+        &self,
+        pocket_ic: &PocketIc,
+        upgrade_path: Vec<SnsUpgrade>,
+        sns_governance_canister_id: Option<PrincipalId>,
+        url: &str,
+    ) -> Result<ProposalInfo, String> {
+        let neuron_id = self.neuron_id.unwrap_or(NeuronId {
+            id: TEST_NEURON_1_ID,
+        });
+        let principal_id = self.principal_id.unwrap_or(*TEST_NEURON_1_OWNER_PRINCIPAL);
+        let agent = PocketIcAgent::new(pocket_ic, principal_id);
+        insert_sns_wasm_upgrade_path_entries(
+            &agent,
+            neuron_id,
+            upgrade_path,
+            sns_governance_canister_id,
+            url,
+        )
+        .await
     }
 
     /// Adds SNS canister WASM modules to the SNS-W canister via NNS proposals.
@@ -290,23 +322,23 @@ impl SnsWasmCanistersInstaller {
             };
 
         let root_proposal_info = self
-            .add_wasm_via_nns_proposal(pocket_ic, root_wasm.clone())
+            .add_wasm_via_nns_proposal(pocket_ic, root_wasm.clone(), false)
             .await?;
         let gov_proposal_info = self
-            .add_wasm_via_nns_proposal(pocket_ic, governance_wasm.clone())
+            .add_wasm_via_nns_proposal(pocket_ic, governance_wasm.clone(), false)
             .await?;
         let swap_proposal_info = self
-            .add_wasm_via_nns_proposal(pocket_ic, swap_wasm.clone())
+            .add_wasm_via_nns_proposal(pocket_ic, swap_wasm.clone(), false)
             .await?;
 
         let index_proposal_info = self
-            .add_wasm_via_nns_proposal(pocket_ic, index_wasm.clone())
+            .add_wasm_via_nns_proposal(pocket_ic, index_wasm.clone(), false)
             .await?;
         let ledger_proposal_info = self
-            .add_wasm_via_nns_proposal(pocket_ic, ledger_wasm.clone())
+            .add_wasm_via_nns_proposal(pocket_ic, ledger_wasm.clone(), false)
             .await?;
         let archive_proposal_info = self
-            .add_wasm_via_nns_proposal(pocket_ic, archive_wasm.clone())
+            .add_wasm_via_nns_proposal(pocket_ic, archive_wasm.clone(), false)
             .await?;
 
         Ok(btreemap! {
@@ -326,9 +358,26 @@ impl SnsWasmCanistersInstaller {
 pub async fn add_wasm_via_nns_proposal(
     pocket_ic: &PocketIc,
     wasm: SnsWasm,
+    skip_update_latest_version: bool,
 ) -> Result<ProposalInfo, String> {
     SnsWasmCanistersInstaller::default()
-        .add_wasm_via_nns_proposal(pocket_ic, wasm)
+        .add_wasm_via_nns_proposal(pocket_ic, wasm, skip_update_latest_version)
+        .await
+}
+
+pub async fn insert_sns_wasm_upgrade_path_entries_via_nns_proposal(
+    pocket_ic: &PocketIc,
+    upgrade_path: Vec<SnsUpgrade>,
+    sns_governance_canister_id: Option<PrincipalId>,
+    url: &str,
+) -> Result<ProposalInfo, String> {
+    SnsWasmCanistersInstaller::default()
+        .insert_sns_wasm_upgrade_path_entries_via_nns_proposal(
+            pocket_ic,
+            upgrade_path,
+            sns_governance_canister_id,
+            url,
+        )
         .await
 }
 
@@ -1400,7 +1449,7 @@ pub mod nns {
         ) -> SnsWasms {
             let wasm = version.get(&canister_type).unwrap();
             let wasm = create_modified_sns_wasm(wasm, Some(nonce));
-            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone(), false)
                 .await
                 .unwrap();
             version.insert(canister_type, wasm);
@@ -1427,7 +1476,7 @@ pub mod nns {
                 SnsCanisterType::Archive => build_archive_sns_wasm(),
             };
             let wasm = create_modified_sns_wasm(&wasm, Some(nonce));
-            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone(), false)
                 .await
                 .unwrap();
             version.insert(canister_type, wasm);

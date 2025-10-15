@@ -144,17 +144,23 @@ async fn test_upgrade_existing_sns() {
     eprintln!("Test upgrading SNS Ledger via proposals. First, add all the WASMs to SNS-W ...");
     {
         let wasm = build_index_ng_sns_wasm();
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
         let wasm = build_ledger_sns_wasm();
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
         let wasm = build_archive_sns_wasm();
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 
@@ -334,17 +340,23 @@ async fn test_upgrade_existing_sns() {
     );
     {
         let wasm = create_modified_sns_wasm(&build_index_ng_sns_wasm(), Some(42));
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
         let wasm = create_modified_sns_wasm(&build_ledger_sns_wasm(), Some(42));
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
         let wasm = create_modified_sns_wasm(&build_archive_sns_wasm(), Some(42));
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 

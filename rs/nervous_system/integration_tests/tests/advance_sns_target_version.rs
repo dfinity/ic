@@ -138,7 +138,7 @@ async fn test_get_upgrade_journal(automatically_advance_target_version: bool) {
 
         let new_sns_version_1 = {
             let root_wasm = create_modified_sns_wasm(original_root_wasm, Some(1));
-            add_wasm_via_nns_proposal(&pocket_ic, root_wasm.clone())
+            add_wasm_via_nns_proposal(&pocket_ic, root_wasm.clone(), false)
                 .await
                 .unwrap();
             let root_wasm_hash = root_wasm.sha256_hash().to_vec();
@@ -150,7 +150,7 @@ async fn test_get_upgrade_journal(automatically_advance_target_version: bool) {
 
         let new_sns_version_2 = {
             let root_wasm = create_modified_sns_wasm(original_root_wasm, Some(2));
-            add_wasm_via_nns_proposal(&pocket_ic, root_wasm.clone())
+            add_wasm_via_nns_proposal(&pocket_ic, root_wasm.clone(), false)
                 .await
                 .unwrap();
             let root_wasm_hash = root_wasm.sha256_hash().to_vec();

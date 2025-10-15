@@ -460,6 +460,15 @@ fn add_freshly_built_sns_wasms_and_return_immediately(
     .collect()
 }
 
+pub fn build_hotfix_sns_root_sns_wasm() -> SnsWasm {
+    let root_wasm = Project::cargo_bin_maybe_from_env("hotfix-sns-root-canister", &[]);
+    SnsWasm {
+        wasm: root_wasm.bytes(),
+        canister_type: SnsCanisterType::Root.into(),
+        ..SnsWasm::default()
+    }
+}
+
 /// Builds the mainnet SnsWasm for the root canister.
 pub fn build_mainnet_root_sns_wasm() -> SnsWasm {
     let root_wasm = Project::cargo_bin_maybe_from_env("mainnet-sns-root-canister", &[]);
