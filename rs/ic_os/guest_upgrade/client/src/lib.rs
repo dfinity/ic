@@ -37,6 +37,8 @@ mod tls;
 const NNS_PUBLIC_KEY_PATH: &str = "/opt/ic/share/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
+pub type CanOpenStore =
+Box<dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
 
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
@@ -47,8 +49,7 @@ pub struct DiskEncryptionKeyExchangeClientAgent {
     sev_root_certificate_verification: SevRootCertificateVerification,
     // We mock can_open_store for easier testing, in production it calls
     // guest_disk::sev::can_open_store, the signature corresponds to that function
-    can_open_store:
-        Box<dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>,
+    can_open_store: CanOpenStore,
 }
 
 impl DiskEncryptionKeyExchangeClientAgent {
@@ -57,9 +58,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
         nns_registry_client: Arc<dyn RegistryClient>,
-        can_open_store: Box<
-            dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync,
-        >,
+        can_open_store: CanOpenStore,
         previous_key_path: PathBuf,
         server_port: u16,
     ) -> Self {

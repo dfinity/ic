@@ -153,12 +153,11 @@ pub fn can_open_store(
     sev_firmware: &mut dyn SevGuestFirmware,
 ) -> Result<bool> {
     // The logic should be kept consistent with open above
-    if previous_key_path.exists() {
-        if let Ok(key) = fs::read(previous_key_path) {
-            if check_encryption_key(device_path, &key).is_ok() {
-                return Ok(true);
-            }
-        }
+    if previous_key_path.exists()
+        && let Ok(key) = fs::read(previous_key_path)
+        && check_encryption_key(device_path, &key).is_ok()
+    {
+        return Ok(true);
     }
 
     let derived_key =

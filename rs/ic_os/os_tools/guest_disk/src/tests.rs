@@ -399,7 +399,7 @@ fn test_open_store_multiple_times_with_different_keys() {
 
 #[test]
 fn test_can_open_store_with_previous_key() {
-    let mut fixture = TestFixture::new(true);
+    let fixture = TestFixture::new(true);
 
     // Prepare device encrypted with a previous key and write previous key file
     const PREVIOUS_KEY: &[u8] = b"previous key";
@@ -424,7 +424,7 @@ fn test_can_open_store_with_previous_key() {
 
 #[test]
 fn test_can_open_store_with_derived_key_when_previous_key_fails() {
-    let mut fixture = TestFixture::new(true);
+    let fixture = TestFixture::new(true);
 
     // Write a previous key that does NOT unlock the device
     fs::write(&fixture.previous_key_path, b"wrong previous key")
@@ -457,7 +457,7 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
 
 #[test]
 fn test_cannot_open_store_when_no_key_works() {
-    let mut fixture = TestFixture::new(true);
+    let fixture = TestFixture::new(true);
 
     // No previous key file and device is unformatted -> should return false
     // Ensure previous key file does not exist
