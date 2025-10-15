@@ -16,6 +16,7 @@ use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressP
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
@@ -43,7 +44,6 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis};
-use ic_test_utilities_crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;

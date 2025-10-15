@@ -10,6 +10,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
@@ -33,7 +34,6 @@ use ic_test_utilities::{
     artifact_pool_config::with_test_pool_config,
     cycles_account_manager::CyclesAccountManagerBuilder,
 };
-use ic_test_utilities_crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_state::{CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;

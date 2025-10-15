@@ -16,6 +16,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     p2p::consensus::{MutablePool, PoolMutationsProducer, UnvalidatedArtifact},
@@ -36,7 +37,6 @@ use ic_replicated_state::{
     CanisterQueues, ReplicatedState, SystemMetadata, canister_snapshots::CanisterSnapshots,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
-use ic_test_utilities_crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
