@@ -1928,6 +1928,7 @@ pub mod test {
         Dependencies, RefMockPayloadBuilder, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
@@ -1949,7 +1950,6 @@ pub mod test {
             fake_state_with_signature_requests,
         },
     };
-    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{

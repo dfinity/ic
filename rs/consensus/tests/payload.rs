@@ -6,6 +6,7 @@ use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
@@ -20,7 +21,6 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::{IDkgStatsNoOp, batch::MockBatchPayloadBuilder, make_genesis};
-use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;

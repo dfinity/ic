@@ -223,6 +223,7 @@ impl IngressManager {
 pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
@@ -233,7 +234,6 @@ pub(crate) mod tests {
         artifact_pool_config::with_test_pool_config,
         cycles_account_manager::CyclesAccountManagerBuilder,
     };
-    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
     use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};

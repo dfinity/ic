@@ -7,6 +7,7 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -54,7 +55,6 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_test_utilities::state_manager::FakeStateManager;
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{

@@ -863,6 +863,7 @@ mod tests {
         generate_tecdsa_protocol_inputs, generate_tschnorr_protocol_inputs, run_tecdsa_protocol,
         run_tschnorr_protocol,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_management_canister_types_private::{MasterPublicKeyId, SchnorrAlgorithm};
@@ -871,7 +872,6 @@ mod tests {
         ThresholdArguments, VetKdArguments,
     };
     use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
-    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::{
         ids::{NODE_1, NODE_2, NODE_3, canister_test_id, subnet_test_id, user_test_id},
