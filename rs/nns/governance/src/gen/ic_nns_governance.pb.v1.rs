@@ -2897,6 +2897,11 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// First proposal id to record voting history for known neurons.
+    /// TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+    #[prost(message, optional, tag = "30")]
+    pub first_proposal_id_to_record_voting_history:
+        ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -4709,6 +4714,12 @@ pub enum NnsFunction {
     DeployHostosToSomeNodes = 51,
     /// The proposal requests a subnet rental.
     SubnetRentalRequest = 52,
+    /// Instruct the migration canister to not accept any more migration requests.
+    PauseCanisterMigrations = 53,
+    /// Instruct the migration canister to accept migration requests again.
+    UnpauseCanisterMigrations = 54,
+    /// Take subnet offline or bring back online. Used as part of subnet recovery.
+    SetSubnetOperationalLevel = 55,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4779,6 +4790,9 @@ impl NnsFunction {
             Self::ReviseElectedHostosVersions => "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS",
             Self::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
             Self::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
+            Self::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
+            Self::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
+            Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4856,6 +4870,9 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
             "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
+            "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
+            "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
+            "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             _ => None,
         }
     }

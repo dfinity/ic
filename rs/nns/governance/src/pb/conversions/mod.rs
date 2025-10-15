@@ -3878,6 +3878,15 @@ impl From<pb::NnsFunction> for pb_api::NnsFunction {
                 pb_api::NnsFunction::DeployHostosToSomeNodes
             }
             pb::NnsFunction::SubnetRentalRequest => pb_api::NnsFunction::SubnetRentalRequest,
+            pb::NnsFunction::PauseCanisterMigrations => {
+                pb_api::NnsFunction::PauseCanisterMigrations
+            }
+            pb::NnsFunction::UnpauseCanisterMigrations => {
+                pb_api::NnsFunction::UnpauseCanisterMigrations
+            }
+            pb::NnsFunction::SetSubnetOperationalLevel => {
+                pb_api::NnsFunction::SetSubnetOperationalLevel
+            }
         }
     }
 }
@@ -3978,6 +3987,15 @@ impl From<pb_api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::DeployHostosToSomeNodes
             }
             pb_api::NnsFunction::SubnetRentalRequest => pb::NnsFunction::SubnetRentalRequest,
+            pb_api::NnsFunction::PauseCanisterMigrations => {
+                pb::NnsFunction::PauseCanisterMigrations
+            }
+            pb_api::NnsFunction::UnpauseCanisterMigrations => {
+                pb::NnsFunction::UnpauseCanisterMigrations
+            }
+            pb_api::NnsFunction::SetSubnetOperationalLevel => {
+                pb::NnsFunction::SetSubnetOperationalLevel
+            }
         }
     }
 }
