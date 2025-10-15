@@ -12,6 +12,9 @@ use maplit::btreemap;
 use rust_decimal_macros::dec;
 use std::collections::BTreeMap;
 
+// Predefined rewards table used in tests
+// Note: Values for 'xdr_permyriad_per_node_per_month' have been chosen to be give good daily
+// rewards once divided by REWARDS_TABLE_DAYS.
 lazy_static! {
   static ref NODE_REWARDS_TABLE: NodeRewardsTable = {
     let mut table = BTreeMap::new();
@@ -230,7 +233,7 @@ fn test_failure_rate_calculation_various_performance() {
             day,
             subnet_id,
             vec![
-                // Excellent performance: 1/(100+1) = 0.99% failure rate
+                // Excellent performance: 1/(100+1) = slightly less than 1% failure rate.
                 NodeMetricsDailyRaw {
                     node_id: test_node_id(10),
                     num_blocks_proposed: 100,
