@@ -36,7 +36,7 @@ pub(crate) use metrics::NeuronMetrics;
 // All information about a neuron can be up to 6 KiB.
 // To avoid hitting the message size limit of 2 MiB, we limit the
 // number of neurons returned in a single page to 300.
-pub const MAX_NEURON_PAGE_SIZE: usize = 300;
+pub const MAX_NEURON_PAGE_SIZE: u32 = 300;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum NeuronStoreError {
@@ -542,12 +542,23 @@ impl NeuronStore {
     pub fn list_all_neurons_paginated(
         &self,
         exclusive_start_id: NeuronId,
-        page_size: usize,
+        page_size: u32,
+        requester: PrincipalId,
+        now_seconds: u64,
+        voting_power_economics: &VotingPowerEconomics,
     ) -> Vec<NeuronInfo> {
         with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
-                .take(page_size)
+                .take(page_size as usize)
+                .map(|neuron| {
+                    neuron.get_neuron_info(
+                        voting_power_economics,
+                        now_seconds,
+                        requester,
+                        false, // TODO double-check
+                    )
+                })
                 .collect()
         })
     }

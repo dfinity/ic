@@ -46,7 +46,7 @@ use crate::{
             add_or_remove_node_provider::Change,
             archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
-            get_neurons_fund_audit_info_response::{self, Result},
+            get_neurons_fund_audit_info_response,
             governance::{
                 GovernanceCachedMetrics, NeuronInFlightCommand,
                 governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
@@ -70,10 +70,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
-    storage::{
-        VOTING_POWER_SNAPSHOTS, neuron_indexes::NeuronIndex, with_voting_history_store,
-        with_voting_history_store_mut,
-    },
+    storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -3513,11 +3510,17 @@ impl Governance {
         })
     }
 
-    /// TODO
+    /// Returns a paginated list of neurons.
+    /// The list has an exclusive lower bound on the neuron id, and a maximum
+    /// number of neurons to be returned.
+    /// The number of neurons to be returned is capped by `MAX_NEURON_PAGE_SIZE`.
     pub fn get_neuron_index(
         &self,
         req: GetNeuronIndexRequest,
+        requester: PrincipalId,
     ) -> Result<NeuronIndexData, GovernanceError> {
+        let now = self.env.now();
+
         let exclusive_start_id = req.exclusive_start_neuron_id.unwrap_or(NeuronId { id: 0 });
 
         let page_size = req
@@ -3525,9 +3528,13 @@ impl Governance {
             .unwrap_or(MAX_NEURON_PAGE_SIZE)
             .min(MAX_NEURON_PAGE_SIZE);
 
-        let neurons = self
-            .neuron_store
-            .list_all_neurons_paginated(exclusive_start_id, page_size);
+        let neurons = self.neuron_store.list_all_neurons_paginated(
+            exclusive_start_id,
+            page_size,
+            requester,
+            now,
+            self.voting_power_economics(),
+        );
 
         Ok(NeuronIndexData { neurons })
     }
