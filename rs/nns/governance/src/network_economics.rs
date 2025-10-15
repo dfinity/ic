@@ -318,7 +318,7 @@ impl VotingPowerEconomics {
     fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
         let from_range = {
             let begin = self.get_start_reducing_voting_power_after_seconds();
-            let end = begin + self.get_clear_following_after_seconds();
+            let end = begin.saturating_add(self.get_clear_following_after_seconds());
 
             begin..end
         };

@@ -13,12 +13,14 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
 ed25519-dalek = { workspace = true }
+fs_extra = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-limits = { path = "../limits" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }

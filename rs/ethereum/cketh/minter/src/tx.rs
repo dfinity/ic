@@ -9,7 +9,7 @@ use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::{TaskType, lazy_call_ecdsa_public_key, mutate_state, read_state};
 use ethnum::u256;
-use evm_rpc_client::{BlockTag, FeeHistory, FeeHistoryArgs};
+use evm_rpc_types::{BlockTag, FeeHistory, FeeHistoryArgs};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;

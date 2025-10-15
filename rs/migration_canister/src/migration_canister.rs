@@ -90,9 +90,12 @@ fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
         .collect();
     let events: Vec<MigrationStatus> = find_event(args.source, args.target)
         .into_iter()
-        .map(|(time, event)| match event {
-            crate::Event::Succeeded { .. } => MigrationStatus::Succeeded { time },
-            crate::Event::Failed { reason, .. } => MigrationStatus::Failed { reason, time },
+        .map(|event| match event.event {
+            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: event.time },
+            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
+                reason,
+                time: event.time,
+            },
         })
         .collect();
     active.extend(events);
@@ -109,9 +112,12 @@ struct ListEventsArgs {
 fn list_events(args: ListEventsArgs) -> Vec<MigrationStatus> {
     crate::canister_state::events::list_events(args.page_index, args.page_size)
         .into_iter()
-        .map(|(time, e)| match e {
-            crate::Event::Succeeded { .. } => MigrationStatus::Succeeded { time },
-            crate::Event::Failed { reason, .. } => MigrationStatus::Failed { reason, time },
+        .map(|e| match e.event {
+            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: e.time },
+            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
+                reason,
+                time: e.time,
+            },
         })
         .collect()
 }

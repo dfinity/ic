@@ -3,9 +3,9 @@
 use crate::{
     complaints::IDkgTranscriptLoader,
     metrics::{IDkgPayloadMetrics, ThresholdSignerMetrics, timed_call},
-    utils::{build_signature_inputs, load_transcripts, update_purge_height},
+    utils::{IDkgSchedule, build_signature_inputs, load_transcripts},
 };
-use ic_consensus_utils::{RoundRobin, crypto::ConsensusCrypto};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     crypto::{
         ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -38,8 +38,11 @@ use ic_types::{
     },
     messages::CallbackId,
 };
+use rayon::{
+    ThreadPool,
+    iter::{IntoParallelIterator, ParallelIterator},
+};
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
     sync::Arc,
@@ -127,23 +130,24 @@ pub(crate) trait ThresholdSigner: Send {
         &self,
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
+        schedule: &IDkgSchedule<Height>,
     ) -> IDkgChangeSet;
 }
 
 pub(crate) struct ThresholdSignerImpl {
     node_id: NodeId,
     crypto: Arc<dyn ConsensusCrypto>,
+    thread_pool: Arc<ThreadPool>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    schedule: RoundRobin,
     metrics: ThresholdSignerMetrics,
     log: ReplicaLogger,
-    prev_certified_height: RefCell<Height>,
 }
 
 impl ThresholdSignerImpl {
     pub(crate) fn new(
         node_id: NodeId,
         crypto: Arc<dyn ConsensusCrypto>,
+        thread_pool: Arc<ThreadPool>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -151,11 +155,10 @@ impl ThresholdSignerImpl {
         Self {
             node_id,
             crypto,
+            thread_pool,
             state_reader,
-            schedule: RoundRobin::default(),
             metrics: ThresholdSignerMetrics::new(metrics_registry),
             log,
-            prev_certified_height: RefCell::new(Height::from(0)),
         }
     }
 
@@ -167,28 +170,41 @@ impl ThresholdSignerImpl {
         transcript_loader: &dyn IDkgTranscriptLoader,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> IDkgChangeSet {
-        state_snapshot
-            .get_state()
-            .signature_request_contexts()
-            .iter()
-            .flat_map(|(id, context)| {
-                build_signature_inputs(*id, context).map_err(|err| {
-                    if err.is_fatal() {
-                        warn!(every_n_seconds => 15, self.log,
-                            "send_signature_shares(): failed to build signature inputs: {:?}",
-                            err
-                        );
-                        self.metrics.sign_errors_inc("signature_inputs_malformed");
-                    }
+        self.thread_pool.install(|| {
+            state_snapshot
+                .get_state()
+                .signature_request_contexts()
+                .into_par_iter()
+                .filter_map(|(id, context)| {
+                    build_signature_inputs(*id, context).inspect_err(|err| {
+                        if err.is_fatal() {
+                            warn!(every_n_seconds => 15, self.log,
+                                "send_signature_shares(): failed to build signature inputs: {:?}",
+                                err
+                            );
+                            self.metrics.sign_errors_inc("signature_inputs_malformed");
+                        }
+                    })
+                    .ok()
                 })
-            })
-            .filter(|(request_id, inputs)| {
-                !self.signer_has_issued_share(idkg_pool, &self.node_id, request_id, inputs.scheme())
-            })
-            .flat_map(|(request_id, sig_inputs)| {
-                self.create_signature_share(idkg_pool, transcript_loader, request_id, sig_inputs)
-            })
-            .collect()
+                .filter(|(request_id, inputs)| {
+                    !self.signer_has_issued_share(
+                        idkg_pool,
+                        &self.node_id,
+                        request_id,
+                        inputs.scheme(),
+                    )
+                })
+                .flat_map(|(request_id, sig_inputs)| {
+                    self.create_signature_share(
+                        idkg_pool,
+                        transcript_loader,
+                        request_id,
+                        sig_inputs,
+                    )
+                })
+                .collect()
+        })
     }
 
     /// Processes the received signature shares
@@ -213,40 +229,47 @@ impl ThresholdSignerImpl {
             })
             .collect::<BTreeMap<_, _>>();
 
-        // Collection of validated shares
-        let mut validated_sig_shares = BTreeSet::new();
+        let shares: Vec<_> = idkg_pool.unvalidated().signature_shares().collect();
+
+        let results: Vec<_> = self.thread_pool.install(|| {
+            // Iterate over all signature shares of all schemes
+            shares
+                .into_par_iter()
+                .filter_map(|(id, share)| {
+                    match Action::new(
+                        &sig_inputs_map,
+                        &share.request_id(),
+                        state_snapshot.get_height(),
+                    ) {
+                        Action::Process(sig_inputs) => {
+                            self.validate_signature_share(idkg_pool, id.clone(), share, sig_inputs)
+                        }
+                        Action::Drop => Some(IDkgChangeAction::RemoveUnvalidated(id)),
+                        Action::Defer => None,
+                    }
+                })
+                .collect()
+        });
 
         let mut ret = Vec::new();
-        // Iterate over all signature shares of all schemes
-        for (id, share) in idkg_pool.unvalidated().signature_shares() {
-            // Remove the duplicate entries
-            let key = (share.request_id(), share.signer());
-            if validated_sig_shares.contains(&key) {
+        // Collection of validated shares
+        let mut validated_sig_shares = BTreeSet::new();
+        for action in results {
+            if let IDkgChangeAction::MoveToValidated(msg) = &action
+                && let Some(key) = msg.sig_share_dedup_key()
+                && !validated_sig_shares.insert(key)
+            {
                 self.metrics
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Duplicate share in unvalidated batch: {share}"),
+                    msg.message_id(),
+                    format!("Duplicate share in unvalidated batch: {msg:?}"),
                 ));
                 continue;
             }
-
-            match Action::new(
-                &sig_inputs_map,
-                &share.request_id(),
-                state_snapshot.get_height(),
-            ) {
-                Action::Process(sig_inputs) => {
-                    let action = self.validate_signature_share(idkg_pool, id, share, sig_inputs);
-                    if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
-                        validated_sig_shares.insert(key);
-                    }
-                    ret.append(&mut action.into_iter().collect());
-                }
-                Action::Drop => ret.push(IDkgChangeAction::RemoveUnvalidated(id)),
-                Action::Defer => {}
-            }
+            ret.push(action);
         }
+
         ret
     }
 
@@ -559,6 +582,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
         &self,
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
+        schedule: &IDkgSchedule<Height>,
     ) -> IDkgChangeSet {
         let Some(snapshot) = self.state_reader.get_certified_state_snapshot() else {
             idkg_pool.stats().update_active_signature_requests(vec![]);
@@ -618,8 +642,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .stats()
             .update_active_signature_requests(active_requests);
 
-        let mut changes = if update_purge_height(&self.prev_certified_height, snapshot.get_height())
-        {
+        let mut changes = if schedule.update_last_purge(snapshot.get_height()) {
             timed_call(
                 "purge_artifacts",
                 || self.purge_artifacts(idkg_pool, snapshot.as_ref()),
@@ -646,7 +669,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
 
         let calls: [&'_ dyn Fn() -> IDkgChangeSet; 2] =
             [&send_signature_shares, &validate_signature_shares];
-        changes.append(&mut self.schedule.call_next(&calls));
+        changes.append(&mut schedule.call_next(&calls));
         changes
     }
 }
@@ -968,23 +991,24 @@ mod tests {
                 ];
                 idkg_pool.apply(change_set);
 
+                let schedule = IDkgSchedule::new(Height::from(0));
                 // Certified height doesn't increase, so share1 shouldn't be purged
-                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*signer.prev_certified_height.borrow(), height_0);
+                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), height_0);
                 assert!(change_set.is_empty());
 
                 // Certified height increases, so share1 is purged
                 let new_height = expected_state_snapshot.write().unwrap().inc_height_by(29);
-                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*signer.prev_certified_height.borrow(), new_height);
+                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
                 idkg_pool.apply(change_set);
 
                 // Certified height increases above share2, so it is purged
                 let new_height = expected_state_snapshot.write().unwrap().inc_height_by(1);
-                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*signer.prev_certified_height.borrow(), new_height);
+                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(height_30, new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id2));

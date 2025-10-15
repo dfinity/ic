@@ -76,6 +76,13 @@ pub struct RegisterExtensionArgs {
     /// JSON-encoded initialization arguments for the extension.
     #[clap(long, value_parser = parse_precise_value)]
     pub extension_init: Option<PreciseValue>,
+
+    /// The name of the dfx network to use.
+    /// TODO[NNS1-4150]: This is currently used because of bad handling
+    /// of the input arguments in the dfx. Once that is fixed,
+    /// this should be removed.
+    #[clap(long)]
+    pub network: Option<String>,
 }
 
 pub struct Wasm {
@@ -300,6 +307,7 @@ pub async fn exec<C: CallCanisters>(
         proposal_url,
         summary,
         extension_init,
+        network: _,
     } = args;
 
     let caller_principal = PrincipalId(agent.caller()?);

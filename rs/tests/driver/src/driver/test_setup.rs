@@ -46,7 +46,6 @@ impl TestEnvAttribute for GroupSetup {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum InfraProvider {
     Farm,
-    K8s,
 }
 
 impl TestEnvAttribute for InfraProvider {

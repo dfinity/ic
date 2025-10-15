@@ -284,9 +284,6 @@ pub struct Config {
     /// by canisters.
     pub allocatable_compute_capacity_in_percent: usize,
 
-    /// Indicates whether deterministic time slicing is enabled or not.
-    pub deterministic_time_slicing: FlagStatus,
-
     /// Bitcoin configuration.
     pub bitcoin: BitcoinConfig,
 
@@ -354,6 +351,9 @@ pub struct Config {
 
     /// Enables the replicated inter-canister calls to `fetch_canister_logs`.
     pub replicated_inter_canister_log_fetch: FlagStatus,
+
+    /// Enables filtering by range in `fetch_canister_logs`.
+    pub fetch_canister_logs_filter: FlagStatus,
 }
 
 impl Default for Config {
@@ -412,7 +412,6 @@ impl Default for Config {
             // The allocatable compute capacity is capped at 50% to ensure that
             // best-effort canisters have sufficient compute to make progress.
             allocatable_compute_capacity_in_percent: 50,
-            deterministic_time_slicing: FlagStatus::Enabled,
             bitcoin: BitcoinConfig {
                 privileged_access: vec![
                     bitcoin_testnet_canister_id,
@@ -446,6 +445,7 @@ impl Default for Config {
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: FlagStatus::Disabled,
+            fetch_canister_logs_filter: FlagStatus::Disabled,
         }
     }
 }
