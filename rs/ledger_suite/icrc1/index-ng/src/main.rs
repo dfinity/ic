@@ -112,8 +112,8 @@ thread_local! {
     /// persistent between upgrades
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
 
-    /// The ID of the block sync timer. `None` means the sync is stopped due to an error.
-    static TIMER_ID: RefCell<Option<TimerId>> = const { RefCell::new(None) };
+    /// The ID of the block sync timer.
+    static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -607,11 +607,8 @@ pub async fn build_index() -> Option<()> {
             log!(P0, "{}", error.message);
             ic_cdk::eprintln!("{}", error.message);
             if !error.retriable {
-                let timer_id = TIMER_ID
-                    .with(|tid| *tid.borrow())
-                    .expect("Sync is running even though timer id is None");
+                let timer_id = TIMER_ID.with(|tid| *tid.borrow());
                 ic_cdk_timers::clear_timer(timer_id);
-                TIMER_ID.with(|tid| *tid.borrow_mut() = None);
             }
         }
     };
@@ -724,7 +721,7 @@ fn set_build_index_timer(after: Duration) {
             let _ = build_index().await;
         })
     });
-    TIMER_ID.with(|tid| *tid.borrow_mut() = Some(timer_id));
+    TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), SyncError> {
