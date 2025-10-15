@@ -3,7 +3,7 @@ use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -174,7 +174,6 @@ impl WasmtimeInstanceBuilder {
             ic_replicated_state::MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
-                    FlagStatus::Disabled,
                     self.num_instructions,
                     self.num_instructions,
                 ),
