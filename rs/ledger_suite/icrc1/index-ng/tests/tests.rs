@@ -521,6 +521,7 @@ fn verify_unknown_block_handling(
 
     let logs = get_logs(env, index_id);
     let mut error_count = 0;
+    let mut stopping_message = false;
     for entry in logs.entries {
         if entry.message.contains(&format!(
             "Block at index {} has unknown fields.",
@@ -528,9 +529,13 @@ fn verify_unknown_block_handling(
         )) {
             error_count += 1;
         }
+        if entry.message.contains("Stopping the indexing timer.") {
+            stopping_message = true;
+        }
     }
     // This additionally checks whether the indexing was stopped.
     assert_eq!(error_count, 1);
+    assert!(stopping_message);
 }
 
 #[test]

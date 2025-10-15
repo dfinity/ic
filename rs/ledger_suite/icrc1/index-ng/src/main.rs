@@ -607,6 +607,8 @@ pub async fn build_index() -> Option<()> {
             log!(P0, "{}", error.message);
             ic_cdk::eprintln!("{}", error.message);
             if !error.retriable {
+                log!(P0, "Stopping the indexing timer.");
+                ic_cdk::eprintln!("Stopping the indexing timer.");
                 let timer_id = TIMER_ID.with(|tid| *tid.borrow());
                 ic_cdk_timers::clear_timer(timer_id);
             }
