@@ -13856,7 +13856,7 @@ async fn test_follow_private_neuron_same_controller() {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 2 })),
                 id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
-                    topic: Topic::NeuronManagement as i32,
+                    topic: Topic::ParticipantManagement as i32,
                     followees: [NeuronId { id: 1 }].to_vec(),
                 })),
             }))),
@@ -13877,7 +13877,7 @@ async fn test_follow_private_neuron_same_controller() {
         gov.get_full_neuron(&NeuronId { id: 2 }, &principal(NEURON_2_CONTROLLER))
             .unwrap()
             .followees
-            .get(&(Topic::NeuronManagement as i32))
+            .get(&(Topic::ParticipantManagement as i32))
             .unwrap()
             .followees
             .contains(&NeuronId { id: 1 })
@@ -13899,6 +13899,8 @@ async fn test_follow_private_neuron_fails() {
     );
 
     // Make a proposal to have neuron 3 follow neuron 1.
+    // This proposal should fail because neuron 3 has neither the same
+    // controller as neuron 1 nor is its controller a hot key of neuron 1.
     gov.make_proposal(
         &NeuronId { id: MANAGER_ID },
         &principal(MANAGER_ID),
@@ -13908,7 +13910,7 @@ async fn test_follow_private_neuron_fails() {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 3 })),
                 id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
-                    topic: Topic::NeuronManagement as i32,
+                    topic: Topic::Kyc as i32,
                     followees: [NeuronId { id: 1 }].to_vec(),
                 })),
             }))),
@@ -13929,10 +13931,7 @@ async fn test_follow_private_neuron_fails() {
         !gov.get_full_neuron(&NeuronId { id: 3 }, &principal(NEURON_3_CONTROLLER))
             .unwrap()
             .followees
-            .get(&(Topic::NeuronManagement as i32))
-            .unwrap()
-            .followees
-            .contains(&NeuronId { id: 1 })
+            .contains_key(&(Topic::Kyc as i32))
     );
 }
 
@@ -13971,7 +13970,6 @@ async fn test_follow_private_neuron_hotkeys() {
         .unwrap();
 
     assert!(result.is_ok());
-
     // Make a proposal to have neuron 3 follow neuron 1.
     gov.make_proposal(
         &NeuronId { id: MANAGER_ID },
@@ -13982,7 +13980,7 @@ async fn test_follow_private_neuron_hotkeys() {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 3 })),
                 id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
-                    topic: Topic::NeuronManagement as i32,
+                    topic: Topic::NetworkEconomics as i32,
                     followees: [NeuronId { id: 1 }].to_vec(),
                 })),
             }))),
@@ -14003,7 +14001,7 @@ async fn test_follow_private_neuron_hotkeys() {
         gov.get_full_neuron(&NeuronId { id: 3 }, &principal(NEURON_3_CONTROLLER))
             .unwrap()
             .followees
-            .get(&(Topic::NeuronManagement as i32))
+            .get(&(Topic::NetworkEconomics as i32))
             .unwrap()
             .followees
             .contains(&NeuronId { id: 1 })
@@ -14044,6 +14042,57 @@ async fn test_follow_public_neuron_succeeds() {
         .unwrap();
 
     assert!(result.is_ok());
+
+    // Make a proposal to have neuron 3 follow neuron 1.
+    gov.make_proposal(
+        &NeuronId { id: MANAGER_ID },
+        &principal(MANAGER_ID),
+        &Proposal {
+            title: Some("N3 follow N1".to_string()),
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 3 })),
+                id: None,
+                command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
+                    topic: Topic::SubnetRental as i32,
+                    followees: [NeuronId { id: 1 }].to_vec(),
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        ProposalStatus::Executed,
+        gov.get_proposal_data(ProposalId { id: 1 })
+            .unwrap()
+            .status()
+    );
+
+    assert!(
+        gov.get_full_neuron(&NeuronId { id: 3 }, &principal(NEURON_3_CONTROLLER))
+            .unwrap()
+            .followees
+            .get(&(Topic::SubnetRental as i32))
+            .unwrap()
+            .followees
+            .contains(&NeuronId { id: 1 })
+    );
+}
+
+// Test that a pirvate neuron can be followed on the
+// NeuronManagement topic.
+#[tokio::test]
+async fn test_follow_private_neuron_neuron_management() {
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_follow_private_neuron_restrictions(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    );
 
     // Make a proposal to have neuron 3 follow neuron 1.
     gov.make_proposal(

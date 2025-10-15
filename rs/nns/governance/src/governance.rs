@@ -8443,6 +8443,14 @@ fn modify_followees(
         return Ok(updated_followees);
     }
 
+    if topic == Topic::NeuronManagement as i32 {
+        // Neuron management followees are not subject to the follow restrictions.
+        // This exception doesn't expose any security issue, as it doesn't reveal
+        // any ballots regardging non-neuron-management proposals of the followees.
+        updated_followees.insert(topic, new_followees);
+        return Ok(updated_followees);
+    }
+
     // Otherwise, update the entry with the new followees list.
     // A new can follow another neuron if:
     // 1. the followee neuron is a public neuron
