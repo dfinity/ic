@@ -2088,18 +2088,6 @@ pub mod sns {
         #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
         pub struct Status {
             pub num_blocks_synced: BlockIndex,
-            pub sync_status: SyncStatus,
-        }
-
-        #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-        pub struct SyncError {
-            pub error_msg: String,
-        }
-
-        #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-        pub enum SyncStatus {
-            Syncing,
-            NotSyncing(SyncError),
         }
 
         pub async fn ledger_id(pocket_ic: &PocketIc, canister_id: PrincipalId) -> PrincipalId {
