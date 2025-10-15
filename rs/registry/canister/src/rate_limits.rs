@@ -26,8 +26,9 @@ const NODE_OPERATOR_MAX_SPIKE: u64 = NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY * 
 pub const NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
 
-const ADD_NODE_IP_CAPACITY: u64 = 4;
-const ADD_NODE_IP_REFILL_INTERVAL_SECONDS: u64 = ONE_DAY_SECONDS / 4;
+const AVG_ADD_NODE_BY_IP_PER_DAY: u64 = 1;
+const ADD_NODE_IP_MAX_SPIKE: u64 = AVG_ADD_NODE_BY_IP_PER_DAY * 7;
+const ADD_NODE_IP_REFILL_INTERVAL_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// Creates a rate limiter configuration for node providers
 fn create_node_provider_rate_limiter_config() -> RateLimiterConfig {
@@ -55,8 +56,8 @@ fn create_add_node_ip_rate_limiter_config() -> RateLimiterConfig {
     RateLimiterConfig {
         add_capacity_amount: 1,
         add_capacity_interval: Duration::from_secs(ADD_NODE_IP_REFILL_INTERVAL_SECONDS),
-        max_capacity: ADD_NODE_IP_CAPACITY,
-        max_reservations: ADD_NODE_IP_CAPACITY * 2,
+        max_capacity: ADD_NODE_IP_MAX_SPIKE,
+        max_reservations: ADD_NODE_IP_MAX_SPIKE * 2,
     }
 }
 
