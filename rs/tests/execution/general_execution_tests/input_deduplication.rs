@@ -53,23 +53,16 @@ pub fn input_deduplication_test(env: TestEnv) {
             };
 
             // The following two requests with the same nonce are identical and thus deduplicated.
-            let res = client
-                .post(format!("{node_url}api/v2/canister/{canister_id}/call"))
-                .header("Content-Type", "application/cbor")
-                .body(update_body(42))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(res.status(), StatusCode::ACCEPTED);
-
-            let res = client
-                .post(format!("{node_url}api/v2/canister/{canister_id}/call"))
-                .header("Content-Type", "application/cbor")
-                .body(update_body(42))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(res.status(), StatusCode::ACCEPTED);
+            for _ in 0..2 {
+                let res = client
+                    .post(format!("{node_url}api/v2/canister/{canister_id}/call"))
+                    .header("Content-Type", "application/cbor")
+                    .body(update_body(42))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(res.status(), StatusCode::ACCEPTED);
+            }
 
             // The following request has a different nonce and thus is executed.
             let res = client
