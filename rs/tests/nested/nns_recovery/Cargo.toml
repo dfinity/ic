@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+ic_consensus_system_test_subnet_recovery = { path = "../../consensus/subnet_recovery" }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 ic-recovery = { path = "../../../recovery" }
 ic-system-test-driver = { path = "../../driver" }
