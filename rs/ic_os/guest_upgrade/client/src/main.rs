@@ -13,7 +13,15 @@ use std::sync::Arc;
 #[tokio::main]
 #[cfg(target_os = "linux")]
 pub async fn main() -> Result<()> {
-    if let Err(err) = try_run_exchange().await {
+    let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
+        .context("Failed to deserialize GuestOS config")?;
+
+    if guestos_config.guest_vm_type != GuestVMType::Upgrade {
+        println!("Not an upgrade VM, skipping key exchange");
+        return Ok(());
+    }
+
+    if let Err(err) = try_run_exchange(guestos_config).await {
         eprintln!("Key exchange failed: {err:?}");
         shutdown();
         Err(err)
@@ -26,21 +34,14 @@ pub async fn main() -> Result<()> {
     }
 }
 
-async fn try_run_exchange() -> Result<()> {
-    let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
-        .context("Failed to deserialize GuestOS config")?;
-    if guestos_config.guest_vm_type != GuestVMType::Upgrade {
-        println!("Not an upgrade VM, skipping key exchange");
-        return Ok(());
-    }
-
+async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let nns_registry_client = create_nns_registry_client(&guestos_config)?;
 
     let sev_firmware = Firmware::open().context("Failed to open SEV firmware")?;
 
     guest_upgrade_client::DiskEncryptionKeyExchangeClientAgent::new(
-        guestos_config.clone(),
+        guestos_config,
         SevRootCertificateVerification::Verify,
         Box::new(sev_firmware),
         Arc::new(nns_registry_client),
