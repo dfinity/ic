@@ -511,8 +511,11 @@ fn verify_unknown_block_handling(
     let archived_count = archive_blocks(env, ledger_id, archive2, 2);
     assert_eq!(archived_count, 2);
 
-    env.advance_time(Duration::from_secs(60));
-    env.tick();
+    // Advance more than once to make sure the indexing was stopped.
+    for _ in 0..3 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
 
     let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
     let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
@@ -525,17 +528,21 @@ fn verify_unknown_block_handling(
     );
 
     let logs = get_logs(env, index_id);
-    let mut found_error = false;
+    let mut error_count = 0;
     for entry in logs.entries {
-        found_error = entry.message.contains(&format!(
+        if entry.message.contains(&format!(
             "Block at index {} has unknown fields.",
             bad_block_index
-        ));
-        if found_error {
-            break;
+        )) {
+            error_count += 1;
         }
     }
-    assert_eq!(found_error, bad_block_index < NUM_BLOCKS);
+    if bad_block_index < NUM_BLOCKS {
+        // This additionally checks whether the indexing was stopped.
+        assert_eq!(error_count, 1);
+    } else {
+        assert_eq!(error_count, 0);
+    }
 }
 
 #[test]
