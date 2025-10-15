@@ -82,7 +82,7 @@ pub fn input_deduplication_test(env: TestEnv) {
             assert_eq!(res.status(), StatusCode::ACCEPTED);
 
             // Synchronization call: we assume that the previous calls have been processed
-            // once the "synchronization" call has been processed.
+            // once the result of the "synchronization" call is available.
             canister.update(wasm().reply().build()).await.unwrap();
 
             // Only two update calls (one submitted with nonce 42 and one submitted with nonce 43)
