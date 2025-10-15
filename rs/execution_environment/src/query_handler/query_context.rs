@@ -416,8 +416,7 @@ impl<'a> QueryContext<'a> {
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
@@ -618,8 +617,7 @@ impl<'a> QueryContext<'a> {
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
         let api_type = match response.response_payload {
             Payload::Data(payload) => ApiType::composite_reply_callback(

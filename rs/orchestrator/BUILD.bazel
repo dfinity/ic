@@ -28,6 +28,7 @@ rust_library(
         "//rs/http_endpoints/async_utils",
         "//rs/http_endpoints/metrics",
         "//rs/http_utils",
+        "//rs/ic_os/guest_upgrade/server",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/monitoring/logger",

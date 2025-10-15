@@ -284,9 +284,6 @@ pub struct Config {
     /// by canisters.
     pub allocatable_compute_capacity_in_percent: usize,
 
-    /// Indicates whether deterministic time slicing is enabled or not.
-    pub deterministic_time_slicing: FlagStatus,
-
     /// Bitcoin configuration.
     pub bitcoin: BitcoinConfig,
 
@@ -415,7 +412,6 @@ impl Default for Config {
             // The allocatable compute capacity is capped at 50% to ensure that
             // best-effort canisters have sufficient compute to make progress.
             allocatable_compute_capacity_in_percent: 50,
-            deterministic_time_slicing: FlagStatus::Enabled,
             bitcoin: BitcoinConfig {
                 privileged_access: vec![
                     bitcoin_testnet_canister_id,

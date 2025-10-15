@@ -1,16 +1,17 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//rs:ic-os-pkg"])
+package(default_visibility = [
+    "//rs:ic-os-pkg",
+    "//rs/orchestrator:__subpackages__",
+])
 
 rust_library(
     name = "server",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "guest_upgrade_server",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = [
         "//rs/ic_os/attestation",
+        "//rs/ic_os/config:config_lib",
         "//rs/ic_os/config_types",
         "//rs/ic_os/guest_upgrade/shared",
         "//rs/ic_os/sev",
