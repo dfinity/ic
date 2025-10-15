@@ -1,5 +1,5 @@
 [Unit]
-Description=Run boot-metrics service 30 seconds after boot
+Description=Run boot-metrics service 10 minutes after boot
 
 [Timer]
 OnBootSec=10min
