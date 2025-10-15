@@ -150,5 +150,5 @@ service : (index_arg : opt IndexArg) -> {
   icrc1_balance_of : (Account) -> (Tokens) query;
   ledger_id : () -> (principal) query;
   list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
-  status : () -> (Status) query;
+  status : () -> (Status) query
 }
