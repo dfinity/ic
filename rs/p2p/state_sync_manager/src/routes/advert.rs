@@ -1,3 +1,4 @@
+use crate::utils::{Advert, XorDistance};
 use axum::{
     Extension,
     body::Bytes,
@@ -11,8 +12,6 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use prost::Message;
 use std::sync::Arc;
-
-use crate::utils::{Advert, XorDistance};
 
 pub const STATE_SYNC_ADVERT_PATH: &str = "/state-sync/advert";
 

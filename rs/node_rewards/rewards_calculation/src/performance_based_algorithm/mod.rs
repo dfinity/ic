@@ -1,6 +1,6 @@
 use crate::performance_based_algorithm::results::{
-    BaseRewards, BaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
-    NodeResults, NodeStatus, Percent, RewardsCalculatorResults, XDRPermyriad,
+    BaseRewardsSpec, DailyNodeProviderRewards, DailyNodeRewards, DailyResults, NodeMetricsDaily,
+    NodeStatus, Percent, RewardsCalculatorResults, Type3BaseRewards, XDRPermyriad,
 };
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
@@ -8,7 +8,6 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
-use maplit::btreemap;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal_macros::dec;
@@ -59,8 +58,8 @@ struct PerformanceMultiplierResults {
 
 #[derive(Default)]
 struct BaseRewardsResults {
-    base_rewards: Vec<BaseRewards>,
-    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards: Vec<BaseRewardsSpec>,
+    base_rewards_type3: Vec<Type3BaseRewards>,
     base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
 }
 
@@ -83,12 +82,6 @@ pub trait DataProvider {
         &self,
         date: &NaiveDate,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        date: &NaiveDate,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String>;
 }
 
 trait PerformanceBasedAlgorithm {
@@ -118,7 +111,6 @@ trait PerformanceBasedAlgorithm {
     fn calculate_rewards(
         from_date: &NaiveDate,
         to_date: &NaiveDate,
-        node_provider_filter: Option<PrincipalId>,
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         if from_date > to_date {
@@ -131,8 +123,7 @@ trait PerformanceBasedAlgorithm {
 
         // Process each day in the reward period
         for day in reward_period {
-            let result_for_day =
-                Self::calculate_daily_rewards(&data_provider, &day, &node_provider_filter)?;
+            let result_for_day = Self::calculate_daily_rewards(&data_provider, &day)?;
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
@@ -158,17 +149,10 @@ trait PerformanceBasedAlgorithm {
     fn calculate_daily_rewards(
         data_provider: &impl DataProvider,
         date: &NaiveDate,
-        node_provider_filter: &Option<PrincipalId>,
     ) -> Result<DailyResults, String> {
         let rewards_table = data_provider.get_rewards_table(date)?;
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(date)?;
-        let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
-            let rewardable_nodes =
-                data_provider.get_provider_rewardable_nodes(date, provider_id)?;
-            btreemap! { *provider_id => rewardable_nodes }
-        } else {
-            data_provider.get_rewardable_nodes(date)?
-        };
+        let providers_rewardable_nodes = data_provider.get_rewardable_nodes(date)?;
         let mut results_per_provider = BTreeMap::new();
 
         // Calculate failure rates for subnets and individual nodes
@@ -197,7 +181,7 @@ trait PerformanceBasedAlgorithm {
         rewards_table: &NodeRewardsTable,
         nodes_metrics_daily: &mut BTreeMap<NodeId, NodeMetricsDaily>,
         rewardable_nodes: Vec<RewardableNode>,
-    ) -> NodeProviderRewards {
+    ) -> DailyNodeProviderRewards {
         let mut provider_nodes_metrics_daily = BTreeMap::new();
         for node in &rewardable_nodes {
             if let Some(metrics) = nodes_metrics_daily.remove(&node.node_id) {
@@ -483,7 +467,7 @@ trait PerformanceBasedAlgorithm {
             .into_iter()
             .map(
                 |(region, (daily_rewards, nodes_count, avg_rewards, avg_coefficient))| {
-                    BaseRewardsType3 {
+                    Type3BaseRewards {
                         region,
                         nodes_count,
                         avg_rewards,
@@ -497,7 +481,7 @@ trait PerformanceBasedAlgorithm {
         let base_rewards = base_rewards
             .into_iter()
             .map(
-                |((node_reward_type, region), (daily_rewards, monthly_rewards))| BaseRewards {
+                |((node_reward_type, region), (daily_rewards, monthly_rewards))| BaseRewardsSpec {
                     node_reward_type,
                     region,
                     monthly: monthly_rewards,
@@ -545,9 +529,9 @@ trait PerformanceBasedAlgorithm {
         mut performance_multiplier: BTreeMap<NodeId, Percent>,
         mut base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
         mut adjusted_rewards: BTreeMap<NodeId, XDRPermyriad>,
-        base_rewards: Vec<BaseRewards>,
-        base_rewards_type3: Vec<BaseRewardsType3>,
-    ) -> NodeProviderRewards {
+        base_rewards: Vec<BaseRewardsSpec>,
+        base_rewards_type3: Vec<Type3BaseRewards>,
+    ) -> DailyNodeProviderRewards {
         let mut results_by_node = Vec::new();
         let mut rewards_total = Decimal::ZERO;
 
@@ -577,7 +561,7 @@ trait PerformanceBasedAlgorithm {
 
             rewards_total += adjusted_rewards_xdr_permyriad;
 
-            results_by_node.push(NodeResults {
+            results_by_node.push(DailyNodeRewards {
                 node_id: node.node_id,
                 node_reward_type: node.node_reward_type,
                 region: node.region,
@@ -590,11 +574,11 @@ trait PerformanceBasedAlgorithm {
             });
         }
 
-        NodeProviderRewards {
+        DailyNodeProviderRewards {
             rewards_total,
             base_rewards,
-            base_rewards_type3,
-            nodes_results: results_by_node,
+            type3_base_rewards: base_rewards_type3,
+            daily_nodes_rewards: results_by_node,
         }
     }
 }
