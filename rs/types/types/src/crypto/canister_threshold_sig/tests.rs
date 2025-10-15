@@ -990,9 +990,9 @@ fn valid_tecdsa_inputs_with_receivers(
     ThresholdEcdsaSigInputsOwned {
         caller: extended_derivation_path.caller,
         derivation_path: extended_derivation_path.derivation_path,
-        hashed_message: hashed_message,
-        nonce: nonce,
+        hashed_message,
+        nonce,
         presig_quadruple: quadruple,
-        key_transcript: key_transcript,
+        key_transcript,
     }
 }
