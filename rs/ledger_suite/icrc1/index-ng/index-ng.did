@@ -136,15 +136,7 @@ type ListSubaccountsArgs = record {
 };
 
 type Status = record {
-  num_blocks_synced : BlockIndex;
-  sync_status : SyncStatus
-};
-
-type SyncStatus = variant {
-  Syncing;
-  NotSyncing : record {
-    error_msg : text
-  }  
+  num_blocks_synced : BlockIndex
 };
 
 type FeeCollectorRanges = record {
