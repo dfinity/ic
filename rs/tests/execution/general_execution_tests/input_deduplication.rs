@@ -81,6 +81,10 @@ pub fn input_deduplication_test(env: TestEnv) {
                 .unwrap();
             assert_eq!(res.status(), StatusCode::ACCEPTED);
 
+            // Synchronization call: we assume that the previous calls have been processed
+            // once the "synchronization" call has been processed.
+            canister.update(wasm().reply().build()).await.unwrap();
+
             // Only two update calls (one submitted with nonce 42 and one submitted with nonce 43)
             // are executed and thus stable memory grows to 2 pages.
             let res = canister
