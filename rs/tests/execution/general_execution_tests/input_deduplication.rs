@@ -32,18 +32,22 @@ pub fn input_deduplication_test(env: TestEnv) {
             let canister_id = canister.canister_id();
             let ingress_expiry = expiry_time().as_nanos() as u64;
 
+            let stable_size = || async {
+                let res = canister
+                    .update(
+                        wasm()
+                            .stable_size()
+                            .int_to_blob()
+                            .append_and_reply()
+                            .build(),
+                    )
+                    .await
+                    .unwrap();
+                u32::from_le_bytes(res.try_into().unwrap())
+            };
+
             // Stable memory size is initially 1 page.
-            let res = canister
-                .update(
-                    wasm()
-                        .stable_size()
-                        .int_to_blob()
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .unwrap();
-            assert_eq!(res, 1_u32.to_le_bytes());
+            assert_eq!(stable_size().await, 1);
 
             // Update call body growing stable memory by 1 page.
             let update_body = |nonce: u64| {
@@ -93,17 +97,7 @@ pub fn input_deduplication_test(env: TestEnv) {
 
             // Only two update calls (one submitted with nonce 42 and one submitted with nonce 43)
             // are executed and thus stable memory grows from 1 page to 3 pages.
-            let res = canister
-                .update(
-                    wasm()
-                        .stable_size()
-                        .int_to_blob()
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .unwrap();
-            assert_eq!(res, 3_u32.to_le_bytes());
+            assert_eq!(stable_size().await, 3);
         }
     });
 }
