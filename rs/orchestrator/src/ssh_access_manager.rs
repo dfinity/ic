@@ -18,6 +18,7 @@ pub(crate) struct SshAccessParameters {
     pub subnet_id: Option<SubnetId>,
 }
 
+#[derive(Debug)]
 struct KeySets {
     readonly: Vec<String>,
     backup: Vec<String>,
@@ -180,6 +181,507 @@ impl SshAccessManager {
             readonly: ssh_readonly_access,
             backup: ssh_backup_access,
             recovery: ssh_recovery_access,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use assert_matches::assert_matches;
+    use ic_logger::ReplicaLogger;
+    use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::{
+        api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::NodeRecord,
+        subnet::v1::SubnetRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    };
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::{
+        make_api_boundary_node_record_key, make_node_record_key, make_subnet_record_key,
+        make_unassigned_nodes_config_record_key,
+    };
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_registry::test_subnet_record;
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, SUBNET_0};
+    use ic_types::{NodeId, RegistryVersion, SubnetId};
+
+    use crate::{
+        error::OrchestratorError,
+        metrics::OrchestratorMetrics,
+        registry_helper::RegistryHelper,
+        ssh_access_manager::{KeySets, SshAccessManager},
+    };
+
+    const SUBNET_ID: SubnetId = SUBNET_0;
+    const ASSIGNED_NODE: NodeId = NODE_1;
+    const UNASSIGNED_NODE: NodeId = NODE_2;
+    const API_BOUNDARY_NODE: NodeId = NODE_3;
+    const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+
+    const ASSIGNED_READONLY_KEY: &str = "assinged_readonly_key";
+    const UNASSIGNED_READONLY_KEY: &str = "unassinged_readonly_key";
+    const BACKUP_KEY: &str = "backup_key";
+    const RECOVERY_KEY: &str = "recovery_key";
+
+    #[derive(Clone)]
+    enum RegistryEntry {
+        /// The Subnet/Node/API Bounday node record corresponding
+        /// to this SSH key doesn't exist
+        MissingRecord,
+        /// No Keys of this type were deployed to registry
+        NoKeys,
+        /// A key of this type was deployed to registry
+        KeyDeployed,
+    }
+
+    impl RegistryEntry {
+        fn to_ssh_access(self, key: &str) -> Option<Vec<String>> {
+            match self {
+                RegistryEntry::MissingRecord => None,
+                RegistryEntry::NoKeys => Some(vec![]),
+                RegistryEntry::KeyDeployed => Some(vec![key.to_string()]),
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestCase {
+        assigned_readonly: RegistryEntry,
+        unassigned_readonly: RegistryEntry,
+        backup: RegistryEntry,
+        recovery: RegistryEntry,
+    }
+
+    impl KeySets {
+        fn has_assigned_readonly(&self) -> bool {
+            self.readonly == vec![ASSIGNED_READONLY_KEY.to_string()]
+        }
+        fn has_unassigned_readonly(&self) -> bool {
+            self.readonly == vec![UNASSIGNED_READONLY_KEY.to_string()]
+        }
+        fn has_recovery(&self) -> bool {
+            self.recovery == vec![RECOVERY_KEY.to_string()]
+        }
+        fn has_backup(&self) -> bool {
+            self.backup == vec![BACKUP_KEY.to_string()]
+        }
+    }
+
+    fn setup_registry(test: TestCase) -> Arc<FakeRegistryClient> {
+        let ssh_assigned_readonly_access =
+            test.assigned_readonly.to_ssh_access(ASSIGNED_READONLY_KEY);
+        let ssh_unassigned_readonly_access = test
+            .unassigned_readonly
+            .to_ssh_access(UNASSIGNED_READONLY_KEY);
+        let ssh_backup_access = test.backup.to_ssh_access(BACKUP_KEY);
+        let ssh_recovery_access = test.recovery.to_ssh_access(RECOVERY_KEY);
+
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        if ssh_assigned_readonly_access.is_some() || ssh_backup_access.is_some() {
+            let subnet_record = SubnetRecord {
+                ssh_readonly_access: ssh_assigned_readonly_access.clone().unwrap_or_default(),
+                ssh_backup_access: ssh_backup_access.unwrap_or_default(),
+                membership: vec![ASSIGNED_NODE.get().to_vec()],
+                ..test_subnet_record()
+            };
+            registry_data
+                .add(
+                    &make_subnet_record_key(SUBNET_ID),
+                    REGISTRY_VERSION,
+                    Some(subnet_record),
+                )
+                .expect("Failed to add subnet record.");
+        }
+
+        if let Some(ssh_readonly_access) = ssh_unassigned_readonly_access {
+            registry_data
+                .add(
+                    &make_unassigned_nodes_config_record_key(),
+                    REGISTRY_VERSION,
+                    Some(UnassignedNodesConfigRecord {
+                        ssh_readonly_access,
+                        replica_version: "some_version".into(),
+                    }),
+                )
+                .expect("Failed to add unassigned nodes record.");
+        }
+
+        if let Some(ssh_node_state_write_access) = ssh_recovery_access {
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                registry_data
+                    .add(
+                        &make_node_record_key(node_id),
+                        REGISTRY_VERSION,
+                        Some(NodeRecord {
+                            ssh_node_state_write_access: ssh_node_state_write_access.clone(),
+                            ..Default::default()
+                        }),
+                    )
+                    .expect("Failed to add node record.");
+            }
+        }
+
+        registry_data
+            .add(
+                &make_api_boundary_node_record_key(API_BOUNDARY_NODE),
+                REGISTRY_VERSION,
+                Some(ApiBoundaryNodeRecord {
+                    version: "some_version".into(),
+                }),
+            )
+            .expect("Failed to add boundary node record.");
+
+        registry_client.reload();
+        registry_client
+    }
+
+    fn setup_ssh_access_manager(
+        node_id: NodeId,
+        test: TestCase,
+        logger: ReplicaLogger,
+    ) -> SshAccessManager {
+        let registry_client = setup_registry(test);
+        let registry = RegistryHelper::new(node_id, registry_client, logger.clone());
+        let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+        SshAccessManager::new(Arc::new(registry), Arc::new(metrics), node_id, logger)
+    }
+
+    #[test]
+    fn test_get_all_keys_assigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::KeyDeployed,
+                unassigned_readonly: RegistryEntry::KeyDeployed,
+                backup: RegistryEntry::KeyDeployed,
+                recovery: RegistryEntry::KeyDeployed,
+            };
+
+            // Regardless of what the registry says, if the orchestrator says we are assigned to a subnet
+            // then we will apply the subnet's keys
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager
+                    .get_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
+                    .unwrap();
+                assert!(keys.has_assigned_readonly());
+                assert!(keys.has_backup());
+                assert!(keys.has_recovery());
+            }
+        })
+    }
+
+    #[test]
+    fn test_get_all_keys_unassigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::KeyDeployed,
+                unassigned_readonly: RegistryEntry::KeyDeployed,
+                backup: RegistryEntry::KeyDeployed,
+                recovery: RegistryEntry::KeyDeployed,
+            };
+
+            // Regardless of what the registry says, if the orchestrator says we are unassigned
+            // then we will not apply the subnet's keys
+            let manager = setup_ssh_access_manager(ASSIGNED_NODE, test.clone(), log.clone());
+            let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+            assert!(keys.has_unassigned_readonly());
+            assert!(keys.backup.is_empty());
+            assert!(keys.has_recovery());
+
+            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, test.clone(), log.clone());
+            let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+            assert!(keys.readonly.is_empty());
+            assert!(keys.backup.is_empty());
+            assert!(keys.has_recovery());
+
+            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, test.clone(), log.clone());
+            let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+            assert!(keys.has_unassigned_readonly());
+            assert!(keys.backup.is_empty());
+            assert!(keys.has_recovery());
+        })
+    }
+
+    #[test]
+    fn test_no_keys_assigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::NoKeys,
+                unassigned_readonly: RegistryEntry::NoKeys,
+                backup: RegistryEntry::NoKeys,
+                recovery: RegistryEntry::NoKeys,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager
+                    .get_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
+                    .unwrap();
+
+                assert!(keys.readonly.is_empty());
+                assert!(keys.backup.is_empty());
+                assert!(keys.recovery.is_empty());
+            }
+        })
+    }
+
+    #[test]
+    fn test_no_keys_unassigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::NoKeys,
+                unassigned_readonly: RegistryEntry::NoKeys,
+                backup: RegistryEntry::NoKeys,
+                recovery: RegistryEntry::NoKeys,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+
+                assert!(keys.readonly.is_empty());
+                assert!(keys.backup.is_empty());
+                assert!(keys.recovery.is_empty());
+            }
+        })
+    }
+
+    #[test]
+    fn test_readonly_assigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::KeyDeployed,
+                unassigned_readonly: RegistryEntry::NoKeys,
+                backup: RegistryEntry::NoKeys,
+                recovery: RegistryEntry::NoKeys,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager
+                    .get_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
+                    .unwrap();
+
+                assert!(keys.has_assigned_readonly());
+                assert!(keys.backup.is_empty());
+                assert!(keys.recovery.is_empty());
+            }
+        })
+    }
+
+    #[test]
+    fn test_readonly_unassigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::NoKeys,
+                unassigned_readonly: RegistryEntry::KeyDeployed,
+                backup: RegistryEntry::NoKeys,
+                recovery: RegistryEntry::NoKeys,
+            };
+
+            for node_id in [ASSIGNED_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+
+                assert!(keys.has_unassigned_readonly());
+                assert!(keys.backup.is_empty());
+                assert!(keys.recovery.is_empty());
+            }
+
+            // API boundary nodes do not use the unassigned readonly keys
+            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, test.clone(), log.clone());
+            let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+
+            assert!(keys.readonly.is_empty());
+            assert!(keys.backup.is_empty());
+            assert!(keys.recovery.is_empty());
+        })
+    }
+
+    #[test]
+    fn test_backup_assigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::NoKeys,
+                unassigned_readonly: RegistryEntry::NoKeys,
+                backup: RegistryEntry::KeyDeployed,
+                recovery: RegistryEntry::NoKeys,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager
+                    .get_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
+                    .unwrap();
+
+                assert!(keys.readonly.is_empty());
+                assert!(keys.has_backup());
+                assert!(keys.recovery.is_empty());
+            }
+        })
+    }
+
+    #[test]
+    fn test_backup_unassigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::NoKeys,
+                unassigned_readonly: RegistryEntry::NoKeys,
+                backup: RegistryEntry::KeyDeployed,
+                recovery: RegistryEntry::NoKeys,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+
+                assert!(keys.readonly.is_empty());
+                assert!(keys.backup.is_empty());
+                assert!(keys.recovery.is_empty());
+            }
+        })
+    }
+
+    #[test]
+    fn test_recovery_assigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::NoKeys,
+                unassigned_readonly: RegistryEntry::NoKeys,
+                backup: RegistryEntry::NoKeys,
+                recovery: RegistryEntry::KeyDeployed,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager
+                    .get_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
+                    .unwrap();
+
+                assert!(keys.readonly.is_empty());
+                assert!(keys.backup.is_empty());
+                assert!(keys.has_recovery());
+            }
+        })
+    }
+
+    #[test]
+    fn test_recovery_unassigned() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::NoKeys,
+                unassigned_readonly: RegistryEntry::NoKeys,
+                backup: RegistryEntry::NoKeys,
+                recovery: RegistryEntry::KeyDeployed,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+
+                assert!(keys.readonly.is_empty());
+                assert!(keys.backup.is_empty());
+                assert!(keys.has_recovery());
+            }
+        })
+    }
+
+    #[test]
+    fn test_assigned_node_fails_without_subnet_record() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::MissingRecord,
+                unassigned_readonly: RegistryEntry::KeyDeployed,
+                backup: RegistryEntry::MissingRecord,
+                recovery: RegistryEntry::KeyDeployed,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys_result = manager.get_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
+
+                assert_matches!(
+                    keys_result,
+                    Err(OrchestratorError::SubnetMissingError(_, _))
+                );
+            }
+        })
+    }
+
+    #[test]
+    fn test_unassigned_node_succeeds_without_subnet_record() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::MissingRecord,
+                unassigned_readonly: RegistryEntry::KeyDeployed,
+                backup: RegistryEntry::MissingRecord,
+                recovery: RegistryEntry::KeyDeployed,
+            };
+
+            let manager = setup_ssh_access_manager(ASSIGNED_NODE, test.clone(), log.clone());
+            let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+            assert!(keys.has_unassigned_readonly());
+            assert!(keys.backup.is_empty());
+            assert!(keys.has_recovery());
+
+            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, test.clone(), log.clone());
+            let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+            assert!(keys.readonly.is_empty());
+            assert!(keys.backup.is_empty());
+            assert!(keys.has_recovery());
+
+            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, test.clone(), log.clone());
+            let keys = manager.get_keysets(None, REGISTRY_VERSION).unwrap();
+            assert!(keys.has_unassigned_readonly());
+            assert!(keys.backup.is_empty());
+            assert!(keys.has_recovery());
+        })
+    }
+
+    #[test]
+    fn test_fails_without_node_record() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::KeyDeployed,
+                unassigned_readonly: RegistryEntry::KeyDeployed,
+                backup: RegistryEntry::KeyDeployed,
+                recovery: RegistryEntry::MissingRecord,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let keys_result = manager.get_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
+
+                assert_matches!(
+                    keys_result,
+                    Err(OrchestratorError::NodeRecordMissingError(_, _))
+                );
+            }
+        })
+    }
+
+    #[test]
+    fn test_get_api_boundary_node_record_fails() {
+        with_test_replica_logger(|log| {
+            let test = TestCase {
+                assigned_readonly: RegistryEntry::KeyDeployed,
+                unassigned_readonly: RegistryEntry::KeyDeployed,
+                backup: RegistryEntry::KeyDeployed,
+                recovery: RegistryEntry::KeyDeployed,
+            };
+
+            for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                // Use unknown registry version
+                let keys_result = manager.get_keysets(None, REGISTRY_VERSION.increment());
+
+                assert_matches!(keys_result, Err(OrchestratorError::RegistryClientError(_)));
+            }
         })
     }
 }
