@@ -4023,24 +4023,12 @@ async fn main() {
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
 
             // Try to parse as Ed25519 (BasicIdentity) first
-            if let Ok(identity) = BasicIdentity::from_pem(contents.as_bytes()) {
+            if let Ok(identity) = BasicIdentity::from_pem(&contents) {
                 Arc::new(identity)
             }
             // Try to parse as Secp256k1 with RFC 5915 format (EC PRIVATE KEY)
-            else if let Ok(secp_key) = Secp256k1PrivateKey::deserialize_rfc5915_pem(&contents) {
-                // Serialize to SEC1 bytes and create k256::SecretKey
-                let sec1_bytes = secp_key.serialize_sec1();
-                let k256_key = k256::SecretKey::from_slice(&sec1_bytes)
-                    .expect("Failed to convert Secp256k1 key to k256::SecretKey");
-                Arc::new(Secp256k1Identity::from_private_key(k256_key))
-            }
-            // Try to parse as Secp256k1 with PKCS#8 format (PRIVATE KEY)
-            else if let Ok(secp_key) = Secp256k1PrivateKey::deserialize_pkcs8_pem(&contents) {
-                // Serialize to SEC1 bytes and create k256::SecretKey
-                let sec1_bytes = secp_key.serialize_sec1();
-                let k256_key = k256::SecretKey::from_slice(&sec1_bytes)
-                    .expect("Failed to convert Secp256k1 key to k256::SecretKey");
-                Arc::new(Secp256k1Identity::from_private_key(k256_key))
+            else if let Ok(identity) = Secp256k1Identity::from_pem(&contents) {
+                Arc::new(identity)
             } else {
                 panic!(
                     "Failed to parse PEM file. Tried Ed25519 (BasicIdentity), Secp256k1 RFC5915, and Secp256k1 PKCS#8 formats."
