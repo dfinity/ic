@@ -920,6 +920,14 @@ filegroup(
     url = "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
 )
 
+http_archive(
+    name = "openssl",
+    build_file = "@//third_party:BUILD.openssl.bazel",
+    integrity = "sha256-4V3agv4v6BOdwqwho21MoB1TE8dfmfRsTooncJtylL8=",
+    strip_prefix = "openssl-3.4.0",
+    urls = ["https://github.com/openssl/openssl/releases/download/openssl-3.4.0/openssl-3.4.0.tar.gz"],
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",

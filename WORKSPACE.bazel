@@ -8,7 +8,6 @@ load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainn
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("//third_party/openssl:repository.bzl", "openssl_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
@@ -192,8 +191,6 @@ rules_motoko_dependencies()
 lmdb_repository()
 
 jemalloc_repository()
-
-openssl_repository()
 
 libfuzzer_repository()
 
