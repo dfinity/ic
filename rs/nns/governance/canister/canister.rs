@@ -378,9 +378,11 @@ fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
 }
 
 #[query]
-fn get_neuron_index(_req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
+fn get_neuron_index(req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
     debug_log("get_neuron_index");
-    Ok(NeuronIndexData::default())
+    governance()
+        .get_neuron_index(req, caller())
+        .map_err(GovernanceError::from)
 }
 
 #[query]

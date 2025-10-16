@@ -17,8 +17,8 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        NeuronMetrics, NeuronStore, approve_genesis_kyc, metrics::NeuronSubsetMetrics,
-        prune_some_following,
+        MAX_NEURON_PAGE_SIZE, NeuronMetrics, NeuronStore, approve_genesis_kyc,
+        metrics::NeuronSubsetMetrics, prune_some_following,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -101,8 +101,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoResponse,
-    ManageNeuronResponse, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
+    GetNeuronIndexRequest, ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse,
+    ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData, NeuronInfo, NeuronVote,
+    NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
@@ -3514,6 +3515,35 @@ impl Governance {
         self.with_neuron(id, |neuron| {
             neuron.get_neuron_info(self.voting_power_economics(), now, requester, false)
         })
+    }
+
+    /// Returns a paginated list of neurons.
+    /// The list has an exclusive lower bound on the neuron id, and a maximum
+    /// number of neurons to be returned.
+    /// The number of neurons to be returned is capped by `MAX_NEURON_PAGE_SIZE`.
+    pub fn get_neuron_index(
+        &self,
+        req: GetNeuronIndexRequest,
+        requester: PrincipalId,
+    ) -> Result<NeuronIndexData, GovernanceError> {
+        let now = self.env.now();
+
+        let exclusive_start_id = req.exclusive_start_neuron_id.unwrap_or(NeuronId { id: 0 });
+
+        let page_size = req
+            .page_size
+            .unwrap_or(MAX_NEURON_PAGE_SIZE)
+            .min(MAX_NEURON_PAGE_SIZE);
+
+        let neurons = self.neuron_store.list_all_neurons_paginated(
+            exclusive_start_id,
+            page_size,
+            requester,
+            now,
+            self.voting_power_economics(),
+        );
+
+        Ok(NeuronIndexData { neurons })
     }
 
     /// Returns the neuron info for a neuron identified by id or subaccount.
