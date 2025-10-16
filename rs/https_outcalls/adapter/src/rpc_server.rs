@@ -12,7 +12,7 @@ use ic_https_outcalls_service::{
     HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
     https_outcalls_service_server::HttpsOutcallsService,
 };
-use ic_logger::{debug, info, ReplicaLogger};
+use ic_logger::{debug, info, error, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
@@ -72,13 +72,17 @@ impl CanisterHttp {
 
     // REFACTOR: This function now creates and returns a reqwest::Client configured with a SOCKS proxy.
     fn create_socks_proxy_client(&self, proxy_addr: &str) -> Result<reqwest::Client, String> {
-        let proxy = reqwest::Proxy::all(proxy_addr)
-            .map_err(|err| format!("Failed to create proxy object: {err}"))?;
-
+        // ... your existing proxy setup logic ...
+        info!(self.logger, "Creating SOCKS proxy client for address: {}", proxy_addr);
+        let proxy = reqwest::Proxy::https(proxy_addr)
+            .map_err(|err| format!("Failed to create HTTPS proxy object: {err}"))?;
+    
         reqwest::Client::builder()
             .proxy(proxy)
-            .connect_timeout(Duration::from_secs(self.http_connect_timeout_secs))
+            .connect_timeout(Duration::from_secs(30))
             .user_agent(USER_AGENT_ADAPTER)
+            // ADD THIS ONE LINE TO DISABLE ALL VALIDATION FOR THE TEST
+            .danger_accept_invalid_certs(true)
             .build()
             .map_err(|err| format!("Failed to build SOCKS reqwest client: {err}"))
     }
@@ -197,7 +201,66 @@ impl CanisterHttp {
 
 #[tonic::async_trait]
 impl HttpsOutcallsService for CanisterHttp {
+
     async fn https_outcall(
+        &self,
+        request: Request<HttpsOutcallRequest>,
+    ) -> Result<Response<HttpsOutcallResponse>, Status> {
+        let req = request.into_inner();
+
+        // --- START MINIMAL RUNTIME TEST ---
+        info!(self.logger, "--- RUNNING MINIMAL RUNTIME SOCKS TEST ---");
+
+        // 1. Extract the necessary runtime values from the incoming request.
+        let use_real_destination = false;
+        let destination_url = if use_real_destination {
+            req.url
+        } else {
+            "https://ifconfig.me/ip".to_string()
+        };
+        let Some(proxy_addr) = req.socks_proxy_addrs.first() else {
+            let err_msg = "Minimal Test Failed: No SOCKS proxy address provided in the request.".to_string();
+            error!(self.logger, "{}", err_msg);
+            return Err(Status::invalid_argument(err_msg));
+        };
+        
+        info!(self.logger, "Proxy: {}", proxy_addr);
+        info!(self.logger, "Destination: {}", &destination_url);
+
+        // 2. Build the SOCKS client using your existing function, which has all our diagnostic settings.
+        let socks_client = match self.get_socks_client(proxy_addr) {
+            Ok(client) => client,
+            Err(e) => {
+                let err_msg = format!("Minimal Test Failed: Could not build SOCKS client: {}", e);
+                error!(self.logger, "{}", err_msg);
+                return Err(Status::internal(err_msg));
+            }
+        };
+
+        // 3. Execute a simple GET request. All other request parameters are ignored.
+        info!(self.logger, "Executing request via SOCKS proxy...");
+        match socks_client.get(&destination_url).send().await {
+            Ok(response) => {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_else(|e| format!("Error reading body: {}", e));
+                info!(self.logger, "--- MINIMAL TEST SUCCESS ---");
+                info!(self.logger, "Status: {}", status);
+                info!(self.logger, "Body: {}", body);
+            }
+            Err(e) => {
+                error!(self.logger, "--- MINIMAL TEST FAILED ---");
+                error!(self.logger, "Full Error: {:?}", e);
+            }
+        }
+        
+        // 4. Return a dummy response. The real result of the test is in the logs.
+        Ok(Response::new(HttpsOutcallResponse::default()))
+        // --- END MINIMAL RUNTIME TEST ---
+    }
+}
+
+impl CanisterHttp {
+    async fn https_outcall_(
         &self,
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResponse>, Status> {
@@ -277,22 +340,35 @@ impl HttpsOutcallsService for CanisterHttp {
 
         info!(self.logger, "Sending request to {}", uri);
 
-        // REFACTOR: The execution flow now uses reqwest::Client::execute.
-        // The response type is now `reqwest::Response`.
-        let http_resp = match self.client.execute(reqwest_req.try_clone().unwrap()).await {
-            Ok(resp) => {
-                info!(self.logger, "Direct connection successful.");
-                Ok(resp)
-            }
-            Err(direct_err) => {
-                info!(self.logger, "Direct connection failed: {direct_err}, trying SOCKS proxy...");
-                self.metrics.requests_socks.inc();
-                // FIX: Pass the original URI to the SOCKS proxy function.
-                self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, reqwest_req, &uri)
-                    .await
-                    .map_err(|socks_err| {
-                        format!("Direct connection failed: {direct_err}, and SOCKS proxy failed: {socks_err}")
-                    })
+        let force_socks_proxy = true;
+        
+        let http_resp = if force_socks_proxy {
+            info!(self.logger, "Forcing SOCKS proxy connection as per configuration.");
+            info!(self.logger, "Proxy addresses provided: {:?}", req.socks_proxy_addrs);
+            self.metrics.requests_socks.inc();
+        
+            self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, reqwest_req, &uri)
+                .await
+                .map_err(|socks_err| {
+                    format!("only SOCKS proxy connection failed: {socks_err}")
+                })
+        } else {
+            match self.client.execute(reqwest_req.try_clone().unwrap()).await {
+                Ok(resp) => {
+                    info!(self.logger, "Direct connection successful.");
+                    Ok(resp)
+                }
+                Err(direct_err) => {
+                    info!(self.logger, "Direct connection failed: {direct_err}, trying SOCKS proxy...");
+                    info!(self.logger, "Proxy addresses provided: {:?}", req.socks_proxy_addrs);
+                    self.metrics.requests_socks.inc();
+                
+                    self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, reqwest_req, &uri)
+                        .await
+                        .map_err(|socks_err| {
+                            format!("Direct connection failed: {direct_err}, and SOCKS proxy failed: {socks_err}")
+                        })
+                }
             }
         }
         .map_err(|err| {

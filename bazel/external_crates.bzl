@@ -1149,7 +1149,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.11.0",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.15",
+                version = "0.12.15",
                 default_features = False,
                 features = [
                     "blocking",
@@ -1159,6 +1159,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "rustls-tls",
                     "rustls-tls-native-roots",
                     "stream",
+                    "socks",
                 ],
             ),
             "ring": crate.spec(
