@@ -106,7 +106,7 @@ pub(crate) async fn single_https_outcall(canister: &Principal, agents: &[Agent])
         .with_arg(
             wasm()
                 .set_transform(wasm().message_payload().append_and_reply())
-                .reply()
+                .reply(),
         )
         .call_and_wait()
         .await
