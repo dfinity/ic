@@ -105,11 +105,9 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology = block_on(topology.block_for_newer_registry_version_within_duration(
-        Duration::from_secs(60),
-        Duration::from_secs(2),
-    ))
-    .unwrap();
+    let new_topology =
+        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
+            .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -562,8 +560,8 @@ async fn simulate_node_provider_action(
             host_boot_id_pre_reboot
         ),
         &logger,
-        Duration::from_secs(5 * 60),
-        Duration::from_secs(5),
+        secs(5 * 60),
+        secs(5),
         || async {
             let host_boot_id = get_host_boot_id_async(host).await;
             if host_boot_id != host_boot_id_pre_reboot {
