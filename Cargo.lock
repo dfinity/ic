@@ -7455,7 +7455,7 @@ dependencies = [
  "ic-cdk",
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
- "ic-secp256k1 0.2.0",
+ "ic-secp256k1 0.3.0",
  "icrc-ledger-types",
  "pocket-ic",
  "serde",
