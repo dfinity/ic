@@ -1,10 +1,9 @@
-use ic_cdk::{init, post_upgrade, update};
-use ic_ckbtc_minter::state::eventlog::EventType;
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME,
+    DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg,
     candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
     lifecycle::init::MinterArg,
     updates,
@@ -111,6 +110,16 @@ fn check_invariants() -> Result<(), String> {
 
         Ok(())
     })
+}
+
+#[query]
+fn get_events(args: GetEventsArg) -> Vec<Event> {
+    const MAX_EVENTS_PER_QUERY: usize = 2000;
+
+    ic_ckbtc_minter::storage::events()
+        .skip(args.start as usize)
+        .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
+        .collect()
 }
 
 fn main() {}
