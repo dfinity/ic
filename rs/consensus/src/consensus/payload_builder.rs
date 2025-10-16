@@ -96,9 +96,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
         section_select.rotate_right(height.get() as usize % num_sections);
 
         let max_total_size_of_other_payloads =
-            self.get_max_block_payload_size_bytes(Slot::Rest, &subnet_records.context_version);
+            self.get_max_payload_slot_size_bytes(Slot::Rest, &subnet_records.context_version);
         let max_ingress_payload_size =
-            self.get_max_block_payload_size_bytes(Slot::Ingress, &subnet_records.context_version);
+            self.get_max_payload_slot_size_bytes(Slot::Ingress, &subnet_records.context_version);
 
         let mut batch_payload = BatchPayload::default();
 
@@ -155,9 +155,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let subnet_record = self.get_subnet_record(proposal_context.validation_context)?;
 
         let max_total_size_of_other_payloads =
-            self.get_max_block_payload_size_bytes(Slot::Rest, &subnet_record);
+            self.get_max_payload_slot_size_bytes(Slot::Rest, &subnet_record);
         let max_ingress_payload_size =
-            self.get_max_block_payload_size_bytes(Slot::Ingress, &subnet_record);
+            self.get_max_payload_slot_size_bytes(Slot::Ingress, &subnet_record);
 
         let mut accumulated_ingress_size = NumBytes::new(0);
         let mut accumulated_rest_size = NumBytes::new(0);
@@ -224,30 +224,33 @@ impl PayloadBuilderImpl {
         )
     }
 
-    /// Returns the valid maximum block payload length from the registry and
+    /// Returns the valid maximum block payload slot length from the registry and
     /// checks the invariants. Emits a warning in case the invariants are not
     /// met.
-    fn get_max_block_payload_size_bytes(
+    fn get_max_payload_slot_size_bytes(
         &self,
         slot: Slot,
         subnet_record: &SubnetRecord,
     ) -> NumBytes {
         match slot {
-            Slot::Ingress => NumBytes::new(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK),
+            Slot::Ingress => NumBytes::new(std::cmp::max(
+                subnet_record.max_ingress_bytes_per_message,
+                ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
+            )),
             Slot::Rest => {
-                let required_min_size = MAX_BITCOIN_PAYLOAD_IN_BYTES
-                    .max(MAX_XNET_PAYLOAD_IN_BYTES.get())
-                    .max(subnet_record.max_ingress_bytes_per_message);
+                let required_min_size =
+                    MAX_BITCOIN_PAYLOAD_IN_BYTES.max(MAX_XNET_PAYLOAD_IN_BYTES.get());
 
                 let mut max_block_payload_size = subnet_record.max_block_payload_size;
-                // In any case, ensure the value is bigger than inter canister payload and
-                // message size
                 if max_block_payload_size < required_min_size {
-                    warn!(every_n_seconds => 300, self.logger,
-                "max_block_payload_size too small. current value: {}, required minimum: {}! \
-                max_block_payload_size must be larger than max_ingress_bytes_per_message \
-                and MAX_XNET_PAYLOAD_IN_BYTES. Update registry! @{}",
-                max_block_payload_size, required_min_size, CRITICAL_ERROR_SUBNET_RECORD_ISSUE);
+                    warn!(
+                        every_n_seconds => 300,
+                        self.logger,
+                        "max_block_payload_size too small. current value: {}, required minimum: {}! \
+                        max_block_payload_size must be larger than MAX_BITCOIN_PAYLOAD_IN_BYTES \
+                        and MAX_XNET_PAYLOAD_IN_BYTES. Update registry! @{}",
+                        max_block_payload_size, required_min_size, CRITICAL_ERROR_SUBNET_RECORD_ISSUE
+                    );
                     self.metrics.critical_error_subnet_record_data_issue.inc();
                     max_block_payload_size = required_min_size;
                 }
