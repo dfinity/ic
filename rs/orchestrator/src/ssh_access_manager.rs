@@ -237,7 +237,7 @@ mod tests {
     }
 
     impl RegistryEntry {
-        fn to_ssh_access(self, key: &str) -> Option<Vec<String>> {
+        fn to_ssh_access(&self, key: &str) -> Option<Vec<String>> {
             match self {
                 RegistryEntry::MissingRecord => None,
                 RegistryEntry::NoKeys => Some(vec![]),
