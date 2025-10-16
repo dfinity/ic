@@ -21,7 +21,6 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-identity-hsm = { workspace = true }
 ic-btc-interface = { workspace = true }
-ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-config = { path = "../../config" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }

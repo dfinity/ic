@@ -46,7 +46,6 @@ rust_binary(
         # Keep sorted.
         ":admin",
         ":build_script",
-        "//packages/ic-secp256k1",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/http_utils",
