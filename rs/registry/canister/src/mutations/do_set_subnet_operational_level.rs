@@ -107,7 +107,11 @@ impl Registry {
 }
 
 fn validate_operational_level(operational_level: Option<i32>) -> Result<(), String> {
-    // None is ok.
+    // None is ok. None just means that is_halted does not get changed. Although
+    // this is not how this field would generally be used in practice, not
+    // having to specify an operational_level could be useful for when you want
+    // the other effects of set_subnet_operational_level (i.e. setting ssh
+    // access).
     let Some(operational_level) = operational_level else {
         return Ok(());
     };
@@ -129,7 +133,8 @@ fn validate_ssh_readonly_access(_ssh_readonly_access: &Option<Vec<String>>) -> R
 fn validate_ssh_node_state_write_access(
     ssh_node_state_write_access: &Option<Vec<NodeSshAccess>>,
 ) -> Result<(), String> {
-    // None is ok.
+    // None is ok. Remarks about when operational_level is None also apply here:
+    // None means no change.
     let Some(ssh_node_state_write_access) = ssh_node_state_write_access.as_ref() else {
         return Ok(());
     };
@@ -251,3 +256,6 @@ pub struct NodeSshAccess {
     node_id: Option<NodeId>,
     public_keys: Option<Vec<String>>,
 }
+
+#[cfg(test)]
+mod tests;
