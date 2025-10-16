@@ -51,19 +51,18 @@ pub fn test_raw_rand_api(env: TestEnv) {
 
             assert_reject(result_query, RejectCode::CanisterError);
 
-            // Calling raw_rand in an update succeeds and return different blobs (of length 32 bytes) every time.
-            let res = canister
-                .update(call_raw_rand_payload.clone())
-                .await
-                .unwrap();
-            let bytes = Decode!(&res, Vec<u8>).unwrap();
-            assert_eq!(bytes.len(), 32);
-            let res = canister
-                .update(call_raw_rand_payload.clone())
-                .await
-                .unwrap();
-            let other_bytes = Decode!(&res, Vec<u8>).unwrap();
-            assert_eq!(other_bytes.len(), 32);
+            // Calling raw_rand in an update succeeds and returns different blobs (of length 32 bytes) every time.
+            let raw_rand_bytes = || async {
+                let res = canister
+                    .update(call_raw_rand_payload.clone())
+                    .await
+                    .unwrap();
+                let bytes = Decode!(&res, Vec<u8>).unwrap();
+                assert_eq!(bytes.len(), 32);
+                bytes
+            };
+            let bytes = raw_rand_bytes().await;
+            let other_bytes = raw_rand_bytes().await;
             assert_ne!(bytes, other_bytes);
         }
     })
