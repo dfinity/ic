@@ -510,11 +510,6 @@ pub(crate) mod test {
         #[case] expects_hard_error: bool,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            const XNET_PAYLOAD_SIZE: NumBytes = NumBytes::new(64 * KB);
-            const BITCOIN_PAYLOAD_SIZE: NumBytes = NumBytes::new(128 * KB);
-            const CANISTER_HTTP_PAYLOAD_SIZE: NumBytes = NumBytes::new(256 * KB);
-            const VETKD_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
-            const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
             const ZERO_BYTES: NumBytes = NumBytes::new(0);
 
             let Dependencies { registry, .. } = dependencies(pool_config, 1);
@@ -524,17 +519,18 @@ pub(crate) mod test {
                 .build();
 
             let settings = MocksSettings {
-                vetkd_payload_to_return: vec![0; VETKD_PAYLOAD_SIZE.get() as usize],
-                expected_vetkd_payload_size_limit: ZERO_BYTES,
                 ingress_payload_to_return: IngressPayload::from(vec![ingress]),
+                query_stats_payload_to_return: vec![0; MB as usize],
+                vetkd_payload_to_return: vec![0; 512 * KB as usize],
+                http_outcalls_payload_to_return: vec![0; 256 * KB as usize],
+                bitcoin_payload_size_to_return: NumBytes::new(128 * KB),
+                xnet_payload_size_to_return: NumBytes::new(64 * KB),
+                // The fields below are irrelevant for the test
+                expected_vetkd_payload_size_limit: ZERO_BYTES,
                 expected_ingress_payload_size_limit: ZERO_BYTES,
-                bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
                 expected_bitcoin_payload_size_limit: ZERO_BYTES,
-                xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
                 expected_xnet_payload_size_limit: ZERO_BYTES,
-                http_outcalls_payload_to_return: vec![0; CANISTER_HTTP_PAYLOAD_SIZE.get() as usize],
                 expected_http_outcalls_size_limit: ZERO_BYTES,
-                query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
                 expected_query_stats_size_limit: ZERO_BYTES,
             };
             let payload_builder = set_up_payload_builder(registry, settings.clone());
