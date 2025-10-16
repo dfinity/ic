@@ -220,7 +220,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresho
             alg,
             Seed::from_rng(rng),
             threshold,
-            &[pk.clone()],
+            std::slice::from_ref(&pk),
             dealer_index,
             associated_data,
         )?;

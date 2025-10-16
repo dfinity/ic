@@ -1832,23 +1832,23 @@ fn open_wasm(
     log: &ReplicaLogger,
 ) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
-    if let Some(cache) = embedder_cache.as_ref() {
-        if let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>() {
-            match opened_wasm {
-                Ok(opened_wasm) => match opened_wasm.sandbox_process.upgrade() {
-                    Some(cached_sandbox_process) => {
-                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
-                        assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
-                        return Ok((opened_wasm.wasm_id, None));
-                    }
-                    _ => {
-                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
-                    }
-                },
-                Err(err) => {
-                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
-                    return Err(err.clone());
+    if let Some(cache) = embedder_cache.as_ref()
+        && let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>()
+    {
+        match opened_wasm {
+            Ok(opened_wasm) => match opened_wasm.sandbox_process.upgrade() {
+                Some(cached_sandbox_process) => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
+                    assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
+                    return Ok((opened_wasm.wasm_id, None));
                 }
+                _ => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
+                }
+            },
+            Err(err) => {
+                metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
+                return Err(err.clone());
             }
         }
     }
@@ -1936,12 +1936,12 @@ fn open_remote_memory(
     memory: &Memory,
 ) -> SandboxMemoryHandle {
     let mut guard = memory.sandbox_memory.lock().unwrap();
-    if let SandboxMemory::Synced(id) = &*guard {
-        if let Some(pid) = id.get_sandbox_process_id() {
-            // There is a at most one sandbox process per canister at any time.
-            assert_eq!(pid, sandbox_process.pid as usize);
-            return id.clone();
-        }
+    if let SandboxMemory::Synced(id) = &*guard
+        && let Some(pid) = id.get_sandbox_process_id()
+    {
+        // There is a at most one sandbox process per canister at any time.
+        assert_eq!(pid, sandbox_process.pid as usize);
+        return id.clone();
     }
 
     // Here we have two cases:

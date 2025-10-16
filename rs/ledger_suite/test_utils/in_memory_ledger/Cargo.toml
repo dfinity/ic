@@ -17,9 +17,11 @@ ic-icrc1-tokens-u64 = { path = "../../icrc1/tokens_u64" }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-ledger-suite-state-machine-helpers = { path = "../../test_utils/state_machine_helpers" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+
+[dev-dependencies]
+ic-types = { path = "../../../types/types" }
 
 [features]
 default = []

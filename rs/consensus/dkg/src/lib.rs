@@ -116,15 +116,14 @@ impl DkgImpl {
 
         // If the transcript is being loaded at the moment, we return early.
         // The transcript will be available at a later point in time.
-        if let Some(transcript) = config.resharing_transcript() {
-            if !self
+        if let Some(transcript) = config.resharing_transcript()
+            && !self
                 .dkg_key_manager
                 .lock()
                 .unwrap()
                 .is_transcript_loaded(&transcript.dkg_id)
-            {
-                return None;
-            }
+        {
+            return None;
         }
 
         let content =

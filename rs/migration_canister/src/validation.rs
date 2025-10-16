@@ -12,7 +12,7 @@ use candid::Principal;
 use ic_cdk::api::canister_self;
 
 use crate::{
-    Request, ValidationError,
+    CYCLES_COST_PER_MIGRATION, Request, ValidationError,
     canister_state::requests::list_by,
     external_interfaces::{
         management::{CanisterStatusType, assert_no_snapshots, canister_status},
@@ -33,13 +33,9 @@ pub async fn validate_request(
         }
     }
     // 2. Does the source canister exist?
-    let source_subnet = get_subnet_for_canister(source).await.into_result(
-        "Call to registry canister (`get_subnet_for_canister`) failed. Try again later.",
-    )?;
+    let source_subnet = get_subnet_for_canister(source).await?;
     // 3. Does the target canister exist?
-    let target_subnet = get_subnet_for_canister(target).await.into_result(
-        "Call to registry canister (`get_subnet_for_canister`) failed. Try again later.",
-    )?;
+    let target_subnet = get_subnet_for_canister(target).await?;
     // 4. Are they on the same subnet?
     if source_subnet == target_subnet {
         return Err(ValidationError::SameSubnet);
@@ -75,8 +71,10 @@ pub async fn validate_request(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
 
-    // n. Does the target have sufficient cycles for the migration?
-    // TODO
+    // 11. Does the source have sufficient cycles for the migration?
+    if source_status.cycles < CYCLES_COST_PER_MIGRATION {
+        return Err(ValidationError::SourceInsufficientCycles);
+    }
 
     let mut source_original_controllers = source_status.settings.controllers;
     source_original_controllers.retain(|e| *e != canister_self());

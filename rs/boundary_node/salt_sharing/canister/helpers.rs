@@ -20,10 +20,10 @@ use salt_sharing_api::{
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
 pub async fn init_async(init_arg: InitArg) {
-    if !is_salt_init() || init_arg.regenerate_now {
-        if let Err(err) = try_regenerate_salt().await {
-            log!(P0, "[init_regenerate_salt_failed]: {err}");
-        }
+    if (!is_salt_init() || init_arg.regenerate_now)
+        && let Err(err) = try_regenerate_salt().await
+    {
+        log!(P0, "[init_regenerate_salt_failed]: {err}");
     }
     // Start salt generation schedule based on the argument.
     match init_arg.salt_generation_strategy {

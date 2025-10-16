@@ -514,7 +514,7 @@ impl TestConsensusPool {
 
     /// Returns a round, which can be granularly configured before it's
     /// executed.
-    pub fn prepare_round(&mut self) -> Round {
+    pub fn prepare_round(&mut self) -> Round<'_> {
         Round::new(self)
     }
 

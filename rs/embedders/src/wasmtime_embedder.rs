@@ -259,12 +259,11 @@ impl WasmtimeEmbedder {
         let mut linker: wasmtime::Linker<StoreData> = Linker::new(module.engine());
         let mut main_memory_type = WasmMemoryType::Wasm32;
 
-        if let Some(export) = module.get_export(WASM_HEAP_MEMORY_NAME) {
-            if let Some(mem) = export.memory() {
-                if mem.is_64() {
-                    main_memory_type = WasmMemoryType::Wasm64;
-                }
-            }
+        if let Some(export) = module.get_export(WASM_HEAP_MEMORY_NAME)
+            && let Some(mem) = export.memory()
+            && mem.is_64()
+        {
+            main_memory_type = WasmMemoryType::Wasm64;
         }
 
         match main_memory_type {
@@ -538,10 +537,10 @@ impl WasmtimeEmbedder {
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
-        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME) {
-            if mem.ty(&store).is_64() {
-                main_memory_type = WasmMemoryType::Wasm64;
-            }
+        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME)
+            && mem.ty(&store).is_64()
+        {
+            main_memory_type = WasmMemoryType::Wasm64;
         }
         let dirty_page_overhead = match main_memory_type {
             WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,

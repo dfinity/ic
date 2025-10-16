@@ -738,7 +738,7 @@ mod tests {
                 Height::new(1),
                 &proposal_context,
                 &payload,
-                &[past_payload.clone()],
+                std::slice::from_ref(&past_payload),
             );
 
             match validation_result {
@@ -891,7 +891,7 @@ mod tests {
         past_payload.serialize_with_limit(MAX_PAYLOAD_SIZE)
     }
 
-    fn as_past_payload(payload: &[u8], height: u64) -> PastPayload {
+    fn as_past_payload(payload: &[u8], height: u64) -> PastPayload<'_> {
         PastPayload {
             height: Height::from(height),
             time: UNIX_EPOCH + Duration::from_nanos(10 * height),

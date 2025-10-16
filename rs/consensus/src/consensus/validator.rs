@@ -7,7 +7,7 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg as dkg;
-use ic_consensus_idkg as idkg;
+use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
     RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -46,6 +46,7 @@ use ic_types::{
     state_manager::StateManagerError,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
+use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -682,6 +683,7 @@ pub struct Validator {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    thread_pool: Arc<ThreadPool>,
     log: ReplicaLogger,
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
@@ -700,6 +702,7 @@ impl Validator {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
@@ -713,6 +716,7 @@ impl Validator {
             state_manager,
             message_routing,
             dkg_pool,
+            thread_pool,
             log,
             metrics,
             schedule: RoundRobin::default(),
@@ -1042,19 +1046,19 @@ impl Validator {
             // validated through a notarization. We skip the block instead
             // of removing it because a higher-rank proposal might still
             // be notarized in the future.
-            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height()) {
-                if proposal.rank() > min_rank {
-                    let id = proposal.get_id();
-                    if self.unvalidated_for_too_long(pool_reader, &id) {
-                        warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                              self.log,
-                              "Due a valid proposal with a lower rank {}, /
-                              skipping validating the proposal: {:?} with rank {}",
-                              min_rank.0, id, proposal.rank().0
-                        );
-                    }
-                    continue;
+            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height())
+                && proposal.rank() > min_rank
+            {
+                let id = proposal.get_id();
+                if self.unvalidated_for_too_long(pool_reader, &id) {
+                    warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                          self.log,
+                          "Due a valid proposal with a lower rank {}, /
+                          skipping validating the proposal: {:?} with rank {}",
+                          min_rank.0, id, proposal.rank().0
+                    );
                 }
+                continue;
             }
 
             let Ok(parent) = get_notarized_parent(pool_reader, &proposal) else {
@@ -1282,6 +1286,7 @@ impl Validator {
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
+            self.thread_pool.as_ref(),
             pool_reader,
             self.state_manager.as_ref(),
             &proposal.context,
@@ -1913,7 +1918,9 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::block_maker::get_block_maker_delay;
+    use crate::consensus::{
+        MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -2010,6 +2017,7 @@ pub mod test {
                 dependencies.state_manager.clone(),
                 message_routing.clone(),
                 dependencies.dkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,

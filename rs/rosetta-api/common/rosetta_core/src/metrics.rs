@@ -22,12 +22,21 @@ use lazy_static::lazy_static;
 lazy_static! {
     static ref ENDPOINTS_METRICS: RosettaEndpointsMetrics = RosettaEndpointsMetrics::new();
 
-    static ref VERIFIED_HEIGHT: IntGaugeVec =
-        register_int_gauge_vec!("rosetta_verified_block_height", "Verified block height", &["token_display_name"]).unwrap();
-    static ref SYNCED_HEIGHT: IntGaugeVec =
-        register_int_gauge_vec!("rosetta_synched_block_height", "Synced block height", &["token_display_name"]).unwrap();
-    static ref TARGET_HEIGHT: IntGaugeVec =
-        register_int_gauge_vec!("rosetta_target_block_height", "Target height (tip)", &["token_display_name"]).unwrap();
+    static ref VERIFIED_HEIGHT: IntGaugeVec = register_int_gauge_vec!(
+        "rosetta_verified_block_height",
+        "Verified block height (index of the most recent block verified locally by Rosetta - all blocks with lower index will also have been verified)",
+        &["token_display_name"]
+    ).unwrap();
+    static ref SYNCED_HEIGHT: IntGaugeVec = register_int_gauge_vec!(
+        "rosetta_synched_block_height",
+        "Synced block height (index of the most recent block synced by Rosetta - note that there may be gaps in the database)",
+        &["token_display_name"]
+    ).unwrap();
+    static ref TARGET_HEIGHT: IntGaugeVec = register_int_gauge_vec!(
+        "rosetta_target_block_height",
+        "Target height / tip (the index of the most recent block in the ledger)",
+        &["token_display_name"]
+    ).unwrap();
     static ref SYNC_ERR_COUNTER: IntCounterVec = register_int_counter_vec!(
         "blockchain_sync_errors_total",
         "Number of times synchronization failed",

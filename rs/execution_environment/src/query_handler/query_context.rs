@@ -374,16 +374,16 @@ impl<'a> QueryContext<'a> {
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
-        if let WasmMethod::CompositeQuery(_) = &method_name {
-            if self.composite_queries == FlagStatus::Disabled {
-                return (
-                    canister,
-                    Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "Composite queries are not enabled yet",
-                    )),
-                );
-            }
+        if let WasmMethod::CompositeQuery(_) = &method_name
+            && self.composite_queries == FlagStatus::Disabled
+        {
+            return (
+                canister,
+                Err(UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    "Composite queries are not enabled yet",
+                )),
+            );
         }
         let cost_schedule = self.get_cost_schedule();
         let subnet_size = self
@@ -416,8 +416,7 @@ impl<'a> QueryContext<'a> {
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
@@ -503,10 +502,10 @@ impl<'a> QueryContext<'a> {
 
     /// Accumulates transient errors from payload.
     pub fn accumulate_transient_errors_from_payload(&mut self, payload: &Payload) {
-        if let Payload::Reject(context) = payload {
-            if context.code() == RejectCode::SysTransient {
-                self.transient_errors += 1;
-            }
+        if let Payload::Reject(context) = payload
+            && context.code() == RejectCode::SysTransient
+        {
+            self.transient_errors += 1;
         }
     }
 
@@ -618,8 +617,7 @@ impl<'a> QueryContext<'a> {
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
         let api_type = match response.response_payload {
             Payload::Data(payload) => ApiType::composite_reply_callback(

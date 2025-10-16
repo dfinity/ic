@@ -212,23 +212,6 @@ impl IcGatewayVm {
                     },
                 ]
             }
-            _ => vec![
-                DnsRecord {
-                    name: ic_gateway_fqdn.to_string(),
-                    record_type: DnsRecordType::AAAA,
-                    records: playnet.aaaa_records.iter().map(|r| r.to_string()).collect(),
-                },
-                DnsRecord {
-                    name: format!("{}.{}", "*", ic_gateway_fqdn),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-                DnsRecord {
-                    name: format!("{}.{}", "*.raw", ic_gateway_fqdn),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-            ],
         };
 
         if !playnet.a_records.is_empty() {

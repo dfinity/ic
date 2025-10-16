@@ -382,7 +382,7 @@ impl std::cmp::Ord for AccountSpender {
 }
 
 impl Storable for AccountSpender {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("AccountSpender encoding should always succeed");
         Cow::Owned(buf)
@@ -438,7 +438,7 @@ impl std::cmp::Ord for Expiration {
 }
 
 impl Storable for Expiration {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("Expiration encoding should always succeed");
         Cow::Owned(buf)
@@ -465,7 +465,7 @@ struct StorableAllowance {
 }
 
 impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
         Cow::Owned(buf)
@@ -1111,10 +1111,10 @@ impl Ledger {
                     .into_iter()
                     .filter_map(|((start, end), canister_id)| {
                         let canister_id = Principal::from(canister_id);
-                        if let Some(from) = args.from {
-                            if canister_id <= from {
-                                return None;
-                            }
+                        if let Some(from) = args.from
+                            && canister_id <= from
+                        {
+                            return None;
                         }
                         Some(ICRC3ArchiveInfo {
                             canister_id,
@@ -1266,10 +1266,10 @@ pub fn get_allowances(
             if account_spender.account.owner != from.owner {
                 break;
             }
-            if let Some(expires_at) = storable_allowance.expires_at {
-                if expires_at.as_nanos_since_unix_epoch() <= now {
-                    continue;
-                }
+            if let Some(expires_at) = storable_allowance.expires_at
+                && expires_at.as_nanos_since_unix_epoch() <= now
+            {
+                continue;
             }
             result.push(Allowance103 {
                 from_account: account_spender.account,

@@ -4,10 +4,11 @@ use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
-    CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -39,7 +40,7 @@ struct ExternalCanisterInfo<'a> {
     test_filename: Option<&'a str>,
 }
 
-const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
+const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 5] = [
     (
         "cycles_ledger",
         ExternalCanisterInfo {
@@ -78,6 +79,16 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
             filename: "sns_aggregator.wasm.gz",
             test_filename: Some("sns_aggregator_dev.wasm.gz"),
             canister_id: SNS_AGGREGATOR_CANISTER_ID,
+        },
+    ),
+    (
+        "bitcoin_testnet",
+        ExternalCanisterInfo {
+            repository: "dfinity/bitcoin-canister",
+            tag_name_prefix: Some("release/"),
+            filename: "ic-btc-canister.wasm.gz",
+            test_filename: None,
+            canister_id: BITCOIN_TESTNET_CANISTER_ID,
         },
     ),
 ];
@@ -197,10 +208,10 @@ impl Tag {
             {
                 return Ok(Some(release));
             }
-        } else if let Some(prod_canister) = release.asset(&canister_filename) {
-            if prod_canister.sha256().await? == expected_module_hash_str {
-                return Ok(Some(release));
-            }
+        } else if let Some(prod_canister) = release.asset(&canister_filename)
+            && prod_canister.sha256().await? == expected_module_hash_str
+        {
+            return Ok(Some(release));
         }
 
         Ok(None)
@@ -294,10 +305,10 @@ async fn get_mainnet_canister_release(
             .await?;
 
         for tag in &tags {
-            if let Some(ref tag_name_prefix) = canister_tag_name_prefix {
-                if !tag.name.starts_with(tag_name_prefix) {
-                    continue;
-                }
+            if let Some(ref tag_name_prefix) = canister_tag_name_prefix
+                && !tag.name.starts_with(tag_name_prefix)
+            {
+                continue;
             }
             match tag
                 .release_for_canister(

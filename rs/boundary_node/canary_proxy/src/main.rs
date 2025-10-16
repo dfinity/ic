@@ -137,10 +137,10 @@ async fn proxy(
         // Note: only after client received an empty body with STATUS_OK can the
         // connection be upgraded, so we can't return a response inside
         // `on_upgrade` future.
-        if let Some(port) = host_port(req.uri()) {
-            if target_addr.port() == 0 {
-                target_addr.set_port(port)
-            }
+        if let Some(port) = host_port(req.uri())
+            && target_addr.port() == 0
+        {
+            target_addr.set_port(port)
         }
 
         info!(message="creating tunnel to target", target=?target_addr);
@@ -215,7 +215,7 @@ async fn proxy(
     }
 }
 
-fn remove_csp(haystack: &[u8]) -> Cow<[u8]> {
+fn remove_csp(haystack: &[u8]) -> Cow<'_, [u8]> {
     static RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r#"(?<pre>.*)upgrade-insecure-requests;?(?<post>.*)"#).unwrap());
     RE.replace(haystack, b"$pre$post")

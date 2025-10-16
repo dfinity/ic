@@ -1,3 +1,4 @@
+use crate::chrono_utils::{last_unix_timestamp_nanoseconds, to_native_date};
 use crate::registry_querier::RegistryQuerier;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nervous_system_canisters::registry::RegistryCanister;
@@ -17,7 +18,7 @@ use ic_registry_keys::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use maplit::btreemap;
-use rewards_calculation::types::{DayUtc, RewardableNode};
+use rewards_calculation::types::RewardableNode;
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -44,14 +45,14 @@ fn add_record_helper(
     value: Option<impl ::prost::Message>,
     datetime_str: &str,
 ) {
-    let ts = DayUtc::try_from(datetime_str).unwrap();
-    add_record_helper_ts(key, version, value, ts.unix_ts_at_day_end_nanoseconds());
-}
-
-fn add_record_helper_ts(key: &str, version: u64, value: Option<impl ::prost::Message>, ts: u64) {
+    let naive_date = to_native_date(datetime_str);
     STATE.with_borrow_mut(|map| {
         map.insert(
-            StorableRegistryKey::new(key.to_string(), version, ts),
+            StorableRegistryKey::new(
+                key.to_string(),
+                version,
+                last_unix_timestamp_nanoseconds(&naive_date),
+            ),
             StorableRegistryValue(value.map(|v| v.encode_to_vec())),
         );
     });
@@ -139,15 +140,8 @@ fn add_dummy_data() {
     add_record_helper(&node_3_k, 39670, None::<NodeRecord>, "2025-07-13");
     add_record_helper(&node_3_k, 39675, Some(node_3_v.clone()), "2025-07-15");
     add_record_helper(&node_4_k, 39676, Some(node_4_v.clone()), "2025-07-16");
-
-    // Removed and re-added node_3 same day
-    let ts_removed = DayUtc::try_from("2025-07-16")
-        .unwrap()
-        .unix_ts_at_day_start_nanoseconds()
-        + 1;
-    add_record_helper_ts(&node_3_k, 39676, None::<NodeRecord>, ts_removed);
-    let ts_readded = ts_removed + 1;
-    add_record_helper_ts(&node_3_k, 39677, Some(node_3_v), ts_readded);
+    add_record_helper(&node_3_k, 39676, None::<NodeRecord>, "2025-07-16");
+    add_record_helper(&node_3_k, 39677, Some(node_3_v), "2025-07-16");
 }
 
 fn client_for_tests() -> RegistryQuerier {
@@ -229,8 +223,8 @@ fn contains_node(nodes: &[RewardableNode], node_num: u64) -> bool {
 #[test]
 fn test_rewardable_nodes_deleted_nodes() {
     let client = client_for_tests();
-    let day1 = DayUtc::try_from("2025-07-12").unwrap();
-    let day2 = DayUtc::try_from("2025-07-13").unwrap();
+    let day1 = to_native_date("2025-07-12");
+    let day2 = to_native_date("2025-07-13");
 
     let mut rewardable_nodes_day1 = client
         .get_rewardable_nodes_per_provider(&day1, None)
@@ -285,23 +279,22 @@ fn test_node_re_registered_after_deletion() {
 
     let client = client_for_tests();
 
-    let from = DayUtc::try_from("2025-07-07").unwrap();
-    let to = DayUtc::try_from("2025-07-12").unwrap();
-    let mut current_day = from;
+    let from = to_native_date("2025-07-07");
+    let to = to_native_date("2025-07-12");
     let expected_absent = [
-        DayUtc::try_from("2025-07-08").unwrap(),
-        DayUtc::try_from("2025-07-09").unwrap(),
-        DayUtc::try_from("2025-07-10").unwrap(),
+        to_native_date("2025-07-08"),
+        to_native_date("2025-07-09"),
+        to_native_date("2025-07-10"),
     ];
 
-    while current_day <= to {
+    for day in from.iter_days().take_while(|d| *d <= to) {
         let rewardables = client
-            .get_rewardable_nodes_per_provider(&current_day, None)
+            .get_rewardable_nodes_per_provider(&day, None)
             .unwrap()
             .remove(&PrincipalId::new_user_test_id(20))
             .unwrap();
 
-        if expected_absent.contains(&current_day) {
+        if expected_absent.contains(&day) {
             assert!(
                 !contains_node(&rewardables, 1),
                 "Node 1 should not be rewardable after deletion"
@@ -312,8 +305,6 @@ fn test_node_re_registered_after_deletion() {
                 "Node 1 should be rewardable on day 1"
             );
         }
-
-        current_day = current_day.next_day();
     }
 }
 

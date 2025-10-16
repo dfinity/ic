@@ -147,11 +147,11 @@ pub fn exec(args: ProposeArgs) -> Result<()> {
                 println!("Proposal ID: {}", proposal_id.id);
             }
 
-            if let Some(save_to) = &save_to {
-                if let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id) {
-                    bail!("{}", err);
-                };
-            }
+            if let Some(save_to) = &save_to
+                && let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id)
+            {
+                bail!("{}", err);
+            };
         }
         err => {
             bail!(

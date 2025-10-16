@@ -272,7 +272,7 @@ impl Issues {
                 .issue_groups_map
                 .entry(discriminant(&issue))
                 .or_default();
-            issue_group.issues_count += 1;
+            issue_group.issues_count = issue_group.issues_count.saturating_add(1);
             if issue_group.example_issues.len() < MAX_EXAMPLE_ISSUES_COUNT {
                 issue_group.example_issues.push(issue);
             }
@@ -399,7 +399,7 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
     fn validate_next_chunk(&mut self, _neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
         // Set a limit on the number of instructions used by this function.
         #[cfg(target_arch = "wasm32")]
-        let instruction_limit = ic_cdk::api::instruction_counter() + 100_000_000;
+        let instruction_limit = ic_cdk::api::instruction_counter().saturating_add(100_000_000);
         #[cfg(target_arch = "wasm32")]
         let keep_going = || ic_cdk::api::instruction_counter() < instruction_limit;
 
@@ -473,7 +473,7 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
     fn validate_cardinalities(_neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary = with_stable_neuron_store(|stable_neuron_store|
                     // `stable_neuron_store.len()` is for the controllers.
-                    stable_neuron_store.lens().hot_keys + stable_neuron_store.len() as u64);
+                    stable_neuron_store.lens().hot_keys.saturating_add(stable_neuron_store.len() as u64));
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.principal().num_entries()) as u64;
         // Because hot keys can also be controllers, the primary data might have larger cardinality
@@ -744,6 +744,7 @@ mod tests {
             name: known_neuron_name,
             description: None,
             links: vec![],
+            committed_topics: vec![],
         }))
     }
 

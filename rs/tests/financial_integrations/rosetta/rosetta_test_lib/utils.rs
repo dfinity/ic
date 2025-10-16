@@ -5,7 +5,7 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::{Tokens, block::BlockIndex};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{Neuron, neuron::DissolveState};
+use ic_nns_governance_api::{Neuron, Visibility, neuron::DissolveState};
 use ic_rosetta_api::{
     DEFAULT_TOKEN_SYMBOL,
     convert::{
@@ -339,7 +339,9 @@ where
     for request in requests {
         // first ask for the fee
         let mut fee_found = false;
-        for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
+        for o in Request::requests_to_operations(std::slice::from_ref(&request.request), token_name)
+            .unwrap()
+        {
             if o.type_.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {
@@ -681,6 +683,7 @@ pub fn create_neuron(
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
         cached_neuron_stake_e8s: Tokens::new(10, 0).unwrap().get_e8s(),
         kyc_verified: true,
+        visibility: Some(Visibility::Public as i32),
         ..Default::default()
     };
 

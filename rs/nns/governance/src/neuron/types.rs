@@ -838,6 +838,7 @@ impl Neuron {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
         requester: PrincipalId,
+        multi_query: bool,
     ) -> NeuronInfo {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
@@ -858,6 +859,13 @@ impl Neuron {
         let visibility = Some(self.visibility() as i32);
         let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
         let potential_voting_power = self.potential_voting_power(now_seconds);
+        let known_neuron_data = if multi_query {
+            None
+        } else {
+            self.known_neuron_data
+                .clone()
+                .map(api::KnownNeuronData::from)
+        };
 
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
@@ -868,10 +876,7 @@ impl Neuron {
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
-            known_neuron_data: self
-                .known_neuron_data
-                .clone()
-                .map(api::KnownNeuronData::from),
+            known_neuron_data,
             neuron_type: self.neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(
@@ -1267,6 +1272,7 @@ impl Neuron {
         self,
         now_seconds: u64,
         voting_power_economics: &VotingPowerEconomics,
+        multi_query: bool,
     ) -> api::Neuron {
         let visibility = Some(self.visibility() as i32);
         let deciding_voting_power =
@@ -1316,7 +1322,11 @@ impl Neuron {
             .map(api::BallotInfo::from)
             .collect();
         let transfer = transfer.map(api::NeuronStakeTransfer::from);
-        let known_neuron_data = known_neuron_data.map(api::KnownNeuronData::from);
+        let known_neuron_data = if multi_query {
+            None
+        } else {
+            known_neuron_data.map(api::KnownNeuronData::from)
+        };
 
         let followees = followees
             .into_iter()

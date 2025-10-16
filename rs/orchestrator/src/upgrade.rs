@@ -6,6 +6,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
+use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -93,6 +94,7 @@ pub(crate) struct Upgrade {
     registry_replicator: Arc<RegistryReplicator>,
     pub logger: ReplicaLogger,
     node_id: NodeId,
+    disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
@@ -113,6 +115,7 @@ impl Upgrade {
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
+        disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     ) -> Self {
         let value = Self {
             registry,
@@ -128,6 +131,7 @@ impl Upgrade {
             logger: logger.clone(),
             prepared_upgrade_version: None,
             orchestrator_data_directory,
+            disk_encryption_key_exchange_agent,
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
@@ -244,16 +248,16 @@ impl Upgrade {
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with
         // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
-        if let Some(old_cup) = local_cup {
-            if old_cup.height() < latest_cup.height() {
-                compare_master_public_keys(
-                    &old_cup,
-                    &latest_cup,
-                    self.metrics.as_ref(),
-                    self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
-                    &self.logger,
-                );
-            }
+        if let Some(old_cup) = local_cup
+            && old_cup.height() < latest_cup.height()
+        {
+            compare_master_public_keys(
+                &old_cup,
+                &latest_cup,
+                self.metrics.as_ref(),
+                self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
+                &self.logger,
+            );
         }
 
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
@@ -360,36 +364,35 @@ impl Upgrade {
             .get_cup_contents(subnet_id, registry_version)
             .ok()
             .and_then(|record| record.value)
+            && let Some(registry_store_uri) = registry_contents.registry_store_uri
         {
-            if let Some(registry_store_uri) = registry_contents.registry_store_uri {
-                warn!(
-                    self.logger,
-                    "Downloading registry data from {} with hash {} for subnet recovery",
-                    registry_store_uri.uri,
-                    registry_store_uri.hash,
-                );
-                let downloader = FileDownloader::new(Some(self.logger.clone()));
-                let local_store_location = tempfile::tempdir()
-                    .expect("temporary location for local store download could not be created")
-                    .keep();
-                downloader
-                    .download_and_extract_tar(
-                        &registry_store_uri.uri,
-                        &local_store_location,
-                        Some(registry_store_uri.hash),
-                    )
-                    .await
-                    .map_err(OrchestratorError::FileDownloadError)?;
-                if let Err(e) = self.stop_replica() {
-                    // Even though we fail to stop the replica, we should still
-                    // replace the registry local store, so we simply issue a warning.
-                    warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                }
-                let new_local_store = LocalStoreImpl::new(local_store_location);
-                self.registry_replicator
-                    .stop_polling_and_set_local_registry_data(&new_local_store);
-                reexec_current_process(&self.logger);
+            warn!(
+                self.logger,
+                "Downloading registry data from {} with hash {} for subnet recovery",
+                registry_store_uri.uri,
+                registry_store_uri.hash,
+            );
+            let downloader = FileDownloader::new(Some(self.logger.clone()));
+            let local_store_location = tempfile::tempdir()
+                .expect("temporary location for local store download could not be created")
+                .keep();
+            downloader
+                .download_and_extract_tar(
+                    &registry_store_uri.uri,
+                    &local_store_location,
+                    Some(registry_store_uri.hash),
+                )
+                .await
+                .map_err(OrchestratorError::FileDownloadError)?;
+            if let Err(e) = self.stop_replica() {
+                // Even though we fail to stop the replica, we should still
+                // replace the registry local store, so we simply issue a warning.
+                warn!(self.logger, "Failed to stop replica with error {:?}", e);
             }
+            let new_local_store = LocalStoreImpl::new(local_store_location);
+            self.registry_replicator
+                .stop_polling_and_set_local_registry_data(&new_local_store);
+            reexec_current_process(&self.logger);
         }
         Ok(())
     }
@@ -585,6 +588,17 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
             record.release_package_urls,
             Some(record.release_package_sha256_hex),
         ))
+    }
+
+    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()> {
+        if let Some(agent) = &self.disk_encryption_key_exchange_agent {
+            agent
+                .exchange_keys()
+                .await
+                .map_err(|e| UpgradeError::DiskEncryptionKeyExchangeError(e.to_string()))
+        } else {
+            Ok(())
+        }
     }
 
     fn log(&self) -> &ReplicaLogger {

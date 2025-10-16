@@ -21,8 +21,8 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
 
 pub const STATE_SYNC_SIZE_BYTES_TOTAL_FETCH: &str = "state_sync_size_bytes_total{op=\"fetch\"}";
-pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES: &str =
-    "state_sync_size_bytes_total{op=\"copy_files\"}";
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_HARDLINK_FILES: &str =
+    "state_sync_size_bytes_total{op=\"hardlink_files\"}";
 pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
     "state_sync_size_bytes_total{op=\"copy_chunks\"}";
 
@@ -253,7 +253,7 @@ pub async fn assert_state_sync_has_happened(
                 rejoin_node.clone(),
                 vec![
                     STATE_SYNC_SIZE_BYTES_TOTAL_FETCH,
-                    STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES,
+                    STATE_SYNC_SIZE_BYTES_TOTAL_HARDLINK_FILES,
                     STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS,
                 ],
             )
@@ -261,9 +261,9 @@ pub async fn assert_state_sync_has_happened(
 
             info!(
                 logger,
-                "State sync size summary, fetch: {} bytes, copy files: {} bytes, copy chunks: {} bytes",
+                "State sync size summary, fetch: {} bytes, hardlink files: {} bytes, copy chunks: {} bytes",
                 stats[STATE_SYNC_SIZE_BYTES_TOTAL_FETCH][0],
-                stats[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES][0],
+                stats[STATE_SYNC_SIZE_BYTES_TOTAL_HARDLINK_FILES][0],
                 stats[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS][0],
             );
 

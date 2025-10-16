@@ -15,8 +15,8 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
-use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
+use ic_config::{execution_environment::Config, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE};
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -52,7 +52,9 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_management_canister_types_private::{FetchCanisterLogsRequest, Payload, QueryMethod};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, FetchCanisterLogsRequest, Payload, QueryMethod,
+};
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -107,35 +109,6 @@ pub struct InternalHttpQueryHandler {
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_query_execution_stats: QueryStatsCollector,
     query_cache: query_cache::QueryCache,
-}
-
-#[derive(Clone)]
-struct HttpQueryHandlerMetrics {
-    pub height_diff_during_query_scheduling: Histogram,
-}
-
-impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
-        Self {
-            height_diff_during_query_scheduling: metrics_registry.register(
-                Histogram::with_opts(histogram_opts!(
-                    "execution_query_height_diff_during_query_scheduling",
-                    "The height difference between the latest certified height before query scheduling and state height used for execution",
-                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
-                    labels! {"query_type".to_string() => namespace.to_string()}
-                )).unwrap(),
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-/// Struct that is responsible for handling queries sent by user.
-pub(crate) struct HttpQueryHandler {
-    internal: Arc<InternalHttpQueryHandler>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    query_scheduler: QueryScheduler,
-    metrics: Arc<HttpQueryHandlerMetrics>,
 }
 
 impl InternalHttpQueryHandler {
@@ -208,10 +181,47 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        self.config.fetch_canister_logs_filter,
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
+                }
+                Ok(QueryMethod::CanisterStatus) => {
+                    let args = CanisterIdRecord::decode(&query.method_payload)?;
+                    let canister_id = args.get_canister_id();
+                    let ready_for_migration = state.get_ref().ready_for_migration(&canister_id);
+                    let canister =
+                        state
+                            .get_ref()
+                            .canister_state(&canister_id)
+                            .ok_or_else(|| {
+                                UserError::new(
+                                    ErrorCode::CanisterNotFound,
+                                    format!("Canister {canister_id} not found"),
+                                )
+                            })?;
+                    let since = Instant::now(); // Start logging execution time.
+                    let response = crate::canister_manager::get_canister_status(
+                        Arc::clone(&self.cycles_account_manager),
+                        query.source(),
+                        canister,
+                        state
+                            .get_ref()
+                            .metadata
+                            .network_topology
+                            .get_subnet_size(&self.hypervisor.subnet_id())
+                            .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
+                        state.get_ref().get_own_cost_schedule(),
+                        ready_for_migration,
+                    )?;
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::CanisterStatus,
                         since.elapsed().as_secs_f64(),
                         &result,
                     );
@@ -297,6 +307,35 @@ impl InternalHttpQueryHandler {
         }
         result
     }
+}
+
+#[derive(Clone)]
+struct HttpQueryHandlerMetrics {
+    pub height_diff_during_query_scheduling: Histogram,
+}
+
+impl HttpQueryHandlerMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
+        Self {
+            height_diff_during_query_scheduling: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_height_diff_during_query_scheduling",
+                    "The height difference between the latest certified height before query scheduling and state height used for execution",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+                    labels! {"query_type".to_string() => namespace.to_string()}
+                )).unwrap(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+/// Struct that is responsible for handling queries sent by user.
+pub(crate) struct HttpQueryHandler {
+    internal: Arc<InternalHttpQueryHandler>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    query_scheduler: QueryScheduler,
+    metrics: Arc<HttpQueryHandlerMetrics>,
 }
 
 impl HttpQueryHandler {

@@ -72,21 +72,21 @@ impl HostosUpgrader {
             .registry
             .get_node_hostos_version(latest_registry_version)?;
 
-        if let Some(node_hostos_version) = node_hostos_version {
-            if self.hostos_version != node_hostos_version {
-                info!(
-                    self.logger,
-                    "Found HostOS version '{node_hostos_version}' set for this node '{node_id}'",
-                );
-                info!(
-                    self.logger,
-                    "Starting HostOS upgrade at registry version {}: {} -> {}",
-                    latest_registry_version,
-                    self.hostos_version,
-                    node_hostos_version
-                );
-                return self.execute_upgrade(&node_hostos_version).await;
-            }
+        if let Some(node_hostos_version) = node_hostos_version
+            && self.hostos_version != node_hostos_version
+        {
+            info!(
+                self.logger,
+                "Found HostOS version '{node_hostos_version}' set for this node '{node_id}'",
+            );
+            info!(
+                self.logger,
+                "Starting HostOS upgrade at registry version {}: {} -> {}",
+                latest_registry_version,
+                self.hostos_version,
+                node_hostos_version
+            );
+            return self.execute_upgrade(&node_hostos_version).await;
         }
 
         Ok(())

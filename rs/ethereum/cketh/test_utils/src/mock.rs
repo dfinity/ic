@@ -218,17 +218,17 @@ impl StubOnce {
         }))
         .unwrap();
 
-        if let Some(max_response_bytes) = context.max_response_bytes {
-            if (response_body.len() as u64) > max_response_bytes.get() {
-                let mut payload = PayloadBuilder::new();
-                payload = payload.http_response_failure(
-                    id,
-                    RejectCode::SysFatal,
-                    format!("Http body exceeds size limit of {max_response_bytes} bytes."),
-                );
-                env.execute_payload(payload);
-                return;
-            }
+        if let Some(max_response_bytes) = context.max_response_bytes
+            && (response_body.len() as u64) > max_response_bytes.get()
+        {
+            let mut payload = PayloadBuilder::new();
+            payload = payload.http_response_failure(
+                id,
+                RejectCode::SysFatal,
+                format!("Http body exceeds size limit of {max_response_bytes} bytes."),
+            );
+            env.execute_payload(payload);
+            return;
         }
 
         let clean_up_context = match context.transform.clone() {
@@ -257,17 +257,17 @@ impl StubOnce {
         )
         .unwrap();
 
-        if let Some(max_response_bytes) = context.max_response_bytes {
-            if (clean_up_response.body.len() as u64) > max_response_bytes.get() {
-                let mut payload = PayloadBuilder::new();
-                payload = payload.http_response_failure(
-                    id,
-                    RejectCode::SysFatal,
-                    format!("Http body exceeds size limit of {max_response_bytes} bytes."),
-                );
-                env.execute_payload(payload);
-                return;
-            }
+        if let Some(max_response_bytes) = context.max_response_bytes
+            && (clean_up_response.body.len() as u64) > max_response_bytes.get()
+        {
+            let mut payload = PayloadBuilder::new();
+            payload = payload.http_response_failure(
+                id,
+                RejectCode::SysFatal,
+                format!("Http body exceeds size limit of {max_response_bytes} bytes."),
+            );
+            env.execute_payload(payload);
+            return;
         }
 
         let http_response = CanisterHttpResponsePayload {

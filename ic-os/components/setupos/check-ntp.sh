@@ -19,7 +19,8 @@ function check_ntp() {
     while [ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]; do
         if [ $retries -ge $max_retries ]; then
             local service_logs=$(journalctl -u chrony.service --no-pager)
-            local log_message="System clock is not synchronized.\n\nChrony service logs:\n${service_logs}"
+            local sources_info=$(chronyc sources 2>/dev/null || echo "Unable to get chrony sources information")
+            local log_message="System clock is not synchronized.\n\nChrony service logs:\n${service_logs}\n\nChrony sources status:\n${sources_info}"
             log_and_halt_installation_on_error 1 "${log_message}"
         fi
 

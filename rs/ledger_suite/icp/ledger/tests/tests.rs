@@ -76,14 +76,6 @@ fn ledger_wasm_prev_version() -> Vec<u8> {
     )
 }
 
-fn ledger_wasm_notify_method() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger-canister_notify-method",
-        &[],
-    )
-}
-
 fn ledger_wasm_mainnet() -> Vec<u8> {
     std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -1920,11 +1912,7 @@ fn test_notify_caller_logging() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_notify_method(),
-            Encode!(&payload).unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister");
 
     // Make a transfer that we can notify about

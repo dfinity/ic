@@ -57,16 +57,16 @@ impl Sha256InvMap {
 
     #[allow(dead_code)]
     fn expand(&self, v: &Value) -> Option<Value> {
-        if let Some(s) = v.as_str() {
-            if let Some(s) = s.strip_prefix(BIN_DATA_SHA256) {
-                let digest = hex_to_sha256_digest(s);
-                let val = self
-                    .m
-                    .get(&digest)
-                    .expect("Could not find sha256 value.")
-                    .clone();
-                return Some(json::assert_to_value(val));
-            }
+        if let Some(s) = v.as_str()
+            && let Some(s) = s.strip_prefix(BIN_DATA_SHA256)
+        {
+            let digest = hex_to_sha256_digest(s);
+            let val = self
+                .m
+                .get(&digest)
+                .expect("Could not find sha256 value.")
+                .clone();
+            return Some(json::assert_to_value(val));
         }
         None
     }
@@ -97,11 +97,11 @@ fn byte_array_to_principal_id(value: &Value) -> Option<Value> {
 }
 
 fn principal_id_to_bytes(value: &Value) -> Option<Value> {
-    if let Some(s) = value.as_str() {
-        if let Some(s) = s.strip_prefix(PRINCIPAL_ID) {
-            let principal_id = PrincipalId::from_str(s).expect("Not a principal id.");
-            return Some(json::assert_to_value(principal_id.as_slice()));
-        }
+    if let Some(s) = value.as_str()
+        && let Some(s) = s.strip_prefix(PRINCIPAL_ID)
+    {
+        let principal_id = PrincipalId::from_str(s).expect("Not a principal id.");
+        return Some(json::assert_to_value(principal_id.as_slice()));
     }
     None
 }
@@ -116,21 +116,22 @@ fn hex_encode_small_arrays(value: &Value) -> Option<Value> {
 }
 
 fn hex_decode_arrays(value: &Value) -> Option<Value> {
-    if let Some(s) = value.as_str() {
-        if let Some(s) = s.strip_prefix(BIN_DATA) {
-            let bytes = hex_to_bytes(s);
-            return Some(json::assert_to_value(bytes));
-        }
+    if let Some(s) = value.as_str()
+        && let Some(s) = s.strip_prefix(BIN_DATA)
+    {
+        let bytes = hex_to_bytes(s);
+        return Some(json::assert_to_value(bytes));
     }
     None
 }
 
 fn as_byte_array_len(value: &Value, range: Range<usize>) -> Option<Vec<u8>> {
-    if let Some(v) = value.as_array() {
-        if v.iter().all(|f| f.as_u64().unwrap_or(0x100) < 0x100) && range.contains(&v.len()) {
-            let bytes = v.iter().map(|x| x.as_u64().unwrap() as u8).collect();
-            return Some(bytes);
-        }
+    if let Some(v) = value.as_array()
+        && v.iter().all(|f| f.as_u64().unwrap_or(0x100) < 0x100)
+        && range.contains(&v.len())
+    {
+        let bytes = v.iter().map(|x| x.as_u64().unwrap() as u8).collect();
+        return Some(bytes);
     }
     None
 }

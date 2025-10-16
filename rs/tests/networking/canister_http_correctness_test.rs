@@ -149,7 +149,7 @@ fn main() -> Result<()> {
                 ))
                 // This section tests the url and ip scenarios
                 .add_test(systest!(test_non_ascii_url_is_accepted))
-                .add_test(systest!(test_invalid_ip_timeout))
+                .add_test(systest!(test_invalid_ip))
                 .add_test(systest!(test_invalid_domain_name))
                 .add_test(systest!(test_max_url_length))
                 .add_test(systest!(test_max_url_length_exceeded))
@@ -1121,14 +1121,16 @@ fn test_invalid_domain_name(env: TestEnv) {
     );
 }
 
-fn test_invalid_ip_timeout(env: TestEnv) {
+fn test_invalid_ip(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: "https://240.0.0.0".to_string(),
+                // `2001:db8::1` is a reserved ipv6 address used in documentation and example source code.
+                // See https://www.rfc-editor.org/rfc/rfc3849
+                url: "https://[2001:db8::1]".to_string(),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1148,12 +1150,10 @@ fn test_invalid_ip_timeout(env: TestEnv) {
 
     assert_matches!(
         response,
-        Err(
-            RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            reject_message,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysTransient,
             ..
-        }) => assert_eq!(reject_message, "Timeout expired")
+        })
     );
     assert_ne!(
         refunded_cycles,

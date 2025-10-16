@@ -286,9 +286,7 @@ fn out_stream(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
 /// with one message enqueued.
 fn out_stream_with_message(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
     let mut stream = out_stream(messages_begin, signals_end);
-    stream.push(ic_types::messages::RequestOrResponse::Request(
-        RequestBuilder::new().build().into(),
-    ));
+    stream.push(RequestBuilder::new().build().into());
     stream
 }
 

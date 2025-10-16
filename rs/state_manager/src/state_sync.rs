@@ -20,6 +20,8 @@ pub struct StateSync {
     state_manager: Arc<StateManagerImpl>,
     state_sync_refs: StateSyncRefs,
     log: ReplicaLogger,
+    #[cfg(debug_assertions)]
+    pub test_force_validate: bool,
 }
 
 impl StateSync {
@@ -28,6 +30,8 @@ impl StateSync {
             state_manager,
             state_sync_refs: StateSyncRefs::new(log.clone()),
             log,
+            #[cfg(debug_assertions)]
+            test_force_validate: false,
         }
     }
 
@@ -41,7 +45,14 @@ impl StateSync {
             state_manager,
             state_sync_refs,
             log,
+            #[cfg(debug_assertions)]
+            test_force_validate: false,
         }
+    }
+
+    #[cfg(debug_assertions)]
+    fn is_test_force_validate(&self) -> bool {
+        self.test_force_validate
     }
 
     /// Returns requested state as a Chunkable artifact for StateSync.
@@ -154,16 +165,15 @@ impl StateSync {
                 }
             });
 
-        if let Some(state_sync_file_group) = file_group_to_populate {
-            if let Some(metadata) = self
+        if let Some(state_sync_file_group) = file_group_to_populate
+            && let Some(metadata) = self
                 .state_manager
                 .states
                 .write()
                 .states_metadata
                 .get_mut(&msg_id.height)
-            {
-                metadata.state_sync_file_group = Some(state_sync_file_group);
-            }
+        {
+            metadata.state_sync_file_group = Some(state_sync_file_group);
         }
         state_sync_message
     }

@@ -151,12 +151,11 @@ impl ProximityMap {
         for (i, node) in nodes.iter().enumerate() {
             if let Some(node_operator) =
                 get_node_operator_id(node, self.registry.as_ref(), &version, &self.log)
+                && let Some(node_weight) = self.weight(&node_operator)
             {
-                if let Some(node_weight) = self.weight(&node_operator) {
-                    node_weights[i] = node_weight;
-                    total_weight += node_weight;
-                    weighted_nodes += 1;
-                }
+                node_weights[i] = node_weight;
+                total_weight += node_weight;
+                weighted_nodes += 1;
             }
         }
 

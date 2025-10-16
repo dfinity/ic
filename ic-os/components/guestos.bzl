@@ -42,10 +42,10 @@ component_files = {
     Label("guestos/ic-https-outcalls-adapter/ic-https-outcalls-adapter.socket"): "/etc/systemd/system/ic-https-outcalls-adapter.socket",
     Label("guestos/ic-https-outcalls-adapter/generate-https-outcalls-adapter-config.sh"): "/opt/ic/bin/generate-https-outcalls-adapter-config.sh",
     Label("guestos/ic-replica.service"): "/etc/systemd/system/ic-replica.service",
-    Label("guestos/generate-ic-config/generate-ic-config.sh"): "/opt/ic/bin/generate-ic-config.sh",
+    Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
     Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
-    Label("guestos/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
     Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
+    Label("guestos/share/nns_public_key.pem"): "/opt/ic/share/nns_public_key.pem",
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
@@ -56,8 +56,10 @@ component_files = {
     Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
     Label("guestos/init/setup-encryption/setup-data-encryption.service"): "/etc/systemd/system/setup-data-encryption.service",
     Label("guestos/init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
+    Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
+    Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
 
     # misc
     Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
@@ -90,6 +92,9 @@ component_files = {
     Label("monitoring/guestos/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
     Label("monitoring/guestos/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
     Label("monitoring/guestos/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
+    Label("monitoring/guestos/boot-metrics/boot-metrics.sh"): "/opt/ic/bin/boot-metrics.sh",
+    Label("monitoring/guestos/boot-metrics/boot-metrics.service"): "/etc/systemd/system/boot-metrics.service",
+    Label("monitoring/guestos/boot-metrics/boot-metrics.timer"): "/etc/systemd/system/boot-metrics.timer",
     Label("monitoring/guestos/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
     Label("monitoring/guestos/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
     Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",

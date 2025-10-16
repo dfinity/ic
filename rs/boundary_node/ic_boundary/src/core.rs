@@ -31,7 +31,6 @@ use ic_bn_lib::{
     pubsub::BrokerBuilder,
     tasks::TaskManager,
     tls::verify::NoopServerCertVerifier,
-    types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
@@ -65,8 +64,9 @@ use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     http::{
-        PATH_CALL, PATH_CALL_V3, PATH_HEALTH, PATH_QUERY, PATH_READ_STATE, PATH_STATUS,
-        PATH_SUBNET_READ_STATE,
+        PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
+        PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
+        PATH_SUBNET_READ_STATE_V3, RequestType,
         handlers::{self, LogsState, logs_canister},
         middleware::{
             cache::{CacheState, cache_middleware},
@@ -886,18 +886,18 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new().route(PATH_QUERY, {
-        post(handlers::handle_canister).with_state(proxy.clone())
-    });
+    let canister_handler = post(handlers::handle_canister).with_state(proxy.clone());
+    let subnet_handler = post(handlers::handle_subnet).with_state(proxy.clone());
+
+    let query_route = Router::new()
+        .route(PATH_QUERY_V2, canister_handler.clone())
+        .route(PATH_QUERY_V3, canister_handler.clone());
 
     let call_route = {
         let mut route = Router::new()
-            .route(PATH_CALL, {
-                post(handlers::handle_canister).with_state(proxy.clone())
-            })
-            .route(PATH_CALL_V3, {
-                post(handlers::handle_canister).with_state(proxy.clone())
-            });
+            .route(PATH_CALL_V2, canister_handler.clone())
+            .route(PATH_CALL_V3, canister_handler.clone())
+            .route(PATH_CALL_V4, canister_handler.clone());
 
         // will panic if ip_rate_limit is Some(0)
         if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
@@ -1065,9 +1065,9 @@ pub fn setup_router(
         .layer(middleware_generic_limiter)
         .layer(middleware_retry);
 
-    let canister_read_state_route = Router::new().route(PATH_READ_STATE, {
-        post(handlers::handle_canister).with_state(proxy.clone())
-    });
+    let canister_read_state_route = Router::new()
+        .route(PATH_READ_STATE_V2, canister_handler.clone())
+        .route(PATH_READ_STATE_V3, canister_handler.clone());
 
     let canister_read_call_query_routes = query_route
         .merge(call_route)
@@ -1075,9 +1075,8 @@ pub fn setup_router(
         .layer(service_canister_read_call_query);
 
     let subnet_read_state_route = Router::new()
-        .route(PATH_SUBNET_READ_STATE, {
-            post(handlers::handle_subnet).with_state(proxy.clone())
-        })
+        .route(PATH_SUBNET_READ_STATE_V2, subnet_handler.clone())
+        .route(PATH_SUBNET_READ_STATE_V3, subnet_handler.clone())
         .layer(service_subnet_read);
 
     let mut router = canister_read_call_query_routes

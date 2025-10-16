@@ -1948,15 +1948,15 @@ impl Swap {
         };
 
         if let Some(buyer_state) = self.buyers.get(&source_principal_id.to_string()) {
-            if let Some(transfer) = &buyer_state.icp {
-                if transfer.transfer_success_timestamp_seconds == 0 {
-                    // This buyer has ICP not yet disbursed using the normal mechanism.
-                    return ErrorRefundIcpResponse::new_precondition_error(format!(
-                        "ICP cannot be refunded as principal {} has {} ICP (e8s) in escrow",
-                        source_principal_id,
-                        buyer_state.amount_icp_e8s()
-                    ));
-                }
+            if let Some(transfer) = &buyer_state.icp
+                && transfer.transfer_success_timestamp_seconds == 0
+            {
+                // This buyer has ICP not yet disbursed using the normal mechanism.
+                return ErrorRefundIcpResponse::new_precondition_error(format!(
+                    "ICP cannot be refunded as principal {} has {} ICP (e8s) in escrow",
+                    source_principal_id,
+                    buyer_state.amount_icp_e8s()
+                ));
             }
             // This buyer has participated in the swap, but all ICP
             // has already been disbursed, either back to the buyer
@@ -3596,7 +3596,7 @@ impl SnsNeuronRecipe {
 }
 
 impl Storable for Ticket {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.encode_to_vec().into()
     }
 

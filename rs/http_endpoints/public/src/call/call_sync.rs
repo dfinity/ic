@@ -215,26 +215,25 @@ async fn call_sync(
     // to the ingress pool.
     if let Some((tree, certification)) =
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
+        && let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id)
     {
-        if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns = match version {
-                Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
-                Version::V4 => nns_delegation_reader
-                    .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
-            };
-            let signature = certification.signed.signature.signature.get().0;
+        let delegation_from_nns = match version {
+            Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+            Version::V4 => nns_delegation_reader
+                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
+        };
+        let signature = certification.signed.signature.signature.get().0;
 
-            metrics
-                .sync_call_early_response_trigger_total
-                .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
-                .inc();
+        metrics
+            .sync_call_early_response_trigger_total
+            .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
+            .inc();
 
-            return SyncCallResponse::Certificate(Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation: delegation_from_nns,
-            });
-        }
+        return SyncCallResponse::Certificate(Certificate {
+            tree,
+            signature: Blob(signature),
+            delegation: delegation_from_nns,
+        });
     };
 
     let certification_subscriber = match ingress_watcher_handle

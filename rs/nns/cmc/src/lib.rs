@@ -8,6 +8,7 @@ use ic_management_canister_types_private::{
     // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
     BoundedControllers,
     CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    EnvironmentVariable,
     LogVisibilityV2,
 };
 
@@ -181,6 +182,7 @@ impl From<LogVisibilityV2> for LogVisibility {
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
 ///     wasm_memory_threshold: opt nat;
+///     environment_variables: opt vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettingsArgs {
@@ -192,6 +194,7 @@ pub struct CanisterSettingsArgs {
     pub log_visibility: Option<LogVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
+    pub environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
@@ -205,7 +208,7 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
-            environment_variables: None,
+            environment_variables: settings.environment_variables,
         }
     }
 }
@@ -221,6 +224,7 @@ impl From<Ic00CanisterSettingsArgs> for CanisterSettingsArgs {
             log_visibility: settings.log_visibility.map(LogVisibility::from),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
+            environment_variables: settings.environment_variables,
         }
     }
 }

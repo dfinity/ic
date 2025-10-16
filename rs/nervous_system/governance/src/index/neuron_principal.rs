@@ -215,7 +215,7 @@ mod tests {
     struct TestNeuronId([u8; 32]);
 
     impl Storable for TestNeuronId {
-        fn to_bytes(&self) -> Cow<[u8]> {
+        fn to_bytes(&self) -> Cow<'_, [u8]> {
             self.0.to_bytes()
         }
 
