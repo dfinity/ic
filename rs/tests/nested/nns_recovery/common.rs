@@ -2,13 +2,11 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::bail;
-use ic_consensus_system_test_subnet_recovery::utils::break_nodes;
+use ic_consensus_system_test_subnet_recovery::utils::{assert_subnet_is_broken, break_nodes};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version,
-    rw_message::{
-        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
-    },
+    rw_message::{can_read_msg, cert_state_makes_progress_with_retries, store_message},
     set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
@@ -292,27 +290,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     break_nodes(faulty_nodes, &logger);
-
-    info!(logger, "Ensure a healthy node still works in read mode");
-    assert!(can_read_msg(
-        &logger,
+    assert_subnet_is_broken(
         &healthy_node.get_public_url(),
         app_can_id,
-        msg
-    ));
-    info!(
-        logger,
-        "Ensure the subnet does not work in write mode anymore"
-    );
-    assert!(cannot_store_msg(
-        logger.clone(),
-        &nns_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
-    info!(
-        logger,
-        "Success: Subnet is broken - cannot store new messages"
+        msg,
+        true,
+        &logger,
     );
 
     // Mirror production setup by removing admin SSH access from all nodes except the DFINITY-owned node

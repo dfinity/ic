@@ -24,11 +24,11 @@ end::catalog[] */
 use anyhow::Result;
 use canister_http::get_universal_vm_address;
 use ic_agent::Agent;
-use ic_consensus_system_test_subnet_recovery::utils::break_nodes;
+use ic_consensus_system_test_subnet_recovery::utils::{assert_subnet_is_broken, break_nodes};
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
-        install_nns_and_check_progress, store_message,
+        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+        store_message,
     },
     set_sandbox_env_vars,
 };
@@ -205,23 +205,13 @@ pub fn test(env: TestEnv) {
     let f = (SUBNET_SIZE - 1) / 3;
     break_nodes(&orig_nns_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
 
-    info!(logger, "Ensure the subnet works in read mode");
-    assert!(can_read_msg(
+    assert_subnet_is_broken(
+        &download_node.get_public_url(),
+        app_can_id,
+        msg,
+        true,
         &logger,
-        &download_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
-    info!(
-        logger,
-        "Ensure the subnet doesn't work in write mode anymore"
     );
-    assert!(cannot_store_msg(
-        logger.clone(),
-        &download_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
 
     info!(logger, "Check if download node is behind...");
     let ot_node_metrics = block_on(get_node_metrics(&logger, &nns_node.get_ip_addr()))

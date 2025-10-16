@@ -1,5 +1,8 @@
+use candid::Principal;
+use ic_consensus_system_test_utils::rw_message::{can_read_msg, cannot_store_msg};
 use ic_system_test_driver::driver::test_env_api::SshSession;
 use slog::{Logger, info};
+use url::Url;
 
 /// Break the replica binary on the given nodes
 pub fn break_nodes<T>(nodes: &[T], logger: &Logger)
@@ -22,5 +25,31 @@ where
         node.block_on_bash_script(ssh_command)
             .unwrap_or_else(|_| panic!("SSH command failed on node with IP {ip}"));
     }
+}
+
+/// A subnet is considered to be broken if it (potentially) still works in read mode, but doesn't
+/// in write mode.
+pub fn assert_subnet_is_broken(
+    node_url: &Url,
+    can_id: Principal,
+    msg: &str,
+    can_read: bool,
+    logger: &Logger,
+) {
+    if can_read {
+        info!(logger, "Ensure the subnet works in read mode");
+        assert!(
+            can_read_msg(logger, node_url, can_id, msg),
+            "Failed to read message on node: {node_url}"
+        );
+    }
+    info!(
+        logger,
+        "Ensure the subnet doesn't work in write mode anymore"
+    );
+    assert!(
+        cannot_store_msg(logger.clone(), node_url, can_id, msg),
+        "Writing messages still successful on: {node_url}"
+    );
 }
 

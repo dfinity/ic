@@ -28,16 +28,15 @@ Success::
 
 end::catalog[] */
 
-use crate::utils::break_nodes;
+use crate::utils::{assert_subnet_is_broken, break_nodes};
 use anyhow::bail;
-use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     node::assert_node_is_unassigned_with_ssh_session,
     rw_message::{
-        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
-        install_nns_and_check_progress, store_message,
+        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+        store_message,
     },
     set_sandbox_env_vars,
     ssh_access::{
@@ -81,7 +80,6 @@ use std::{
 };
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
-use url::Url;
 
 const DKG_INTERVAL: u64 = 20;
 const NNS_NODES: usize = 4;
@@ -866,32 +864,6 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         .halt_subnet(subnet.subnet_id, false, &[])
         .exec()
         .expect("Failed to unhalt subnet.");
-}
-
-/// A subnet is considered to be broken if it still works in read mode,
-/// but doesn't in write mode
-fn assert_subnet_is_broken(
-    node_url: &Url,
-    can_id: Principal,
-    msg: &str,
-    can_read: bool,
-    logger: &Logger,
-) {
-    if can_read {
-        info!(logger, "Ensure the subnet works in read mode");
-        assert!(
-            can_read_msg(logger, node_url, can_id, msg),
-            "Failed to read message on node: {node_url}"
-        );
-    }
-    info!(
-        logger,
-        "Ensure the subnet doesn't work in write mode anymore"
-    );
-    assert!(
-        cannot_store_msg(logger.clone(), node_url, can_id, msg),
-        "Writing messages still successful on: {node_url}"
-    );
 }
 
 /// Select a node with highest certification height in the given subnet snapshot
