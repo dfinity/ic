@@ -112,7 +112,12 @@ fn check_invariants() -> Result<(), String> {
     })
 }
 
-#[query]
+// TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
+// both types of events:
+// 1) ckBTC has some deprecated events only for backwards-compatibility purposes
+// 2) Some events, related to KYT are not applicable to Dogecoin.
+// 3) Some fundamental types like BitcoinAddress are also misused to fit in a Dogecoin address.
+#[query(hidden = true)]
 fn get_events(args: GetEventsArg) -> Vec<Event> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
 
