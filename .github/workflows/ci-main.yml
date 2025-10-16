@@ -284,6 +284,12 @@ jobs:
               --build_tag_filters=test_all_platforms \
               //... --nobuild
 
+            # make sure the artifacts always evaluate successfully even if we don't
+            # upload them
+            bazel build \
+              --config=stamped \
+              //:upload-artifacts --nobuild
+
       - name: Build & Test
         if: ${{ needs.config.outputs.full_macos_build == 'true' }}
         uses: ./.github/actions/bazel
