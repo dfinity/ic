@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-pub fn test(env: TestEnv) {
+pub fn test(env: TestEnv)  {
     let logger = env.logger();
 
     let app_subnets = get_all_application_subnets(&env);
