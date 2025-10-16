@@ -24,6 +24,7 @@ end::catalog[] */
 use anyhow::Result;
 use canister_http::get_universal_vm_address;
 use ic_agent::Agent;
+use ic_consensus_system_test_subnet_recovery::utils::break_nodes;
 use ic_consensus_system_test_utils::{
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
@@ -200,24 +201,9 @@ pub fn test(env: TestEnv) {
         subnet_args,
     );
 
-    // let's take f+1 nodes and break them.
+    // Break f+1 nodes
     let f = (SUBNET_SIZE - 1) / 3;
-    info!(
-        logger,
-        "Breaking the NNS subnet by breaking the replica binary on f+1={} nodes",
-        f + 1
-    );
-
-    let faulty_nodes = orig_nns_nodes.take(f + 1).collect::<Vec<_>>();
-    for node in faulty_nodes {
-        subnet_recovery
-        .get_recovery_api()
-        .execute_admin_ssh_command(
-            node.get_ip_addr(),
-            "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
-        )
-        .expect("couldn't run ssh command");
-    }
+    break_nodes(&orig_nns_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
 
     info!(logger, "Ensure the subnet works in read mode");
     assert!(can_read_msg(

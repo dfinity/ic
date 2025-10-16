@@ -2,6 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::bail;
+use ic_consensus_system_test_subnet_recovery::utils::break_nodes;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version,
@@ -289,30 +290,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         dfinity_owned_node.node_id,
         dfinity_owned_node.get_ip_addr()
     );
-    // Break faulty nodes by SSHing into them and breaking the replica binary.
-    info!(
-        logger,
-        "Breaking the NNS subnet by breaking the replica binary on f+1={} nodes",
-        f + 1
-    );
-    let ssh_command =
-        "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
-    for node in faulty_nodes {
-        info!(
-            logger,
-            "Breaking the replica on node {} ({:?})...",
-            node.node_id,
-            node.get_ip_addr()
-        );
 
-        node.block_on_bash_script(ssh_command).unwrap_or_else(|_| {
-            panic!(
-                "SSH command failed on node {} ({:?})",
-                node.node_id,
-                node.get_ip_addr()
-            )
-        });
-    }
+    break_nodes(faulty_nodes, &logger);
 
     info!(logger, "Ensure a healthy node still works in read mode");
     assert!(can_read_msg(

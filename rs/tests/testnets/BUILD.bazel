@@ -331,6 +331,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/limits",
         "//rs/recovery",
+        "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",

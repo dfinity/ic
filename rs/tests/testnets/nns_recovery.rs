@@ -30,6 +30,7 @@
 // Happy testing!
 
 use anyhow::Result;
+use ic_consensus_system_test_subnet_recovery::utils::break_nodes;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
     BACKUP_USERNAME, SetupConfig, grant_backup_access_to_all_nns_nodes,
@@ -180,22 +181,15 @@ fn log_instructions(env: TestEnv) {
         std::thread::sleep(Duration::from_secs(5));
     }
 
-    // Break faulty nodes by SSHing into them and breaking the replica binary.
-    info!(
-        logger,
-        "Breaking the subnet by breaking the replica binary on {} nodes", num_to_break
-    );
-    let ssh_command =
-        "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
-    for vm in env.get_all_nested_vms().unwrap().iter().take(num_to_break) {
-        let ip = vm.get_nested_network().unwrap().guest_ip;
-        info!(logger, "Breaking the replica on IP {ip}...",);
-
-        vm.get_guest_ssh()
+    break_nodes(
+        &env.get_all_nested_vms()
             .unwrap()
-            .block_on_bash_script(ssh_command)
-            .unwrap_or_else(|_| panic!("SSH command failed on IP {ip}",));
-    }
+            .iter()
+            .map(|vm| vm.get_guest_ssh().unwrap())
+            .take(num_to_break)
+            .collect::<Vec<_>>(),
+        &logger,
+    );
 
     info!(logger, "The subnet should now be broken.");
 }

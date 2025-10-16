@@ -28,6 +28,7 @@ Success::
 
 end::catalog[] */
 
+use crate::utils::break_nodes;
 use anyhow::bail;
 use candid::Principal;
 use canister_test::Canister;
@@ -504,10 +505,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         subnet_args,
     );
     if cfg.upgrade {
-        break_subnet(
-            &mut app_nodes,
-            cfg.subnet_size,
-            subnet_recovery.get_recovery_api(),
+        // Break f+1 nodes
+        let f = (cfg.subnet_size - 1) / 3;
+        break_nodes(
+            &Iterator::take(&mut app_nodes, f + 1).collect::<Vec<_>>(),
             &logger,
         );
     } else {
@@ -729,34 +730,6 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     match node.block_on_bash_script_from_session(session, &command) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
-    }
-}
-
-/// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
-/// nodes taken from the given iterator.
-fn break_subnet(
-    subnet: &mut dyn Iterator<Item = IcNodeSnapshot>,
-    subnet_size: usize,
-    recovery: &Recovery,
-    logger: &Logger,
-) {
-    // Let's take f+1 nodes and break them.
-    let f = (subnet_size - 1) / 3;
-    info!(
-        logger,
-        "Breaking the subnet by breaking the replica binary on f+1={} nodes",
-        f + 1
-    );
-
-    let faulty_nodes = subnet.take(f + 1).collect::<Vec<_>>();
-    for node in faulty_nodes {
-        // simulate subnet failure by breaking the replica process, but not the orchestrator
-        recovery
-            .execute_admin_ssh_command(
-                node.get_ip_addr(),
-                "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
-            )
-            .expect("couldn't run ssh command");
     }
 }
 
