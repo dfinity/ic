@@ -35,8 +35,6 @@ use std::sync::Arc;
 ///   `<=` payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
 ///
 /// It is advised to call the validation function after building the payload to be 100% sure.
-// [build_payload]: (BatchPayloadSectionBuilder::build_payload)
-// [validate_payload]: (BatchPayloadSectionBuilder::validate_payload)
 pub(crate) enum BatchPayloadSectionBuilder {
     Ingress(Arc<dyn IngressSelector>),
     XNet(Arc<dyn XNetPayloadBuilder>),
@@ -44,6 +42,14 @@ pub(crate) enum BatchPayloadSectionBuilder {
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
     QueryStats(Arc<dyn BatchPayloadBuilder>),
     VetKd(Arc<dyn BatchPayloadBuilder>),
+}
+
+/// Different types of payloads occupy different slots in a block, and their sizes/limits are counted separately.
+/// As of now, ingress payload is kept in its own slot and all the other payloads are kept in the other.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Slot {
+    Ingress,
+    Rest,
 }
 
 impl BatchPayloadSectionBuilder {
@@ -94,6 +100,17 @@ impl BatchPayloadSectionBuilder {
             Self::CanisterHttp(_) => "canister_http",
             Self::QueryStats(_) => "query_stats",
             Self::VetKd(_) => "vetkd",
+        }
+    }
+
+    pub(crate) fn slot(&self) -> Slot {
+        match self {
+            BatchPayloadSectionBuilder::Ingress(_) => Slot::Ingress,
+            BatchPayloadSectionBuilder::XNet(_)
+            | BatchPayloadSectionBuilder::SelfValidating(_)
+            | BatchPayloadSectionBuilder::CanisterHttp(_)
+            | BatchPayloadSectionBuilder::QueryStats(_)
+            | BatchPayloadSectionBuilder::VetKd(_) => Slot::Rest,
         }
     }
 

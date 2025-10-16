@@ -68,6 +68,7 @@ pub enum InvalidPayloadReason {
     InvalidVetKdPayload(InvalidVetKdPayloadReason),
     /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
+        slot_name: &'static str,
         expected: NumBytes,
         received: NumBytes,
     },
