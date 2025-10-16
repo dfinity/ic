@@ -10834,6 +10834,3 @@ fn parallel_callbacks() {
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert!(err.description().contains("trap in second callback"));
 }
-
-#[test]
-fn unreplied_update_call_commits_state_changes() {}

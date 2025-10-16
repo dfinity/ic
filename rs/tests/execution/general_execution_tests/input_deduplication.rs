@@ -108,9 +108,11 @@ pub fn input_deduplication_test(env: TestEnv) {
     });
 }
 
+/// Returns the ingress expiry used by IC agent:
+/// 3 minutes into the future from now.
 fn expiry_time() -> Duration {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
-        + Duration::from_secs(60)
+        + Duration::from_secs(3 * 60)
 }
