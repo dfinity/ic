@@ -28,7 +28,9 @@ Success::
 
 end::catalog[] */
 
-use crate::utils::{assert_subnet_is_broken, break_nodes};
+use crate::utils::{
+    assert_subnet_is_broken, break_nodes, node_with_highest_certification_share_height,
+};
 use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
@@ -51,7 +53,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    NodeMetrics, Recovery, RecoveryArgs,
+    Recovery, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     get_node_metrics,
     steps::Step,
@@ -512,10 +514,18 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     }
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
-    let download_node = select_download_node(&app_subnet, &logger);
+    let (download_node, highest_cert_share) =
+        node_with_highest_certification_share_height(&app_subnet, &logger);
+    info!(
+        logger,
+        "Selected download node {} ({:?}) with highest certification share height {}",
+        download_node.node_id,
+        download_node.get_ip_addr(),
+        highest_cert_share,
+    );
     let upload_node = if cfg.local_recovery {
         // In local recoveries, we download and upload from/to the same node
-        download_node.0.clone()
+        download_node.clone()
     } else {
         env.topology_snapshot()
             .unassigned_nodes()
@@ -525,8 +535,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     };
 
     subnet_recovery.params.download_method =
-        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
-    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
+        Some(DataLocation::Remote(download_node.get_ip_addr()));
+    subnet_recovery.params.replay_until_height = Some(highest_cert_share);
     subnet_recovery.params.upload_method = Some(DataLocation::Remote(upload_node.get_ip_addr()));
     subnet_recovery.params.wait_for_cup_node = Some(upload_node.get_ip_addr());
 
@@ -545,7 +555,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     } else {
         // In cases where we cannot deploy read-only access, we download the state & pool using
         // admin access instead of read-only, so we need admin access on the download node as well
-        vec![&upload_node, &download_node.0]
+        vec![&upload_node, &download_node]
     };
     info!(
         logger,
@@ -581,7 +591,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
-        local_recovery(&download_node.0, subnet_recovery, &logger);
+        local_recovery(&download_node, subnet_recovery, &logger);
     } else {
         info!(logger, "Performing remote recovery");
         remote_recovery(&cfg, subnet_recovery, &logger);
@@ -865,22 +875,6 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         .halt_subnet(subnet.subnet_id, false, &[])
         .exec()
         .expect("Failed to unhalt subnet.");
-}
-
-/// Select a node with highest certification height in the given subnet snapshot
-fn select_download_node(subnet: &SubnetSnapshot, logger: &Logger) -> (IcNodeSnapshot, NodeMetrics) {
-    let node = subnet
-        .nodes()
-        .filter_map(|n| block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| (n, m)))
-        .max_by_key(|(_, metric)| metric.certification_height)
-        .expect("No download node found");
-    info!(
-        logger,
-        "Selected download node: ({}, {})",
-        node.0.get_ip_addr(),
-        node.1.certification_height
-    );
-    node
 }
 
 /// Print ID and IP of the source subnet, the first app subnet found that is not the source, and all

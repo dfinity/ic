@@ -330,7 +330,6 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/limits",
-        "//rs/recovery",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",

@@ -2,7 +2,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::bail;
-use ic_consensus_system_test_subnet_recovery::utils::{assert_subnet_is_broken, break_nodes};
+use ic_consensus_system_test_subnet_recovery::utils::{
+    assert_subnet_is_broken, break_nodes, node_with_highest_certification_share_height,
+};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version,
@@ -16,7 +18,7 @@ use ic_consensus_system_test_utils::{
     upgrade::bless_replica_version,
 };
 use ic_recovery::{
-    RecoveryArgs, get_node_metrics,
+    RecoveryArgs,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     steps::CreateNNSRecoveryTarStep,
     util::DataLocation,
@@ -330,14 +332,15 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     // Download pool from the node with the highest certification share height
-    let (download_pool_node, highest_certification_share_height) = nns_subnet
-        .nodes()
-        .filter_map(|n| {
-            block_on(get_node_metrics(&logger, &n.get_ip_addr()))
-                .map(|m| (n, m.certification_share_height.get()))
-        })
-        .max_by_key(|&(_, cert_share_height)| cert_share_height)
-        .expect("No download node found");
+    let (download_pool_node, highest_cert_share) =
+        node_with_highest_certification_share_height(&nns_subnet, &logger);
+    info!(
+        logger,
+        "Selected node {} ({:?}) as download pool with certification share height {}",
+        download_pool_node.node_id,
+        download_pool_node.get_ip_addr(),
+        highest_cert_share,
+    );
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
@@ -357,7 +360,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
         add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
-        replay_until_height: Some(highest_certification_share_height),
+        replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
