@@ -46,7 +46,12 @@ pub fn query_stats_https_outcalls(env: TestEnv) {
     query_stats_fault_tolerance(env, single_https_outcall, 0..4, false)
 }
 
-fn query_stats_fault_tolerance(env: TestEnv, canister_call: impl AsyncFn(&Principal, &[Agent]) -> (), query_range: Range<usize>, expect_success: bool) {
+fn query_stats_fault_tolerance(
+    env: TestEnv,
+    canister_call: impl AsyncFn(&Principal, &[Agent]) -> (),
+    query_range: Range<usize>,
+    expect_success: bool,
+) {
     let logger = env.logger();
     let subnet = env
         .topology_snapshot()
