@@ -18,9 +18,15 @@ pub(crate) struct SshAccessParameters {
     pub subnet_id: Option<SubnetId>,
 }
 
+struct KeySets {
+    readonly: Vec<String>,
+    backup: Vec<String>,
+    recovery: Vec<String>,
+}
+
 /// Provides function to continuously check the Registry to determine if there
-/// has been a change in the readonly and backup public key sets.If so, updates
-/// the access to the node accordingly.
+/// has been a change in the readonly, backup or recovery public key sets. If so,
+/// updates the access to the node accordingly.
 pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
@@ -62,21 +68,20 @@ impl SshAccessManager {
             subnet_id
         );
 
-        let (new_readonly_keys, new_backup_keys) =
-            match self.get_readonly_and_backup_keysets(subnet_id, registry_version) {
-                Err(error) => {
-                    warn!(
-                        every_n_seconds => 300,
-                        self.logger,
-                        "Cannot retrieve the readonly & backup keysets from the registry {}", error
-                    );
-                    return;
-                }
-                Ok(keys) => keys,
-            };
+        let key_sets = match self.get_keysets(subnet_id, registry_version) {
+            Err(error) => {
+                warn!(
+                    every_n_seconds => 300,
+                    self.logger,
+                    "Cannot retrieve the readonly, backup or recovery keysets from the registry {}", error
+                );
+                return;
+            }
+            Ok(keys) => keys,
+        };
 
-        // Update the readonly & backup keys. If it fails, log why.
-        if self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
+        // Update the readonly, backup & recovery keys. If it fails, log why.
+        if self.update_access_keys(key_sets) {
             *self.last_applied_parameters.write().unwrap() = SshAccessParameters {
                 registry_version,
                 subnet_id,
@@ -91,7 +96,7 @@ impl SshAccessManager {
         Arc::clone(&self.last_applied_parameters)
     }
 
-    fn update_access_keys(&self, readonly_keys: &[String], backup_keys: &[String]) -> bool {
+    fn update_access_keys(&self, key_sets: KeySets) -> bool {
         let update = |account, keys| {
             self.update_access_to_one_account(account, keys)
                 .map_err(|e| {
@@ -103,8 +108,10 @@ impl SshAccessManager {
                 })
                 .is_ok()
         };
-        let result = update("readonly", readonly_keys);
-        update("backup", backup_keys) && result
+        let readonly_result = update("readonly", &key_sets.readonly);
+        let backup_result = update("backup", &key_sets.backup);
+        let recovery_result = update("recovery", &key_sets.recovery);
+        readonly_result && backup_result && recovery_result
     }
 
     // If `keys` is empty, pre-existing keys will be deleted
@@ -132,12 +139,13 @@ impl SshAccessManager {
         }
     }
 
-    fn get_readonly_and_backup_keysets(
+    fn get_keysets(
         &self,
         subnet_id: Option<SubnetId>,
         version: RegistryVersion,
-    ) -> OrchestratorResult<(Vec<String>, Vec<String>)> {
-        match subnet_id {
+    ) -> OrchestratorResult<KeySets> {
+        let ssh_recovery_access = self.registry.get_ssh_recovery_access(version)?;
+        let (ssh_readonly_access, ssh_backup_access) = match subnet_id {
             None => match self
                 .registry
                 .get_api_boundary_node_record(self.node_id, version)
@@ -167,6 +175,11 @@ impl SshAccessManager {
                         )
                     })
             }
-        }
+        }?;
+        Ok(KeySets {
+            readonly: ssh_readonly_access,
+            backup: ssh_backup_access,
+            recovery: ssh_recovery_access,
+        })
     }
 }
