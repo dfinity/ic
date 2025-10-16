@@ -12,8 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled, is_neuron_follow_restrictions_enabled,
-    is_set_subnet_operational_level_enabled,
+    is_neuron_follow_restrictions_enabled, is_set_subnet_operational_level_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -8386,9 +8385,7 @@ fn record_known_neuron_abstentions(
 ) {
     // TODO(NNS1-4227): clean up `first_proposal_id_to_record_voting_history` after all proposals
     // before this id have votes finalized.
-    if is_known_neuron_voting_history_enabled()
-        && proposal_id >= first_proposal_id_to_record_voting_history
-    {
+    if proposal_id >= first_proposal_id_to_record_voting_history {
         for known_neuron_id in known_neuron_ids {
             if let Some(ballot) = ballots.get(&known_neuron_id.id)
                 && ballot.vote() == Vote::Unspecified
