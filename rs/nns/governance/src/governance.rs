@@ -12,7 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled,
+    is_comprehensive_neuron_list_enabled, is_known_neuron_voting_history_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -3519,6 +3519,10 @@ impl Governance {
         req: GetNeuronIndexRequest,
         requester: PrincipalId,
     ) -> Result<NeuronIndexData, GovernanceError> {
+        if !is_comprehensive_neuron_list_enabled() {
+            return Ok(NeuronIndexData { neurons: vec![] });
+        }
+
         let now = self.env.now();
 
         let exclusive_start_id = req.exclusive_start_neuron_id.unwrap_or(NeuronId { id: 0 });
