@@ -1228,6 +1228,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         ic_nervous_system_common::total_memory_size_bytes() as f64,
         "Size of the total memory allocated by this canister measured in bytes.",
     )?;
+    w.encode_gauge(
+        "registry_latest_version",
+        registry().latest_version() as f64,
+        "The current latest version of the registry.",
+    )?;
 
     Ok(())
 }

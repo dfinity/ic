@@ -387,8 +387,7 @@ impl ExecutionEnvironment {
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
-            config.deterministic_time_slicing == FlagStatus::Disabled
-                || config.canister_sandboxing_flag == FlagStatus::Enabled,
+            config.canister_sandboxing_flag == FlagStatus::Enabled,
             "Deterministic time slicing works only with canister sandboxing."
         );
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
@@ -806,6 +805,7 @@ impl ExecutionEnvironment {
                             msg.canister_change_origin(args.get_sender_canister_version()),
                             args.get_canister_id(),
                             &mut state,
+                            round_limits,
                             &self.metrics.canister_not_found_error,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
@@ -1805,7 +1805,7 @@ impl ExecutionEnvironment {
                 let res = RenameCanisterArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
-                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                    self.rename_canister(*msg.sender(), &mut state, round_limits, args, origin)
                         .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
@@ -2041,7 +2041,6 @@ impl ExecutionEnvironment {
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
                 let instruction_limits = InstructionLimits::new(
-                    FlagStatus::Enabled,
                     max_instructions_per_message_without_dts,
                     instruction_limits.slice(),
                 );
@@ -2661,6 +2660,7 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
         args: RenameCanisterArgs,
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
@@ -2691,6 +2691,7 @@ impl ExecutionEnvironment {
                 to_version,
                 to_total_num_changes,
                 state,
+                round_limits,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
@@ -3017,7 +3018,6 @@ impl ExecutionEnvironment {
         // An inspect message is expected to finish quickly, so DTS is not
         // supported for it.
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.config.max_instructions_for_message_acceptance_calls,
             self.config.max_instructions_for_message_acceptance_calls,
         );

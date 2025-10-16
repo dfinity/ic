@@ -8,19 +8,13 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
-
-* Record votes by known neurons before clearing ballots.
-* Allow updating known neuron through RegisterKnownNeuron without having to change its name.
+* Introduces two new proposals called `PauseCanisterMigrations` and `UnpauseCanisterMigrations`.
 
 ## Changed
-
-* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
-  limit.
+* Following private neurons has changed. A private neuron P can be followed by another neuron N, if either they share a controller or N's controller is listed as P's hotkey.
+Following private neurons on the topic `NeuronManagement` is not a subject of this limitation. Furthermore, following public neurons is always allowed.
 
 ## Deprecated
-
-* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
-  instead).
 
 ## Removed
 

@@ -3,6 +3,8 @@ This package provides a stable version of the TLA+ tools.
 Visit https://github.com/tlaplus/tlaplus/releases if you need to update the jar file.
 """
 
+load("@rules_java//java:java_import.bzl", "java_import")
+
 package(default_visibility = ["//visibility:public"])
 
 # NOTE: we committed the jar to the repo because version 1.8.0 is

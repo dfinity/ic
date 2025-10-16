@@ -7,7 +7,7 @@ use crate::eth_rpc::Topic;
 use crate::numeric::BlockNumber;
 use crate::state::State;
 use crate::state::eth_logs_scraping::LogScrapingId;
-use evm_rpc_client::Hex32;
+use evm_rpc_types::Hex32;
 use ic_ethereum_types::Address;
 use std::iter::once;
 

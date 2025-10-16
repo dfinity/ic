@@ -63,6 +63,7 @@ fn all_icp_features() -> IcpFeatures {
         sns: Some(IcpFeaturesConfig::DefaultConfig),
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
+        bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }
 
@@ -557,7 +558,9 @@ fn test_cycles_ledger() {
         )
         .unwrap()
         .0;
-        assert_eq!(balance, expected_index_balance);
+        // TODO: Once https://github.com/dfinity/ic/pull/6508 is on mainnet we can remove
+        // `expected_index_balance` param and only compare against `expected_ledger_balance`.
+        assert!(balance == expected_index_balance || balance == expected_ledger_balance);
     };
     let check_cycles = |expected: u128| {
         let actual = pic.cycle_balance(canister_id);

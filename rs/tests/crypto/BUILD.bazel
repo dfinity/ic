@@ -33,9 +33,6 @@ system_test(
     env = {
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
     },
-    tags = [
-        "k8s",
-    ],
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + II_DEV_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
@@ -43,9 +40,6 @@ system_test(
 system_test(
     name = "request_signature_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
@@ -53,41 +47,26 @@ system_test(
 system_test(
     name = "rpc_csp_vault_reconnection_test",
     env = MESSAGE_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_csp_metrics_test",
-    tags = [
-        "k8s",
-    ],
     deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_csp_socket_test",
-    tags = [
-        "k8s",
-    ],
     deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_csp_umask_test",
-    tags = [
-        "k8s",
-    ],
     deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_fstrim_tool_test",
-    tags = [
-        "k8s",
-    ],
     deps = DEPENDENCIES,
 )
