@@ -11,9 +11,9 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/types/management_canister_types",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
