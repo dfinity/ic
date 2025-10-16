@@ -1,10 +1,9 @@
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::bail;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
-    node::await_subnet_earliest_topology_version,
+    node::await_subnet_earliest_topology_version_with_retries,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
     },
