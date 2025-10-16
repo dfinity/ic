@@ -8,15 +8,11 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
-
-* Record votes by known neurons before clearing ballots.
+* Introduces two new proposals called `PauseCanisterMigrations` and `UnpauseCanisterMigrations`.
 
 ## Changed
 
 ## Deprecated
-
-* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
-  instead).
 
 ## Removed
 

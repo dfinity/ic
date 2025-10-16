@@ -78,7 +78,8 @@ pub fn add_wasm(
         "add_wasm",
         Encode!(&AddWasmRequest {
             hash: hash.to_vec(),
-            wasm: Some(wasm)
+            wasm: Some(wasm),
+            skip_update_latest_version: Some(false),
         })
         .unwrap(),
     )
@@ -161,6 +162,7 @@ pub fn add_wasm_via_proposal_and_return_immediately(env: &StateMachine, wasm: Sn
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
         wasm: Some(wasm.clone()),
+        skip_update_latest_version: Some(false),
     };
 
     let proposal = Proposal {

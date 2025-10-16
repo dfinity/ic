@@ -3,10 +3,12 @@ Bare metal utility functions. Use this macro to define a target to launch an OS 
 """
 
 load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 def launch_bare_metal(name, image_zst_file):
     binary_name = name + "_main"
-    native.py_binary(
+    py_binary(
         name = binary_name,
         srcs = ["//ic-os/dev-tools/bare_metal_deployment:deploy.py"],
         main = "//ic-os/dev-tools/bare_metal_deployment:deploy.py",
@@ -22,8 +24,7 @@ def launch_bare_metal(name, image_zst_file):
         ],
         tags = ["manual"],
     )
-
-    native.sh_binary(
+    sh_binary(
         name = name,
         srcs = ["//toolchains/sysimage:proc_wrapper.sh"],
         args = [

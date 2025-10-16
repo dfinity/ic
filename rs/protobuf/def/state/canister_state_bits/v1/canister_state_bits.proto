@@ -18,6 +18,10 @@ message CallContext {
     types.v1.UserId user_id = 1;
     bytes message_id = 2;
   }
+  message Query {
+    types.v1.UserId user_id = 1;
+    string method_name = 2;
+  }
   message CanisterUpdateOrQuery {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;
@@ -33,6 +37,7 @@ message CallContext {
     types.v1.UserId query = 3;
     CanisterUpdateOrQuery canister_query = 4;
     SystemTask system_task = 7;
+    Query user_query = 12;
   }
   bool responded = 5;
   state.queues.v1.Funds available_funds = 6;

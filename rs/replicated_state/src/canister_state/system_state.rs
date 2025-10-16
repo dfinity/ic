@@ -186,9 +186,9 @@ impl CanisterHistory {
     }
 
     /// Adds a canister change to the history, updating the memory usage
-    /// and total number of changes. It also makes sure that the number
-    /// of canister changes does not exceed `MAX_CANISTER_HISTORY_CHANGES`
-    /// by dropping the oldest entry if necessary.
+    /// of canister history tracked internally and the total number of changes.
+    /// It also makes sure that the number of canister changes does not exceed
+    /// `MAX_CANISTER_HISTORY_CHANGES` by dropping the oldest entry if necessary.
     pub fn add_canister_change(&mut self, canister_change: CanisterChange) {
         let changes = Arc::make_mut(&mut self.changes);
         if changes.len() >= MAX_CANISTER_HISTORY_CHANGES as usize {

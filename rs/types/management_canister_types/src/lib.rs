@@ -1579,6 +1579,10 @@ impl CanisterStatusResultV2 {
         self.reserved_cycles.0.to_u128().unwrap()
     }
 
+    pub fn environment_variables(&self) -> &[EnvironmentVariable] {
+        &self.settings.environment_variables
+    }
+
     pub fn settings(&self) -> DefiniteCanisterSettingsArgs {
         self.settings.clone()
     }
@@ -3348,6 +3352,7 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 #[strum(serialize_all = "snake_case")]
 pub enum QueryMethod {
     FetchCanisterLogs,
+    CanisterStatus,
 }
 
 /// `CandidType` for `SubnetInfoArgs`

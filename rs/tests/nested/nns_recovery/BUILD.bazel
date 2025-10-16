@@ -98,7 +98,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nr_remote",
+    name = "nr_no_bless",
     env = ENV,
     flaky = True,
     tags = ["long_test"],

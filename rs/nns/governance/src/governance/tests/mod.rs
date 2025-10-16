@@ -1568,7 +1568,7 @@ fn test_update_neuron_errors_out_expectedly() {
     governance.add_neuron(1, neuron).unwrap();
 
     assert_eq!(
-        governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default())),
+        governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default(), false)),
         Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!("Cannot change the subaccount {neuron_subaccount} of a neuron."),
@@ -1836,17 +1836,30 @@ fn test_record_known_neuron_abstentions() {
             3 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
             4 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
         },
+        ProposalId { id: 0 },
     );
 
     with_voting_history_store(|voting_history| {
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 1 }),
+            voting_history.list_neuron_votes(NeuronId { id: 1 }, None, Some(100)),
             vec![(ProposalId { id: 1 }, Vote::Unspecified)]
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 2 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 3 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 2 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 3 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 4 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 5 }, None, Some(100)),
+            vec![]
+        );
     });
 
     record_known_neuron_abstentions(
@@ -1857,19 +1870,104 @@ fn test_record_known_neuron_abstentions() {
             3 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
             4 => Ballot { voting_power: 1, vote: Vote::No as i32 },
         },
+        ProposalId { id: 0 },
     );
 
     with_voting_history_store(|voting_history| {
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 1 }),
+            voting_history.list_neuron_votes(NeuronId { id: 1 }, None, Some(100)),
             vec![(ProposalId { id: 1 }, Vote::Unspecified),]
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 2 }), vec![]);
         assert_eq!(
-            voting_history.list_neuron_votes(NeuronId { id: 3 }),
+            voting_history.list_neuron_votes(NeuronId { id: 2 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 3 }, None, Some(100)),
             vec![(ProposalId { id: 2 }, Vote::Unspecified)]
         );
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 4 }), vec![]);
-        assert_eq!(voting_history.list_neuron_votes(NeuronId { id: 5 }), vec![]);
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 4 }, None, Some(100)),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 5 }, None, Some(100)),
+            vec![]
+        );
+    });
+}
+
+#[test]
+fn test_record_known_neuron_abstentions_filters_by_first_proposal_id() {
+    let _t = temporarily_enable_known_neuron_voting_history();
+
+    // Record abstentions for proposal 1 with threshold at proposal 5
+    // These should NOT be recorded because proposal_id (1) < threshold (5)
+    record_known_neuron_abstentions(
+        &[NeuronId { id: 1 }, NeuronId { id: 2 }],
+        ProposalId { id: 1 },
+        hashmap! {
+            1 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+            2 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        },
+        ProposalId { id: 5 },
+    );
+
+    with_voting_history_store(|voting_history| {
+        // Should not be recorded because proposal 1 < threshold 5
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 1 }, None, None),
+            vec![]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 2 }, None, None),
+            vec![]
+        );
+    });
+
+    // Record abstentions for proposal 5 (equal to threshold)
+    // These SHOULD be recorded because proposal_id (5) >= threshold (5)
+    record_known_neuron_abstentions(
+        &[NeuronId { id: 1 }, NeuronId { id: 2 }],
+        ProposalId { id: 5 },
+        hashmap! {
+            1 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+            2 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        },
+        ProposalId { id: 5 },
+    );
+
+    with_voting_history_store(|voting_history| {
+        // Should be recorded because proposal 5 >= threshold 5
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 1 }, None, None),
+            vec![(ProposalId { id: 5 }, Vote::Unspecified)]
+        );
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 2 }, None, None),
+            vec![(ProposalId { id: 5 }, Vote::Unspecified)]
+        );
+    });
+
+    // Record abstentions for proposal 10 (greater than threshold)
+    // These SHOULD be recorded because proposal_id (10) >= threshold (5)
+    record_known_neuron_abstentions(
+        &[NeuronId { id: 1 }],
+        ProposalId { id: 10 },
+        hashmap! {
+            1 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        },
+        ProposalId { id: 5 },
+    );
+
+    with_voting_history_store(|voting_history| {
+        // Should have both proposal 5 and 10 (in descending order - most recent first)
+        assert_eq!(
+            voting_history.list_neuron_votes(NeuronId { id: 1 }, None, None),
+            vec![
+                (ProposalId { id: 10 }, Vote::Unspecified),
+                (ProposalId { id: 5 }, Vote::Unspecified)
+            ]
+        );
     });
 }

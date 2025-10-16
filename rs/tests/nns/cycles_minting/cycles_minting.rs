@@ -340,6 +340,18 @@ impl TestAgent {
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
     }
 
+    pub async fn query(
+        &self,
+        canister_id: &CanisterId,
+        method: &str,
+        arg: Vec<u8>,
+    ) -> Result<Vec<u8>, String> {
+        self.agent
+            .execute_query(canister_id, method, arg)
+            .await?
+            .ok_or_else(|| "Reply payload was empty".to_string())
+    }
+
     pub async fn get_block(&self, h: BlockIndex) -> Result<Option<Block>, String> {
         match self
             .query_pb(&LEDGER_CANISTER_ID, "block_pb", BlockArg(h))
