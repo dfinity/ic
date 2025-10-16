@@ -936,6 +936,16 @@ http_archive(
     urls = ["https://github.com/llvm/llvm-project/archive/refs/tags/llvmorg-20.1.0.tar.gz"],
 )
 
+http_archive(
+    name = "jemalloc",
+    build_file = "@//third_party:BUILD.jemalloc.bazel",
+    sha256 = "ef6f74fd45e95ee4ef7f9e19ebe5b075ca6b7fbe0140612b2a161abafb7ee179",
+    strip_prefix = "jemalloc-5.3.0",
+    urls = [
+        "https://github.com/jemalloc/jemalloc/archive/refs/tags/5.3.0.tar.gz",
+    ],
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
