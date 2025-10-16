@@ -144,6 +144,14 @@ pub fn query_stats_https_outcalls(env: TestEnv) {
 
         wait_until_next_epoch(&subnet, &logger);
 
+        single_https_outcall(&uc_id, &agents[query_range.clone()]).await;
+        info!(logger, "Performed an HTTPS outcall");
+        wait_until_next_epoch(&subnet, &logger);
+
+        single_https_outcall(&uc_id, &agents[query_range.clone()]).await;
+        info!(logger, "Performed an HTTPS outcall");
+        wait_until_next_epoch(&subnet, &logger);
+
         let query_stats = ManagementCanister::create(agents.first().unwrap())
             .canister_status(&uc_id)
             .call_and_wait()
