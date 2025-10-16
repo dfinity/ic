@@ -32,11 +32,9 @@ message CallContext {
   }
   // System task is either a Heartbeat or a GlobalTimer.
   message SystemTask {}
-
   // deprecated types.v1.UserId query
-  reserved 3; 
+  reserved 3;
   reserved "query";
-  
   oneof call_origin {
     Ingress ingress = 1;
     CanisterUpdateOrQuery canister_update = 2;
