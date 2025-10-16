@@ -204,9 +204,7 @@ impl TryFrom<Value> for IcrcBlock {
 
     fn try_from(value: Value) -> anyhow::Result<Self> {
         // The base of all fields is a BTreeMap that holds all the other fields from the ICRC-3 standard
-        let map = value
-            .as_map()
-            .map_err(|err| anyhow!("Top level element should be a map: {:?}", err))?;
+        let map = value.as_map().map_err(|err| anyhow!("{:?}", err))?;
 
         // Now we can try to extract every field that corresponds to a Block object from the map
         let parent_hash = get_opt_field::<Vec<u8>>(&map, &[], "phash")?
@@ -215,10 +213,10 @@ impl TryFrom<Value> for IcrcBlock {
                     .map_err(|_| anyhow!("phash should be 32 bytes"))
             })
             .transpose()?;
-        let timestamp = get_field::<u64>(&map, &[], "invalid 'ts'")?;
-        let effective_fee = get_opt_field::<Nat>(&map, &[], "invalid 'fee'")?;
-        let fee_collector = get_opt_field::<Account>(&map, &[], "invalid 'fee_col'")?;
-        let fee_collector_block_index = get_opt_field::<u64>(&map, &[], "invalid 'fee_col_block'")?;
+        let timestamp = get_field::<u64>(&map, &[], "ts")?;
+        let effective_fee = get_opt_field::<Nat>(&map, &[], "fee")?;
+        let fee_collector = get_opt_field::<Account>(&map, &[], "fee_col")?;
+        let fee_collector_block_index = get_opt_field::<u64>(&map, &[], "fee_col_block")?;
         let transaction = map.get("tx").ok_or(anyhow!("Missing field 'tx'"))?.clone();
         let transaction = IcrcTransaction::try_from(transaction)?;
 
