@@ -571,7 +571,14 @@ async fn fetch_blocks_interval(
                     + index as u64;
                 fetched_blocks_result.insert(
                     block_index,
-                    Some(RosettaBlock::from_generic_block(block, block_index)?),
+                    Some(
+                        RosettaBlock::from_generic_block(block, block_index).map_err(|e| {
+                            let old_context = e.to_string();
+                            e.context(format!(
+                                "Failed to parse block at index {block_index}: {old_context}"
+                            ))
+                        })?,
+                    ),
                 );
             }
 
