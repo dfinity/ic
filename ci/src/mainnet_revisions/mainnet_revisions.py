@@ -28,8 +28,8 @@ class VersionInfo:
     version: str
     hash: str
     dev_hash: str
-    launch_measurements: str
-    dev_measurements: str
+    launch_measurements: dict
+    dev_measurements: dict
 
 
 def sync_main_branch_and_checkout_branch(
@@ -347,7 +347,7 @@ def download_and_read_file(url: str):
     with tempfile.NamedTemporaryFile() as tmp_file:
         urllib.request.urlretrieve(url, tmp_file.name)
         with open(tmp_file.name, "rb") as f:
-            return f.read()
+            return json.loads(f.read().decode())
 
 
 def get_logger(level) -> logging.Logger:
