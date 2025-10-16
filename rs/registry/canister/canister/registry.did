@@ -496,7 +496,7 @@ type NodeSshAccess = record {
   node_id : opt principal;
 
   // Doesn't make sense without this. (opt for future compatibility.)
-  public_key : opt vec text;
+  public_keys : opt vec text;
 };
 
 service : {

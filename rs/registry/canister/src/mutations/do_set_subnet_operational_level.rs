@@ -22,5 +22,5 @@ pub struct SetSubnetOperationalLevelPayload {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct NodeSshAccess {
     node_id: Option<NodeId>,
-    public_key: Option<Vec<String>>,
+    public_keys: Option<Vec<String>>,
 }
