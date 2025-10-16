@@ -9,6 +9,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "//packages/ic-error-types",
     "//rs/config",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/http_endpoints/nns_delegation_manager",
     "//rs/http_endpoints/public",
     "//rs/interfaces",
