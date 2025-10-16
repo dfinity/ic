@@ -6317,7 +6317,6 @@ dependencies = [
  "ic-types",
  "indexmap 2.10.0",
  "itertools 0.12.1",
- "k256 0.13.4",
  "maplit",
  "pocket-ic",
  "pretty_assertions",

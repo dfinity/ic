@@ -111,7 +111,6 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_nns_data_provider_wrappers::{CertifiedNnsDataProvider, NnsDataProvider};
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations as OtherCanisterMigrations};
 use ic_registry_transport::Error;
-use ic_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
@@ -4023,11 +4022,11 @@ async fn main() {
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
 
             // Try to parse as Ed25519 (BasicIdentity) first
-            if let Ok(identity) = BasicIdentity::from_pem(&contents) {
+            if let Ok(identity) = BasicIdentity::from_pem(contents.as_bytes()) {
                 Arc::new(identity)
             }
             // Try to parse as Secp256k1 with RFC 5915 format (EC PRIVATE KEY)
-            else if let Ok(identity) = Secp256k1Identity::from_pem(&contents) {
+            else if let Ok(identity) = Secp256k1Identity::from_pem(contents.as_bytes()) {
                 Arc::new(identity)
             } else {
                 panic!(
