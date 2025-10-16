@@ -23,9 +23,10 @@ exports_files(
 )
 
 canister_test_did(
-    name = "canister/governance_test.did",
+    name = "test_did",
     canister_did = "canister/governance.did",
     canister_test_did_patch = "canister/governance_test.did.patch",
+    output_path = "canister/governance_test.did",
 )
 
 # Allows temporarily disabling TLA checks from the command line;
@@ -282,13 +283,13 @@ rust_canister(
         "canister/tla_ledger.rs",
     ],
     aliases = ALIASES,
-    compile_data = [":canister/governance_test.did"],
+    compile_data = [":test_did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + [
         "//rs/tla_instrumentation:proc_macros",
     ],
-    service_file = ":canister/governance_test.did",
+    service_file = ":test_did",
     visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
