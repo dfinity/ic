@@ -11,11 +11,11 @@
 //!  - Add downloaded chunk to state.
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.
-use crate::utils::PeerState;
-use crate::{metrics::OngoingStateSyncMetrics, utils::XorDistance};
 use crate::{
+    metrics::OngoingStateSyncMetrics,
+    ongoing::chunks_to_download::ChunksToDownload,
     routes::{build_chunk_handler_request, parse_chunk_handler_response},
-    utils::ChunksToDownload,
+    utils::{PeerState, XorDistance},
 };
 use ic_base_types::NodeId;
 use ic_http_endpoints_async_utils::JoinMap;
@@ -39,6 +39,8 @@ use tokio::{
     sync::mpsc::{Receiver, Sender},
 };
 use tokio_util::sync::CancellationToken;
+
+mod chunks_to_download;
 
 // TODO: NET-1461 find appropriate value for the parallelism
 const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
