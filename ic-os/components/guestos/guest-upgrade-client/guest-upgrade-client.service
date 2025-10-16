@@ -1,0 +1,18 @@
+[Unit]
+Description=Guest Upgrade Client - Disk Encryption Key Exchange
+DefaultDependencies=no
+After=init-config.service
+Requires=init-config.service
+RequiresMountsFor=/var
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/guest_upgrade_client
+TimeoutSec=300
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=local-fs.target
+
