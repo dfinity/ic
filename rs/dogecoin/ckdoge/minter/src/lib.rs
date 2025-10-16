@@ -21,7 +21,7 @@ pub use dogecoin_canister::get_dogecoin_canister_id;
 pub use ic_ckbtc_minter::{
     OutPoint, Page, Txid, Utxo,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
-    state::eventlog::{Event, EventType, GetEventsArg, },
+    state::eventlog::{Event, EventType, GetEventsArg},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 
