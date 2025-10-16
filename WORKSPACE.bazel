@@ -6,7 +6,6 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
-load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
@@ -191,8 +190,6 @@ rules_motoko_dependencies()
 lmdb_repository()
 
 jemalloc_repository()
-
-libfuzzer_repository()
 
 # Rosetta CLI
 
