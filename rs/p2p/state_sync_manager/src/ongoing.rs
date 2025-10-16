@@ -22,14 +22,10 @@ use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_quic_transport::{Shutdown, Transport};
-use rand::SeedableRng;
-use rand::distributions::WeightedIndex;
-use rand::prelude::Distribution;
-use rand::rngs::SmallRng;
-use std::sync::RwLock;
+use rand::{SeedableRng, distributions::WeightedIndex, prelude::Distribution, rngs::SmallRng};
 use std::{
     collections::{HashMap, hash_map::Entry},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 use thiserror::Error;
@@ -53,7 +49,6 @@ struct OngoingStateSync {
     artifact_id: StateSyncArtifactId,
     metrics: OngoingStateSyncMetrics,
     transport: Arc<dyn Transport>,
-    node_id: NodeId,
     // Peer management
     new_peers_rx: Receiver<(NodeId, Option<XorDistance>)>,
     // Peers that advertised state and the number of outstanding chunk downloads to that peer.
@@ -96,10 +91,9 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         artifact_id: artifact_id.clone(),
         metrics,
         transport,
-        node_id,
         new_peers_rx,
         peer_state: HashMap::new(),
-        chunks_to_download: ChunksToDownload::new(&log),
+        chunks_to_download: ChunksToDownload::new(node_id, artifact_id.clone(), &log),
         partial_state: partial_state.clone(),
         is_base_layer: false,
         downloading_chunks: JoinMap::new(),
@@ -282,7 +276,7 @@ impl OngoingStateSync {
                     );
                 }
                 None => {
-                    if self.chunks_to_download.num_entries() != 0 {
+                    if !self.chunks_to_download.is_empty() {
                         break;
                     }
 
@@ -294,12 +288,7 @@ impl OngoingStateSync {
                         .chunks_to_download()
                         .filter(|chunk| !self.downloading_chunks.contains(chunk));
 
-                    let added = self.chunks_to_download.add_chunks(
-                        self.node_id,
-                        self.artifact_id.clone(),
-                        chunks_to_download,
-                    );
-
+                    let added = self.chunks_to_download.add_chunks(chunks_to_download);
                     if added != 0 {
                         info!(
                             self.log,
