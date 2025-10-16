@@ -278,6 +278,7 @@ rust_canister(
 
 rust_canister(
     name = "governance-canister-test",
+    testonly = True,
     srcs = [
         "canister/canister.rs",
         "canister/tla_ledger.rs",
