@@ -316,6 +316,7 @@ enum CspVaultMethod {
     CreateSchnorrSigShare,
     CreateEncryptedVetKdKeyShare,
     NewPublicSeed,
+    DummyResponse,
 }
 
 impl CspVaultMethod {
@@ -394,6 +395,7 @@ impl CspVaultMethod {
                 (MetricsDomain::VetKd, "create_encrypted_vetkd_key_share")
             }
             CspVaultMethod::NewPublicSeed => (MetricsDomain::PublicSeed, "new_public_seed"),
+            CspVaultMethod::DummyResponse => (MetricsDomain::DummyResponse, "dummy_response"),
         }
     }
 }
@@ -434,6 +436,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
             Req::CreateEncryptedVetkdKeyShare { .. } => Method::CreateEncryptedVetKdKeyShare,
             Req::NewPublicSeed { .. } => Method::NewPublicSeed,
+            Req::DummyResponse { .. } => Method::DummyResponse,
         }
     }
 }
@@ -474,6 +477,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
             Resp::CreateEncryptedVetkdKeyShare { .. } => Method::CreateEncryptedVetKdKeyShare,
             Resp::NewPublicSeed { .. } => Method::NewPublicSeed,
+            Resp::DummyResponse { .. } => Method::DummyResponse,
         }
     }
 }

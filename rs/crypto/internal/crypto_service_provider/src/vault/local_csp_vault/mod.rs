@@ -1,5 +1,6 @@
 mod basic_sig;
 pub mod builder;
+mod dummy_response;
 mod idkg;
 mod multi_sig;
 mod ni_dkg;

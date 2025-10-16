@@ -366,6 +366,7 @@ pub enum MetricsDomain {
     VetKd,
     PublicSeed,
     KeyManagement,
+    DummyResponse,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]

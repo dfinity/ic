@@ -389,6 +389,7 @@ pub trait CspVault:
     + PublicRandomSeedGenerator
     + PublicAndSecretKeyStoreCspVault
     + PublicKeyStoreCspVault
+    + DummySizedRandomResponseGenerator
 {
 }
 
@@ -408,6 +409,7 @@ impl<T> CspVault for T where
         + PublicRandomSeedGenerator
         + PublicAndSecretKeyStoreCspVault
         + PublicKeyStoreCspVault
+        + DummySizedRandomResponseGenerator
 {
 }
 
@@ -1089,4 +1091,10 @@ pub trait PublicRandomSeedGenerator {
     /// any use cases where the security relies on keeping the randomness secret, e.g.,
     /// generation of cryptographic keys.
     fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError>;
+}
+
+/// Operations of [`CspVault`] for generating public random seed.
+pub trait DummySizedRandomResponseGenerator {
+    fn dummy_response(&self, input: Vec<u8>, response_size_bytes: usize)
+    -> Result<Vec<u8>, String>;
 }
