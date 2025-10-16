@@ -13,7 +13,6 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HASH_LENGTH;
 use ic_ledger_hash_of::HashOf;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use prost::Message;
@@ -52,6 +51,23 @@ pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 pub const MEMO_SIZE_BYTES: usize = 32;
 
 pub const MAX_TAKE_ALLOWANCES: u64 = 500;
+
+pub const GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 1;
+pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
+pub const ROOT_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 3;
+pub const LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 11;
+
+/// 1: rrkah-fqaaa-aaaaa-aaaaq-cai
+pub const GOVERNANCE_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 2: ryjl3-tyaaa-aaaaa-aaaba-cai
+pub const LEDGER_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 3: r7inp-6aaaa-aaaaa-aaabq-cai
+pub const ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(ROOT_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 11: qhbym-qaaaa-aaaaa-aaafq-cai
+pub const LEDGER_INDEX_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
