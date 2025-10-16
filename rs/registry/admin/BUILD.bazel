@@ -94,7 +94,6 @@ rust_binary(
         "@crate_index//:ic-identity-hsm",
         "@crate_index//:indexmap",
         "@crate_index//:itertools",
-        "@crate_index//:k256",
         "@crate_index//:maplit",
         "@crate_index//:prost",
         "@crate_index//:serde",
