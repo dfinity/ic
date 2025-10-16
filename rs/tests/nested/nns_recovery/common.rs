@@ -125,10 +125,12 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
-    await_subnet_earliest_topology_version(
+    await_subnet_earliest_topology_version_with_retries(
         &nns_subnet,
         new_topology.get_registry_version(),
         &logger,
+        secs(15 * 60),
+        secs(15),
     );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 }
