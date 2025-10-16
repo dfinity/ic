@@ -805,20 +805,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
                 default_features = False,
             ),
-            "k8s-openapi": crate.spec(
-                version = "^0.22.0",
-                features = [
-                    "v1_28",
-                    "schemars",
-                ],
-            ),
-            "kube": crate.spec(
-                version = "^0.94.0",
-                features = [
-                    "client",
-                    "derive",
-                ],
-            ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
             ),

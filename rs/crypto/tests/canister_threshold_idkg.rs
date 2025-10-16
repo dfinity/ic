@@ -2104,24 +2104,22 @@ mod load_transcript_with_openings {
                 &key_transcript,
                 rng,
             );
-            let inputs = {
-                let derivation_path = ExtendedDerivationPath {
-                    caller: PrincipalId::new_user_test_id(1),
-                    derivation_path: vec![],
-                };
+            let caller = PrincipalId::new_user_test_id(1);
+            let derivation_path = vec![];
 
-                let hashed_message = rng.r#gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
+            let hashed_message = rng.r#gen::<[u8; 32]>();
+            let seed = rng.r#gen::<[u8; 32]>();
 
-                ThresholdEcdsaSigInputs::new(
-                    &derivation_path,
-                    &hashed_message,
-                    seed,
-                    quadruple,
-                    key_transcript.clone(),
-                )
-                .expect("failed to create signature inputs")
-            };
+            let inputs = ThresholdEcdsaSigInputs::new(
+                &caller,
+                &derivation_path,
+                &hashed_message,
+                &seed,
+                &quadruple,
+                &key_transcript,
+            )
+            .expect("failed to create signature inputs");
+
             complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_unmasked());
             complainer.load_transcript_or_panic(inputs.presig_quadruple().lambda_masked());
             complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());

@@ -115,14 +115,14 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 () = cancellation.cancelled() => {
                     break;
                 }
+                Some(_) = advertise_task.join_next() => {}
+                Some((advert, peer_id)) = self.advert_receiver.recv() => {
+                    self.handle_advert(advert, peer_id, transport.clone()).await;
+                }
                 // Make sure we only have one active advertise task.
                 _ = interval.tick(), if advertise_task.is_empty() => {
                   self.send_adverts(&mut advertise_task, cancellation.clone(), transport.clone()).await;
                 },
-                Some((advert, peer_id)) = self.advert_receiver.recv() =>{
-                    self.handle_advert(advert, peer_id, transport.clone()).await;
-                }
-                Some(_) = advertise_task.join_next() => {}
             }
         }
         while advertise_task.join_next().await.is_some() {}
