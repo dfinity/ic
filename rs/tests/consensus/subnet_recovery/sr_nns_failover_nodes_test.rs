@@ -27,10 +27,10 @@ use ic_agent::Agent;
 use ic_consensus_system_test_subnet_recovery::utils::{assert_subnet_is_broken, break_nodes};
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-        store_message,
+        cert_state_makes_progress_with_retries, install_nns_and_check_progress, store_message,
     },
     set_sandbox_env_vars,
+    subnet::assert_subnet_is_healthy,
 };
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
@@ -105,7 +105,8 @@ pub fn test(env: TestEnv) {
     );
 
     // choose a node from the nns subnet
-    let mut orig_nns_nodes = topo_broken_ic.root_subnet().nodes();
+    let orig_nns_subnet = topo_broken_ic.root_subnet();
+    let mut orig_nns_nodes = orig_nns_subnet.nodes();
     let nns_node = orig_nns_nodes.next().expect("there is no NNS node");
 
     info!(
@@ -152,19 +153,22 @@ pub fn test(env: TestEnv) {
     }
 
     info!(logger, "Ensure NNS subnet is functional");
-    let msg = "subnet recovery works!";
+    let init_msg = "subnet recovery works!";
     let app_can_id = store_message(
         &download_node.get_public_url(),
         download_node.effective_canister_id(),
+        init_msg,
+        &logger,
+    );
+    let msg = "subnet recovery works again!";
+    assert_subnet_is_healthy(
+        &orig_nns_subnet.nodes().collect::<Vec<_>>(),
+        &ic_version,
+        app_can_id,
+        init_msg,
         msg,
         &logger,
     );
-    assert!(can_read_msg(
-        &logger,
-        &download_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
 
     let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));

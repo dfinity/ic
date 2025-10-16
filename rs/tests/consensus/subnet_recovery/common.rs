@@ -34,10 +34,7 @@ use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     node::assert_node_is_unassigned_with_ssh_session,
-    rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-        store_message,
-    },
+    rw_message::{install_nns_and_check_progress, store_message},
     set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, execute_bash_command,
@@ -403,26 +400,22 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     info!(logger, "app node URL: {}", app_node.get_public_url());
 
     info!(logger, "Ensure app subnet is functional");
-    cert_state_makes_progress_with_retries(
-        &app_node.get_public_url(),
-        app_node.effective_canister_id(),
-        &logger,
-        secs(600),
-        secs(10),
-    );
-    let msg = "subnet recovery works!";
+    let init_msg = "subnet recovery works!";
     let app_can_id = store_message(
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
+        init_msg,
+        &logger,
+    );
+    let msg = "subnet recovery works again!";
+    assert_subnet_is_healthy(
+        &app_subnet.nodes().collect::<Vec<_>>(),
+        &initial_version,
+        app_can_id,
+        init_msg,
         msg,
         &logger,
     );
-    assert!(can_read_msg(
-        &logger,
-        &app_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
 
     let subnet_id = app_subnet.subnet_id;
 
@@ -620,7 +613,15 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
-    assert_subnet_is_healthy(&all_app_nodes, &working_version, app_can_id, msg, &logger);
+    let new_msg = "subnet recovery still works!";
+    assert_subnet_is_healthy(
+        &all_app_nodes,
+        &working_version,
+        app_can_id,
+        msg,
+        new_msg,
+        &logger,
+    );
 
     for node in all_app_nodes {
         let height = block_on(get_node_metrics(&logger, &node.get_ip_addr()))

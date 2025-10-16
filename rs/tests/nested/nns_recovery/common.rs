@@ -6,13 +6,14 @@ use ic_consensus_system_test_subnet_recovery::utils::{assert_subnet_is_broken, b
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version,
-    rw_message::{can_read_msg, cert_state_makes_progress_with_retries, store_message},
+    rw_message::store_message,
     set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
     },
-    upgrade::{assert_assigned_replica_version, bless_replica_version},
+    subnet::assert_subnet_is_healthy,
+    upgrade::bless_replica_version,
 };
 use ic_recovery::{
     RecoveryArgs, get_node_metrics,
@@ -220,28 +221,31 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let nns_subnet = topology.root_subnet();
     let subnet_size = nns_subnet.nodes().count();
     let nns_node = nns_subnet.nodes().next().unwrap();
+    let current_version = get_guestos_img_version();
+    info!(logger, "Current GuestOS version: {:?}", &current_version);
 
     info!(logger, "Ensure NNS subnet is functional");
-    let msg = "subnet recovery works!";
+    let init_msg = "subnet recovery works!";
     let app_can_id = store_message(
         &nns_node.get_public_url(),
         nns_node.effective_canister_id(),
+        init_msg,
+        &logger,
+    );
+    let msg = "subnet recovery works again!";
+    assert_subnet_is_healthy(
+        &nns_subnet.nodes().collect::<Vec<_>>(),
+        &current_version,
+        app_can_id,
+        init_msg,
         msg,
         &logger,
     );
-    assert!(can_read_msg(
-        &logger,
-        &nns_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
     info!(
         logger,
         "NNS is healthy - message stored and read successfully"
     );
 
-    let current_version = get_guestos_img_version();
-    info!(logger, "Current GuestOS version: {:?}", &current_version);
     // identifies the version of the replica after the recovery
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();
@@ -436,59 +440,20 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         handles.join_all().await;
     });
 
-    info!(
-        logger,
-        "Ensure every node uses the new replica version, is healthy and the subnet is making progress"
-    );
+    info!(logger, "Ensure the subnet is healthy after the recovery");
     let nns_subnet =
         block_on(topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)))
             .expect("Could not obtain updated registry.")
             .root_subnet();
-    for node in nns_subnet.nodes() {
-        assert_assigned_replica_version(&node, &upgrade_version, env.logger());
-        node.await_status_is_healthy().unwrap_or_else(|_| {
-            panic!(
-                "Node {} ({:?}) did not become healthy after the recovery",
-                node.node_id,
-                node.get_ip_addr()
-            )
-        });
-    }
-    cert_state_makes_progress_with_retries(
-        &dfinity_owned_node.get_public_url(),
-        dfinity_owned_node.effective_canister_id(),
-        &logger,
-        secs(600),
-        secs(10),
-    );
-
-    let nns_node = nns_subnet.nodes().next().unwrap();
-
-    info!(logger, "Ensure the old message is still readable");
-    assert!(can_read_msg(
-        &logger,
-        &nns_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
-
-    info!(
-        logger,
-        "Ensure that the subnet is accepting updates after the recovery"
-    );
     let new_msg = "subnet recovery still works!";
-    let new_app_can_id = store_message(
-        &nns_node.get_public_url(),
-        nns_node.effective_canister_id(),
+    assert_subnet_is_healthy(
+        &nns_subnet.nodes().collect::<Vec<_>>(),
+        &upgrade_version,
+        app_can_id,
+        msg,
         new_msg,
         &logger,
     );
-    assert!(can_read_msg(
-        &logger,
-        &nns_node.get_public_url(),
-        new_app_can_id,
-        new_msg
-    ));
 }
 
 async fn simulate_node_provider_action(
