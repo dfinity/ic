@@ -59,6 +59,7 @@ component_files = {
     Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
+    Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
 
     # misc
     Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
@@ -91,6 +92,9 @@ component_files = {
     Label("monitoring/guestos/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
     Label("monitoring/guestos/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
     Label("monitoring/guestos/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
+    Label("monitoring/guestos/boot-metrics/boot-metrics.sh"): "/opt/ic/bin/boot-metrics.sh",
+    Label("monitoring/guestos/boot-metrics/boot-metrics.service"): "/etc/systemd/system/boot-metrics.service",
+    Label("monitoring/guestos/boot-metrics/boot-metrics.timer"): "/etc/systemd/system/boot-metrics.timer",
     Label("monitoring/guestos/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
     Label("monitoring/guestos/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
     Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",

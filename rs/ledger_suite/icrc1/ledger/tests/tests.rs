@@ -593,6 +593,36 @@ fn test_get_blocks_returns_multiple_archive_callbacks() {
     );
 }
 
+#[test]
+fn test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_skipped_if_cycles_to_create_archive_less_than_cost() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_skipped_if_cycles_to_create_archive_less_than_cost(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
 fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgument {
     LedgerArgument::Upgrade(Some(UpgradeArgs {
         metadata: None,

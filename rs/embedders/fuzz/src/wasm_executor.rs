@@ -1,7 +1,7 @@
 use crate::ic_wasm::ICWasmModule;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -144,7 +144,6 @@ pub(crate) fn get_system_state(api_type: ApiType) -> SandboxSafeSystemState {
 pub(crate) fn get_execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
             DEFAULT_NUM_INSTRUCTIONS,
             DEFAULT_NUM_INSTRUCTIONS,
         ),

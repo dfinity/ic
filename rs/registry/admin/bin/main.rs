@@ -1460,6 +1460,10 @@ struct ProposeToAddWasmToSnsWasmCmd {
     #[clap(long, required = true)]
     /// The Canister type, one of: Root, Governance, Ledger, Swap, Archive, Index
     canister_type: String,
+
+    #[clap(long)]
+    /// If set, it will skip updating the latest version of the SNS-WASM canister.
+    skip_update_latest_version: bool,
 }
 
 impl ProposalTitle for ProposeToAddWasmToSnsWasmCmd {
@@ -1496,7 +1500,7 @@ impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
         AddWasmRequest {
             wasm: Some(sns_wasm),
             hash: hex::decode(&self.wasm_module_sha256).unwrap(),
-            skip_update_latest_version: Some(false),
+            skip_update_latest_version: Some(self.skip_update_latest_version),
         }
     }
 }

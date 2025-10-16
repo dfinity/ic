@@ -52,7 +52,7 @@ pub const SUBNET_SIZE: usize = 4;
 /// test runtime low
 pub const DKG_INTERVAL: u64 = 9;
 
-/// 40 nodes and DKG interval of 199 are the production values for the NNS but 49 was chosen for
+/// 40 nodes and DKG interval of 499 are the production values for the NNS but 49 was chosen for
 /// the DKG interval to make the test faster
 pub const LARGE_SUBNET_SIZE: usize = 40;
 pub const LARGE_DKG_INTERVAL: u64 = 49;
@@ -61,7 +61,7 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
-const BACKUP_USERNAME: &str = "backup";
+pub const BACKUP_USERNAME: &str = "backup";
 
 const ADMIN_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
 const BACKUP_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/backup_key";
@@ -133,6 +133,48 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 }
 
+// Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
+// This is necessary as part of the `DownloadCertifications` step of the recovery to determine
+// the latest certified height of the subnet.
+pub fn grant_backup_access_to_all_nns_nodes(
+    env: &TestEnv,
+    ssh_priv_key_path: &Path,
+    ssh_pub_key_path: &Path,
+) {
+    let logger = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+
+    let ssh_priv_key =
+        std::fs::read_to_string(ssh_priv_key_path).expect("Failed to read SSH private key");
+    let backup_auth = AuthMean::PrivateKey(ssh_priv_key);
+    let ssh_pub_key =
+        std::fs::read_to_string(ssh_pub_key_path).expect("Failed to read SSH public key");
+
+    info!(logger, "Update the registry with the backup key");
+    let payload =
+        get_updatesubnetpayload_with_keys(nns_subnet.subnet_id, None, Some(vec![ssh_pub_key]));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+
+    for node in nns_subnet.nodes() {
+        info!(
+            logger,
+            "Waiting for authentication to be granted on node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+        wait_until_authentication_is_granted(
+            &logger,
+            &node.get_ip_addr(),
+            BACKUP_USERNAME,
+            &backup_auth,
+        );
+    }
+
+    info!(logger, "Success: Backup access granted to all NNS nodes");
+}
+
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
     if cfg.impersonate_upstreams {
         impersonate_upstreams::setup_upstreams_uvm(&env);
@@ -157,14 +199,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-
-    let topology = env.topology_snapshot();
-    let nns_subnet = topology.root_subnet();
-    let subnet_size = nns_subnet.nodes().count();
-    let nns_node = nns_subnet.nodes().next().unwrap();
-
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
@@ -177,37 +211,16 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     env.ssh_keygen_for_user(BACKUP_USERNAME)
         .expect("ssh-keygen failed for backup key");
     let ssh_backup_priv_key_path = ssh_authorized_priv_keys_dir.join(BACKUP_USERNAME);
-    let ssh_backup_priv_key = std::fs::read_to_string(&ssh_backup_priv_key_path)
-        .expect("Failed to read backup SSH private key");
-    let backup_auth = AuthMean::PrivateKey(ssh_backup_priv_key);
     let ssh_backup_pub_key_path = ssh_authorized_pub_keys_dir.join(BACKUP_USERNAME);
-    let ssh_backup_pub_key = std::fs::read_to_string(&ssh_backup_pub_key_path)
-        .expect("Failed to read backup SSH public key");
 
-    // Mirror production setup by granting backup SSH access to all NNS nodes to a specific SSH key.
-    // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
-    // the latest certified height of the subnet.
-    info!(logger, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(
-        nns_subnet.subnet_id,
-        None,
-        Some(vec![ssh_backup_pub_key]),
-    );
-    block_on(update_subnet_record(nns_node.get_public_url(), payload));
-    for node in nns_subnet.nodes() {
-        info!(
-            logger,
-            "Waiting for authentication to be granted on node {} ({:?})",
-            node.node_id,
-            node.get_ip_addr()
-        );
-        wait_until_authentication_is_granted(
-            &logger,
-            &node.get_ip_addr(),
-            BACKUP_USERNAME,
-            &backup_auth,
-        );
-    }
+    nested::registration(env.clone());
+    replace_nns_with_unassigned_nodes(&env);
+    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
+
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let subnet_size = nns_subnet.nodes().count();
+    let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";

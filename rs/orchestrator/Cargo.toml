@@ -16,6 +16,7 @@ clap = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
 get_if_addrs = { workspace = true }
+guest_upgrade_server = { path = "../ic_os/guest_upgrade/server" }
 hex = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
