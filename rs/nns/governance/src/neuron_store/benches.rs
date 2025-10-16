@@ -278,7 +278,6 @@ fn record_neuron_vote() -> BenchResult {
                 Topic::NetworkEconomics,
                 ProposalId { id: rng.next_u64() },
                 Vote::Yes,
-                ProposalId { id: 0 },
             )
             .unwrap();
     })
@@ -321,7 +320,6 @@ fn record_known_neuron_vote() -> BenchResult {
                 Topic::NetworkEconomics,
                 ProposalId { id: rng.next_u64() },
                 Vote::Yes,
-                ProposalId { id: 0 },
             )
             .unwrap();
     })
