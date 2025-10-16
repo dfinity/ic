@@ -30,13 +30,14 @@
 // Happy testing!
 
 use anyhow::Result;
-use ic_consensus_system_test_subnet_recovery::utils::break_nodes;
+use ic_consensus_system_test_subnet_recovery::utils::{
+    break_nodes, node_with_highest_certification_share_height,
+};
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
     BACKUP_USERNAME, SetupConfig, grant_backup_access_to_all_nns_nodes,
     replace_nns_with_unassigned_nodes,
 };
-use ic_recovery::get_node_metrics;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
@@ -45,7 +46,6 @@ use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
-use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use slog::{info, warn};
 use std::time::Duration;
@@ -156,27 +156,21 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let highest_certified_height = env
-            .topology_snapshot()
-            .root_subnet()
-            .nodes()
-            .filter_map(|n| {
-                block_on(get_node_metrics(&logger, &n.get_ip_addr()))
-                    .map(|m| m.certification_height.get())
-            })
-            .max()
-            .expect("No heights found");
+        let (_, highest_cert_share) = node_with_highest_certification_share_height(
+            &env.topology_snapshot().root_subnet(),
+            &logger,
+        );
 
-        if highest_certified_height >= break_at_height {
+        if highest_cert_share >= break_at_height {
             info!(
                 logger,
-                "Reached break height {break_at_height} (current height is {highest_certified_height})."
+                "Reached break height {break_at_height} (current height is {highest_cert_share})."
             );
             break;
         }
         info!(
             logger,
-            "Waiting to reach break height {break_at_height}, current height is {highest_certified_height}..."
+            "Waiting to reach break height {break_at_height}, current height is {highest_cert_share}..."
         );
         std::thread::sleep(Duration::from_secs(5));
     }
