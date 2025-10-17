@@ -3,7 +3,6 @@ Title:: Input deduplication test.
 
 Goal:: Test update call deduplication by sending two identical update call requests and asserting that only one was executed.
 
-
 end::catalog[] */
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -29,9 +28,6 @@ pub fn input_deduplication_test(env: TestEnv) {
 
             let client = reqwest::Client::new();
 
-            let canister_id = canister.canister_id();
-            let ingress_expiry = expiry_time().as_nanos() as u64;
-
             let stable_size = || async {
                 let res = canister
                     .update(
@@ -50,6 +46,11 @@ pub fn input_deduplication_test(env: TestEnv) {
             assert_eq!(stable_size().await, 1);
 
             // Update call body growing stable memory by 1 page.
+            // The ingress expiry is equal in all update call bodies
+            // so that they can be deduplicated;
+            // only the nonce can vary.
+            let canister_id = canister.canister_id();
+            let ingress_expiry = expiry_time().as_nanos() as u64;
             let update_body = |nonce: u64| {
                 let envelope = HttpRequestEnvelope {
                     content: HttpCallContent::Call {
@@ -69,29 +70,27 @@ pub fn input_deduplication_test(env: TestEnv) {
                 serde_cbor::ser::to_vec(&envelope).unwrap()
             };
 
-            // The following two requests with the same nonce are identical and thus deduplicated.
-            for _ in 0..2 {
+            let submit_update_call = |body: Vec<u8>| async {
                 let res = client
                     .post(format!("{node_url}api/v2/canister/{canister_id}/call"))
                     .header("Content-Type", "application/cbor")
-                    .body(update_body(42))
+                    .body(body)
                     .send()
                     .await
                     .unwrap();
                 assert_eq!(res.status(), StatusCode::ACCEPTED);
+            };
+
+            // The following two update calls with the same nonce are identical and thus deduplicated.
+            for _ in 0..2 {
+                submit_update_call(update_body(42)).await;
             }
 
-            // The following request has a different nonce and thus is executed.
-            let res = client
-                .post(format!("{node_url}api/v2/canister/{canister_id}/call"))
-                .header("Content-Type", "application/cbor")
-                .body(update_body(43))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(res.status(), StatusCode::ACCEPTED);
+            // The following update call has a different nonce and thus it is executed separately.
+            submit_update_call(update_body(43)).await;
 
-            // Synchronization call: we assume that the previous calls have been processed
+            // Synchronization call: we assume that the previous calls have been executed
+            // (in the same round as the synchronization call or in previous rounds)
             // once the result of the "synchronization" call is available.
             canister.update(wasm().reply().build()).await.unwrap();
 
