@@ -10,6 +10,22 @@
 #![deny(unused_results)]
 
 //! A crate for performing derivation of threshold public keys
+//!
+//! The Internet Computer platform offers a threshold signing interface
+//! supporting ECDSA, Ed25519, BIP340-Schnorr, and BLS. The signing interface
+//! allows signing under many different keys which are derived from a master key
+//! using a derivation algorithm.
+//!
+//! The management canister interface allows for *online* derivation of public
+//! keys: a canister running on the IC can invoke the call to determine what
+//! public key will be used for any particular context argument.
+//!
+//! This crate mirrors that functionality in an offline way: it can be called either
+//! by canisters that do not wish to call the management canister interface, or
+//! by applications not running on that IC at all.
+//!
+//! As an extension of the management canister interface, this crate also allows
+//! deriving keys relative to the hardcoded test master keys used by PocketIC.
 
 #[cfg(not(any(feature = "secp256k1", feature = "ed25519", feature = "vetkeys")))]
 compile_error!("At least one of the features (secp256k1, ed25519, vetkeys) must be enabled");
@@ -98,15 +114,27 @@ impl TryFrom<&EcdsaKeyId> for MasterPublicKey {
 
         #[cfg(feature = "secp256k1")]
         {
-            let key_id = match (key_id.curve, key_id.name.as_ref()) {
-                (EcdsaCurve::Secp256k1, "key_1") => ic_secp256k1::MasterPublicKeyId::EcdsaKey1,
-                (EcdsaCurve::Secp256k1, "test_key_1") => {
-                    ic_secp256k1::MasterPublicKeyId::EcdsaTestKey1
+            let mk = match (key_id.curve, key_id.name.as_ref()) {
+                (EcdsaCurve::Secp256k1, "key_1") => {
+                    ic_secp256k1::PublicKey::mainnet_key(ic_secp256k1::MasterPublicKeyId::EcdsaKey1)
                 }
+                (EcdsaCurve::Secp256k1, "test_key_1") => ic_secp256k1::PublicKey::mainnet_key(
+                    ic_secp256k1::MasterPublicKeyId::EcdsaTestKey1,
+                ),
+                (EcdsaCurve::Secp256k1, "pocketic_key_1") => ic_secp256k1::PublicKey::pocketic_key(
+                    ic_secp256k1::PocketIcMasterPublicKeyId::EcdsaKey1,
+                ),
+                (EcdsaCurve::Secp256k1, "pocketic_test_key_1") => {
+                    ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::EcdsaTestKey1,
+                    )
+                }
+                (EcdsaCurve::Secp256k1, "dfx_test_key") => ic_secp256k1::PublicKey::pocketic_key(
+                    ic_secp256k1::PocketIcMasterPublicKeyId::EcdsaDfxTestKey,
+                ),
                 (_, _) => return Err(Error::UnknownKeyIdentifier),
             };
 
-            let mk = ic_secp256k1::PublicKey::mainnet_key(key_id);
             let inner = MasterPublicKeyInner::EcdsaSecp256k1(mk);
             Ok(Self { inner })
         }
@@ -125,13 +153,25 @@ impl TryFrom<&SchnorrKeyId> for MasterPublicKey {
         #[cfg(feature = "secp256k1")]
         {
             if key_id.algorithm == SchnorrAlgorithm::Bip340secp256k1 {
-                let key_id = match key_id.name.as_ref() {
-                    "key_1" => ic_secp256k1::MasterPublicKeyId::SchnorrKey1,
-                    "test_key_1" => ic_secp256k1::MasterPublicKeyId::SchnorrTestKey1,
+                let mk = match key_id.name.as_ref() {
+                    "key_1" => ic_secp256k1::PublicKey::mainnet_key(
+                        ic_secp256k1::MasterPublicKeyId::SchnorrKey1,
+                    ),
+                    "test_key_1" => ic_secp256k1::PublicKey::mainnet_key(
+                        ic_secp256k1::MasterPublicKeyId::SchnorrTestKey1,
+                    ),
+                    "pocketic_key_1" => ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::SchnorrKey1,
+                    ),
+                    "pocketic_test_key_1" => ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::SchnorrTestKey1,
+                    ),
+                    "dfx_test_key" => ic_secp256k1::PublicKey::pocketic_key(
+                        ic_secp256k1::PocketIcMasterPublicKeyId::SchnorrDfxTestKey,
+                    ),
                     _ => return Err(Error::UnknownKeyIdentifier),
                 };
 
-                let mk = ic_secp256k1::PublicKey::mainnet_key(key_id);
                 let inner = MasterPublicKeyInner::Bip340Secp256k1(mk);
                 return Ok(Self { inner });
             }
@@ -140,13 +180,25 @@ impl TryFrom<&SchnorrKeyId> for MasterPublicKey {
         #[cfg(feature = "ed25519")]
         {
             if key_id.algorithm == SchnorrAlgorithm::Ed25519 {
-                let key_id = match key_id.name.as_ref() {
-                    "key_1" => ic_ed25519::MasterPublicKeyId::Key1,
-                    "test_key_1" => ic_ed25519::MasterPublicKeyId::TestKey1,
+                let mk = match key_id.name.as_ref() {
+                    "key_1" => {
+                        ic_ed25519::PublicKey::mainnet_key(ic_ed25519::MasterPublicKeyId::Key1)
+                    }
+                    "test_key_1" => {
+                        ic_ed25519::PublicKey::mainnet_key(ic_ed25519::MasterPublicKeyId::TestKey1)
+                    }
+                    "pocketic_key_1" => ic_ed25519::PublicKey::pocketic_key(
+                        ic_ed25519::PocketIcMasterPublicKeyId::Key1,
+                    ),
+                    "pocketic_test_key_1" => ic_ed25519::PublicKey::pocketic_key(
+                        ic_ed25519::PocketIcMasterPublicKeyId::TestKey1,
+                    ),
+                    "dfx_test_key" => ic_ed25519::PublicKey::pocketic_key(
+                        ic_ed25519::PocketIcMasterPublicKeyId::DfxTestKey,
+                    ),
                     _ => return Err(Error::UnknownKeyIdentifier),
                 };
 
-                let mk = ic_ed25519::PublicKey::mainnet_key(key_id);
                 let inner = MasterPublicKeyInner::Ed25519(mk);
                 return Ok(Self { inner });
             }
@@ -359,7 +411,22 @@ impl DerivedPublicKey {
 ///
 /// This is an offline equivalent to the `ecdsa_public_key` management canister call
 ///
-/// See [IC method `ecdsa_public_key`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-ecdsa_public_key).
+/// As an extension of the management canister call this function also
+/// supports the keys that are used (for testing) by PocketIC.
+///
+/// See [IC method `ecdsa_public_key`](https://internetcomputer.org/docs/references/ic-interface-spec/#ic-ecdsa_public_key).
+///
+/// # Supported Keys
+///
+/// The following key IDs are currently supported
+///
+/// * `key_1`: The production key used on mainnet
+/// * `test_key_1`: The test key used on mainnet
+/// * `pocketic_key_1`: The key used by PocketIC when a request to the management canister
+///   uses `key_1`.
+/// * `pocketic_test_key_1`: The key used by PocketIC when a request to the management canister
+///   uses `test_key_1`.
+/// * `dfx_test_key`: PocketIC specific test key
 pub fn derive_ecdsa_key(args: &EcdsaPublicKeyArgs) -> Result<EcdsaPublicKeyResult, Error> {
     let canister_id = args.canister_id.ok_or(Error::CanisterIdMissing)?;
 
@@ -377,7 +444,20 @@ pub fn derive_ecdsa_key(args: &EcdsaPublicKeyArgs) -> Result<EcdsaPublicKeyResul
 ///
 /// This is an offline equivalent to the `schnorr_public_key` management canister call
 ///
-/// See [IC method `schnorr_public_key`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-schnorr_public_key).
+/// See [IC method `schnorr_public_key`](https://internetcomputer.org/docs/references/ic-interface-spec/#ic-schnorr_public_key).
+///
+/// # Supported Keys
+///
+/// Currently this function supports both Ed25519 and BIP340 Schnorr key derivation,
+/// using any of the following key names:
+///
+/// * `key_1`: The production key used on mainnet
+/// * `test_key_1`: The test key used on mainnet
+/// * `pocketic_key_1`: The key used by PocketIC when a request to the management canister
+///   uses `key_1`.
+/// * `pocketic_test_key_1`: The key used by PocketIC when a request to the management canister
+///   uses `test_key_1`.
+/// * `dfx_test_key`: PocketIC specific test key
 pub fn derive_schnorr_key(args: &SchnorrPublicKeyArgs) -> Result<SchnorrPublicKeyResult, Error> {
     let canister_id = args.canister_id.ok_or(Error::CanisterIdMissing)?;
 
@@ -395,7 +475,7 @@ pub fn derive_schnorr_key(args: &SchnorrPublicKeyArgs) -> Result<SchnorrPublicKe
 ///
 /// This is an offline equivalent to the `vetkd_public_key` management canister call
 ///
-/// See [IC method `vetkd_public_key`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-vetkd_public_key)
+/// See [IC method `vetkd_public_key`](https://internetcomputer.org/docs/references/ic-interface-spec/#ic-vetkd_public_key)
 pub fn derive_vetkd_key(args: &VetKDPublicKeyArgs) -> Result<VetKDPublicKeyResult, Error> {
     let canister_id = args.canister_id.ok_or(Error::CanisterIdMissing)?;
 

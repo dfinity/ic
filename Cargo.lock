@@ -5383,6 +5383,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
+ "config",
  "config_types",
  "der 0.7.9",
  "guest_upgrade_shared",
@@ -6451,6 +6452,7 @@ dependencies = [
  "criterion",
  "ic-config",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
@@ -6995,6 +6997,7 @@ dependencies = [
  "ic-canonical-state",
  "ic-certification 0.9.0",
  "ic-certification-test-utils",
+ "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-root-of-trust",
  "ic-crypto-test-utils-tls",
@@ -7003,7 +7006,6 @@ dependencies = [
  "ic-protobuf",
  "ic-read-state-response-parser",
  "ic-secp256k1 0.3.0",
- "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
  "ic-validator",
@@ -7601,6 +7603,7 @@ dependencies = [
  "ic-crypto-prng",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
@@ -7668,6 +7671,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-consensus-mocks",
  "ic-consensus-utils",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
@@ -7712,6 +7716,7 @@ dependencies = [
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -7751,6 +7756,7 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-error-types 0.2.0",
@@ -7821,6 +7827,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus-utils",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -8743,6 +8750,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-test-utils-crypto-returning-ok"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-internal-types",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-ni-dkg",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-registry-client-fake",
+ "ic-registry-proto-data-provider",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "ic-crypto-test-utils-csp"
 version = "0.9.0"
 dependencies = [
@@ -9147,23 +9173,6 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba67d72c59e6e7a9794054bf991f6d6f397073f36b02d66ca652aa6f4c2117f3"
-dependencies = [
- "candid",
- "curve25519-dalek",
- "ed25519-dalek",
- "hex-literal 0.4.1",
- "hkdf",
- "pem 1.1.1",
- "rand 0.8.5",
- "thiserror 2.0.12",
- "zeroize",
-]
-
-[[package]]
-name = "ic-ed25519"
 version = "0.4.0"
 dependencies = [
  "curve25519-dalek",
@@ -9177,6 +9186,23 @@ dependencies = [
  "rand_chacha 0.3.1",
  "thiserror 2.0.12",
  "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-ed25519"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42596a652c7f0ae12bacf337da33695f53fb3758620271168a390a93aae73719"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex-literal 0.4.1",
+ "hkdf",
+ "ic_principal",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "thiserror 2.0.12",
  "zeroize",
 ]
 
@@ -9572,6 +9598,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-tree-hash",
@@ -9598,7 +9625,6 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-replicated-state",
- "ic-test-utilities",
  "ic-test-utilities-consensus",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
@@ -10315,6 +10341,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-temp-crypto",
  "ic-cycles-account-manager",
  "ic-interfaces",
  "ic-interfaces-mocks",
@@ -10693,7 +10720,6 @@ dependencies = [
  "ic-icp-index",
  "ic-ledger-core",
  "ic-management-canister-types",
- "ic-nns-constants",
  "ic-state-machine-tests",
  "icp-ledger",
  "icrc-ledger-types",
@@ -12340,10 +12366,9 @@ name = "ic-pub-key"
 version = "0.1.0"
 dependencies = [
  "hex",
- "hex-literal 0.4.1",
- "ic-ed25519 0.3.0",
+ "ic-ed25519 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-management-canister-types",
- "ic-secp256k1 0.2.0",
+ "ic-secp256k1 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-vetkeys",
 ]
 
@@ -12373,6 +12398,7 @@ dependencies = [
  "candid",
  "futures",
  "ic-agent",
+ "ic-management-canister-types-private",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -12921,6 +12947,7 @@ dependencies = [
  "pretty_assertions",
  "prost 0.13.4",
  "rand 0.8.5",
+ "rayon",
  "serde",
  "serde_json",
  "slog",
@@ -13287,26 +13314,6 @@ dependencies = [
 
 [[package]]
 name = "ic-secp256k1"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8c0b976993791865897b9edffd153253cef7b9ff2b51b75bb2a1ac82ebfcad7"
-dependencies = [
- "candid",
- "hex-literal 0.4.1",
- "hmac",
- "k256 0.13.4",
- "lazy_static",
- "num-bigint 0.4.6",
- "pem 1.1.1",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "sha2 0.10.9",
- "simple_asn1",
- "zeroize",
-]
-
-[[package]]
-name = "ic-secp256k1"
 version = "0.3.0"
 dependencies = [
  "bip32 0.5.3",
@@ -13324,6 +13331,25 @@ dependencies = [
  "sha2 0.10.9",
  "simple_asn1",
  "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-secp256k1"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bf34836f1c4e8114b6d13b7699428939742e9ad73615bc0be4799ccc5566869"
+dependencies = [
+ "hex-literal 0.4.1",
+ "hmac",
+ "ic_principal",
+ "k256 0.13.4",
+ "num-bigint 0.4.6",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "sha2 0.10.9",
+ "simple_asn1",
  "zeroize",
 ]
 
@@ -14097,6 +14123,7 @@ dependencies = [
  "ic-consensus-utils",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
@@ -14131,7 +14158,6 @@ dependencies = [
  "ic-state-layout",
  "ic-state-manager",
  "ic-test-state-machine-client",
- "ic-test-utilities",
  "ic-test-utilities-consensus",
  "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
@@ -14457,6 +14483,7 @@ dependencies = [
  "ic-config",
  "ic-consensus-dkg",
  "ic-consensus-utils",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
@@ -14464,7 +14491,6 @@ dependencies = [
  "ic-metrics",
  "ic-registry-client-helpers",
  "ic-replicated-state",
- "ic-test-utilities",
  "ic-test-utilities-consensus",
  "ic-test-utilities-types",
  "ic-types",
@@ -14502,45 +14528,27 @@ dependencies = [
  "ic-artifact-pool",
  "ic-btc-replica-types",
  "ic-config",
- "ic-crypto-interfaces-sig-verification",
- "ic-crypto-internal-types",
  "ic-crypto-sha2",
- "ic-crypto-temp-crypto",
- "ic-crypto-test-utils-canister-threshold-sigs",
- "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
- "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
- "ic-logger",
  "ic-metrics",
- "ic-protobuf",
- "ic-registry-client-fake",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities-logger",
- "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
- "ic-types-test-utils",
  "ic-universal-canister",
  "lazy_static",
  "nix 0.24.3",
- "parking_lot",
- "rand 0.8.5",
  "rusty-fork",
  "serde",
  "serde_cbor",
- "slog",
  "socket2 0.5.9",
  "tempfile",
- "tokio",
- "tower 0.5.2",
  "wasmprinter",
  "wat",
 ]
@@ -14603,6 +14611,7 @@ dependencies = [
  "bincode",
  "ic-base-types",
  "ic-config",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-error-types 0.2.0",
@@ -15050,11 +15059,11 @@ dependencies = [
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-sha2",
  "ic-crypto-standalone-sig-verifier",
+ "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-root-of-trust",
  "ic-crypto-tree-hash",
  "ic-limits",
- "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
  "mockall",
@@ -15683,6 +15692,7 @@ dependencies = [
  "ic-ledger-suite-in-memory-ledger",
  "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-test-utils",
+ "ic-management-canister-types",
  "ic-nns-constants",
  "ic-nns-test-utils-golden-nns-state",
  "ic-stable-structures 0.6.8",
@@ -18483,6 +18493,7 @@ dependencies = [
  "env-file-reader",
  "exec",
  "get_if_addrs",
+ "guest_upgrade_server",
  "hex",
  "http-body-util",
  "hyper 1.6.0",
@@ -18496,6 +18507,7 @@ dependencies = [
  "ic-crypto-node-key-generation",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
@@ -18523,7 +18535,6 @@ dependencies = [
  "ic-registry-replicator",
  "ic-registry-subnet-type",
  "ic-sys",
- "ic-test-utilities",
  "ic-test-utilities-consensus",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-logger",
@@ -23361,6 +23372,8 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-base-types",
+ "ic-limits",
+ "ic-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",

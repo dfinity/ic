@@ -5,10 +5,6 @@ workspace(
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
-load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
-load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
-load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("//third_party/openssl:repository.bzl", "openssl_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
@@ -113,22 +109,6 @@ load("@canisters//:defs.bzl", "canister_deps")
 canister_deps()
 
 http_archive(
-    name = "aspect_rules_sol",
-    sha256 = "4e98a4572cd2c5f9e0a4118be3b8d2f0be148c80779ea9da646d0afabe2d609c",
-    strip_prefix = "rules_sol-0.1.0",
-    url = "https://github.com/aspect-build/rules_sol/releases/download/v0.1.0/rules_sol-v0.1.0.tar.gz",
-)
-
-load("@aspect_rules_sol//sol:repositories.bzl", "rules_sol_dependencies", "sol_register_toolchains")
-
-rules_sol_dependencies()
-
-sol_register_toolchains(
-    name = "solc",
-    sol_version = "0.8.18",
-)
-
-http_archive(
     name = "rules_rust",
     integrity = "sha256-2GH766nwQzOgrmnkSO6D1pF/JC3bt/41xo/CEqarpUY=",
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.64.0/rules_rust-0.64.0.tar.gz"],
@@ -186,16 +166,6 @@ http_archive(
 load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
-
-# Third party dependencies that require special treatment
-
-lmdb_repository()
-
-jemalloc_repository()
-
-openssl_repository()
-
-libfuzzer_repository()
 
 # Rosetta CLI
 

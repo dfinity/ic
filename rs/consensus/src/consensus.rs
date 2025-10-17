@@ -58,6 +58,7 @@ use ic_types::{
     replica_version::ReplicaVersion,
 };
 pub use metrics::ValidatorMetrics;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -79,6 +80,9 @@ pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 /// value above the latest CUP. During validation, the only exception to this are
 /// CUPs, which have no upper bound on the height to be validated.
 pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
+
+/// The maximum number of threads used to create & validate block payloads in parallel.
+pub(crate) const MAX_CONSENSUS_THREADS: usize = 8;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -109,6 +113,16 @@ pub(crate) fn check_protocol_version(
     } else {
         Ok(())
     }
+}
+
+/// Builds a rayon thread pool with the given number of threads.
+pub(crate) fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
 }
 
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
@@ -199,6 +213,8 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Aggregator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
 
+        let thread_pool = build_thread_pool(MAX_CONSENSUS_THREADS);
+
         ConsensusImpl {
             dkg_key_manager,
             notary: Notary::new(
@@ -250,6 +266,7 @@ impl ConsensusImpl {
                 payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                thread_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -264,6 +281,7 @@ impl ConsensusImpl {
                 state_manager.clone(),
                 message_routing.clone(),
                 dkg_pool,
+                thread_pool,
                 logger.clone(),
                 ValidatorMetrics::new(metrics_registry.clone()),
                 Arc::clone(&time_source),

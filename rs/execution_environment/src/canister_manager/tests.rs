@@ -2107,7 +2107,8 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                     CallContextBuilder::new()
                         .with_call_origin(CallOrigin::Ingress(
                             user_test_id(123),
-                            message_test_id(456)
+                            message_test_id(456),
+                            String::from(""),
                         ))
                         .with_responded(false)
                         .build()
