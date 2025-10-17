@@ -94,7 +94,7 @@ impl RegistryCanister {
     ///
     /// The transformer receives built agents with anonymous identity and can
     /// perform any mutations needed before they're used.
-    pub fn new_with_agent_transformer<F>(urls: Vec<Url>, mut f: F) -> Self
+    pub fn new_with_agent_transformer<F>(urls: Vec<Url>, f: F) -> Self
     where
         F: FnMut(Agent) -> Agent,
     {
