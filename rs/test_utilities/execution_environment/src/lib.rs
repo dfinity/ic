@@ -2261,6 +2261,8 @@ impl ExecutionTestBuilder {
 
     pub fn with_resource_saturation_scaling(mut self, scaling: usize) -> Self {
         self.subnet_config.scheduler_config.scheduler_cores = scaling;
+        // If scaling == 1, i.e. a single core is requested in the test, DTS must
+        // be disabled by setting the slice limit to be equal to the message limit.
         if scaling == 1 {
             self.subnet_config
                 .scheduler_config
