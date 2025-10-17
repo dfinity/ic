@@ -865,6 +865,22 @@ http_file(
     url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
 )
 
+http_archive(
+    name = "rclone-x86_64-darwin",
+    build_file = "@//third_party:BUILD.rclone.bazel",
+    sha256 = "0a9a107ba911bf6bd3c61ad5160a379ac7c81a1b63498e12efcccb4676c65361",
+    strip_prefix = "rclone-v1.69.2-osx-amd64",
+    url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-osx-amd64.zip",
+)
+
+http_archive(
+    name = "rclone-x86_64-linux",
+    build_file = "@//third_party:BUILD.rclone.bazel",
+    sha256 = "14aaed7163df57894c96f8aca94757f19065f9cb3cb8a84ff9c33234271e1d69",
+    strip_prefix = "rclone-v1.69.2-linux-amd64",
+    url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-linux-amd64.zip",
+)
+
 # Management canister candid interface
 
 http_file(
