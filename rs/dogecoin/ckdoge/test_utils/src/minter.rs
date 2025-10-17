@@ -1,4 +1,6 @@
+use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
+use ic_ckdoge_minter::Event;
 use ic_ckdoge_minter::UtxoStatus;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::candid_api::{
@@ -73,5 +75,39 @@ impl MinterCanister {
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
         self.env
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
+    }
+
+    pub fn assert_that_events(&self) -> MinterEventAssert {
+        MinterEventAssert {
+            events: self.get_all_events(),
+        }
+    }
+
+    pub fn get_all_events(&self) -> Vec<Event> {
+        const FIRST_BATCH_SIZE: u64 = 100;
+        let mut all_events = self.get_events(0, FIRST_BATCH_SIZE);
+        loop {
+            let events = self.get_events(all_events.len() as u64, 2_000);
+            if !events.is_empty() {
+                all_events.extend(events);
+            } else {
+                return all_events;
+            }
+        }
+    }
+
+    fn get_events(&self, start: u64, length: u64) -> Vec<Event> {
+        use ic_ckdoge_minter::GetEventsArg;
+
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "get_events",
+                Encode!(&GetEventsArg { start, length }).unwrap(),
+            )
+            .expect("BUG: failed to call get_events");
+        Decode!(&call_result, Vec<Event>).unwrap()
     }
 }

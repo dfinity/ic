@@ -128,8 +128,8 @@ mod get_doge_address {
 mod deposit {
     use candid::Principal;
     use ic_ckdoge_minter::{
-        MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus, candid_api::GetDogeAddressArgs,
-        memo_encode,
+        EventType, MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus,
+        candid_api::GetDogeAddressArgs, memo_encode,
     };
     use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, txid};
     use icrc_ledger_types::icrc1::account::Account;
@@ -196,6 +196,16 @@ mod deposit {
                 created_at_time: None,
             });
 
-        // TODO XC-495: retrieve and assert on expected events
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::CheckedUtxoV2 {
+                utxo: utxo.clone(),
+                account,
+            },
+            EventType::ReceivedUtxos {
+                mint_txid: Some(0),
+                to_account: account,
+                utxos: vec![utxo],
+            },
+        ]);
     }
 }
