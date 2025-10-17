@@ -40,10 +40,7 @@ use ic_consensus_system_test_utils::{
     node::assert_node_is_unassigned_with_ssh_session,
     rw_message::{install_nns_and_check_progress, store_message},
     set_sandbox_env_vars,
-    ssh_access::{
-        AuthMean, disable_ssh_access_to_node, execute_bash_command,
-        wait_until_authentication_is_granted,
-    },
+    ssh_access::{AuthMean, disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
     },
@@ -724,12 +721,13 @@ fn halt_subnet(
     logger: &Logger,
 ) {
     info!(logger, "Breaking the app subnet by halting it");
-    let s = app_node.block_on_ssh_session().unwrap();
-    let message_str = execute_bash_command(
-        &s,
-        "journalctl -n1 -o json --output-fields='__CURSOR'".to_string(),
-    )
-    .expect("journal message");
+    let session = app_node.block_on_ssh_session().unwrap();
+    let message_str = app_node
+        .block_on_bash_script_from_session(
+            &session,
+            "journalctl -n1 -o json --output-fields='__CURSOR'",
+        )
+        .expect("journal message");
     let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
     recovery
         .halt_subnet(subnet_id, true, &[])
@@ -741,9 +739,9 @@ fn halt_subnet(
         secs(120),
         secs(10),
         || {
-            let res = execute_bash_command(
-                &s,
-                format!(
+            let res = app_node.block_on_bash_script_from_session(
+                &session,
+                &format!(
                     "journalctl --after-cursor='{}' | grep -c 'is halted'",
                     message.cursor
                 ),
@@ -772,11 +770,12 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         "Setting journal cursor on node {:?}",
         app_node.get_ip_addr()
     );
-    let message_str = execute_bash_command(
-        &session,
-        "journalctl -n1 -o json --output-fields='__CURSOR'".to_string(),
-    )
-    .expect("journal message");
+    let message_str = app_node
+        .block_on_bash_script_from_session(
+            &session,
+            "journalctl -n1 -o json --output-fields='__CURSOR'",
+        )
+        .expect("journal message");
     let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
 
     info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
@@ -798,22 +797,24 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
             node.get_ip_addr()
         );
         let session = node.block_on_ssh_session().unwrap();
-        execute_bash_command(
-            &session,
-            format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
-        )
-        .expect("touch");
+        app_node
+            .block_on_bash_script_from_session(
+                &session,
+                &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
+            )
+            .expect("touch");
         let mut channel = session
             .scp_send(Path::new(NEW_CUP_PATH), 0o666, bytes.len() as u64, None)
             .unwrap();
         channel.write_all(&bytes).unwrap();
 
         info!(logger, "Restarting node {:?}", node.get_ip_addr());
-        execute_bash_command(
-            &session,
-            format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
-        )
-        .expect("restart");
+        app_node
+            .block_on_bash_script_from_session(
+                &session,
+                &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
+            )
+            .expect("restart");
     }
 
     ic_system_test_driver::retry_with_msg!(
@@ -822,9 +823,9 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         secs(120),
         secs(10),
         || {
-            let res = execute_bash_command(
+            let res = app_node.block_on_bash_script_from_session(
                 &session,
-                format!(
+                &format!(
                     "journalctl --after-cursor='{}' | grep -c 'Failed to deserialize CatchUpPackage'",
                     message.cursor
                 ),
