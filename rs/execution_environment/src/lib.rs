@@ -186,6 +186,7 @@ impl ExecutionServices {
             Arc::clone(&state_reader),
             metrics_registry,
             "regular",
+            true,
         );
         let https_outcalls_service = HttpQueryHandler::new_service(
             Arc::clone(&sync_query_handler) as Arc<_>,
@@ -193,6 +194,7 @@ impl ExecutionServices {
             Arc::clone(&state_reader),
             metrics_registry,
             "https_outcall",
+            false,
         );
         let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),
@@ -212,7 +214,6 @@ impl ExecutionServices {
             logger,
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
-            config.deterministic_time_slicing,
             Arc::clone(&fd_factory),
         ));
 

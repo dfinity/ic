@@ -5,10 +5,6 @@ workspace(
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
-load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
-load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
-load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("//third_party/openssl:repository.bzl", "openssl_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
@@ -113,22 +109,6 @@ load("@canisters//:defs.bzl", "canister_deps")
 canister_deps()
 
 http_archive(
-    name = "aspect_rules_sol",
-    sha256 = "4e98a4572cd2c5f9e0a4118be3b8d2f0be148c80779ea9da646d0afabe2d609c",
-    strip_prefix = "rules_sol-0.1.0",
-    url = "https://github.com/aspect-build/rules_sol/releases/download/v0.1.0/rules_sol-v0.1.0.tar.gz",
-)
-
-load("@aspect_rules_sol//sol:repositories.bzl", "rules_sol_dependencies", "sol_register_toolchains")
-
-rules_sol_dependencies()
-
-sol_register_toolchains(
-    name = "solc",
-    sol_version = "0.8.18",
-)
-
-http_archive(
     name = "rules_rust",
     integrity = "sha256-2GH766nwQzOgrmnkSO6D1pF/JC3bt/41xo/CEqarpUY=",
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.64.0/rules_rust-0.64.0.tar.gz"],
@@ -187,43 +167,11 @@ load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
 
-# Third party dependencies that require special treatment
-
-lmdb_repository()
-
-jemalloc_repository()
-
-openssl_repository()
-
-libfuzzer_repository()
-
-http_archive(
-    name = "buildifier_prebuilt",
-    sha256 = "72b5bb0853aac597cce6482ee6c62513318e7f2c0050bc7c319d75d03d8a3875",
-    strip_prefix = "buildifier-prebuilt-6.3.3",
-    urls = [
-        "http://github.com/keith/buildifier-prebuilt/archive/6.3.3.tar.gz",
-    ],
-)
-
-load("@buildifier_prebuilt//:deps.bzl", "buildifier_prebuilt_deps")
-
-buildifier_prebuilt_deps()
-
-load("@buildifier_prebuilt//:defs.bzl", "buildifier_prebuilt_register_toolchains")
-
-buildifier_prebuilt_register_toolchains()
-
 # Rosetta CLI
 
 load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
 
 rosetta_cli_repository(name = "rosetta-cli")
-
-# rclone binary for upload_artifacts
-load("//bazel:rclone.bzl", "rclone_repository")
-
-rclone_repository(name = "rclone")
 
 # trivy binary for vulnerability scanning
 load("//bazel:trivy.bzl", "trivy_scan")

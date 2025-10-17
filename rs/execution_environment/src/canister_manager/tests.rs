@@ -149,11 +149,7 @@ lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
-        instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_NUM_INSTRUCTIONS
-        ),
+        instruction_limits: InstructionLimits::new(MAX_NUM_INSTRUCTIONS, MAX_NUM_INSTRUCTIONS),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
@@ -372,11 +368,7 @@ fn install_code(
 ) {
     let instruction_limit = NumInstructions::new(round_limits.instructions.get() as u64);
     let mut execution_parameters = ExecutionParameters {
-        instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
-            instruction_limit,
-            instruction_limit,
-        ),
+        instruction_limits: InstructionLimits::new(instruction_limit, instruction_limit),
         ..EXECUTION_PARAMETERS.clone()
     };
 
@@ -2115,7 +2107,8 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                     CallContextBuilder::new()
                         .with_call_origin(CallOrigin::Ingress(
                             user_test_id(123),
-                            message_test_id(456)
+                            message_test_id(456),
+                            String::from(""),
                         ))
                         .with_responded(false)
                         .build()

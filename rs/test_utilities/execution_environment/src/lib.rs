@@ -7,6 +7,7 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -53,7 +54,7 @@ use ic_replicated_state::{
     },
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
-use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -1131,7 +1132,6 @@ impl ExecutionTest {
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
@@ -1206,6 +1206,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             data_certificate,
             /*certification_delegation_metadata=*/ None,
+            true,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1743,6 +1744,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             data_certificate,
             certificate_delegation_metadata,
+            true,
         )
     }
 
@@ -2113,11 +2115,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_rate_limiting_of_instructions(mut self) -> Self {
         self.execution_config.rate_limiting_of_instructions = FlagStatus::Enabled;
-        self
-    }
-
-    pub fn with_deterministic_time_slicing_disabled(mut self) -> Self {
-        self.execution_config.deterministic_time_slicing = FlagStatus::Disabled;
         self
     }
 
@@ -2583,7 +2580,6 @@ impl ExecutionTestBuilder {
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_message,
@@ -2592,7 +2588,6 @@ impl ExecutionTestBuilder {
                     .max_instructions_per_slice,
             ),
             install_code_instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_install_code,
@@ -2782,6 +2777,10 @@ macro_rules! assert_delta {
             assert_eq!($x, $y, "delta: `{:?}`", $d);
         }
     };
+}
+
+fn mock_random_number_generator() -> Box<ReproducibleRng> {
+    Box::new(ReproducibleRng::from_seed_for_debugging([0u8; 32]))
 }
 
 #[cfg(test)]

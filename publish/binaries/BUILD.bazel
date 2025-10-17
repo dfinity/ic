@@ -1,4 +1,5 @@
 load("@os_info//:defs.bzl", "os_info")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//publish:defs.bzl", "artifact_bundle", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
@@ -62,6 +63,12 @@ NO_STRIP_BINARIES = [
     "replica",
 ]
 
+# The name of binaries we have no reason to release
+# on macOS Darwin
+NO_DARWIN_BINARIES = [
+    "orchestrator",
+]
+
 TEST_BINARIES = [
     "types-test",
 ]
@@ -111,7 +118,10 @@ TEST_BINARIES = [
 
 filegroup(
     name = "binaries",
-    srcs = [name + ".gz" for name in ALL_BINARIES],
+    srcs = select({
+        "@platforms//os:linux": [name + ".gz" for name in ALL_BINARIES],
+        "@platforms//os:osx": [name + ".gz" for name in ALL_BINARIES if name not in NO_DARWIN_BINARIES],
+    }),
 )
 
 artifact_bundle(

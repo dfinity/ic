@@ -6,7 +6,6 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
 };
-use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
@@ -120,6 +119,7 @@ where
         canister_test_id(REMOTE_CANISTER_ID),
         CallbackId::new(0),
         NO_DEADLINE,
+        String::from(""),
     );
     let call_context_id = canister_state
         .system_state
@@ -157,11 +157,7 @@ where
 
     // Create execution parameters
     let execution_parameters = ExecutionParameters {
-        instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_NUM_INSTRUCTIONS,
-        ),
+        instruction_limits: InstructionLimits::new(MAX_NUM_INSTRUCTIONS, MAX_NUM_INSTRUCTIONS),
         wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,

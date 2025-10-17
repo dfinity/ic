@@ -754,9 +754,9 @@ impl ApiState {
             .with_url(replica_url.clone())
             .build()
             .unwrap();
-        time::timeout(DEFAULT_SYNC_WAIT_DURATION, agent.fetch_root_key())
+        agent
+            .fetch_root_key()
             .await
-            .map_err(|_| format!("{UPSTREAM_ERROR} (timeout)"))?
             .map_err(|e| format!("{UPSTREAM_ERROR} ({e})"))?;
 
         let handle = Handle::new();
