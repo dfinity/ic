@@ -60,12 +60,12 @@ ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
+messaging-test = { path = "../rust_canisters/messaging_test" }
 mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-random-traffic-test = { path = "../rust_canisters/random_traffic_test" }
 serde = { workspace = true }
 test-strategy = "0.3.1"
 xnet-test = { path = "../rust_canisters/xnet_test" }

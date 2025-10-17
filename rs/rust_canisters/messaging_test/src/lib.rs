@@ -1,0 +1,96 @@
+use candid::{CandidType, Decode, Encode};
+use ic_base_types::CanisterId;
+use serde::{Deserialize, Serialize};
+
+/// Includes all the information for a call to this canister.
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
+pub struct Call {
+    /// The receiver canister of this call.
+    pub receiver: CanisterId,
+    /// The number of bytes the payload of the message sent to the `receiver` should have.
+    pub call_bytes: u32,
+    /// The number of bytes the payload received in the reply from the `receiver` should have.
+    pub reply_bytes: u32,
+    /// The timeout used for a best effort call; `Some(_)`: best effort call, `None`: guaranteed response call.
+    pub timeout_secs: Option<u32>,
+    /// A list of downstream calls `receiver` should attempt.
+    pub downstream_calls: Vec<Call>,
+}
+
+/// The message sent to this canister by an ingress or an inter canister message.
+#[derive(Serialize, Deserialize, CandidType, Debug, Eq, PartialEq)]
+pub struct Message {
+    /// The call index for this call, i.e. a strictly increasing integer (with each call).
+    pub call_index: u32,
+    /// The number of bytes the reply to this call should have.
+    pub reply_bytes: u32,
+    /// A list of downstream calls this call is supposed to attempt.
+    pub downstream_calls: Vec<Call>,
+}
+
+/// Includes all the information for a response from this canister.
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
+pub enum Response {
+    /// The call to `respondent` was successful.
+    Success {
+        bytes_received_on_call: u32,
+        bytes_sent_on_reply: u32,
+        downstream_responses: Vec<(CanisterId, Response)>,
+    },
+    /// A synchronous reject occurred, i.e. perform call failed.
+    SyncReject,
+    /// An asynchronous reject occurred, e.g. queue full.
+    AsyncReject {
+        reject_code: u32,
+        reject_message: String,
+    },
+}
+
+/// The reply received from this canister to an ingress or an inter canister message.
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
+pub struct Reply {
+    pub bytes_received_on_call: u32,
+    pub downstream_responses: Vec<(CanisterId, Response)>,
+}
+
+/// Encodes a message of type `T` using Candid and appropriate padding
+/// to result in a blob of exactly `target_bytes_count` bytes if possible.
+///
+/// Returns the encoded blob and the bytes count of the contained candid
+/// encoded payload.
+pub fn encode<T>(msg: &T, target_bytes_count: usize) -> (Vec<u8>, u32)
+where
+    T: Serialize + for<'a> Deserialize<'a> + CandidType,
+{
+    // Encode `msg` in Candid as usual.
+    let mut payload = candid::Encode!(msg).expect("candid encoding failed");
+    let payload_size_bytes = payload.len();
+
+    // Create bytes vector [payload.len(); payload; padding].
+    let mut bytes = Vec::with_capacity(std::cmp::max(target_bytes_count, payload.len() + 4));
+    bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    bytes.append(&mut payload);
+    bytes.resize(bytes.capacity(), 13_u8);
+
+    (bytes, payload_size_bytes as u32)
+}
+
+/// Decodes a blob into a type `T`, discarding any possible padding.
+///
+/// Returns the decoded type `T`, the bytes count of the blob and the
+/// bytes count of the contained candid encoded payload.
+pub fn decode<T>(blob: Vec<u8>) -> (T, u32, u32)
+where
+    T: Serialize + for<'a> Deserialize<'a> + CandidType,
+{
+    let blob_bytes_count = blob.len() as u32;
+    let payload_bytes_count = u32::from_le_bytes(<[u8; 4]>::try_from(&blob[0..4]).unwrap());
+    (
+        candid::Decode!(&blob[4..(4 + payload_bytes_count as usize)], T).unwrap(),
+        blob_bytes_count,
+        payload_bytes_count,
+    )
+}
+
+// Enable Candid export.
+ic_cdk::export_candid!();
