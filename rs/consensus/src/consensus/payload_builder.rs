@@ -220,17 +220,16 @@ pub(crate) mod test {
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_interfaces_mocks::messaging::MockXNetPayloadBuilder;
-    use ic_interfaces_mocks::payload_builder::MockSelfValidatingPayloadBuilder;
+    use ic_interfaces_mocks::payload_builder::{
+        MockIngressSelector, MockSelfValidatingPayloadBuilder,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
-    use ic_test_utilities_consensus::{
-        batch::{MockBatchPayloadBuilder, MockIngressSelector},
-        fake::Fake,
-    };
+    use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::Fake};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::{
         ids::{node_test_id, subnet_test_id},
