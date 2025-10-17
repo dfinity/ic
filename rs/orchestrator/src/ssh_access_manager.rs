@@ -220,8 +220,8 @@ mod tests {
     const API_BOUNDARY_NODE: NodeId = NODE_3;
     const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
-    const ASSIGNED_READONLY_KEY: &str = "assinged_readonly_key";
-    const UNASSIGNED_READONLY_KEY: &str = "unassinged_readonly_key";
+    const ASSIGNED_READONLY_KEY: &str = "assigned_readonly_key";
+    const UNASSIGNED_READONLY_KEY: &str = "unassigned_readonly_key";
     const BACKUP_KEY: &str = "backup_key";
     const RECOVERY_KEY: &str = "recovery_key";
 
