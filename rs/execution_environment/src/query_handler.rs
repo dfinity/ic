@@ -15,8 +15,8 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
-use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
+use ic_config::{execution_environment::Config, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE};
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -52,7 +52,9 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_management_canister_types_private::{FetchCanisterLogsRequest, Payload, QueryMethod};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, FetchCanisterLogsRequest, Payload, QueryMethod,
+};
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -167,6 +169,7 @@ impl InternalHttpQueryHandler {
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
         certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+        enable_query_stats_tracking: bool,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -179,10 +182,47 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        self.config.fetch_canister_logs_filter,
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
+                }
+                Ok(QueryMethod::CanisterStatus) => {
+                    let args = CanisterIdRecord::decode(&query.method_payload)?;
+                    let canister_id = args.get_canister_id();
+                    let ready_for_migration = state.get_ref().ready_for_migration(&canister_id);
+                    let canister =
+                        state
+                            .get_ref()
+                            .canister_state(&canister_id)
+                            .ok_or_else(|| {
+                                UserError::new(
+                                    ErrorCode::CanisterNotFound,
+                                    format!("Canister {canister_id} not found"),
+                                )
+                            })?;
+                    let since = Instant::now(); // Start logging execution time.
+                    let response = crate::canister_manager::get_canister_status(
+                        Arc::clone(&self.cycles_account_manager),
+                        query.source(),
+                        canister,
+                        state
+                            .get_ref()
+                            .metadata
+                            .network_topology
+                            .get_subnet_size(&self.hypervisor.subnet_id())
+                            .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
+                        state.get_ref().get_own_cost_schedule(),
+                        ready_for_migration,
+                    )?;
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::CanisterStatus,
                         since.elapsed().as_secs_f64(),
                         &result,
                     );
@@ -197,7 +237,9 @@ impl InternalHttpQueryHandler {
             };
         }
 
-        let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled {
+        let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
+            && enable_query_stats_tracking
+        {
             Some(&self.local_query_execution_stats)
         } else {
             None
@@ -297,6 +339,7 @@ pub(crate) struct HttpQueryHandler {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_scheduler: QueryScheduler,
     metrics: Arc<HttpQueryHandlerMetrics>,
+    enable_query_stats_tracking: bool,
 }
 
 impl HttpQueryHandler {
@@ -306,12 +349,14 @@ impl HttpQueryHandler {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
         namespace: &str,
+        enable_query_stats_tracking: bool,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
             metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
+            enable_query_stats_tracking,
         })
     }
 }
@@ -339,6 +384,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         let canister_id = query.receiver;
         let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
         let http_query_handler_metrics = Arc::clone(&self.metrics);
+        let enable_query_stats_tracking = self.enable_query_stats_tracking;
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
@@ -372,8 +418,13 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response =
-                            internal.query(query, state, cert, certificate_delegation_metadata);
+                        let response = internal.query(
+                            query,
+                            state,
+                            cert,
+                            certificate_delegation_metadata,
+                            enable_query_stats_tracking,
+                        );
 
                         Ok((response, time))
                     }

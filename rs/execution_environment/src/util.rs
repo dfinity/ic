@@ -7,6 +7,7 @@ use prometheus::IntCounter;
 use std::sync::Arc;
 
 pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
+pub(crate) const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
 /// Debug assert a condition, increase an error counter, and log the error.
 ///

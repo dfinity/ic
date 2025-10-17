@@ -30,6 +30,7 @@ ic-management-canister-types = { workspace = true }
 ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
 schemars = "0.8.16"
+semver = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -70,3 +71,5 @@ wat = { workspace = true }
 ic-registry-client = { path = "../../rs/registry/client" }
 ic-registry-client-helpers = { path = "../../rs/registry/helpers" }
 ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provider" }
+ic-registry-transport = { path = "../../rs/registry/transport" }
+prost = { workspace = true }

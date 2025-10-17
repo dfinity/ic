@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/chunks",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/rate_limits",
     "//rs/nervous_system/string",
     "//rs/nervous_system/temporary",
     "//rs/nervous_system/time_helpers",
@@ -260,6 +261,7 @@ rust_ic_test_suite_with_extra_srcs(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":canister",
         "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/state_machine_tests",
     ] + POCKET_IC_DEPS,
 )
 

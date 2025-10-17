@@ -384,6 +384,7 @@ async fn add_wasm_to_sns_wasm(
     let proposal_payload = AddWasmRequest {
         wasm: Some(sns_wasm),
         hash: wasm_hash.to_vec(),
+        skip_update_latest_version: Some(false),
     };
 
     let proposal_id = submit_external_proposal_with_test_id(

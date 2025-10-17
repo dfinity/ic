@@ -1,12 +1,9 @@
 use super::*;
-use crate::temporarily_enable_fulfill_subnet_rental_request_proposals;
 use ic_base_types::PrincipalId;
 
 #[test]
 fn test_validate_fulfill_subnet_rental_request() {
     // Step 1: Prepare the world.
-
-    let _restore_on_drop = temporarily_enable_fulfill_subnet_rental_request_proposals();
 
     // Step 2: Call the code under test.
 

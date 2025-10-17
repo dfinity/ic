@@ -590,7 +590,7 @@ pub struct IcpFeatures {
     pub cycles_minting: Option<IcpFeaturesConfig>,
     /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
     pub icp_token: Option<IcpFeaturesConfig>,
-    /// Deploys the cycles ledger and index canisters.
+    /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
     pub cycles_token: Option<IcpFeaturesConfig>,
     /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
     /// The initial NNS neuron is controlled by the anonymous principal.
@@ -603,6 +603,8 @@ pub struct IcpFeatures {
     /// Deploys the NNS frontend dapp. The HTTP gateway must be specified via `http_gateway_config` in `InstanceConfig`
     /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
     pub nns_ui: Option<IcpFeaturesConfig>,
+    /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    pub bitcoin: Option<IcpFeaturesConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -786,6 +788,7 @@ impl ExtendedSubnetConfigSet {
             sns,
             ii,
             nns_ui,
+            bitcoin,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -813,6 +816,13 @@ impl ExtendedSubnetConfigSet {
             if flag.is_some() {
                 check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
                 self.sns = Some(self.sns.unwrap_or_default());
+            }
+        }
+        // canisters on the Bitcoin subnet
+        for (flag, icp_feature_str) in [(bitcoin, "bitcoin")] {
+            if flag.is_some() {
+                check_empty_subnet(&self.bitcoin, "Bitcoin", icp_feature_str)?;
+                self.bitcoin = Some(self.bitcoin.unwrap_or_default());
             }
         }
         Ok(self)

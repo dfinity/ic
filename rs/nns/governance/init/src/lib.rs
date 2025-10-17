@@ -9,6 +9,7 @@ use std::path::Path;
 
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
+use ic_nns_governance_api::Visibility;
 use ic_nns_governance_api::{
     Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,
 };
@@ -121,6 +122,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: true,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -148,6 +150,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -167,6 +170,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -342,6 +346,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                     .iter()
                     .cloned()
                     .collect(),
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             };
 

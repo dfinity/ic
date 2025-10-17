@@ -329,6 +329,7 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) -> Result<()> {
             proposal_id: None,
         }),
         hash: sns_wasm_hash.to_vec(),
+        skip_update_latest_version: Some(false),
     };
 
     let sns_wasms_canister_id = args

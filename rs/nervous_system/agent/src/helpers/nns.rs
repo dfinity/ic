@@ -172,6 +172,7 @@ pub async fn add_wasm_via_nns_proposal<
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
         wasm: Some(wasm),
+        skip_update_latest_version: Some(false),
     };
 
     let proposal = MakeProposalRequest {

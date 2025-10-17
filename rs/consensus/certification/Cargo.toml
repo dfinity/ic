@@ -24,6 +24,7 @@ tokio = { workspace = true }
 assert_matches = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }

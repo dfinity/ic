@@ -1,0 +1,22 @@
+[package]
+name = "ic-crypto-test-utils-crypto-returning-ok"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-crypto-interfaces-sig-verification = { path = "../../interfaces/sig_verification" }
+ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
+ic-crypto-temp-crypto = { path = "../../temp_crypto" }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "../../test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-ni-dkg = { path = "../../test_utils/ni-dkg" }
+ic-interfaces = { path = "../../../interfaces" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-registry-client-fake = { path = "../../../registry/fake" }
+ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
+ic-test-utilities-types = { path = "../../../test_utilities/types" }
+ic-types = { path = "../../../types/types" }
+ic-types-test-utils = { path = "../../../types/types_test_utils" }
+rand = { workspace = true }
