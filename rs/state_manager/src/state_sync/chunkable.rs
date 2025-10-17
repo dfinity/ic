@@ -963,7 +963,9 @@ impl IncompleteState {
                 let elapsed = started_at.elapsed();
                 info!(
                     log,
-                    "Successfully made the synced checkpoint at height {} in {:?}", height, elapsed
+                    "state sync: elapsed since start: {:?}, successfully made checkpoint at height {}",
+                    elapsed,
+                    height
                 );
                 true
             }
