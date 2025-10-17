@@ -6310,7 +6310,6 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
- "ic-secp256k1 0.3.0",
  "ic-sns-init",
  "ic-sns-swap",
  "ic-sns-wasm",
