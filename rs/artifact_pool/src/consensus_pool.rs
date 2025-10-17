@@ -20,7 +20,6 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_logger::{ReplicaLogger, warn};
-use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::NodeId;
@@ -105,7 +104,7 @@ const LABEL_TYPE: &str = "type";
 const LABEL_STAT: &str = "stat";
 
 impl<T> PerTypeMetrics<T> {
-    fn new(registry: &MetricsRegistry, pool_portion: &str, type_name: &str) -> Self {
+    fn new(registry: &ic_metrics::MetricsRegistry, pool_portion: &str, type_name: &str) -> Self {
         const NAME: &str = "artifact_pool_consensus_height_stat";
         const HELP: &str =
             "The height of objects in a consensus pool, by pool type, object type and stat";
@@ -191,7 +190,7 @@ struct PoolMetrics {
 }
 
 impl PoolMetrics {
-    fn new(registry: MetricsRegistry, pool_portion: &str) -> Self {
+    fn new(registry: ic_metrics::MetricsRegistry, pool_portion: &str) -> Self {
         Self {
             random_beacon: PerTypeMetrics::new(&registry, pool_portion, "random_beacon"),
             random_tape: PerTypeMetrics::new(&registry, pool_portion, "random_tape"),
@@ -302,17 +301,12 @@ pub struct UncachedConsensusPoolImpl {
 }
 
 impl UncachedConsensusPoolImpl {
-    pub fn new(
-        config: ArtifactPoolConfig,
-        metrics_registry: &MetricsRegistry,
-        log: ReplicaLogger,
-    ) -> UncachedConsensusPoolImpl {
+    pub fn new(config: ArtifactPoolConfig, log: ReplicaLogger) -> UncachedConsensusPoolImpl {
         let validated = match config.persistent_pool_backend {
             PersistentPoolBackend::Lmdb(lmdb_config) => Box::new(
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_consensus_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
-                    metrics_registry,
                     log,
                 ),
             ) as Box<_>,
@@ -427,11 +421,11 @@ impl ConsensusPoolImpl {
         subnet_id: SubnetId,
         cup_proto: pb::CatchUpPackage,
         config: ArtifactPoolConfig,
-        registry: MetricsRegistry,
+        registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
     ) -> ConsensusPoolImpl {
-        let mut pool = UncachedConsensusPoolImpl::new(config.clone(), &registry, log.clone());
+        let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
         Self::init_genesis(cup_proto, pool.validated.as_mut());
         let mut pool = Self::from_uncached(
             node_id,
@@ -491,7 +485,7 @@ impl ConsensusPoolImpl {
     pub fn from_uncached(
         node_id: NodeId,
         uncached: UncachedConsensusPoolImpl,
-        registry: MetricsRegistry,
+        registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
     ) -> ConsensusPoolImpl {
