@@ -478,8 +478,8 @@ type SetSubnetOperationalLevelPayload = record {
   // Which subnet not modify (if any).
   subnet_id : opt principal;
 
-  // 1 = Normal. This results in setting is_halted in SubnetRecord to true.
-  // 2 = DownForRepairs. This results in setting is_halted in SubnetRecord to false.
+  // 1 = Normal. This results in setting is_halted in SubnetRecord to false.
+  // 2 = DownForRepairs. This results in setting is_halted in SubnetRecord to true.
   operational_level : opt int32;
 
   // SSH public keys that are allowed to ssh into nodes of the subnet with
