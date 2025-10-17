@@ -206,12 +206,13 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     replace_nns_with_unassigned_nodes(&env);
     grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
+    let current_version = get_guestos_img_version();
+    info!(logger, "Current GuestOS version: {:?}", current_version);
+
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
     let subnet_size = nns_subnet.nodes().count();
     let nns_node = nns_subnet.nodes().next().unwrap();
-    let current_version = get_guestos_img_version();
-    info!(logger, "Current GuestOS version: {:?}", &current_version);
 
     info!(logger, "Ensure NNS subnet is functional");
     let init_msg = "subnet recovery works!";
@@ -229,10 +230,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         init_msg,
         msg,
         &logger,
-    );
-    info!(
-        logger,
-        "NNS is healthy - message stored and read successfully"
     );
 
     // identifies the version of the replica after the recovery
@@ -291,6 +288,17 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &logger,
     );
 
+    // Download pool from the node with the highest certification share height
+    let (download_pool_node, highest_cert_share) =
+        node_with_highest_certification_share_height(&nns_subnet, &logger);
+    info!(
+        logger,
+        "Selected node {} ({:?}) as download pool with certification share height {}",
+        download_pool_node.node_id,
+        download_pool_node.get_ip_addr(),
+        highest_cert_share,
+    );
+
     // Mirror production setup by removing admin SSH access from all nodes except the DFINITY-owned node
     info!(
         logger,
@@ -318,17 +326,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &admin_auth,
     );
 
-    // Download pool from the node with the highest certification share height
-    let (download_pool_node, highest_cert_share) =
-        node_with_highest_certification_share_height(&nns_subnet, &logger);
-    info!(
-        logger,
-        "Selected node {} ({:?}) as download pool with certification share height {}",
-        download_pool_node.node_id,
-        download_pool_node.get_ip_addr(),
-        highest_cert_share,
-    );
-
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
@@ -339,8 +336,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         use_local_binaries: false,
     };
 
-    // unlike during a production recovery using the CLI, here we already know all of parameters
-    // ahead of time.
+    // Unlike during a production recovery using the CLI, here we already know all parameters ahead
+    // of time.
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: nns_subnet.subnet_id,
         upgrade_version: Some(upgrade_version.clone()),
@@ -358,15 +355,19 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         skip: Some(vec![StepType::Cleanup]), // Skip Cleanup to keep the output directory
     };
 
-    let subnet_recovery_tool =
-        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
+    info!(
+        logger,
+        "Starting recovery of NNS subnet {} with {:?}", nns_subnet.subnet_id, &subnet_args
+    );
+
+    let subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
     if cfg.local_recovery {
         info!(logger, "Performing a local recovery");
-        local_recovery(dfinity_owned_node, subnet_recovery_tool, &logger);
+        local_recovery(dfinity_owned_node, subnet_recovery, &logger);
     } else {
         info!(logger, "Performing a remote recovery");
-        remote_recovery(subnet_recovery_tool, &logger);
+        remote_recovery(subnet_recovery, &logger);
     }
     info!(
         logger,

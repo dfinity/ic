@@ -313,8 +313,20 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         };
     }
 
-    let initial_version = get_guestos_img_version();
-    info!(logger, "IC_VERSION_ID: {initial_version:?}");
+    let (
+        ssh_admin_priv_key_path,
+        admin_auth,
+        ssh_readonly_priv_key_path,
+        _,
+        _,
+        ssh_readonly_pub_key,
+    ) = admin_keys_and_generate_readonly_keys(&env);
+    // If the latest CUP is corrupted we can't deploy read-only access
+    let ssh_readonly_pub_key_deployed = (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key);
+
+    let current_version = get_guestos_img_version();
+    info!(logger, "Current GuestOS version: {:?}", current_version);
+
     let topology_snapshot = env.topology_snapshot();
 
     // Choose a node from the nns subnet
@@ -325,7 +337,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         nns_node.node_id,
         nns_node.get_ip_addr()
     );
-
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let nns_canister = block_on(MessageCanister::new(
         &agent,
@@ -362,7 +373,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
                 &nns_canister,
                 source_subnet_id,
                 cfg.subnet_size,
-                initial_version.clone(),
+                current_version.clone(),
                 key_ids.clone(),
                 &logger,
             )
@@ -405,37 +416,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let msg = "subnet recovery works again!";
     assert_subnet_is_healthy(
         &app_subnet.nodes().collect::<Vec<_>>(),
-        &initial_version,
+        &current_version,
         app_can_id,
         init_msg,
         msg,
         &logger,
     );
-
-    let subnet_id = app_subnet.subnet_id;
-
-    let (
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_readonly_priv_key_path,
-        _,
-        _,
-        ssh_readonly_pub_key,
-    ) = admin_keys_and_generate_readonly_keys(&env);
-
-    let recovery_dir = get_dependency_path("rs/tests");
-    let binaries_dir = recovery_dir.join("recovery/binaries");
-    set_sandbox_env_vars(binaries_dir.clone());
-
-    let recovery_args = RecoveryArgs {
-        dir: recovery_dir,
-        nns_url: nns_node.get_public_url(),
-        replica_version: Some(initial_version.clone()),
-        admin_key_file: Some(ssh_admin_priv_key_path),
-        test_mode: true,
-        skip_prompts: true,
-        use_local_binaries: cfg.local_recovery,
-    };
 
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
 
@@ -449,45 +435,14 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let working_version = if version_is_broken {
         get_guestos_update_img_version()
     } else {
-        initial_version
+        current_version.clone()
     };
 
-    let subnet_args = AppSubnetRecoveryArgs {
-        keep_downloaded_state: Some(cfg.chain_key),
-        subnet_id,
-        upgrade_version: version_is_broken.then(|| working_version.clone()),
-        upgrade_image_url: Some(get_guestos_update_img_url()),
-        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
-        replacement_nodes: Some(unassigned_nodes_ids.clone()),
-        replay_until_height: None, // We will set this after breaking/halting the subnet, see below
-        // If the latest CUP is corrupted we can't deploy read-only access
-        readonly_pub_key: (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key),
-        readonly_key_file: Some(ssh_readonly_priv_key_path),
-        download_method: None, // We will set this after breaking/halting the subnet, see below
-        upload_method: None,   // We will set this after breaking/halting the subnet, see below
-        wait_for_cup_node: None, // We will set this after breaking/halting the subnet, see below
-        chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
-        next_step: None,
-        // Skip validating the output if the CUP is corrupt, as in this case no replica will be
-        // running to compare the heights to.
-        skip: cfg
-            .corrupt_cup
-            .then_some(vec![StepType::ValidateReplayOutput]),
-    };
+    let recovery_dir = get_dependency_path("rs/tests");
+    let binaries_dir = recovery_dir.join("recovery/binaries");
+    set_sandbox_env_vars(binaries_dir.clone());
 
-    info!(
-        logger,
-        "Starting recovery of subnet {} with {:?}",
-        subnet_id.to_string(),
-        &subnet_args
-    );
-
-    let mut subnet_recovery = AppSubnetRecovery::new(
-        env.logger(),
-        recovery_args,
-        /*neuron_args=*/ None,
-        subnet_args,
-    );
+    let app_subnet_id = app_subnet.subnet_id;
     let admin_helper = AdminHelper::new(
         match std::env::var("IC_ADMIN_PATH") {
             Ok(path) => get_dependency_path(path),
@@ -504,7 +459,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             &logger,
         );
     } else {
-        halt_subnet(&admin_helper, &app_node, subnet_id, &[], &logger)
+        halt_subnet(&admin_helper, &app_node, app_subnet_id, &[], &logger)
     }
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
@@ -528,12 +483,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             .unwrap()
     };
 
-    subnet_recovery.params.download_method =
-        Some(DataLocation::Remote(download_node.get_ip_addr()));
-    subnet_recovery.params.replay_until_height = Some(highest_cert_share);
-    subnet_recovery.params.upload_method = Some(DataLocation::Remote(upload_node.get_ip_addr()));
-    subnet_recovery.params.wait_for_cup_node = Some(upload_node.get_ip_addr());
-
     if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
         corrupt_latest_cup(&app_subnet, &admin_helper, &logger);
@@ -542,7 +491,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     // Mirror production setup by removing admin SSH access from all nodes except the ones we need
     // for recovery.
-    let admin_nodes = if subnet_recovery.params.readonly_pub_key.is_some() {
+    let admin_nodes = if ssh_readonly_pub_key_deployed.is_some() {
         // If we can deploy read-only access, we only need admin access on the upload node to upload
         // the state
         vec![&upload_node]
@@ -583,6 +532,54 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
+    let recovery_args = RecoveryArgs {
+        dir: recovery_dir,
+        nns_url: nns_node.get_public_url(),
+        replica_version: Some(current_version),
+        admin_key_file: Some(ssh_admin_priv_key_path),
+        test_mode: true,
+        skip_prompts: true,
+        use_local_binaries: cfg.local_recovery,
+    };
+
+    // Unlike during a production recovery using the CLI, here we already know all parameters ahead
+    // of time.
+    let subnet_args = AppSubnetRecoveryArgs {
+        subnet_id: app_subnet_id,
+        upgrade_version: version_is_broken.then(|| working_version.clone()),
+        upgrade_image_url: Some(get_guestos_update_img_url()),
+        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
+        replacement_nodes: Some(unassigned_nodes_ids.clone()),
+        replay_until_height: Some(highest_cert_share),
+        readonly_pub_key: ssh_readonly_pub_key_deployed,
+        readonly_key_file: Some(ssh_readonly_priv_key_path),
+        download_method: Some(DataLocation::Remote(download_node.get_ip_addr())),
+        keep_downloaded_state: Some(cfg.chain_key),
+        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
+        wait_for_cup_node: Some(upload_node.get_ip_addr()),
+        chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
+        next_step: None,
+        // Skip validating the output if the CUP is corrupted, as in this case no replica will be
+        // running to compare the heights to.
+        skip: cfg
+            .corrupt_cup
+            .then_some(vec![StepType::ValidateReplayOutput]),
+    };
+
+    info!(
+        logger,
+        "Starting recovery of subnet {} with {:?}",
+        app_subnet_id.to_string(),
+        &subnet_args
+    );
+
+    let subnet_recovery = AppSubnetRecovery::new(
+        env.logger(),
+        recovery_args,
+        /*neuron_args=*/ None,
+        subnet_args,
+    );
+
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
         local_recovery(&download_node, subnet_recovery, &logger);
@@ -590,6 +587,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         info!(logger, "Performing remote recovery");
         remote_recovery(subnet_recovery, &logger);
     }
+    info!(
+        logger,
+        "Recovery coordinator successfully went through all steps of the recovery tool"
+    );
 
     info!(logger, "Blocking for newer registry version");
     let topology_snapshot = block_on(env.topology_snapshot().block_for_newer_registry_version())
@@ -650,7 +651,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             let app_keys = enable_chain_key_signing_on_subnet(
                 &nns_node,
                 &nns_canister,
-                subnet_id,
+                app_subnet_id,
                 key_ids.clone(),
                 &logger,
             );
