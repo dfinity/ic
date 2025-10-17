@@ -55,7 +55,7 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> Replica
         &target_version,
         &logger,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
     info!(&logger, "Blessed target version");

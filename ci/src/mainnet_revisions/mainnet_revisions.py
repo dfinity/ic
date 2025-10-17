@@ -28,8 +28,8 @@ class VersionInfo:
     version: str
     hash: str
     dev_hash: str
-    launch_measurements: str
-    dev_measurements: str
+    launch_measurements: dict
+    dev_measurements: dict
 
 
 def sync_main_branch_and_checkout_branch(
@@ -344,12 +344,10 @@ def download_and_hash_file(url: str):
 
 
 def download_and_read_file(url: str):
-    # TODO(NODE-1723): Currently dev measurements are not published. Track them once they are.
-    return "unimplemented"
     with tempfile.NamedTemporaryFile() as tmp_file:
         urllib.request.urlretrieve(url, tmp_file.name)
         with open(tmp_file.name, "rb") as f:
-            return f.read()
+            return json.loads(f.read().decode())
 
 
 def get_logger(level) -> logging.Logger:
