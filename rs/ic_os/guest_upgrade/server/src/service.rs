@@ -75,7 +75,10 @@ impl DiskEncryptionKeyExchangeServiceImpl {
 
 #[async_trait]
 impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
-    async fn get_disk_encryption_key(&self, request: Request<GetDiskEncryptionKeyRequest>) -> Result<Response<GetDiskEncryptionKeyResponse>, Status> {
+    async fn get_disk_encryption_key(
+        &self,
+        request: Request<GetDiskEncryptionKeyRequest>,
+    ) -> Result<Response<GetDiskEncryptionKeyResponse>, Status> {
         let result = self.get_disk_encryption_key_impl(request).await;
         if let Err(e) = result.as_ref() {
             eprintln!("get_disk_encryption_key returned error: {}", e.message());
@@ -83,7 +86,10 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
         result
     }
 
-    async fn signal_status(&self, request: Request<SignalStatusRequest>) -> Result<Response<SignalStatusResponse>, Status> {
+    async fn signal_status(
+        &self,
+        request: Request<SignalStatusRequest>,
+    ) -> Result<Response<SignalStatusResponse>, Status> {
         self.signal_status_impl(request).await
     }
 }
