@@ -218,9 +218,6 @@ impl OngoingStateSync {
                 self.chunks_to_download.download_failed(chunk_id);
             }
             Err(err) => {
-                // Err(DownloadChunkError::Overloaded)
-                // | Err(DownloadChunkError::Timeout)
-                // | Err(DownloadChunkError::Cancelled) => {
                 self.peer_state.entry(peer_id).and_modify(|peer| {
                     peer.deregister_download();
                 });
@@ -244,73 +241,70 @@ impl OngoingStateSync {
             return;
         }
 
-        loop {
-            match self.chunks_to_download.next_chunk_to_download() {
-                Some(chunk) => {
-                    let Some(peer_id) = self.choose_peer_for_chunk(chunk) else {
-                        self.chunks_to_download.download_failed(chunk);
-                        break;
-                    };
-
-                    info!(
-                        self.log,
-                        "STATE_SYNC: Spawning download chunk {} for peer {}", chunk, peer_id
-                    );
-                    self.peer_state
-                        .entry(peer_id)
-                        .and_modify(|peer| peer.register_download());
-                    self.downloading_chunks.spawn_on(
-                        chunk,
-                        self.metrics
-                            .download_task_monitor
-                            .instrument(Self::download_chunk_task(
-                                peer_id,
-                                self.transport.clone(),
-                                tracker.clone(),
-                                self.artifact_id.clone(),
-                                chunk,
-                                cancellation.child_token(),
-                                self.metrics.clone(),
-                            )),
-                        &self.rt,
-                    );
-                }
-                None => {
-                    if !self.chunks_to_download.is_empty() {
-                        break;
-                    }
-
-                    // If we store chunks in self.chunks_to_download we will eventually initiate and
-                    // by filtering with the current in flight request we avoid double download.
-                    let tracker = tracker.lock().unwrap();
-
-                    let chunks_to_download = tracker
-                        .chunks_to_download()
-                        .filter(|chunk| !self.downloading_chunks.contains(chunk));
-
-                    let added = self.chunks_to_download.add_chunks(chunks_to_download);
-                    if added != 0 {
-                        info!(
-                            self.log,
-                            "STATE_SYNC: Requesting new chunks, added {}", added
-                        );
-                    }
-
-                    if !self.is_base_layer && tracker.is_base_layer() {
-                        info!(self.log, "STATE_SYNC: Starting to download base layer");
-                        self.is_base_layer = true;
-                    }
-
-                    self.metrics.chunks_to_download_calls_total.inc();
-                    self.metrics.chunks_to_download_total.inc_by(added as u64);
-
-                    if added == 0 {
-                        info!(self.log, "STATE_SYNC: Failed to retreive new chunks");
-                        break;
-                    }
-                }
-            }
+        if self.chunks_to_download.is_empty() {
+            self.update_chunks_to_download(tracker.clone());
         }
+
+        while let Some(chunk) = self.chunks_to_download.next_chunk_to_download() {
+            let Some(peer_id) = self.choose_peer_for_chunk(chunk) else {
+                self.chunks_to_download.download_failed(chunk);
+                break;
+            };
+
+            info!(
+                self.log,
+                "STATE_SYNC: Spawning download chunk {} for peer {}", chunk, peer_id
+            );
+            self.peer_state
+                .entry(peer_id)
+                .and_modify(|peer| peer.register_download());
+            self.downloading_chunks.spawn_on(
+                chunk,
+                self.metrics
+                    .download_task_monitor
+                    .instrument(Self::download_chunk_task(
+                        peer_id,
+                        self.transport.clone(),
+                        tracker.clone(),
+                        self.artifact_id.clone(),
+                        chunk,
+                        cancellation.child_token(),
+                        self.metrics.clone(),
+                    )),
+                &self.rt,
+            );
+        }
+    }
+
+    fn update_chunks_to_download<T: 'static + Send>(
+        &mut self,
+        tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
+    ) {
+        let chunks_to_download = {
+            let tracker = tracker.lock().unwrap();
+
+            if !self.is_base_layer && tracker.is_base_layer() {
+                info!(self.log, "STATE_SYNC: Starting to download base layer");
+                self.is_base_layer = true;
+            }
+
+            tracker
+                .chunks_to_download()
+                .filter(|chunk| !self.downloading_chunks.contains(chunk))
+        };
+
+        let added = self.chunks_to_download.add_chunks(chunks_to_download);
+        if added != 0 {
+            info!(
+                self.log,
+                "STATE_SYNC: Requesting new chunks, added {}", added
+            );
+        } else {
+            info!(self.log, "STATE_SYNC: Failed to retreive new chunks");
+        }
+
+        self.metrics.chunks_to_download_calls_total.inc();
+        self.metrics.chunks_to_download_total.inc_by(added as u64);
     }
 
     fn choose_peer_for_chunk(&self, chunk_id: ChunkId) -> Option<NodeId> {
