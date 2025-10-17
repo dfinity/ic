@@ -70,3 +70,10 @@ system_test(
     name = "ic_crypto_fstrim_tool_test",
     deps = DEPENDENCIES,
 )
+
+system_test(
+    name = "crypto_ingress_verification_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES,
+)
