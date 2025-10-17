@@ -1708,7 +1708,6 @@ fn test_set_controllers_via_update_settings() {
             test.canister_update_controller(canister_id, controllers.clone())
                 .unwrap();
 
-            // List of controllers should have been updated to the new controllers.
             assert_eq!(
                 *test.canister_state(canister_id).controllers(),
                 controllers.into_iter().collect::<BTreeSet<_>>()
@@ -1729,7 +1728,6 @@ fn test_set_controllers_to_self() {
     test.canister_update_controller(canister_id, vec![canister_id.get()])
         .unwrap();
 
-    // List of controllers should have been updated to the new controller.
     assert_eq!(
         *test.canister_state(canister_id).controllers(),
         btreeset! {canister_id.get()}
@@ -1750,7 +1748,6 @@ fn duplicate_controllers() {
     test.canister_update_controller(canister_id, controllers.clone())
         .unwrap();
 
-    // List of controllers should have been updated to the new controllers.
     assert_eq!(
         *test.canister_state(canister_id).controllers(),
         controllers.into_iter().collect::<BTreeSet<_>>()
@@ -1770,15 +1767,17 @@ fn too_many_controllers() {
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-    let controllers: Vec<_> = (0..11).map(|i| user_test_id(i).get()).collect();
+    let controllers: Vec<_> = (0..=MAX_CONTROLLERS)
+        .map(|i| user_test_id(i as u64).get())
+        .collect();
     let err = test
         .canister_update_controller(canister_id, controllers.clone())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
-    assert!(
-        err.description()
-            .contains("The number of elements exceeds maximum allowed 10")
-    );
+    assert!(err.description().contains(&format!(
+        "The number of elements exceeds maximum allowed {}",
+        MAX_CONTROLLERS
+    )));
 }
 
 #[test]
