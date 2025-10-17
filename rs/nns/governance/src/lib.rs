@@ -209,7 +209,7 @@ thread_local! {
         = const { Cell::new(cfg!(feature = "test")) };
 
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
-        = const { Cell::new(true) };
+        = const { Cell::new(cfg!(feature = "test")) };
 
     static ENABLE_SET_SUBNET_OPERATIONAL_LEVEL: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
