@@ -26,7 +26,10 @@ pub const DOGECOIN_MAINNET_CANISTER: Principal =
     Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
-pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
+pub const DOGE: u64 = 100_000_000;
+pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
+// 0.01 DOGE, ca 0.002 USD (2025.09.06)
+pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
 pub const MIN_CONFIRMATIONS: u32 = 60;
 
 pub struct Setup {
@@ -121,8 +124,7 @@ impl Setup {
                     ]),
                 }),
                 initial_balances: vec![],
-                // 0.1 DOGE, ca 0.02 USD (2025.09.06)
-                transfer_fee: 10_000_000_u32.into(),
+                transfer_fee: LEDGER_TRANSFER_FEE.into(),
                 decimals: Some(8),
                 token_name: "ckDOGE".to_string(),
                 token_symbol: "ckDOGE".to_string(),

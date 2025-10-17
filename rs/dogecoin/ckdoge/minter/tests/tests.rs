@@ -212,14 +212,18 @@ mod deposit {
 
 mod withdrawal {
     use candid::Principal;
+    use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalArgs;
     use ic_ckdoge_minter::{
-        EventType, MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus,
+        BurnMemo, EventType, MintMemo, OutPoint, Status, UpdateBalanceArgs, Utxo, UtxoStatus,
         candid_api::GetDogeAddressArgs, memo_encode,
     };
-    use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, txid};
+    use ic_ckdoge_minter_test_utils::{
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+        txid,
+    };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
-    use icrc_ledger_types::icrc3::transactions::Mint;
+    use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 
     #[test]
     fn should_withdraw_doge() {
@@ -246,7 +250,7 @@ mod withdrawal {
                 txid: txid(),
                 vout: 1,
             },
-            value: 1_000_000_000,
+            value: RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
         };
         dogecoin.simulate_transaction(utxo.clone(), deposit_address);
 
@@ -293,6 +297,32 @@ mod withdrawal {
             },
         ]);
 
-        let _ledger_approval_index = ledger.icrc2_approve(account, 1, minter.id()).unwrap();
+        let _ledger_approval_index = ledger
+            .icrc2_approve(account, RETRIEVE_DOGE_MIN_AMOUNT, minter.id())
+            .unwrap();
+
+        let retrieve_doge_id = minter
+            .retrieve_doge_with_approval(
+                USER_PRINCIPAL,
+                &RetrieveDogeWithApprovalArgs {
+                    amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                    from_subaccount: account.subaccount,
+                    address: DOGECOIN_ADDRESS_1.to_string(),
+                },
+            )
+            .unwrap();
+        ledger
+            .assert_that_transaction(retrieve_doge_id.block_index)
+            .equals_burn_ignoring_timestamp(Burn {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT.into(),
+                from: account,
+                spender: Some(minter.id().into()),
+                memo: Some(Memo::from(memo_encode(&BurnMemo::Convert {
+                    address: Some(DOGECOIN_ADDRESS_1),
+                    kyt_fee: None,
+                    status: None,
+                }))),
+                created_at_time: None,
+            });
     }
 }
