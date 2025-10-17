@@ -4234,7 +4234,9 @@ fn update_settings_checks_freezing_threshold_for_memory_allocation() {
 
 #[test]
 fn update_settings_checks_freezing_threshold_for_compute_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(51)
+        .build();
 
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
 
@@ -4255,6 +4257,7 @@ fn update_settings_checks_freezing_threshold_for_compute_allocation() {
 fn system_subnet_does_not_check_for_freezing_threshold_on_allocation_changes() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
+        .with_allocatable_compute_capacity_in_percent(51)
         .build();
 
     let canister_id = test
@@ -7624,7 +7627,9 @@ fn can_create_canister_with_extra_cycles() {
 
 #[test]
 fn create_canister_sets_correct_allocations() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(51)
+        .build();
 
     let compute_allocation = 50;
     let memory_allocation = 1024 * 1024 * 1024;
@@ -8099,7 +8104,9 @@ fn create_canister_checks_freezing_threshold_for_memory_allocation() {
 
 #[test]
 fn create_canister_checks_freezing_threshold_for_compute_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(51)
+        .build();
 
     let err = test
         .create_canister_with_allocation(Cycles::new(1_000_000_000_000), Some(50), None)
