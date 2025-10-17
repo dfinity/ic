@@ -31,10 +31,7 @@ pub struct DogeCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
-    async fn bitcoin_get_utxos(
-        &self,
-        request: &GetUtxosRequest,
-    ) -> Result<GetUtxosResponse, CallError> {
+    async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         dogecoin_canister::dogecoin_get_utxos(request)
             .await
             .map(GetUtxosResponse::from)

@@ -1448,11 +1448,8 @@ pub trait CanisterRuntime {
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
-    /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
-    async fn bitcoin_get_utxos(
-        &self,
-        request: &GetUtxosRequest,
-    ) -> Result<GetUtxosResponse, CallError>;
+    /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified network.
+    async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
         &self,
@@ -1494,10 +1491,7 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
-    async fn bitcoin_get_utxos(
-        &self,
-        request: &GetUtxosRequest,
-    ) -> Result<GetUtxosResponse, CallError> {
+    async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }
 
