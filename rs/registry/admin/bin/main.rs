@@ -6393,16 +6393,6 @@ async fn vote_on_root_proposal_to_upgrade_governance_canister(
     }
 }
 
-/// A helper function for the handler code.
-fn generate_nonce() -> Vec<u8> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_le_bytes()
-        .to_vec()
-}
-
 async fn swap_node_in_subnet_directly(
     registry_canister: RegistryCanister,
     cmd: SwapNodeInSubnetDirectlyCmd,
