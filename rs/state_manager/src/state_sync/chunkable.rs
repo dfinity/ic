@@ -264,9 +264,10 @@ impl IncompleteState {
         })
     }
 
-    /// Creates all the directories listed in the manifest.
-    /// Returns the number of directories containing files.
-    /// This must be called before hardlinking files because
+    /// Creates parent directories for all the files listed in the manifest.
+    /// Returns the number of parent directories created.
+    ///
+    /// This method must be called before hardlinking files because
     /// the parent directory of the destination file must exist before hardlinking.
     pub(crate) fn preallocate_layout_directories(
         log: &ReplicaLogger,
@@ -391,11 +392,7 @@ impl IncompleteState {
     ///
     /// If the source file is writable, it will be marked as readonly.
     /// Any existing file at the destination will be removed.
-    fn mark_readonly_and_hardlink_file(
-        _log: &ReplicaLogger,
-        src: &Path,
-        dst: &Path,
-    ) -> std::io::Result<()> {
+    fn mark_readonly_and_hardlink_file(src: &Path, dst: &Path) -> std::io::Result<()> {
         let src_metadata = src.metadata()?;
         let mut permissions = src_metadata.permissions();
         if !permissions.readonly() {
@@ -599,15 +596,14 @@ impl IncompleteState {
                             }
                         }
 
-                        let dst_size = manifest_old.file_table[*old_index].size_bytes;
                         if bad_chunks.is_empty()
                             && src_data.len()
-                                == dst_size as usize
+                                == manifest_old.file_table[*old_index].size_bytes as usize
                         {
                             // All the hash sums and the file size match, so we can
                             // simply hardlink the whole file.  That's much faster than
                             // copying one chunk at a time.
-                            Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                            Self::mark_readonly_and_hardlink_file(&src_path, &dst_path).unwrap_or_else(|err| {
                                 fatal!(
                                     log,
                                     "Failed to hardlink file from {} to {}: {}",
@@ -621,7 +617,7 @@ impl IncompleteState {
                                 .remaining
                                 .sub(new_chunk_range.len() as i64);
                         } else {
-                            let dst = Self::create_file_and_set_len(log, &dst_path, dst_size);
+                            let dst = Self::create_file_and_set_len(log, &dst_path, manifest_new.file_table[*new_index].size_bytes);
                             // Copy the chunks that passed validation to the
                             // destination, the rest will be fetched and applied later.
                             for idx in old_chunk_range {
@@ -678,7 +674,7 @@ impl IncompleteState {
                     } else {
                         // Since we do not validate in this else branch, we can simply hardlink the
                         // file without any extra work
-                        Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                        Self::mark_readonly_and_hardlink_file(&src_path, &dst_path).unwrap_or_else(|err| {
                             fatal!(
                                 log,
                                 "Failed to hardlink file from {} to {}: {}",
@@ -1217,7 +1213,7 @@ impl IncompleteState {
             #[cfg(debug_assertions)]
             {
                 // All files should be present with the expected size before copying chunks,
-                //either as a result of preallocation or hardlinking
+                // either as a result of preallocation or hardlinking
                 for file in manifest_new.file_table.iter() {
                     let path = self.root.join(&file.relative_path);
                     let size = std::fs::metadata(&path).expect("file should exist").len();
