@@ -392,6 +392,7 @@ pub fn setup_consensus_and_p2p(
     // StateSync receive side + handler definition
     let (state_sync_manager_router, state_sync_manager_runner) =
         ic_state_sync_manager::build_state_sync_manager(
+            node_id,
             log,
             metrics_registry,
             rt_handle,

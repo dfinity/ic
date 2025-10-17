@@ -122,7 +122,46 @@ impl StateSync {
         }
     }
 
-    pub fn get(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
+    // Try to get `StateSyncMessage` using IncompleteStateReader.
+    fn get_from_incomplete_state(
+        &self,
+        msg_id: &StateSyncArtifactId,
+        chunk_id: ChunkId,
+    ) -> Option<StateSyncMessage> {
+        let path = self
+            .state_manager
+            .state_layout
+            .state_sync_scratchpad(msg_id.height);
+
+        let incomplete_state_readers = self.state_sync_refs.incomplete_state_readers.read();
+        let incomplete_state_reader = incomplete_state_readers.get(&msg_id.height)?;
+        if incomplete_state_reader.root_hash == msg_id.hash.clone().into()
+            && incomplete_state_reader.chunks.contains(&chunk_id)
+        {
+            let manifest = incomplete_state_reader.manifest.clone();
+            let meta_manifest = Arc::new(incomplete_state_reader.meta_manifest.clone());
+            let state_sync_file_group =
+                Arc::new(incomplete_state_reader.state_sync_file_group.clone());
+
+            Some(StateSyncMessage {
+                height: msg_id.height,
+                root_hash: CryptoHashOfState::from(msg_id.hash.clone()),
+                checkpoint_root: path,
+                meta_manifest,
+                manifest,
+                state_sync_file_group,
+                malicious_flags: self.state_manager.malicious_flags.clone(),
+            })
+        } else {
+            None
+        }
+    }
+
+    // Try to get `StateSyncMessage` from complete states (checkpoints).
+    pub fn get_from_complete_state(
+        &self,
+        msg_id: &StateSyncArtifactId,
+    ) -> Option<StateSyncMessage> {
         let mut file_group_to_populate: Option<Arc<FileGroupChunks>> = None;
 
         let state_sync_message = self
@@ -338,7 +377,9 @@ impl StateSyncClient for StateSync {
 
     /// Blocking. Makes synchronous file system calls.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
-        let msg = self.get(id)?;
+        let msg = self
+            .get_from_incomplete_state(id, chunk_id)
+            .or(self.get_from_complete_state(id))?;
         msg.get_chunk(chunk_id)
     }
 }
