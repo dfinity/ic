@@ -327,7 +327,7 @@ impl IncompleteState {
             .with_label_values(&[LABEL_PREALLOCATE_FILES])
             .start_timer();
 
-        let num_files_to_hardlink = diff_script.map_or(0, |ds| ds.copy_files.len());
+        let num_files_to_hardlink = diff_script.map_or(0, |ds| ds.hardlink_files.len());
         info!(
             log,
             "state sync: preallocate_layout_files for {} out of {} files ({} files to be hardlinked)",
@@ -342,7 +342,7 @@ impl IncompleteState {
         match diff_script {
             Some(ds) => {
                 for (idx, file) in manifest.file_table.iter().enumerate() {
-                    if ds.copy_files.contains_key(&idx) {
+                    if ds.hardlink_files.contains_key(&idx) {
                         continue;
                     }
                     let parent = file
@@ -468,7 +468,7 @@ impl IncompleteState {
         info!(
             log,
             "state sync: hardlink_files for {} files {} validation",
-            diff_script.copy_files.len(),
+            diff_script.hardlink_files.len(),
             if self.should_validate(validate_data) {
                 "with"
             } else {
@@ -479,7 +479,7 @@ impl IncompleteState {
         let corrupted_chunks = Arc::new(Mutex::new(Vec::new()));
 
         thread_pool.scoped(|scope| {
-            for (new_index, old_index) in diff_script.copy_files.iter() {
+            for (new_index, old_index) in diff_script.hardlink_files.iter() {
                 let src_path = root_old.join(&manifest_old.file_table[*old_index].relative_path);
                 let dst_path = root_new.join(&manifest_new.file_table[*new_index].relative_path);
                 let corrupted_chunks = Arc::clone(&corrupted_chunks);
@@ -1168,7 +1168,7 @@ impl IncompleteState {
                 (diff_script.zeros_chunks * crate::state_sync::types::DEFAULT_CHUNK_SIZE) as u64;
 
             let hardlink_files_bytes: u64 = diff_script
-                .copy_files
+                .hardlink_files
                 .keys()
                 .map(|i| manifest_new.file_table[*i].size_bytes)
                 .sum();
