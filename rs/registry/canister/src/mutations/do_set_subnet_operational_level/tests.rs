@@ -3,6 +3,7 @@ use crate::common::test_helpers::{
     add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
     prepare_registry_with_nodes,
 };
+use ic_base_types::PrincipalId;
 use ic_test_utilities_types::ids::subnet_test_id;
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -121,4 +122,225 @@ fn test_set_subnet_operational_level() {
         registry.get_node_or_panic(*NODE_ID),
         ORIGINAL_NODE_RECORD.clone()
     );
+}
+
+#[test]
+#[should_panic(expected = "WE ARE AT THE END OF THE TEST")]
+fn test_validate_operational_level_ok() {
+    validate_operational_level(None);
+
+    validate_operational_level(Some(operational_level::NORMAL));
+    validate_operational_level(Some(operational_level::DOWN_FOR_REPAIRS));
+
+    for code in operational_level::ALL_VALID_CODES {
+        validate_operational_level(Some(code));
+    }
+
+    panic!("WE ARE AT THE END OF THE TEST");
+}
+
+#[test]
+#[should_panic(expected = "operational_level")]
+fn test_validate_operational_level_zero() {
+    validate_operational_level(Some(0));
+}
+
+#[test]
+#[should_panic(expected = "not one of the allowed values")]
+fn test_validate_operational_level_garbage() {
+    let garbage = 6;
+    assert!(!operational_level::ALL_VALID_CODES.contains(&garbage));
+    validate_operational_level(Some(garbage));
+}
+
+lazy_static! {
+    static ref GENERAL_SSH_NODE_STATE_WRITE_ACCESS: Vec<NodeSshAccess> = vec![
+        NodeSshAccess {
+            node_id: Some(NodeId::from(PrincipalId::new_user_test_id(42))),
+            public_keys: Some(vec!["hello, world!".to_string()]),
+        },
+        NodeSshAccess {
+            node_id: Some(NodeId::from(PrincipalId::new_user_test_id(43))),
+            public_keys: Some(vec![
+                "Daniel Wong".to_string(),
+                "deserves a phat raise.".to_string(),
+            ]),
+        },
+    ];
+}
+
+#[test]
+#[should_panic(expected = "WE ARE AT THE END OF THE TEST")]
+fn test_validate_ssh_node_state_write_access_ok() {
+    validate_ssh_node_state_write_access(&None);
+    validate_ssh_node_state_write_access(&Some(vec![]));
+
+    validate_ssh_node_state_write_access(&Some(GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone()));
+
+    panic!("WE ARE AT THE END OF THE TEST");
+}
+
+#[test]
+#[should_panic(expected = "unique")]
+fn test_validate_ssh_node_state_write_access_not_unique() {
+    let mut ssh_node_state_write_access = GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone();
+    ssh_node_state_write_access.push(ssh_node_state_write_access.get(0).unwrap().clone());
+    validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+}
+
+#[test]
+#[should_panic(expected = "node_id")]
+fn test_validate_ssh_node_state_write_access_missing_node_id() {
+    let mut ssh_node_state_write_access = GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone();
+    ssh_node_state_write_access.get_mut(0).unwrap().node_id = None;
+    validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+}
+
+#[test]
+#[should_panic(expected = "public_keys")]
+fn test_validate_ssh_node_state_write_access_missing_public_keys() {
+    let mut ssh_node_state_write_access = GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone();
+    ssh_node_state_write_access.get_mut(0).unwrap().public_keys = None;
+    validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+}
+
+lazy_static! {
+    static ref GENERAL_PAYLOAD: SetSubnetOperationalLevelPayload =
+        SetSubnetOperationalLevelPayload {
+            subnet_id: Some(SubnetId::from(PrincipalId::new_user_test_id(777))),
+            operational_level: Some(operational_level::NORMAL),
+            ssh_readonly_access: Some(vec!["hello".to_string(), "world".to_string()]),
+            ssh_node_state_write_access: Some(GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone()),
+        };
+}
+
+#[test]
+fn test_validate_payload_no_subnet_ok() {
+    // Step 1: Prepare the world.
+    let mut registry = REGISTRY.clone();
+
+    // Step 2: Run code under test.
+
+    // This just changes the NodeRecord, not the SubnetRecord.
+    registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
+        subnet_id: None,
+        operational_level: None,
+        ssh_readonly_access: None,
+
+        ssh_node_state_write_access: Some(vec![NodeSshAccess {
+            node_id: Some(*NODE_ID),
+            public_keys: Some(vec!["fake node state write public key".to_string()]),
+        }]),
+    });
+
+    // Step 3: Verify results.
+
+    // Step 3A.1: Verify SubnetRecord.
+    let new_subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(new_subnet_record, ORIGINAL_SUBNET_RECORD.clone(),);
+
+    // Step 3A.2: Verify NodeRecord.
+    let new_node_record = registry.get_node_or_panic(*NODE_ID);
+    assert_eq!(
+        new_node_record,
+        NodeRecord {
+            ssh_node_state_write_access: vec!["fake node state write public key".to_string()],
+            ..ORIGINAL_NODE_RECORD.clone()
+        }
+    );
+}
+
+#[test]
+fn test_validate_payload_no_node_ok() {
+    // Step 1: Prepare the world.
+    let mut registry = REGISTRY.clone();
+
+    // Step 2: Run code under test.
+
+    // This just changes the NodeRecord, not the SubnetRecord.
+    registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
+        subnet_id: Some(*SUBNET_ID),
+        operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
+        ssh_readonly_access: Some(vec!["fake read-only public key".to_string()]),
+
+        ssh_node_state_write_access: None,
+    });
+
+    // Step 3: Verify results.
+
+    // Step 3A.1: Verify SubnetRecord.
+    let new_subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(
+        new_subnet_record,
+        SubnetRecord {
+            is_halted: true,
+            ssh_readonly_access: vec!["fake read-only public key".to_string()],
+            ..ORIGINAL_SUBNET_RECORD.clone()
+        }
+    );
+
+    // Step 3A.2: Verify NodeRecord.
+    let new_node_record = registry.get_node_or_panic(*NODE_ID);
+    assert_eq!(new_node_record, ORIGINAL_NODE_RECORD.clone(),);
+}
+
+/// The situation tested here is degenerate, but not broken per se, and therefore, allowed.
+#[test]
+fn test_validate_payload_no_nothing_ok() {
+    // Step 1: Prepare the world.
+    let mut registry = REGISTRY.clone();
+
+    // Step 2: Run code under test.
+
+    // This just changes the NodeRecord, not the SubnetRecord.
+    registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
+        subnet_id: None,
+        operational_level: None,
+        ssh_readonly_access: None,
+
+        ssh_node_state_write_access: None,
+    });
+
+    // Step 3: Verify results.
+
+    // Step 3A.1: Verify SubnetRecord.
+    let new_subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(new_subnet_record, ORIGINAL_SUBNET_RECORD.clone(),);
+
+    // Step 3A.2: Verify NodeRecord.
+    let new_node_record = registry.get_node_or_panic(*NODE_ID);
+    assert_eq!(new_node_record, ORIGINAL_NODE_RECORD.clone(),);
+}
+
+#[test]
+#[should_panic(expected = "operational_level")]
+fn test_validate_payload_no_subnet_but_operational_level() {
+    REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
+        subnet_id: None,
+        operational_level: Some(operational_level::NORMAL),
+        ssh_readonly_access: None,
+
+        ssh_node_state_write_access: Some(vec![NodeSshAccess {
+            node_id: Some(*NODE_ID),
+            public_keys: Some(vec!["fake node state write public key".to_string()]),
+        }]),
+    });
+
+    // Step 3: Verify results.
+    // Actually, the assertion appears at the top: should_panic...
+}
+
+#[test]
+#[should_panic(expected = "ssh_readonly_access")]
+fn test_validate_payload_no_subnet_but_ssh_readonly_access() {
+    REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
+        subnet_id: None,
+        operational_level: None,
+        ssh_readonly_access: Some(vec!["hello".to_string()]),
+
+        ssh_node_state_write_access: Some(vec![NodeSshAccess {
+            node_id: Some(*NODE_ID),
+            public_keys: Some(vec!["fake node state write public key".to_string()]),
+        }]),
+    });
 }
