@@ -212,9 +212,9 @@ mod deposit {
 
 mod withdrawal {
     use candid::Principal;
-    use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalArgs;
+    use ic_ckdoge_minter::candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs};
     use ic_ckdoge_minter::{
-        BurnMemo, EventType, MintMemo, OutPoint, Status, UpdateBalanceArgs, Utxo, UtxoStatus,
+        BurnMemo, EventType, MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus,
         candid_api::GetDogeAddressArgs, memo_encode,
     };
     use ic_ckdoge_minter_test_utils::{
@@ -311,6 +311,11 @@ mod withdrawal {
                 },
             )
             .unwrap();
+        assert_eq!(
+            minter.retrieve_doge_status(retrieve_doge_id.block_index),
+            RetrieveDogeStatus::Pending
+        );
+
         ledger
             .assert_that_transaction(retrieve_doge_id.block_index)
             .equals_burn_ignoring_timestamp(Burn {

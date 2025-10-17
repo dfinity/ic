@@ -2,7 +2,9 @@ use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
 use ic_ckdoge_minter::Event;
 use ic_ckdoge_minter::UtxoStatus;
-use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
+use ic_ckdoge_minter::candid_api::{
+    GetDogeAddressArgs, RetrieveDogeStatus, RetrieveDogeStatusRequest,
+};
 use ic_ckdoge_minter::candid_api::{
     RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
 };
@@ -75,6 +77,22 @@ impl MinterCanister {
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
         self.env
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
+    }
+
+    pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "retrieve_doge_status",
+                Encode!(&RetrieveDogeStatusRequest {
+                    block_index: ledger_burn_index
+                })
+                .unwrap(),
+            )
+            .expect("BUg: failed to call retrieve_doge_status");
+        Decode!(&call_result, RetrieveDogeStatus).unwrap()
     }
 
     pub fn assert_that_events(&self) -> MinterEventAssert {
