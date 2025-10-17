@@ -10,7 +10,10 @@ use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
+use ic_interfaces::execution_environment::SubnetAvailableExecutionMemoryChange;
+use ic_management_canister_types_private::{
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
@@ -503,6 +506,13 @@ impl CanisterState {
         self.system_state.memory_allocation
     }
 
+    /// Returns the actual number of allocated bytes for the canister:
+    /// the maximum of its memory allocation and memory usage.
+    pub fn memory_allocated_bytes(&self) -> NumBytes {
+        self.memory_allocation()
+            .allocated_bytes(self.memory_usage())
+    }
+
     /// Returns the current Wasm memory threshold of the canister.
     pub fn wasm_memory_threshold(&self) -> NumBytes {
         self.system_state.wasm_memory_threshold
@@ -596,11 +606,6 @@ impl CanisterState {
         system_state.drop_in_progress_management_calls_after_split();
     }
 
-    /// Appends the given log to the canister log.
-    pub fn append_log(&mut self, other: &mut CanisterLog) {
-        self.system_state.canister_log.append(other);
-    }
-
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
         self.system_state.canister_log.clear();
@@ -634,6 +639,28 @@ impl CanisterState {
                 self.memory_usage(),
                 self.wasm_memory_usage(),
             )
+    }
+
+    /// Adds a canister change to canister history and returns the change
+    /// of subnet available execution memory due to updating canister history.
+    #[must_use]
+    pub fn add_canister_change(
+        &mut self,
+        timestamp_nanos: Time,
+        change_origin: CanisterChangeOrigin,
+        change_details: CanisterChangeDetails,
+    ) -> SubnetAvailableExecutionMemoryChange {
+        let old_allocated_bytes = self.memory_allocated_bytes();
+        self.system_state
+            .add_canister_change(timestamp_nanos, change_origin, change_details);
+        let new_allocated_bytes = self.memory_allocated_bytes();
+        if new_allocated_bytes >= old_allocated_bytes {
+            let allocated_bytes = new_allocated_bytes - old_allocated_bytes;
+            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes)
+        } else {
+            let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
+            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
+        }
     }
 }
 

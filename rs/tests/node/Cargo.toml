@@ -41,3 +41,7 @@ path = "launch_single_guest.rs"
 [[bin]]
 name = "launch_single_host"
 path = "launch_single_host.rs"
+
+[[bin]]
+name = "ic-systest-kill-start"
+path = "kill_start_test.rs"

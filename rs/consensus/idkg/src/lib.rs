@@ -279,13 +279,14 @@ impl IDkgImpl {
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
-            thread_pool,
+            thread_pool.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
         let signer = Box::new(ThresholdSignerImpl::new(
             node_id,
             crypto.clone(),
+            thread_pool,
             state_reader.clone(),
             metrics_registry.clone(),
             logger.clone(),

@@ -13,6 +13,8 @@ type CanisterStatusArgs = CanisterIdRecord;
 type CanisterStatusResult = CanisterStatusResultV2;
 type CanisterInfoArgs = CanisterInfoRequest;
 type CanisterInfoResult = CanisterInfoResponse;
+type CanisterMetadataArgs = CanisterMetadataRequest;
+type CanisterMetadataResult = CanisterMetadataResponse;
 type SubnetInfoResult = SubnetInfoResponse;
 type DeleteCanisterArgs = CanisterIdRecord;
 type DepositCyclesArgs = CanisterIdRecord;
@@ -90,6 +92,11 @@ fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
 
 #[candid_method(update)]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn canister_metadata(_: CanisterMetadataArgs) -> CanisterMetadataResult {
     unreachable!()
 }
 

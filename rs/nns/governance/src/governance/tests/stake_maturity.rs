@@ -35,7 +35,7 @@ fn test_stake_maturity() {
     .with_maturity_e8s_equivalent(1000)
     .with_staked_maturity_e8s_equivalent(100)
     .build();
-    governance.add_neuron(1, neuron, false).unwrap();
+    governance.add_neuron(1, neuron).unwrap();
 
     let request = StakeMaturity {
         percentage_to_stake: Some(40),

@@ -47,6 +47,9 @@ use slog::{Logger, info};
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
+pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+pub const NODE_UPGRADE_BACKOFF: Duration = Duration::from_secs(5);
+
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
 pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast: bool) {
     let principal =

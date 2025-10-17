@@ -1,12 +1,13 @@
 use crate::{
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_FETCH,
     LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
+    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_PREALLOCATE_DIRECTORIES,
+    LABEL_PREALLOCATE_FILES, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
     StateSyncMetrics, StateSyncRefs,
     manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
     state_sync::StateSync,
     state_sync::types::{
-        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks,
+        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo,
         MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, Manifest, ManifestChunkIndex, MetaManifest,
         StateSyncChunk, StateSyncMessage, decode_manifest, decode_meta_manifest,
         state_sync_chunk_type,
@@ -17,6 +18,7 @@ use ic_logger::{ReplicaLogger, debug, error, fatal, info, trace, warn};
 use ic_state_layout::{CheckpointLayout, ReadOnly, RwPolicy, StateLayout, error::LayoutError};
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};
+use ic_utils::thread::parallel_map;
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -201,6 +203,26 @@ impl Drop for IncompleteState {
 }
 
 impl IncompleteState {
+    /// Determines whether to validate chunks based on three conditions:
+    /// 1. validate_data: whether validation is normally required (checkpoint_height <= started_height)
+    /// 2. ALWAYS_VALIDATE: compile-time constant (currently false)
+    /// 3. test_force_validate: test-only override to force validation (only available in debug builds)
+    fn should_validate(&self, validate_data: bool) -> bool {
+        validate_data || ALWAYS_VALIDATE || self.is_test_force_validate_enabled()
+    }
+
+    /// Returns true if test force validation is enabled (debug builds only)
+    fn is_test_force_validate_enabled(&self) -> bool {
+        #[cfg(debug_assertions)]
+        {
+            self.state_sync.is_test_force_validate()
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            false
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_new(
         log: ReplicaLogger,
@@ -242,18 +264,31 @@ impl IncompleteState {
         })
     }
 
-    /// Creates all the files listed in the manifest and resizes them to their
-    /// expected sizes.  This way we won't have to worry about creating parent
-    /// directories when we receive chunks.
-    pub(crate) fn preallocate_layout(log: &ReplicaLogger, root: &Path, manifest: &Manifest) {
-        for file_info in manifest.file_table.iter() {
-            let path = root.join(&file_info.relative_path);
+    pub(crate) fn preallocate_layout_directories(
+        log: &ReplicaLogger,
+        root: &Path,
+        manifest: &Manifest,
+        metrics: &StateSyncMetrics,
+    ) -> usize {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE_DIRECTORIES])
+            .start_timer();
 
-            std::fs::create_dir_all(
-                path.parent()
-                    .expect("every file in the manifest must have a parent"),
-            )
-            .unwrap_or_else(|err| {
+        let unique_dirs = manifest
+            .file_table
+            .iter()
+            .map(|file_info| {
+                file_info
+                    .relative_path
+                    .parent()
+                    .expect("every file in the manifest must have a parent")
+            })
+            .collect::<HashSet<_>>();
+
+        for dir in &unique_dirs {
+            let path = root.join(dir);
+            std::fs::create_dir_all(&path).unwrap_or_else(|err| {
                 fatal!(
                     log,
                     "Failed to create parent directory for path {}: {}",
@@ -261,20 +296,69 @@ impl IncompleteState {
                     err
                 )
             });
-
-            let f = std::fs::File::create(&path).unwrap_or_else(|err| {
-                fatal!(log, "Failed to create file {}: {}", path.display(), err)
-            });
-            f.set_len(file_info.size_bytes).unwrap_or_else(|err| {
-                fatal!(
-                    log,
-                    "Failed to truncate file {} to size {}: {}",
-                    path.display(),
-                    file_info.size_bytes,
-                    err
-                )
-            });
         }
+        unique_dirs.len()
+    }
+
+    pub(crate) fn preallocate_layout_files(
+        log: &ReplicaLogger,
+        root: &Path,
+        unique_dirs_size: usize,
+        manifest: &Manifest,
+        metrics: &StateSyncMetrics,
+        thread_pool: &mut scoped_threadpool::Pool,
+    ) {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE_FILES])
+            .start_timer();
+
+        let mut by_parent: HashMap<PathBuf, Vec<&FileInfo>> =
+            HashMap::with_capacity(unique_dirs_size);
+        for file in manifest.file_table.iter() {
+            let parent = file
+                .relative_path
+                .parent()
+                .expect("every file in the manifest must have a parent");
+            by_parent.entry(parent.to_owned()).or_default().push(file);
+        }
+
+        parallel_map(thread_pool, by_parent.into_iter(), |(_parent, files)| {
+            for file_info in files {
+                let path = root.join(&file_info.relative_path);
+                let f = std::fs::File::create(&path).unwrap_or_else(|err| {
+                    fatal!(log, "Failed to create file {}: {}", path.display(), err)
+                });
+                f.set_len(file_info.size_bytes).unwrap_or_else(|err| {
+                    fatal!(
+                        log,
+                        "Failed to truncate file {} to size {}: {}",
+                        path.display(),
+                        file_info.size_bytes,
+                        err
+                    )
+                });
+            }
+        });
+    }
+
+    /// Creates all the files listed in the manifest and resizes them to their
+    /// expected sizes.  This way we won't have to worry about creating parent
+    /// directories when we receive chunks.
+    pub(crate) fn preallocate_layout(
+        log: &ReplicaLogger,
+        root: &Path,
+        manifest: &Manifest,
+        metrics: &StateSyncMetrics,
+        thread_pool: &mut scoped_threadpool::Pool,
+    ) {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE])
+            .start_timer();
+
+        let unique_dirs_size = Self::preallocate_layout_directories(log, root, manifest, metrics);
+        Self::preallocate_layout_files(log, root, unique_dirs_size, manifest, metrics, thread_pool);
     }
 
     /// Marks the source file as readonly and creates a hard link to the destination.
@@ -337,6 +421,7 @@ impl IncompleteState {
     /// Hardlink unchanged files from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn hardlink_files(
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -357,7 +442,7 @@ impl IncompleteState {
             log,
             "state sync: hardlink_files for {} files {} validation",
             diff_script.copy_files.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if self.should_validate(validate_data) {
                 "with"
             } else {
                 "without"
@@ -378,7 +463,7 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    if validate_data || ALWAYS_VALIDATE {
+                    if self.should_validate(validate_data) {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
                             fatal!(
@@ -439,7 +524,7 @@ impl IncompleteState {
                                 );
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -471,7 +556,7 @@ impl IncompleteState {
 
                                 bad_chunks.push(idx);
                                 corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -599,6 +684,7 @@ impl IncompleteState {
     /// Copy reusable chunks from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_chunks(
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -619,7 +705,7 @@ impl IncompleteState {
             log,
             "state sync: copy_chunks for {} chunks {} validation",
             diff_script.copy_chunks.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if self.should_validate(validate_data) {
                 "with"
             } else {
                 "without"
@@ -710,7 +796,7 @@ impl IncompleteState {
                         }
                         #[cfg(not(target_os = "linux"))]
                         let src_data = &src_map.as_slice()[byte_range];
-                        if validate_data || ALWAYS_VALIDATE {
+                        if self.should_validate(validate_data) {
                             #[cfg(target_os = "linux")]
                             let src_data = &src_map.as_slice()[byte_range];
 
@@ -733,7 +819,7 @@ impl IncompleteState {
                                 );
 
                                 corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}.",
@@ -916,7 +1002,13 @@ impl IncompleteState {
     /// that we have locally.
     /// Returns a set of chunks that still need to be fetched
     fn initialize_state_on_disk(&self, manifest_new: &Manifest) -> HashSet<usize> {
-        Self::preallocate_layout(&self.log, &self.root, manifest_new);
+        Self::preallocate_layout(
+            &self.log,
+            &self.root,
+            manifest_new,
+            &self.metrics.state_sync_metrics,
+            &mut self.thread_pool.lock().unwrap(),
+        );
 
         let state_sync_size_fetch = self
             .metrics
@@ -990,7 +1082,8 @@ impl IncompleteState {
                         missing_chunks: Default::default(),
                         root_old: checkpoint_layout.raw_path().to_path_buf(),
                         height_old: checkpoint_height,
-                        validate_data: true,
+                        validate_data: checkpoint_height
+                            <= self.state_sync.state_manager.started_height(),
                     })
                 }
             }
@@ -1008,11 +1101,8 @@ impl IncompleteState {
                     missing_chunks: Default::default(),
                     root_old: checkpoint_old.raw_path().to_path_buf(),
                     height_old: checkpoint_height,
-                    validate_data: !self
-                        .state_sync_refs
-                        .cache
-                        .read()
-                        .state_is_fetched(checkpoint_height),
+                    validate_data: checkpoint_height
+                        <= self.state_sync.state_manager.started_height(),
                 })
             }
             (None, None) => None,
@@ -1082,7 +1172,7 @@ impl IncompleteState {
                 .sub(diff_script.zeros_chunks as i64);
 
             let mut thread_pool = self.thread_pool.lock().unwrap();
-            Self::hardlink_files(
+            self.hardlink_files(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1095,7 +1185,7 @@ impl IncompleteState {
                 &mut fetch_chunks,
             );
 
-            Self::copy_chunks(
+            self.copy_chunks(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1406,10 +1496,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             Arc::new(meta_manifest.clone()),
                         );
                         self.state = DownloadState::Complete;
-                        self.state_sync_refs
-                            .cache
-                            .write()
-                            .register_successful_sync(self.height);
                         Ok(())
                     } else {
                         let state_sync_file_group = build_file_group_chunks(&manifest);
@@ -1603,11 +1689,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         Arc::new(meta_manifest.clone()),
                     );
                     self.state = DownloadState::Complete;
-
-                    self.state_sync_refs
-                        .cache
-                        .write()
-                        .register_successful_sync(self.height);
 
                     // Delay delivery of artifact
                     #[cfg(feature = "malicious_code")]
