@@ -149,6 +149,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
 /rs/interfaces/certified_stream_store/                  @dfinity/ic-message-routing-owners
+/rs/interfaces/mocks/src/payload_builder                @dfinity/consensus
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
