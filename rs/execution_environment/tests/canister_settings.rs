@@ -10,6 +10,9 @@ use ic_test_utilities_execution_environment::get_reply;
 use ic_types::ingress::WasmResult;
 use ic_types::{Cycles, NumBytes};
 
+// The following test uses `StateMachine` instead of `ExecutionTest`
+// because the compute capacity of the subnet is not initialized
+// properly in `ExecutionTest`.
 #[test]
 fn canister_settings_ranges() {
     let via_update_settings = |settings: CanisterSettingsArgs| {
@@ -73,7 +76,7 @@ fn canister_settings_ranges() {
             proxy_canister_id,
             "update",
             wasm()
-                .call_with_cycles(IC_00, Method::CreateCanister, call_args, Cycles::zero())
+                .call_simple(IC_00, Method::CreateCanister, call_args)
                 .build(),
         );
         match res {
