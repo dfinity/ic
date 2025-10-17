@@ -2304,6 +2304,7 @@ impl CanisterSettingsArgsBuilder {
     /// the description of this field in the IC specification.
     /// Values larger than `u64::MAX` are invalid and thus this function
     /// should only be used in tests.
+    #[doc(hidden)]
     pub fn with_freezing_threshold_u128(self, freezing_threshold: u128) -> Self {
         Self {
             freezing_threshold: Some(candid::Nat::from(freezing_threshold)),
