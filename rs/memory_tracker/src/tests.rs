@@ -5,10 +5,11 @@ use ic_replicated_state::{
     PageIndex, PageMap,
     page_map::{TestPageAllocatorFileDescriptorImpl, test_utils::base_only_storage_layout},
 };
-use ic_sys::{PAGE_SIZE, PageBytes};
+use ic_sys::{OS_PAGES_IN_CHUNK, PAGE_SIZE, PageBytes};
 use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
+use rstest::rstest;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -16,7 +17,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::{
-    AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker, new_signal_handler_available,
+    AccessKind, DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, PageBitmap,
+    SigsegvMemoryTracker, new_signal_handler_available,
 };
 
 /// Sets up the SigsegvMemoryTracker to track accesses to a region of memory. Returns:
@@ -25,6 +27,7 @@ use crate::{
 /// 3. A pointer to the tracked region.
 /// 4. A regular vector with the same initial contents as the PageMap.
 fn setup(
+    maybe_missing_page_handler_kind: Option<MissingPageHandlerKind>,
     checkpoint_pages: usize,
     memory_pages: usize,
     page_delta: Vec<PageIndex>,
@@ -76,6 +79,12 @@ fn setup(
         no_op_logger(),
         dirty_page_tracking,
         page_map.clone(),
+        maybe_missing_page_handler_kind,
+        MemoryLimits {
+            max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
+            max_accessed_pages: NumOsPages::new(memory_pages as u64),
+            max_dirty_pages: NumOsPages::new(memory_pages as u64),
+        },
     )
     .unwrap();
     (tracker, page_map, memory, vec)
@@ -91,6 +100,26 @@ fn with_setup<F>(
     F: FnOnce(SigsegvMemoryTracker, PageMap),
 {
     let (tracker, page_map, _memory, _vec) = setup(
+        None,
+        checkpoint_pages,
+        memory_pages,
+        page_delta,
+        dirty_page_tracking,
+    );
+    f(tracker, page_map);
+}
+
+fn with_deterministic_setup<F>(
+    checkpoint_pages: usize,
+    memory_pages: usize,
+    page_delta: Vec<PageIndex>,
+    dirty_page_tracking: DirtyPageTracking,
+    f: F,
+) where
+    F: FnOnce(SigsegvMemoryTracker, PageMap),
+{
+    let (tracker, page_map, _memory, _vec) = setup(
+        Some(MissingPageHandlerKind::Deterministic),
         checkpoint_pages,
         memory_pages,
         page_delta,
@@ -878,6 +907,7 @@ mod random_ops {
         G: FnOnce(SigsegvMemoryTracker),
     {
         let (tracker, _page_map, memory, vec) = setup(
+            None,
             checkpoint_pages,
             memory_pages,
             page_delta,
@@ -1174,4 +1204,68 @@ mod random_ops {
             )
         }
     }
+}
+
+#[rstest]
+fn deterministic_memory_tracker_correctly_count_access_and_dirty_pages(
+    #[values(DirtyPageTracking::Ignore, DirtyPageTracking::Track)]
+    dirty_page_tracking: DirtyPageTracking,
+    #[values(0, 5, 16, 26, 33, 76)] page_index: u64,
+    #[values(0, OS_PAGES_IN_CHUNK, OS_PAGES_IN_CHUNK * 2)] second_access_offset: u64,
+    #[values(AccessKind::Read, AccessKind::Write)] first_access_kind: AccessKind,
+    #[values(AccessKind::Read, AccessKind::Write)] second_access_kind: AccessKind,
+) {
+    if second_access_offset == 0
+        && (first_access_kind != AccessKind::Read
+            || second_access_kind != AccessKind::Write
+            || dirty_page_tracking != DirtyPageTracking::Track)
+    {
+        // We can access the same page twice only in the case of a write after a read.
+        return;
+    }
+
+    with_deterministic_setup(
+        50,
+        128,
+        (25..75).map(PageIndex::new).collect(),
+        dirty_page_tracking,
+        |tracker, _| {
+            assert_eq!(tracker.num_accessed_pages(), 0);
+
+            // First access.
+            sigsegv(&tracker, PageIndex::new(page_index), first_access_kind);
+            assert_eq!(tracker.num_accessed_pages(), OS_PAGES_IN_CHUNK as usize);
+            if first_access_kind == AccessKind::Write
+                && dirty_page_tracking == DirtyPageTracking::Track
+            {
+                assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_CHUNK as usize);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            } else {
+                assert_eq!(tracker.take_dirty_pages().len(), 0);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            }
+
+            // Second access.
+            sigsegv(
+                &tracker,
+                PageIndex::new(page_index + second_access_offset),
+                second_access_kind,
+            );
+            assert_eq!(
+                tracker.num_accessed_pages(),
+                OS_PAGES_IN_CHUNK as usize * if second_access_offset == 0 { 1 } else { 2 }
+            );
+            if second_access_kind == AccessKind::Write
+                && dirty_page_tracking == DirtyPageTracking::Track
+            {
+                // As we took the previous dirty pages, we should see
+                // just one dirty page again.
+                assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_CHUNK as usize);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            } else {
+                assert_eq!(tracker.take_dirty_pages().len(), 0);
+                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
+            }
+        },
+    );
 }

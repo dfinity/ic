@@ -17,6 +17,10 @@ use std::{
     time::Duration,
 };
 
+mod deterministic;
+use deterministic::DeterministicState;
+pub use deterministic::{MemoryLimits, MissingPageHandlerKind};
+
 // The upper bound on the number of pages that are memory mapped from the
 // checkpoint file per signal handler call. Higher value gives higher
 // throughput in memory intensive workloads, but may regress performance
@@ -52,7 +56,7 @@ impl MemoryArea {
     }
 
     #[inline]
-    pub fn is_within(&self, a: *const libc::c_void) -> bool {
+    pub fn contains(&self, a: *const libc::c_void) -> bool {
         let a = a as usize;
         (self.addr <= a) && (a < self.addr + self.size.get().get() as usize)
     }
@@ -113,6 +117,11 @@ impl PageBitmap {
     }
 
     fn mark(&mut self, page: PageIndex) {
+        debug_assert_eq!(
+            self.pages.get(page.get() as usize),
+            Some(false),
+            "Error marking a non-existent or already marked page {page:?}"
+        );
         self.pages.set(page.get() as usize, true);
         self.marked_count.inc_assign();
     }
@@ -263,10 +272,11 @@ pub struct SigsegvMemoryTracker {
     speculatively_dirty_pages: RefCell<Vec<PageIndex>>,
     dirty_page_tracking: DirtyPageTracking,
     page_map: PageMap,
-    use_new_signal_handler: bool,
+    missing_page_handler_kind: MissingPageHandlerKind,
     #[cfg(feature = "sigsegv_handler_checksum")]
     checksum: RefCell<checksum::SigsegChecksum>,
     pub metrics: MemoryTrackerMetrics,
+    pub deterministic_state: Option<RefCell<DeterministicState>>,
 }
 
 impl SigsegvMemoryTracker {
@@ -277,6 +287,8 @@ impl SigsegvMemoryTracker {
         log: ReplicaLogger,
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
+        maybe_missing_page_handler_kind: Option<MissingPageHandlerKind>,
+        memory_limits: MemoryLimits,
     ) -> nix::Result<Self> {
         assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
         let num_pages = NumOsPages::new(size.get() / PAGE_SIZE as u64);
@@ -291,7 +303,25 @@ impl SigsegvMemoryTracker {
         let dirty_bitmap = RefCell::new(PageBitmap::new(num_pages));
         let dirty_pages = RefCell::new(Vec::new());
         let speculatively_dirty_pages = RefCell::new(Vec::new());
-        let use_new_signal_handler = new_signal_handler_available();
+        let missing_page_handler_kind = match maybe_missing_page_handler_kind {
+            None => {
+                if new_signal_handler_available() {
+                    MissingPageHandlerKind::New
+                } else {
+                    MissingPageHandlerKind::Old
+                }
+            }
+            Some(MissingPageHandlerKind::Old) => MissingPageHandlerKind::Old,
+            Some(MissingPageHandlerKind::New) => MissingPageHandlerKind::New,
+            Some(MissingPageHandlerKind::Deterministic) => MissingPageHandlerKind::Deterministic,
+        };
+        let deterministic_state = match missing_page_handler_kind {
+            MissingPageHandlerKind::Old | MissingPageHandlerKind::New => None,
+            MissingPageHandlerKind::Deterministic => Some(RefCell::new(DeterministicState::new(
+                num_pages,
+                memory_limits,
+            ))),
+        };
         let tracker = SigsegvMemoryTracker {
             memory_area,
             accessed_bitmap,
@@ -301,26 +331,30 @@ impl SigsegvMemoryTracker {
             speculatively_dirty_pages,
             dirty_page_tracking,
             page_map,
-            use_new_signal_handler,
+            missing_page_handler_kind,
             #[cfg(feature = "sigsegv_handler_checksum")]
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
             metrics: MemoryTrackerMetrics::default(),
+            deterministic_state,
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
-        if tracker.use_new_signal_handler {
-            let mut instructions = tracker.page_map.get_base_memory_instructions();
+        match missing_page_handler_kind {
+            MissingPageHandlerKind::Old => {
+                unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
+                tracker
+                    .metrics
+                    .mprotect_count
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            MissingPageHandlerKind::New | MissingPageHandlerKind::Deterministic => {
+                let mut instructions = tracker.page_map.get_base_memory_instructions();
 
-            // Restrict to tracked range before applying
-            instructions.restrict_to_range(&tracker.page_range());
+                // Restrict to tracked range before applying
+                instructions.restrict_to_range(&tracker.page_range());
 
-            apply_memory_instructions(&tracker, ProtFlags::PROT_NONE, instructions);
-        } else {
-            unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
-            tracker
-                .metrics
-                .mprotect_count
-                .fetch_add(1, Ordering::Relaxed);
+                apply_memory_instructions(&tracker, ProtFlags::PROT_NONE, instructions);
+            }
         }
 
         Ok(tracker)
@@ -332,10 +366,16 @@ impl SigsegvMemoryTracker {
         fault_address: *mut libc::c_void,
     ) -> bool {
         self.metrics.sigsegv_count.fetch_add(1, Ordering::Relaxed);
-        if self.use_new_signal_handler {
-            sigsegv_fault_handler_new(self, access_kind.unwrap(), fault_address)
-        } else {
-            sigsegv_fault_handler_old(self, &self.page_map, fault_address)
+        match self.missing_page_handler_kind {
+            MissingPageHandlerKind::Old => {
+                sigsegv_fault_handler_old(self, &self.page_map, fault_address)
+            }
+            MissingPageHandlerKind::New => {
+                sigsegv_fault_handler_new(self, access_kind.unwrap(), fault_address)
+            }
+            MissingPageHandlerKind::Deterministic => {
+                deterministic::handle_missing_page(self, access_kind, fault_address)
+            }
         }
     }
 
@@ -361,7 +401,10 @@ impl SigsegvMemoryTracker {
     }
 
     pub fn take_dirty_pages(&self) -> Vec<PageIndex> {
-        self.dirty_pages.take()
+        match self.missing_page_handler_kind {
+            MissingPageHandlerKind::Old | MissingPageHandlerKind::New => self.dirty_pages.take(),
+            MissingPageHandlerKind::Deterministic => deterministic::take_dirty_pages(self),
+        }
     }
 
     pub fn take_speculatively_dirty_pages(&self) -> Vec<PageIndex> {
@@ -378,7 +421,12 @@ impl SigsegvMemoryTracker {
     }
 
     pub fn num_accessed_pages(&self) -> usize {
-        self.accessed_bitmap.borrow().marked_count().get() as usize
+        match self.missing_page_handler_kind {
+            MissingPageHandlerKind::Old | MissingPageHandlerKind::New => {
+                self.accessed_bitmap.borrow().marked_count().get() as usize
+            }
+            MissingPageHandlerKind::Deterministic => deterministic::num_accessed_pages(self),
+        }
     }
 
     fn page_index_from(&self, addr: *mut libc::c_void) -> PageIndex {
@@ -494,7 +542,7 @@ pub fn sigsegv_fault_handler_old(
     );
 
     // Ensure `fault_address` falls within tracked memory area
-    if !tracker.memory_area.is_within(fault_address) {
+    if !tracker.memory_area.contains(fault_address) {
         return false;
     };
 
@@ -622,7 +670,7 @@ pub fn sigsegv_fault_handler_new(
     access_kind: AccessKind,
     fault_address: *mut libc::c_void,
 ) -> bool {
-    if !tracker.memory_area.is_within(fault_address) {
+    if !tracker.memory_area.contains(fault_address) {
         // This memory tracker is not responsible for handling this address.
         return false;
     };
