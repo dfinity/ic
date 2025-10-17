@@ -10,6 +10,10 @@ load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainn
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
 # For each new canister defined in the source JSON file (see `path`) a mapping can be added
 # from canister name (as per JSON) to filename (and to repo name, resp.).
+#
+# Additionally the `repositories` list GitHub repositories for canisters. If a canister has an
+# entry in `repositories`, then the source JSON file must specify a `tag` and the canister
+# artifact will be fetched from the tag's release page.
 canisters(
     name = "canisters",
     filenames = {
