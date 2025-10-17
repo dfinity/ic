@@ -230,10 +230,10 @@ pub(super) fn block_chain_cache(
 }
 
 /// Helper to build threshold signature inputs from the context
-pub(super) fn build_signature_inputs(
+pub(super) fn build_signature_inputs<'a>(
     callback_id: CallbackId,
-    context: &SignWithThresholdContext,
-) -> Result<(RequestId, ThresholdSigInputs), BuildSignatureInputsError> {
+    context: &'a SignWithThresholdContext,
+) -> Result<(RequestId, ThresholdSigInputs<'a>), BuildSignatureInputsError> {
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
             let matched_data = args
@@ -244,21 +244,18 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: matched_data.height,
             };
-            let nonce = Id::from(
-                context
-                    .nonce
-                    .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
-            );
+            let nonce_ref = context
+                .nonce
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let inputs = ThresholdSigInputs::Ecdsa(
                 ThresholdEcdsaSigInputs::new(
-                    &ExtendedDerivationPath {
-                        caller: context.request.sender.into(),
-                        derivation_path: context.derivation_path.to_vec(),
-                    },
+                    context.request.sender.get_ref(),
+                    context.derivation_path.as_ref(),
                     &args.message_hash,
-                    nonce,
-                    matched_data.pre_signature.as_ref().clone(),
-                    matched_data.key_transcript.as_ref().clone(),
+                    nonce_ref,
+                    matched_data.pre_signature.as_ref(),
+                    matched_data.key_transcript.as_ref(),
                 )
                 .map_err(BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError)?,
             );

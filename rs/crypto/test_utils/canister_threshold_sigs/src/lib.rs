@@ -31,7 +31,7 @@ use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, ExtendedDerivationPath, KeyPurpose, Signed,
 };
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
-use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
+use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
@@ -1904,18 +1904,18 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
     rng: &mut R,
-) -> ThresholdEcdsaSigInputs {
+) -> ThresholdEcdsaSigInputsOwned {
     let quadruple =
         generate_ecdsa_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
 
-    ThresholdEcdsaSigInputs::new(
-        derivation_path,
-        message_hash,
-        nonce,
+    ThresholdEcdsaSigInputsOwned::new(
+        derivation_path.caller,
+        derivation_path.derivation_path.clone(),
+        message_hash.to_vec(),
+        nonce.get(),
         quadruple,
         key_transcript.clone(),
     )
-    .expect("failed to create signature inputs")
 }
 
 pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
@@ -2433,24 +2433,105 @@ impl IntoBuilder for SignedIDkgDealing {
     }
 }
 
+/// An owned variant of `ThresholdEcdsaSigInputs` for testing.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdEcdsaSigInputsOwned {
+    pub caller: PrincipalId,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub hashed_message: Vec<u8>,
+    pub nonce: [u8; 32],
+    pub presig_quadruple: EcdsaPreSignatureQuadruple,
+    pub key_transcript: IDkgTranscript,
+}
+
+impl ThresholdEcdsaSigInputsOwned {
+    pub fn new(
+        caller: PrincipalId,
+        derivation_path: Vec<Vec<u8>>,
+        hashed_message: Vec<u8>,
+        nonce: [u8; 32],
+        presig_quadruple: EcdsaPreSignatureQuadruple,
+        key_transcript: IDkgTranscript,
+    ) -> Self {
+        Self {
+            caller,
+            derivation_path,
+            hashed_message,
+            nonce,
+            presig_quadruple,
+            key_transcript,
+        }
+    }
+
+    pub fn as_ref<'a>(&'a self) -> ThresholdEcdsaSigInputs<'a> {
+        ThresholdEcdsaSigInputs::new(
+            &self.caller,
+            &self.derivation_path,
+            &self.hashed_message,
+            &self.nonce,
+            &self.presig_quadruple,
+            &self.key_transcript,
+        )
+        .expect("invalid threshold ECDSA sig inputs")
+    }
+
+    pub fn receivers(&self) -> &IDkgReceivers {
+        &self.key_transcript.receivers
+    }
+
+    pub fn key_transcript(&self) -> &IDkgTranscript {
+        &self.key_transcript
+    }
+
+    pub fn presig_quadruple(&self) -> &EcdsaPreSignatureQuadruple {
+        &self.presig_quadruple
+    }
+
+    pub fn reconstruction_threshold(&self) -> NumberOfNodes {
+        self.key_transcript.reconstruction_threshold()
+    }
+}
+
+impl AsRef<IDkgReceivers> for ThresholdEcdsaSigInputsOwned {
+    fn as_ref(&self) -> &IDkgReceivers {
+        self.receivers()
+    }
+}
+
+impl IntoBuilder for ThresholdEcdsaSigInputsOwned {
+    type BuilderType = ThresholdEcdsaSigInputsBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        ThresholdEcdsaSigInputsBuilder {
+            caller: self.caller,
+            derivation_path: self.derivation_path,
+            hashed_message: self.hashed_message,
+            nonce: self.nonce,
+            presig_quadruple: self.presig_quadruple,
+            key_transcript: self.key_transcript,
+        }
+    }
+}
+
 pub struct ThresholdEcdsaSigInputsBuilder {
-    derivation_path: ExtendedDerivationPath,
+    caller: PrincipalId,
+    derivation_path: Vec<Vec<u8>>,
     hashed_message: Vec<u8>,
-    nonce: Randomness,
+    nonce: [u8; 32],
     presig_quadruple: EcdsaPreSignatureQuadruple,
     key_transcript: IDkgTranscript,
 }
 
 impl ThresholdEcdsaSigInputsBuilder {
-    pub fn build(self) -> ThresholdEcdsaSigInputs {
-        ThresholdEcdsaSigInputs::new(
-            &self.derivation_path,
-            &self.hashed_message,
-            self.nonce,
-            self.presig_quadruple,
-            self.key_transcript,
-        )
-        .expect("invalid threshold ECDSA sig inputs")
+    pub fn build(self) -> ThresholdEcdsaSigInputsOwned {
+        ThresholdEcdsaSigInputsOwned {
+            caller: self.caller,
+            derivation_path: self.derivation_path,
+            hashed_message: self.hashed_message,
+            nonce: self.nonce,
+            presig_quadruple: self.presig_quadruple,
+            key_transcript: self.key_transcript,
+        }
     }
 
     pub fn corrupt_hashed_message(mut self) -> Self {
@@ -2464,12 +2545,13 @@ impl ThresholdEcdsaSigInputsBuilder {
     }
 }
 
-impl IntoBuilder for ThresholdEcdsaSigInputs {
+impl IntoBuilder for ThresholdEcdsaSigInputs<'_> {
     type BuilderType = ThresholdEcdsaSigInputsBuilder;
 
     fn into_builder(self) -> Self::BuilderType {
         ThresholdEcdsaSigInputsBuilder {
-            derivation_path: self.derivation_path().clone(),
+            caller: *self.caller(),
+            derivation_path: self.derivation_path().to_vec(),
             hashed_message: Vec::from(self.hashed_message()),
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
@@ -2897,12 +2979,11 @@ pub fn generate_initial_dealings<R: RngCore + CryptoRng>(
 
 pub mod ecdsa {
     use super::{
-        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
-        generate_tecdsa_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdEcdsaSigInputsOwned,
+        generate_key_transcript, generate_tecdsa_protocol_inputs,
     };
     use ic_types::PrincipalId;
     use ic_types::Randomness;
-    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
     use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use rand::distributions::uniform::SampleRange;
@@ -2914,7 +2995,7 @@ pub mod ecdsa {
         rng: &mut R,
     ) -> (
         CanisterThresholdSigTestEnvironment,
-        ThresholdEcdsaSigInputs,
+        ThresholdEcdsaSigInputsOwned,
         IDkgDealers,
         IDkgReceivers,
     )
