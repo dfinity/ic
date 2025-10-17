@@ -8234,6 +8234,10 @@ fn resource_saturation_scaling_works_in_regular_execution() {
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
     let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
     let balance_before = test.canister_state(canister_id).system_state.balance();
+    let reserved_balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
     let result = test.ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
     let balance_after = test.canister_state(canister_id).system_state.balance();
@@ -8247,12 +8251,13 @@ fn resource_saturation_scaling_works_in_regular_execution() {
     assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        )
+        reserved_balance_before
+            + test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
     );
 
     assert!(balance_before - balance_after > reserved_cycles);

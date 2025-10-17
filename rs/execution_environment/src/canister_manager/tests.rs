@@ -4811,11 +4811,11 @@ fn resource_saturation_scaling_works_in_install_code() {
 
     let subnet_memory_usage =
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+    let memory_usage_before = test.canister_state(canister_id).memory_usage();
     let balance_before = test.canister_state(canister_id).system_state.balance();
     test.install_canister(canister_id, wasm_binary).unwrap();
     let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+    let memory_usage_after = test.canister_state(canister_id).memory_usage();
 
     let reserved_cycles = test
         .canister_state(canister_id)
