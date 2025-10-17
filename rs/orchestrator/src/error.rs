@@ -27,6 +27,10 @@ pub(crate) enum OrchestratorError {
     /// given version
     ApiBoundaryNodeMissingError(NodeId, RegistryVersion),
 
+    /// The given node id does not map to a `NodeRecord` at the
+    /// given version
+    NodeRecordMissingError(NodeId, RegistryVersion),
+
     /// An error occurred when querying the Registry that prevents Orchestrator
     /// from making progress
     RegistryClientError(RegistryClientError),
@@ -138,6 +142,10 @@ impl fmt::Display for OrchestratorError {
             OrchestratorError::ApiBoundaryNodeMissingError(node_id, registry_version) => write!(
                 f,
                 "Api Boundary Node ID {node_id:?} does not exist in the Registry at registry version {registry_version:?}"
+            ),
+            OrchestratorError::NodeRecordMissingError(node_id, registry_version) => write!(
+                f,
+                "Node ID {node_id:?} does not exist in the Registry at registry version {registry_version:?}"
             ),
             OrchestratorError::ReplicaVersionParseError(e) => {
                 write!(f, "Failed to parse replica version: {e}")
