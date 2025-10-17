@@ -268,6 +268,10 @@ main() {
     if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
         log_message "ERROR: version and version-hash parameters are required"
         log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
+        # Sleep 30 seconds then repeat error message to ensure visibility after console initialization wipe
+        sleep 30
+        log_message "ERROR: version and version-hash parameters are required"
+        log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
         exit 1
     fi
 
@@ -276,7 +280,7 @@ main() {
     if [ -n "$RECOVERY_HASH" ]; then
         log_message "Recovery hash: $RECOVERY_HASH"
     else
-        log_message "Recovery hash not provided (optional)"
+        log_message "Recovery hash not provided (optional for testing)"
     fi
 
     TMPDIR=$(mktemp -d)
