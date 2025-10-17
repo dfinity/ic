@@ -268,6 +268,12 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn set_transform<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
+        self = self.push_bytes(payload.as_ref());
+        self.0.push(Ops::SetTransform as u8);
+        self
+    }
+
     pub fn api_global_timer_set(mut self, timestamp: u64) -> Self {
         self = self.push_int64(timestamp);
         self.0.push(Ops::ApiGlobalTimerSet as u8);

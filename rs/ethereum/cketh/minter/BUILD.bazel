@@ -1,25 +1,8 @@
-load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
-
-sol_binary(
-    name = "contracts",
-    srcs = [
-        "EthDepositHelper.sol",
-    ],
-)
-
-# Export the compiled bytecode and ABI files as artifacts
-filegroup(
-    name = "contract_artifacts",
-    srcs = [
-        ":contracts",
-    ],
-    visibility = ["//visibility:public"],
-)
 
 filegroup(
     name = "helper_contracts",

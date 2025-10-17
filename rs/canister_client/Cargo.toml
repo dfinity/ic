@@ -38,7 +38,7 @@ ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
-ic-test-utilities = { path = "../test_utilities" }
+ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-validator = { path = "../validator" }
 rand = { workspace = true }

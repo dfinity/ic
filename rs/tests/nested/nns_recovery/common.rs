@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
@@ -9,7 +8,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
-    node::await_subnet_earliest_topology_version,
+    node::await_subnet_earliest_topology_version_with_retries,
     rw_message::store_message,
     set_sandbox_env_vars,
     ssh_access::{
@@ -102,11 +101,9 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology = block_on(topology.block_for_newer_registry_version_within_duration(
-        Duration::from_secs(60),
-        Duration::from_secs(2),
-    ))
-    .unwrap();
+    let new_topology =
+        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
+            .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -122,10 +119,12 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
-    await_subnet_earliest_topology_version(
+    await_subnet_earliest_topology_version_with_retries(
         &nns_subnet,
         new_topology.get_registry_version(),
         &logger,
+        secs(15 * 60),
+        secs(15),
     );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 }
@@ -478,8 +477,8 @@ async fn simulate_node_provider_action(
             host_boot_id_pre_reboot
         ),
         &logger,
-        Duration::from_secs(5 * 60),
-        Duration::from_secs(5),
+        secs(5 * 60),
+        secs(5),
         || async {
             let host_boot_id = get_host_boot_id_async(host).await;
             if host_boot_id != host_boot_id_pre_reboot {

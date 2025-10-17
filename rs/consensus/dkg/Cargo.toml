@@ -30,6 +30,7 @@ ic-test-artifact-pool = { path = "../../test_utilities/artifact_pool" }
 prost = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-registry-keys = { path = "../../registry/keys" }

@@ -403,6 +403,7 @@ mod tests {
         dependencies_with_subnet_records_with_raw_state_manager,
     };
     use ic_consensus_utils::pool_reader::PoolReader;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -412,7 +413,6 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

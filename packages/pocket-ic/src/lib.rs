@@ -103,8 +103,10 @@ pub mod nonblocking;
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
 const MIN_SERVER_VERSION: &str = "10.0.0";
-const LATEST_SERVER_VERSION: &str = "10.0.0";
 const MAX_SERVER_VERSION: &str = "11";
+
+/// Public to facilitate downloading the PocketIC server.
+pub const LATEST_SERVER_VERSION: &str = "10.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;

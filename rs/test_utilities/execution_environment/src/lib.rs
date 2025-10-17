@@ -7,6 +7,7 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -53,7 +54,7 @@ use ic_replicated_state::{
     },
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
-use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -1205,6 +1206,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             data_certificate,
             /*certification_delegation_metadata=*/ None,
+            true,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1742,6 +1744,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             data_certificate,
             certificate_delegation_metadata,
+            true,
         )
     }
 
@@ -2774,6 +2777,10 @@ macro_rules! assert_delta {
             assert_eq!($x, $y, "delta: `{:?}`", $d);
         }
     };
+}
+
+fn mock_random_number_generator() -> Box<ReproducibleRng> {
+    Box::new(ReproducibleRng::from_seed_for_debugging([0u8; 32]))
 }
 
 #[cfg(test)]
