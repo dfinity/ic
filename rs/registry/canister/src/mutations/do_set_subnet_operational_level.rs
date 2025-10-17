@@ -103,7 +103,11 @@ impl Registry {
 }
 
 fn validate_operational_level(operational_level: Option<i32>) {
-    // None is ok.
+    // None is ok. None just means that is_halted does not get changed. Although
+    // this is not how this field would generally be used in practice, not
+    // having to specify an operational_level could be useful for when you want
+    // the other effects of set_subnet_operational_level (i.e. setting ssh
+    // access).
     let Some(operational_level) = operational_level else {
         return;
     };
@@ -120,7 +124,8 @@ fn validate_ssh_readonly_access(_ssh_readonly_access: &Option<Vec<String>>) {
 }
 
 fn validate_ssh_node_state_write_access(ssh_node_state_write_access: &Option<Vec<NodeSshAccess>>) {
-    // None is ok.
+    // None is ok. Remarks about when operational_level is None also apply here:
+    // None means no change.
     let Some(ssh_node_state_write_access) = ssh_node_state_write_access.as_ref() else {
         return;
     };
@@ -207,10 +212,11 @@ fn modify_node_record_for_set_subnet_operational_level(
             // Assuming validate_set_subnet_operational_level is correct,
             // these unwraps will not panic.
             let node_id = node_id.unwrap();
+            let public_keys = public_keys.unwrap();
 
             let mut node_record = node_record_fetcher(node_id);
 
-            node_record.ssh_node_state_write_access = public_keys.unwrap_or_default();
+            node_record.ssh_node_state_write_access = public_keys;
 
             // This could be skipped if the original value of
             // ssh_node_state_write_access == public_keys, but for simplicity,
@@ -238,3 +244,6 @@ pub struct NodeSshAccess {
     node_id: Option<NodeId>,
     public_keys: Option<Vec<String>>,
 }
+
+#[cfg(test)]
+mod tests;
