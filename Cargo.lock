@@ -2065,7 +2065,6 @@ dependencies = [
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic0",
  "proptest",
- "regex",
  "serde",
  "serde_json",
 ]
