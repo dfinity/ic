@@ -29,9 +29,9 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    READONLY_USERNAME, assert_subnet_is_broken, break_nodes,
+    Cursor, READONLY_USERNAME, assert_subnet_is_broken, break_nodes, halt_subnet,
     local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
-    remote_recovery,
+    remote_recovery, unhalt_subnet,
 };
 use anyhow::bail;
 use canister_test::Canister;
@@ -52,7 +52,8 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    Recovery, RecoveryArgs,
+    RecoveryArgs,
+    admin_helper::AdminHelper,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     get_node_metrics,
     util::DataLocation,
@@ -69,7 +70,6 @@ use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
 use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use prost::Message;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -434,7 +434,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .expect("Failed to read readonly SSH public key");
 
     let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
+    let binaries_dir = recovery_dir.join("recovery/binaries");
+    set_sandbox_env_vars(binaries_dir.clone());
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
@@ -497,6 +498,14 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         /*neuron_args=*/ None,
         subnet_args,
     );
+    let admin_helper = AdminHelper::new(
+        match std::env::var("IC_ADMIN_PATH") {
+            Ok(path) => get_dependency_path(path),
+            Err(_) => binaries_dir.join("ic-admin"),
+        },
+        nns_node.get_public_url(),
+        None,
+    );
     if cfg.upgrade {
         // Break f+1 nodes
         let f = (cfg.subnet_size - 1) / 3;
@@ -505,12 +514,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             &logger,
         );
     } else {
-        halt_subnet(
-            &app_node,
-            subnet_id,
-            subnet_recovery.get_recovery_api(),
-            &logger,
-        )
+        halt_subnet(&admin_helper, &app_node, subnet_id, &[], &logger)
     }
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
@@ -542,7 +546,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
-        corrupt_latest_cup(&app_subnet, subnet_recovery.get_recovery_api(), &logger);
+        corrupt_latest_cup(&app_subnet, &admin_helper, &logger);
         assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
     }
 
@@ -707,58 +711,9 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct Cursor {
-    #[serde(alias = "__CURSOR")]
-    cursor: String,
-}
-
-/// Halt the subnet and wait until the given app node reports consensus 'is halted'
-fn halt_subnet(
-    app_node: &IcNodeSnapshot,
-    subnet_id: SubnetId,
-    recovery: &Recovery,
-    logger: &Logger,
-) {
-    info!(logger, "Breaking the app subnet by halting it");
-    let session = app_node.block_on_ssh_session().unwrap();
-    let message_str = app_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("journal message");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
-    recovery
-        .halt_subnet(subnet_id, true, &[])
-        .exec()
-        .expect("Failed to halt subnet.");
-    ic_system_test_driver::retry_with_msg!(
-        "check if consensus is halted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            let res = app_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'is halted'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
-                Ok(())
-            } else {
-                bail!("Did not find log entry that consensus is halted.")
-            }
-        }
-    )
-    .expect("Failed to detect broken subnet.");
-}
-
 // Corrupt the latest cup of all subnet nodes by change the CUP's replica version field.
 // This will change the hash of the block, thus making the CUP non-deserializable.
-fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Logger) {
+fn corrupt_latest_cup(subnet: &SubnetSnapshot, admin_helper: &AdminHelper, logger: &Logger) {
     const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
     const NEW_CUP_PATH: &str = "/var/lib/ic/data/cups/new_cup.pb";
 
@@ -839,11 +794,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
     )
     .expect("Failed to detect broken subnet.");
 
-    info!(logger, "Unhalting subnet");
-    recovery
-        .halt_subnet(subnet.subnet_id, false, &[])
-        .exec()
-        .expect("Failed to unhalt subnet.");
+    unhalt_subnet(admin_helper, subnet.subnet_id, &[], logger);
 }
 
 /// Print ID and IP of the source subnet, the first app subnet found that is not the source, and all

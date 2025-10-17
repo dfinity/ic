@@ -1,12 +1,19 @@
+use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::rw_message::{can_read_msg, cannot_store_msg};
-use ic_recovery::{get_node_metrics, steps::Step};
+use ic_recovery::{
+    admin_helper::AdminHelper,
+    get_node_metrics,
+    steps::{AdminStep, Step},
+};
 use ic_system_test_driver::{
     driver::test_env_api::{
-        IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to,
+        IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
     },
     util::block_on,
 };
+use ic_types::SubnetId;
+use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::fmt::Debug;
 use url::Url;
@@ -35,6 +42,81 @@ where
         node.block_on_bash_script(ssh_command)
             .unwrap_or_else(|_| panic!("SSH command failed on node with IP {ip}"));
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Cursor {
+    #[serde(alias = "__CURSOR")]
+    pub cursor: String,
+}
+
+// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
+// This function waits until it detects in the subnet node's journal that consensus is halted.
+pub fn halt_subnet(
+    admin_helper: &AdminHelper,
+    subnet_node: &IcNodeSnapshot,
+    subnet_id: SubnetId,
+    keys: &[String],
+    logger: &Logger,
+) {
+    info!(logger, "Halting subnet {subnet_id}...");
+    let session = subnet_node.block_on_ssh_session().unwrap();
+    let message_str = subnet_node
+        .block_on_bash_script_from_session(
+            &session,
+            "journalctl -n1 -o json --output-fields='__CURSOR'",
+        )
+        .expect("Failed to get journal cursor");
+    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+
+    AdminStep {
+        logger: logger.clone(),
+        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, true, keys),
+    }
+    .exec()
+    .expect("Failed to halt subnet");
+
+    ic_system_test_driver::retry_with_msg!(
+        "check if consensus is halted",
+        logger.clone(),
+        secs(120),
+        secs(10),
+        || {
+            let res = subnet_node.block_on_bash_script_from_session(
+                &session,
+                &format!(
+                    "journalctl --after-cursor='{}' | grep -c 'is halted'",
+                    message.cursor
+                ),
+            );
+            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
+                Ok(())
+            } else {
+                Err(anyhow!("Did not find log entry that consensus is halted"))
+            }
+        }
+    )
+    .expect("Failed to detect halted subnet");
+
+    info!(logger, "Subnet {subnet_id} halted.");
+}
+
+// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
+// URL.
+pub fn unhalt_subnet(
+    admin_helper: &AdminHelper,
+    subnet_id: SubnetId,
+    keys: &[String],
+    logger: &Logger,
+) {
+    info!(logger, "Unhalting subnet {subnet_id}...");
+    AdminStep {
+        logger: logger.clone(),
+        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, false, keys),
+    }
+    .exec()
+    .expect("Failed to unhalt subnet");
+    info!(logger, "Subnet {subnet_id} unhalted.");
 }
 
 /// A subnet is considered to be broken if it (potentially) still works in read mode, but doesn't
