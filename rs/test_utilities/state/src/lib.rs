@@ -400,7 +400,7 @@ impl Default for CanisterStateBuilder {
             cycles: INITIAL_CYCLES,
             stable_memory: None,
             wasm: None,
-            memory_allocation: MemoryAllocation::BestEffort,
+            memory_allocation: MemoryAllocation::default(),
             wasm_memory_threshold: NumBytes::new(0),
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),

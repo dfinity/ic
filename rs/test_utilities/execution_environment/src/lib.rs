@@ -389,10 +389,7 @@ impl ExecutionTest {
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
-        let memory_usage = self.execution_state(canister_id).memory_usage()
-            + self
-                .canister_state(canister_id)
-                .canister_history_memory_usage();
+        let memory_usage = self.canister_state(canister_id).memory_usage();
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state
@@ -710,24 +707,6 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(wasm_memory_limit.get())
-                .with_wasm_memory_threshold(wasm_memory_threshold.get())
-                .build(),
-            sender_canister_version: None,
-        }
-        .encode();
-        self.subnet_message(Method::UpdateSettings, payload)
-    }
-
-    pub fn canister_update_memory_allocation_and_wasm_memory_threshold(
-        &mut self,
-        canister_id: CanisterId,
-        memory_allocation: NumBytes,
-        wasm_memory_threshold: NumBytes,
-    ) -> Result<WasmResult, UserError> {
-        let payload = UpdateSettingsArgs {
-            canister_id: canister_id.into(),
-            settings: CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation.get())
                 .with_wasm_memory_threshold(wasm_memory_threshold.get())
                 .build(),
             sender_canister_version: None,
@@ -1831,6 +1810,18 @@ impl ExecutionTest {
 
     pub fn get_own_subnet_id(&self) -> SubnetId {
         self.cycles_account_manager.get_subnet_id()
+    }
+
+    pub fn expected_storage_reservation_cycles(&self, allocated_bytes: NumBytes) -> Cycles {
+        let subnet_memory_saturation = self
+            .exec_env
+            .subnet_memory_saturation(&self.subnet_available_memory);
+        self.cycles_account_manager.storage_reservation_cycles(
+            allocated_bytes,
+            &subnet_memory_saturation,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 }
 
