@@ -862,6 +862,22 @@ http_archive(
     url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-linux-amd64.zip",
 )
 
+# even if the macOS version is "x86_64" it runs on ARM chips because of
+# emulation
+http_archive(
+    name = "dfx-x86_64-darwin",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "4b1c24805f655576fb97f61aba019fbbe7c1bdca0598a5c1a9220a4bfe80f460",
+    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-darwin.tar.gz",
+)
+
+http_archive(
+    name = "dfx-x86_64-linux",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "011c8a6ff9af0578ee2c8b0a7af3abc5b3d5950cc64421b4c3a7acd1fc18265e",
+    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-linux.tar.gz",
+)
+
 # Management canister candid interface
 
 http_file(
