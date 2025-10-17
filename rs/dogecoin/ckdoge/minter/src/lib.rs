@@ -12,15 +12,19 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse,
-    address::BitcoinAddress, management::CallError, state::CkBtcMinterState, tx,
+    management::CallError, state::CkBtcMinterState, tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 
 pub use ic_ckbtc_minter::{
     Log, LogEntry, OutPoint, Page, Txid, Utxo,
+    address::BitcoinAddress,
     memo::{BurnMemo, MintMemo, Status, encode as memo_encode},
-    state::eventlog::{Event, EventType, GetEventsArg},
+    state::{
+        RetrieveBtcRequest,
+        eventlog::{Event, EventType, GetEventsArg},
+    },
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 

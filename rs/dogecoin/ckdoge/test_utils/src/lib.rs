@@ -188,6 +188,12 @@ impl Default for Setup {
     }
 }
 
+impl AsRef<PocketIc> for Setup {
+    fn as_ref(&self) -> &PocketIc {
+        &self.env
+    }
+}
+
 fn minter_wasm() -> Vec<u8> {
     let wasm_path = std::env::var("IC_CKDOGE_MINTER_WASM_PATH").unwrap();
     std::fs::read(wasm_path).unwrap()

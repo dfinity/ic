@@ -212,10 +212,12 @@ mod deposit {
 
 mod withdrawal {
     use candid::Principal;
+    use ic_ckdoge_minter::address::DogecoinAddress;
     use ic_ckdoge_minter::candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs};
+    use ic_ckdoge_minter::lifecycle::init::Network;
     use ic_ckdoge_minter::{
-        BurnMemo, EventType, MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus,
-        candid_api::GetDogeAddressArgs, memo_encode,
+        BitcoinAddress, BurnMemo, EventType, MintMemo, OutPoint, RetrieveBtcRequest,
+        UpdateBalanceArgs, Utxo, UtxoStatus, candid_api::GetDogeAddressArgs, memo_encode,
     };
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
@@ -224,6 +226,7 @@ mod withdrawal {
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
+    use pocket_ic::Time;
 
     #[test]
     fn should_withdraw_doge() {
@@ -301,6 +304,11 @@ mod withdrawal {
             .icrc2_approve(account, RETRIEVE_DOGE_MIN_AMOUNT, minter.id())
             .unwrap();
 
+        let beneficiary_address =
+            DogecoinAddress::parse(DOGECOIN_ADDRESS_1, &Network::Mainnet).unwrap();
+        let time_of_retrieval = Time::from_nanos_since_unix_epoch(1760709476000000000);
+
+        setup.as_ref().set_time(time_of_retrieval);
         let retrieve_doge_id = minter
             .retrieve_doge_with_approval(
                 USER_PRINCIPAL,
@@ -315,6 +323,18 @@ mod withdrawal {
             minter.retrieve_doge_status(retrieve_doge_id.block_index),
             RetrieveDogeStatus::Pending
         );
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                address: BitcoinAddress::P2pkh(
+                    beneficiary_address.as_bytes().to_vec().try_into().unwrap(),
+                ),
+                block_index: retrieve_doge_id.block_index,
+                received_at: time_of_retrieval.as_nanos_since_unix_epoch(),
+                kyt_provider: None,
+                reimbursement_account: Some(account),
+            }),
+        ]);
 
         ledger
             .assert_that_transaction(retrieve_doge_id.block_index)
