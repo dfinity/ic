@@ -15787,7 +15787,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "assert_matches",
  "base32",
