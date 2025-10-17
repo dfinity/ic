@@ -31,12 +31,11 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    break_nodes, node_with_highest_certification_share_height,
+    BACKUP_USERNAME, break_nodes, node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
-    BACKUP_USERNAME, SetupConfig, grant_backup_access_to_all_nns_nodes,
-    replace_nns_with_unassigned_nodes,
+    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
