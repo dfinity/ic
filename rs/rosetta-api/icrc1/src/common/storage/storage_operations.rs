@@ -268,7 +268,12 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
     while !rosetta_blocks.is_empty() {
         for rosetta_block in rosetta_blocks {
             match rosetta_block.get_transaction().operation {
-                crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => {
+                crate::common::storage::types::IcrcOperation::Burn {
+                    from,
+                    amount,
+                    fee: _,
+                    spender: _,
+                } => {
                     let fee = rosetta_block
                         .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
@@ -295,7 +300,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         )?;
                     }
                 }
-                crate::common::storage::types::IcrcOperation::Mint { to, amount, .. } => {
+                crate::common::storage::types::IcrcOperation::Mint { to, amount, fee: _ } => {
                     let fee = rosetta_block
                         .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
@@ -322,7 +327,14 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         )?;
                     }
                 }
-                crate::common::storage::types::IcrcOperation::Approve { from, .. } => {
+                crate::common::storage::types::IcrcOperation::Approve {
+                    from,
+                    spender: _,
+                    amount: _,
+                    expected_allowance: _,
+                    expires_at: _,
+                    fee: _,
+                } => {
                     let fee = rosetta_block
                         .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
@@ -335,7 +347,11 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                     )?;
                 }
                 crate::common::storage::types::IcrcOperation::Transfer {
-                    from, to, amount, ..
+                    from,
+                    to,
+                    amount,
+                    spender: _,
+                    fee: _,
                 } => {
                     let fee = rosetta_block
                         .get_fee_paid()?
