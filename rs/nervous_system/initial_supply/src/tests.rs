@@ -68,6 +68,7 @@ async fn test_initial_supply() {
                             subaccount: None,
                         },
                         memo: None,
+                        fee: None,
                     }),
 
                     kind: "mint".to_string(),

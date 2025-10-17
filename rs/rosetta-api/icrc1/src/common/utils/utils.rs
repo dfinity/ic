@@ -233,24 +233,20 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     if self.spender.is_some() {
                         bail!("Spender AccountIdentifier field is not allowed for Mint operation")
                     }
-                    if self.fee.is_some() {
-                        bail!("Fee field is not allowed for Mint operation")
-                    }
                     crate::common::storage::types::IcrcOperation::Mint{
                     to: self.to.context("Account field needs to be populated for Mint operation")?.try_into()?,
                     amount: self.amount.context("Amount field needs to be populated for Mint operation")?,
+                    fee: self.fee,
                 }},
                 IcrcOperation::Burn => {
                     if self.to.is_some() {
                         bail!("To AccountIdentifier field is not allowed for Burn operation")
                     }
-                    if self.fee.is_some() {
-                        bail!("Fee field is not allowed for Burn operation")
-                    }
                     crate::common::storage::types::IcrcOperation::Burn{
                     from: self.from.context("From AccountIdentifier field needs to be populated for Burn operation")?.try_into()?,
                     amount: self.amount.context("Amount field needs to be populated for Burn operation")?,
                     spender: self.spender.map(|spender| spender.try_into()).transpose()?,
+                    fee: self.fee,
                 }},
                 IcrcOperation::Transfer => crate::common::storage::types::IcrcOperation::Transfer{
                     from: self.from.context("From AccountIdentifier field needs to be populated for Transfer operation")?.try_into()?,
@@ -392,24 +388,48 @@ pub fn icrc1_operation_to_rosetta_core_operations(
 ) -> anyhow::Result<Vec<rosetta_core::objects::Operation>> {
     let mut operations = vec![];
     match operation {
-        crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
+        crate::common::storage::types::IcrcOperation::Mint { to, amount, fee } => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
                 OperationType::Mint.to_string(),
                 Some(to.into()),
                 Some(rosetta_core::objects::Amount::new(
                     BigInt::from(amount.0),
-                    currency,
+                    currency.clone(),
                 )),
                 None,
                 None,
-            ))
+            ));
+
+            if let Some(fee_paid) = fee_payed {
+                operations.push(rosetta_core::objects::Operation::new(
+                    1,
+                    OperationType::Fee.to_string(),
+                    Some(to.into()), // Mint fees are payed by the receiving account.
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency,
+                    )),
+                    None,
+                    // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
+                    Some(
+                        FeeMetadata {
+                            fee_set_by: match fee {
+                                Some(_) => FeeSetter::User,
+                                None => FeeSetter::Ledger,
+                            },
+                        }
+                        .try_into()?,
+                    ),
+                ));
+            }
         }
 
         crate::common::storage::types::IcrcOperation::Burn {
             from,
             spender,
             amount,
+            fee,
         } => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
@@ -417,20 +437,46 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
                     BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
-                    currency,
+                    currency.clone(),
                 )),
                 None,
                 None,
             ));
 
+            let mut idx = 1;
+
             if let Some(spender) = spender {
                 operations.push(rosetta_core::objects::Operation::new(
-                    1,
+                    idx,
                     OperationType::Spender.to_string(),
                     Some(spender.into()),
                     None,
                     None,
                     None,
+                ));
+                idx += 1;
+            }
+
+            if let Some(fee_paid) = fee_payed {
+                operations.push(rosetta_core::objects::Operation::new(
+                    idx,
+                    OperationType::Fee.to_string(),
+                    Some(from.into()),
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency,
+                    )),
+                    None,
+                    // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
+                    Some(
+                        FeeMetadata {
+                            fee_set_by: match fee {
+                                Some(_) => FeeSetter::User,
+                                None => FeeSetter::Ledger,
+                            },
+                        }
+                        .try_into()?,
+                    ),
                 ));
             }
         }
@@ -487,7 +533,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     Some(from.into()),
                     Some(Amount::new(
                         BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
-                        currency.clone(),
+                        currency,
                     )),
                     None,
                     // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing

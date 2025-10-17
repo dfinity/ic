@@ -93,6 +93,7 @@ fn should_deposit_and_withdraw() {
                     log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ledger_approve_minter(account.owner, EXPECTED_BALANCE, account.subaccount)
             .expect_ok(1)
@@ -124,6 +125,7 @@ fn should_deposit_and_withdraw() {
                     to_address: destination.parse().unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
         assert_eq!(cketh.balance_of(account), Nat::from(0_u8));
 
@@ -454,6 +456,7 @@ fn should_reimburse() {
                 log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
             })),
             created_at_time: None,
+            fee: None,
         })
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
         .expect_ok(1);
@@ -493,6 +496,7 @@ fn should_reimburse() {
                 to_address: destination.parse().unwrap(),
             })),
             created_at_time: None,
+            fee: None,
         });
 
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
@@ -543,6 +547,7 @@ fn should_reimburse() {
                 tx_hash: failed_tx_hash.parse().unwrap(),
             })),
             created_at_time: None,
+            fee: None,
         })
         .assert_has_unique_events_in_order(&vec![
             EventPayload::AcceptedEthWithdrawalRequest {
