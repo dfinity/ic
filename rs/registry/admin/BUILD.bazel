@@ -46,8 +46,6 @@ rust_binary(
         # Keep sorted.
         ":admin",
         ":build_script",
-        "//rs/canister_client",
-        "//rs/canister_client/sender",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/http_utils",
@@ -90,7 +88,9 @@ rust_binary(
         "@crate_index//:clap",
         "@crate_index//:futures",
         "@crate_index//:hex",
+        "@crate_index//:ic-agent",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-identity-hsm",
         "@crate_index//:indexmap",
         "@crate_index//:itertools",
         "@crate_index//:maplit",
