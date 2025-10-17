@@ -7,7 +7,7 @@ use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
 use candid::{Encode, Principal};
 use ic_ckdoge_minter::{
-    Txid,
+    Txid, get_dogecoin_canister_id,
     lifecycle::init::{InitArgs, MinterArg, Mode, Network},
 };
 use ic_icrc1_ledger::ArchiveOptions;
@@ -21,8 +21,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
-pub const DOGECOIN_MAINNET_CANISTER: Principal =
-    Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
 pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
@@ -36,7 +34,7 @@ pub struct Setup {
 }
 
 impl Setup {
-    pub fn new() -> Self {
+    pub fn new(doge_network: Network) -> Self {
         let env = Arc::new(
             PocketIcBuilder::new()
                 .with_bitcoin_subnet()
@@ -51,7 +49,7 @@ impl Setup {
                     controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
                     ..Default::default()
                 }),
-                DOGECOIN_MAINNET_CANISTER,
+                get_dogecoin_canister_id(&doge_network),
             )
             .unwrap();
         env.install_canister(
@@ -92,7 +90,7 @@ impl Setup {
 
         {
             let minter_init_args = MinterArg::Init(InitArgs {
-                doge_network: Network::Mainnet,
+                doge_network,
                 ecdsa_key_name: "key_1".into(),
                 retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
@@ -113,7 +111,7 @@ impl Setup {
             let ledger_init_args = ic_icrc1_ledger::InitArgs {
                 minting_account: minter.into(),
                 fee_collector_account: Some(Account {
-                    owner: DOGECOIN_MAINNET_CANISTER,
+                    owner: minter,
                     subaccount: Some([
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0x0f, 0xee,
@@ -180,7 +178,7 @@ impl Setup {
 
 impl Default for Setup {
     fn default() -> Self {
-        Self::new()
+        Self::new(Network::Mainnet)
     }
 }
 
@@ -211,17 +209,4 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
 
 pub fn txid() -> Txid {
     Txid::from([42u8; 32])
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::DOGECOIN_MAINNET_CANISTER;
-
-    #[test]
-    fn should_have_correct_principal() {
-        assert_eq!(
-            DOGECOIN_MAINNET_CANISTER.to_string(),
-            "gordg-fyaaa-aaaan-aaadq-cai"
-        );
-    }
 }
