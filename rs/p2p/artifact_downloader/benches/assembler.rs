@@ -1,39 +1,33 @@
-use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
-use std::vec;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
+    time::Duration,
+    vec,
+};
 
 use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
 use ic_artifact_downloader::FetchStrippedConsensusArtifact;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, Peers};
-use ic_interfaces::p2p::consensus::{BouncerValue, ValidatedPoolReader};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue, Peers, ValidatedPoolReader};
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockBouncerFactory, MockTransport, MockValidatedPoolReader};
-use ic_test_utilities_consensus::fake::Fake;
-use ic_test_utilities_consensus::fake::FakeContentSigner;
-use ic_test_utilities_consensus::make_genesis;
-use ic_types::artifact::IdentifiableArtifact;
-use ic_types::artifact::{ConsensusMessageId, IngressMessageId};
-use ic_types::batch::BatchPayload;
-use ic_types::batch::IngressPayload;
-use ic_types::consensus::Block;
-use ic_types::consensus::BlockPayload;
-use ic_types::consensus::BlockProposal;
-use ic_types::consensus::DataPayload;
-use ic_types::consensus::Payload;
-use ic_types::consensus::Rank;
-use ic_types::consensus::dkg::DkgDataPayload;
-use ic_types::consensus::dkg::DkgSummary;
-use ic_types::messages::Blob;
-use ic_types::messages::HttpCallContent;
-use ic_types::messages::HttpCanisterUpdate;
-use ic_types::messages::HttpRequestEnvelope;
-use ic_types::time::UNIX_EPOCH;
-use ic_types::{Height, NodeId};
-use ic_types::{consensus::ConsensusMessage, messages::SignedIngress};
+use ic_test_utilities_consensus::{
+    fake::{Fake, FakeContentSigner},
+    make_genesis,
+};
+use ic_types::{
+    Height, NodeId,
+    artifact::{IdentifiableArtifact, IngressMessageId},
+    batch::{BatchPayload, IngressPayload},
+    consensus::{
+        Block, BlockPayload, BlockProposal, ConsensusMessage, DataPayload, Payload, Rank,
+        dkg::{DkgDataPayload, DkgSummary},
+    },
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
+    time::UNIX_EPOCH,
+};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
-use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::runtime::Handle;
 
 struct FakeIngressPool {
     ingresses: BTreeMap<IngressMessageId, SignedIngress>,
