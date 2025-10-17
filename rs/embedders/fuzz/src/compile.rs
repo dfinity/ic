@@ -1,7 +1,7 @@
 use crate::ic_wasm::{generate_exports, ic_wasm_config};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_embedders::{WasmtimeEmbedder, wasm_utils::compile};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::time::Duration;

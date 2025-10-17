@@ -1,5 +1,5 @@
 #![no_main]
-use candid::{define_function, CandidType, Decode, DecoderConfig, Deserialize, Nat};
+use candid::{CandidType, Decode, DecoderConfig, Deserialize, Nat, define_function};
 use libfuzzer_sys::fuzz_target;
 use serde_bytes::ByteBuf;
 

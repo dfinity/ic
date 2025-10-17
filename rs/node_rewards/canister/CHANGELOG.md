@@ -2,7 +2,31 @@
 
 INSERT NEW RELEASES HERE
 
-* Replicated execution of the query endpoints `get_node_provider_rewards_calculation` and `get_historical_reward_periods`
+# 2025-09-06: Proposal 138378
+
+https://dashboard.internetcomputer.org/proposal/138378
+
+* Add Node Provider filtering on get_rewardable_nodes_per_provider to reduce number of instruction on query calls.
+* Discard historical rewards storage and API endpoints as historical rewards will be stored in Governance canister.
+* Disable replicated execution of query calls.
+
+# 2025-08-30: Proposal 138288
+
+http://dashboard.internetcomputer.org/proposal/138288
+
+## Added
+
+* Add get_node_providers_rewards endpoint, to be used by the Governance to compute performance-based rewards.
+* Store rewards (including intermediate results) in stable memory for client retrieval.
+* Add get_node_provider_rewards_calculation endpoint to compute ongoing rewards and fetch historical ones.
+* Add get_historical_reward_periods endpoint to fetch historical reward periods and the providers rewarded.
+
+## Fixed
+
+* Fix rewards calculation algorithm to extrapolate with 0% failure rate node's performance for node providers with no
+  assigned nodes on a given day.
+* Replicated execution of the query endpoints `get_node_providers_rewards_calculation` and
+  `get_historical_reward_periods`
   is disabled.
 
 # 2025-08-15: Proposal 137910

@@ -6,9 +6,9 @@ use ic_stable_structures::storable::{Bound, Storable};
 use minicbor::{Decode, Encode};
 use num_traits::Bounded;
 use serde::{
+    Deserialize, Serialize,
     de::{self, Deserializer},
     ser::Serializer,
-    Deserialize, Serialize,
 };
 use std::borrow::Cow;
 use std::fmt;
@@ -91,7 +91,7 @@ impl TryFrom<Nat> for U256 {
     fn try_from(n: Nat) -> Result<Self, Self::Error> {
         let le_bytes = n.0.to_bytes_le();
         if le_bytes.len() > 32 {
-            return Err(format!("amount {} does not fit into u256 token type", n));
+            return Err(format!("amount {n} does not fit into u256 token type"));
         }
         let mut bytes = [0u8; 32];
         bytes[0..le_bytes.len()].copy_from_slice(&le_bytes[..]);
@@ -100,7 +100,7 @@ impl TryFrom<Nat> for U256 {
 }
 
 impl Storable for U256 {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(self.0.to_be_bytes().to_vec())
     }
 

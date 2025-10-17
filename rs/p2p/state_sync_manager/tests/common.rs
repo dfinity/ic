@@ -1,9 +1,9 @@
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeMap, HashSet},
+    collections::{BTreeMap, HashSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, MutexGuard,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -17,7 +17,7 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_quic_transport::Shutdown;
 use ic_state_manager::state_sync::types::StateSyncMessage;
-use ic_types::{crypto::CryptoHash, Height, NodeId, PrincipalId};
+use ic_types::{Height, NodeId, PrincipalId, crypto::CryptoHash};
 use tokio::runtime::Handle;
 
 const META_MANIFEST_ID: u32 = u32::MAX - 1;
@@ -280,7 +280,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
             if set.remove(&chunk_id) {
                 break;
             } else {
-                panic!("Downloaded chunk {} twice", chunk_id)
+                panic!("Downloaded chunk {chunk_id} twice")
             }
         }
 

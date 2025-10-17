@@ -158,21 +158,13 @@ fn can_retrieve_entries_correctly() {
         assert_eq!(
             versioned_value,
             expected_value.map(|expected| value(expected).test_value),
-            "get_versioned_value: key: {}, version: {}, expected: {:?}, actual: {:?}",
-            key,
-            ver,
-            expected_value,
-            versioned_value
+            "get_versioned_value: key: {key}, version: {ver}, expected: {expected_value:?}, actual: {versioned_value:?}"
         );
 
         assert_eq!(
             get_value,
             Ok(expected_value.map(|expected| value(expected).test_value)),
-            "get_value: key: {}, version: {}, expected: {:?}, actual: {:?}",
-            key,
-            ver,
-            expected_value,
-            get_value
+            "get_value: key: {key}, version: {ver}, expected: {expected_value:?}, actual: {get_value:?}"
         );
     };
 

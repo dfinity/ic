@@ -5,7 +5,7 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_registry_keys::make_firewall_config_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 
@@ -14,7 +14,10 @@ impl Registry {
     ///
     /// This method is called by the governance canister.
     pub fn do_set_firewall_config(&mut self, payload: SetFirewallConfigPayload) {
-        println!("{}do_set_firewall_config: firewall_config: {:?}, ipv4_prefixes: {:?}, ipv6_prefixes: {:?}", LOG_PREFIX, payload.firewall_config, payload.ipv4_prefixes, payload.ipv6_prefixes);
+        println!(
+            "{}do_set_firewall_config: firewall_config: {:?}, ipv4_prefixes: {:?}, ipv6_prefixes: {:?}",
+            LOG_PREFIX, payload.firewall_config, payload.ipv4_prefixes, payload.ipv6_prefixes
+        );
 
         let firewall_config: FirewallConfig = payload.into();
 

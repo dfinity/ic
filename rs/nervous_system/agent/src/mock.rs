@@ -51,9 +51,7 @@ impl Drop for MockCallCanisters {
         let len = calls.len();
         assert!(
             calls.is_empty(),
-            "{} expected calls were left over (i.e. were never made):\n{:#?}",
-            len,
-            calls,
+            "{len} expected calls were left over (i.e. were never made):\n{calls:#?}",
         );
     }
 }

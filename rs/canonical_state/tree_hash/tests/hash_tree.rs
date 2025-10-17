@@ -1,8 +1,8 @@
 use assert_matches::assert_matches;
-use ic_canonical_state_tree_hash::hash_tree::{hash_lazy_tree, HashTreeError};
+use ic_canonical_state_tree_hash::hash_tree::{HashTreeError, hash_lazy_tree};
 use ic_canonical_state_tree_hash_test_utils::{as_lazy, test_membership_witness};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, flatmap};
 use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_labeled_tree;
 use proptest::prelude::*;
 use rand::SeedableRng;
@@ -111,18 +111,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"Z"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"a"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_unknown(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 
     let ht_witness = hash_tree
@@ -135,18 +132,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"a"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"b"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 
     let ht_witness = hash_tree
@@ -159,18 +153,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"a"]).is_unknown(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"d"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 }
 

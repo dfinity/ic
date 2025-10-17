@@ -13,12 +13,8 @@ pub(crate) fn check_projected_instructions(
     let projected_instructions = benchmark_instructions / bench_scale * production_scale;
     assert!(
         projected_instructions <= instructions_limit,
-        "The instructions used by the benchmark ({}), when scaled to production from {} to {}, \
-        exceed the limit ({}).",
-        benchmark_instructions,
-        bench_scale,
-        production_scale,
-        instructions_limit
+        "The instructions used by the benchmark ({benchmark_instructions}), when scaled to production from {bench_scale} to {production_scale}, \
+        exceed the limit ({instructions_limit})."
     );
     bench_result
 }

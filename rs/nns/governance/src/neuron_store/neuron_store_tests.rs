@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{Followees, MaturityDisbursement},
-    storage::with_stable_neuron_indexes,
+    pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
+    storage::{with_stable_neuron_indexes, with_voting_history_store},
+    temporarily_disable_known_neuron_voting_history,
+    temporarily_enable_known_neuron_voting_history,
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -234,7 +236,7 @@ fn test_remove_inactive_neuron() {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(neuron_id, inactive_neuron.id());
             }
-            _ => panic!("read returns error other than not found: {:?}", error),
+            _ => panic!("read returns error other than not found: {error:?}"),
         },
     }
 }
@@ -879,34 +881,50 @@ fn test_approve_genesis_kyc() {
         neuron_4.id().id => neuron_4.clone(),
     });
     // Before calling `approve_genesis_kyc`, none of the neurons have KYC verified.
-    assert!(!neuron_store
-        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
-        .unwrap());
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
 
     // Approve KYC for neuron_1, neuron_2 and neuron_3.
     approve_genesis_kyc(&mut neuron_store, &[principal_1, principal_2]).unwrap();
 
-    assert!(neuron_store
-        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(neuron_store
-        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(neuron_store
-        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
-        .unwrap());
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
 }
 
 // Prepares `num_neurons_same_controller` neurons with the same controller and
@@ -955,16 +973,20 @@ fn test_approve_genesis_kyc_cap_not_exceeded() {
 
     // All 1000 neurons should have KYC verified.
     for neuron in &neurons {
-        assert!(neuron_store
-            .with_neuron(&neuron.id(), |n| n.kyc_verified)
-            .unwrap());
+        assert!(
+            neuron_store
+                .with_neuron(&neuron.id(), |n| n.kyc_verified)
+                .unwrap()
+        );
     }
 
     // The neuron with id 1001 should not have KYC verified.
-    assert!(!neuron_store
-        .with_neuron(&neuron_should_not_have_kyc_verified.id(), |n| n
-            .kyc_verified)
-        .unwrap());
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_should_not_have_kyc_verified.id(), |n| n
+                .kyc_verified)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -987,8 +1009,154 @@ fn test_approve_genesis_kyc_cap_exceeded() {
 
     // None of the neurons should have KYC verified.
     for neuron in &neurons {
-        assert!(!neuron_store
-            .with_neuron(&neuron.id(), |n| n.kyc_verified)
-            .unwrap());
+        assert!(
+            !neuron_store
+                .with_neuron(&neuron.id(), |n| n.kyc_verified)
+                .unwrap()
+        );
     }
+}
+
+fn test_record_neuron_vote(enabled: bool) {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let neuron = simple_neuron_builder(1)
+        .with_known_neuron_data(Some(KnownNeuronData {
+            name: "my known neuron".to_string(),
+            description: Some("my known neuron description".to_string()),
+            links: vec![],
+            committed_topics: vec![],
+        }))
+        .build();
+    let neuron_id = neuron_store.add_neuron(neuron).unwrap();
+
+    neuron_store
+        .record_neuron_vote(
+            neuron_id,
+            Topic::NetworkEconomics,
+            ProposalId { id: 1 },
+            Vote::Yes,
+            ProposalId { id: 0 },
+        )
+        .unwrap();
+
+    let recent_ballots = neuron_store
+        .with_neuron(&neuron_id, |n| n.recent_ballots.clone())
+        .unwrap();
+    assert_eq!(
+        recent_ballots,
+        vec![BallotInfo {
+            proposal_id: Some(ProposalId { id: 1 }),
+            vote: Vote::Yes as i32,
+        }]
+    );
+
+    let voting_history = with_voting_history_store(|voting_history| {
+        voting_history.list_neuron_votes(neuron_id, None, Some(10))
+    });
+    if enabled {
+        assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
+    } else {
+        assert_eq!(voting_history, vec![]);
+    }
+}
+
+#[test]
+fn test_record_neuron_vote_disabled() {
+    let _t = temporarily_disable_known_neuron_voting_history();
+
+    test_record_neuron_vote(false);
+}
+
+#[test]
+fn test_record_neuron_vote_enabled() {
+    let _t = temporarily_enable_known_neuron_voting_history();
+
+    test_record_neuron_vote(true);
+}
+
+#[test]
+fn test_record_neuron_vote_filters_by_first_proposal_id() {
+    let _t = temporarily_enable_known_neuron_voting_history();
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let neuron = simple_neuron_builder(1)
+        .with_known_neuron_data(Some(KnownNeuronData {
+            name: "my known neuron".to_string(),
+            description: Some("my known neuron description".to_string()),
+            links: vec![],
+            committed_topics: vec![],
+        }))
+        .build();
+    let neuron_id = neuron_store.add_neuron(neuron).unwrap();
+
+    // Record a vote for proposal 1 with threshold at 5
+    // This should NOT be recorded in voting history because proposal_id (1) < threshold (5)
+    neuron_store
+        .record_neuron_vote(
+            neuron_id,
+            Topic::NetworkEconomics,
+            ProposalId { id: 1 },
+            Vote::Yes,
+            ProposalId { id: 5 },
+        )
+        .unwrap();
+
+    // Verify ballot was recorded in recent_ballots
+    let recent_ballots = neuron_store
+        .with_neuron(&neuron_id, |n| n.recent_ballots.clone())
+        .unwrap();
+    assert_eq!(
+        recent_ballots,
+        vec![BallotInfo {
+            proposal_id: Some(ProposalId { id: 1 }),
+            vote: Vote::Yes as i32,
+        }]
+    );
+
+    // Verify it was NOT recorded in voting history
+    let voting_history = with_voting_history_store(|voting_history| {
+        voting_history.list_neuron_votes(neuron_id, None, None)
+    });
+    assert_eq!(voting_history, vec![]);
+
+    // Record a vote for proposal 5 (equal to threshold)
+    // This SHOULD be recorded in voting history because proposal_id (5) >= threshold (5)
+    neuron_store
+        .record_neuron_vote(
+            neuron_id,
+            Topic::NetworkEconomics,
+            ProposalId { id: 5 },
+            Vote::No,
+            ProposalId { id: 5 },
+        )
+        .unwrap();
+
+    // Verify it WAS recorded in voting history
+    let voting_history = with_voting_history_store(|voting_history| {
+        voting_history.list_neuron_votes(neuron_id, None, None)
+    });
+    assert_eq!(voting_history, vec![(ProposalId { id: 5 }, Vote::No)]);
+
+    // Record a vote for proposal 10 (greater than threshold)
+    // This SHOULD be recorded in voting history because proposal_id (10) >= threshold (5)
+    neuron_store
+        .record_neuron_vote(
+            neuron_id,
+            Topic::NetworkEconomics,
+            ProposalId { id: 10 },
+            Vote::Yes,
+            ProposalId { id: 5 },
+        )
+        .unwrap();
+
+    // Verify both proposal 5 and 10 are in voting history (in descending order - most recent first)
+    let voting_history = with_voting_history_store(|voting_history| {
+        voting_history.list_neuron_votes(neuron_id, None, None)
+    });
+    assert_eq!(
+        voting_history,
+        vec![
+            (ProposalId { id: 10 }, Vote::Yes),
+            (ProposalId { id: 5 }, Vote::No)
+        ]
+    );
 }

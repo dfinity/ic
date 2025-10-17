@@ -1,6 +1,6 @@
 use self::println;
 use super::*;
-use crate::{DeserializableFunction, SerializableFunction, E8};
+use crate::{DeserializableFunction, E8, SerializableFunction};
 use assert_matches::assert_matches;
 use ic_nervous_system_common::WIDE_RANGE_OF_U64_VALUES;
 use lazy_static::lazy_static;
@@ -30,11 +30,7 @@ fn known_values_test() {
         let observed_icp = f.apply(arg_icp_e8s).unwrap();
         assert!(
             (observed_icp - expected_icp).abs() <= ERROR_TOLERANCE_ICP,
-            "Expected f({}) = {} but observed {} (tolerance = {})",
-            arg_icp_e8s,
-            expected_icp,
-            observed_icp,
-            ERROR_TOLERANCE_ICP,
+            "Expected f({arg_icp_e8s}) = {expected_icp} but observed {observed_icp} (tolerance = {ERROR_TOLERANCE_ICP})",
         );
     };
     assert_close_enough(33 * E8, dec!(0));
@@ -90,7 +86,7 @@ fn plot_test() {
     println!(
         "{}",
         f.plot(NonZeroU64::try_from(50).unwrap())
-            .map(|plot| format!("{:?}", plot))
+            .map(|plot| format!("{plot:?}"))
             .unwrap_or_else(|e| e)
     );
     for x in 0..=600 {
@@ -110,10 +106,8 @@ fn plot_test() {
         );
         assert!(
             x1_icp_e8s.abs_diff(x_icp_e8s) <= 1,
-            "Inverted value {} is further away from the expected value {} than the error \
+            "Inverted value {x1_icp_e8s} is further away from the expected value {x_icp_e8s} than the error \
             tolerance 1_u64",
-            x1_icp_e8s,
-            x_icp_e8s,
         );
     }
 }

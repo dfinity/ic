@@ -1,12 +1,12 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{
-    hash_tree::{Label, LookupResult},
     Agent,
+    hash_tree::{Label, LookupResult},
 };
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
-    hash_tree::{HashTreeNode, SubtreeLookupResult},
     Certificate, HashTree,
+    hash_tree::{HashTreeNode, SubtreeLookupResult},
 };
 use icrc_ledger_types::icrc::generic_value::Hash;
 use icrc_ledger_types::icrc1::account::Account;
@@ -42,7 +42,7 @@ impl From<candid::Error> for Icrc1AgentError {
 
 impl std::fmt::Display for Icrc1AgentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -297,7 +297,7 @@ impl Icrc1Agent {
                 return Err(Icrc1AgentError::VerificationFailed(format!(
                     "could not find certified_data for canister: {}",
                     self.ledger_canister_id
-                )))
+                )));
             }
         };
 
@@ -323,8 +323,7 @@ impl Icrc1Agent {
             Ok(certificate) => certificate,
             Err(e) => {
                 return Err(Icrc1AgentError::VerificationFailed(format!(
-                    "Unable to deserialize CBOR encoded Certificate: {}",
-                    e
+                    "Unable to deserialize CBOR encoded Certificate: {e}"
                 )));
             }
         };
@@ -332,9 +331,8 @@ impl Icrc1Agent {
             Ok(hash_tree) => hash_tree,
             Err(e) => {
                 return Err(Icrc1AgentError::VerificationFailed(format!(
-                    "Unable to deserialize CBOR encoded hash_tree: {}",
-                    e
-                )))
+                    "Unable to deserialize CBOR encoded hash_tree: {e}"
+                )));
             }
         };
         self.verify_root_hash(&certificate, &hash_tree.digest())
@@ -362,16 +360,18 @@ impl Icrc1Agent {
             lookup_leaf(&hash_tree, "last_block_hash")?,
         ) {
             (Some(tip_hash), _) => {
-                let last_block_index_bytes: [u8; 8] =
-                    match last_block_index_encoded.clone().try_into() {
-                        Ok(last_block_index_bytes) => last_block_index_bytes,
-                        Err(_) => {
-                            return Err(Icrc1AgentError::VerificationFailed(format!(
-                    "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
-                    hex::encode(last_block_index_encoded)
-                )))
-                        }
-                    };
+                let last_block_index_bytes: [u8; 8] = match last_block_index_encoded
+                    .clone()
+                    .try_into()
+                {
+                    Ok(last_block_index_bytes) => last_block_index_bytes,
+                    Err(_) => {
+                        return Err(Icrc1AgentError::VerificationFailed(format!(
+                            "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
+                            hex::encode(last_block_index_encoded)
+                        )));
+                    }
+                };
                 let last_block_index = u64::from_be_bytes(last_block_index_bytes);
                 Ok(Some((
                     convert_block_hash(tip_hash)?,
@@ -382,8 +382,7 @@ impl Icrc1Agent {
                 let mut decode_buf = std::io::Cursor::new(&last_block_index_encoded);
                 let last_block_index = leb128::read::unsigned(&mut decode_buf).map_err(|e| {
                     Icrc1AgentError::VerificationFailed(format!(
-                        "Unable to decode last_block_index: {}",
-                        e
+                        "Unable to decode last_block_index: {e}"
                     ))
                 })?;
                 Ok(Some((
@@ -401,14 +400,12 @@ fn lookup_leaf(hash_tree: &HashTree, leaf_name: &str) -> Result<Option<Vec<u8>>,
         SubtreeLookupResult::Found(tree) => match tree.as_ref() {
             HashTreeNode::Leaf(result) => Ok(Some(result.clone())),
             _ => Err(Icrc1AgentError::VerificationFailed(format!(
-                "`{}` value in the hash_tree should be a leaf",
-                leaf_name
+                "`{leaf_name}` value in the hash_tree should be a leaf"
             ))),
         },
         SubtreeLookupResult::Absent => Ok(None),
         _ => Err(Icrc1AgentError::VerificationFailed(format!(
-            "`{}` not found in the response hash_tree",
-            leaf_name
+            "`{leaf_name}` not found in the response hash_tree"
         ))),
     }
 }

@@ -1,5 +1,5 @@
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-extern "C" {
+unsafe extern "C" {
     fn install_backtrace_handler();
 }
 

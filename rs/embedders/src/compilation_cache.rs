@@ -1,8 +1,8 @@
 use std::{
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
@@ -122,9 +122,9 @@ impl CompilationCache {
         let hash = WasmHash::from(canister_module);
         let id = self.counter.fetch_add(1, Ordering::SeqCst);
         let mut bytes_path: PathBuf = self.dir.path().into();
-        bytes_path.push(format!("{}-{}.module_bytes", hash, id));
+        bytes_path.push(format!("{hash}-{id}.module_bytes"));
         let mut initial_state_path: PathBuf = self.dir.path().into();
-        initial_state_path.push(format!("{}-{}.initial_data", hash, id));
+        initial_state_path.push(format!("{hash}-{id}.initial_data"));
 
         let on_disk = Arc::new(OnDiskSerializedModule::from_serialized_module(
             serialized_module,

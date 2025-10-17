@@ -30,28 +30,28 @@ impl HashTreeTestUtils for HashTree {
     fn left_tree(&self) -> &Self {
         match &self {
             Self::Fork { left_tree, .. } => left_tree,
-            _ => panic!("Not a fork: {:?}", self),
+            _ => panic!("Not a fork: {self:?}"),
         }
     }
 
     fn right_tree(&self) -> &Self {
         match &self {
             Self::Fork { right_tree, .. } => right_tree,
-            _ => panic!("Not a fork: {:?}", self),
+            _ => panic!("Not a fork: {self:?}"),
         }
     }
 
     fn node_tree(&self) -> &Self {
         match &self {
             Self::Node { hash_tree, .. } => hash_tree,
-            _ => panic!("Not a node: {:?}", self),
+            _ => panic!("Not a node: {self:?}"),
         }
     }
 
     fn label(&self) -> &Label {
         match &self {
             Self::Node { label, .. } => label,
-            _ => panic!("Not a node: {:?}", self),
+            _ => panic!("Not a node: {self:?}"),
         }
     }
 }
@@ -995,8 +995,7 @@ fn check_recompute_digest_works(
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(mixed_hash_tree.clone()).unwrap();
     assert_eq!(
         partial_tree, &labeled_tree,
-        "mixed_hash_tree: {:#?}",
-        mixed_hash_tree
+        "mixed_hash_tree: {mixed_hash_tree:#?}"
     );
 }
 
@@ -2099,7 +2098,7 @@ fn prune_witness_prune_all() {
         Witness::Pruned { digest } => {
             assert_eq!(fixture.builder.into_hash_tree().unwrap().digest(), &digest)
         }
-        other => panic!("Expected a Witness::Pruned, got {:?}", other),
+        other => panic!("Expected a Witness::Pruned, got {other:?}"),
     }
 }
 
@@ -2113,7 +2112,7 @@ fn prune_witness_prune_all2() {
         Witness::Pruned { digest } => {
             assert_eq!(fixture.builder.into_hash_tree().unwrap().digest(), &digest)
         }
-        other => panic!("Expected a Witness::Pruned, got {:?}", other),
+        other => panic!("Expected a Witness::Pruned, got {other:?}"),
     }
 }
 

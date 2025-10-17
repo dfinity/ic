@@ -2,8 +2,8 @@
 mod tests;
 use crate::reimbursement::reimburse_withdrawals;
 use crate::{
-    estimate_fee_per_vbyte, finalize_requests, submit_pending_requests, CanisterRuntime,
-    IC_CANISTER_RUNTIME,
+    CanisterRuntime, IC_CANISTER_RUNTIME, estimate_fee_per_vbyte, finalize_requests,
+    submit_pending_requests,
 };
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};

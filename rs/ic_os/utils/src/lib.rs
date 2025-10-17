@@ -1,11 +1,11 @@
 use std::net::Ipv6Addr;
 use std::process::Command;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 /// Systemd requires IP addresses to be specified with the prefix length
 pub fn to_cidr(ipv6_address: Ipv6Addr, prefix_length: u8) -> String {
-    format!("{}/{}", ipv6_address, prefix_length)
+    format!("{ipv6_address}/{prefix_length}")
 }
 
 /// Run a command with args and get the stdout if success, stderr if failure.

@@ -1,12 +1,13 @@
 use std::path::PathBuf;
-use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
 use tla_instrumentation::UpdateTrace;
+use tla_instrumentation::checker::{PredicateDescription, check_tla_code_link};
 
 // Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
 fn set_java_path() {
     let current_path = std::env::var("PATH").unwrap();
     let bazel_java = std::env::var("JAVABASE").unwrap();
-    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
 }
 
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`).
@@ -32,7 +33,7 @@ pub fn get_apalache_path() -> PathBuf {
     let apalache = PathBuf::from(apalache);
 
     if !apalache.as_path().is_file() {
-        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{apalache:?}'");
     }
 
     apalache
@@ -43,9 +44,9 @@ pub fn check_tla_trace(trace: &UpdateTrace) {
     let model_name = trace.model_name.clone();
     for pair in &trace.state_pairs {
         let constants = trace.constants.clone();
-        println!("Constants: {:?}", constants);
+        println!("Constants: {constants:?}");
         // NOTE: the 'process_id" is actually the tla module name
-        let tla_module = format!("{}_Apalache.tla", model_name);
+        let tla_module = format!("{model_name}_Apalache.tla");
         let tla_module = get_tla_module_path(&tla_module);
         check_tla_code_link(
             &get_apalache_path(),

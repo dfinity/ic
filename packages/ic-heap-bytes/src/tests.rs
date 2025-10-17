@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use super::{deterministic_total_bytes, total_bytes, DeterministicHeapBytes, HeapBytes};
+use super::{DeterministicHeapBytes, HeapBytes, deterministic_total_bytes, total_bytes};
 
 #[test]
 fn empty_deterministic_total_bytes() {
@@ -60,7 +60,7 @@ fn empty_total_bytes() {
 }
 
 macro_rules! assert_struct_basic_field_total_bytes_eq {
-    ($field_type:ty, $expected_size:expr) => {{
+    ($field_type:ty, $expected_size:expr_2021) => {{
         #[derive(DeterministicHeapBytes, Default)]
         struct S {
             v: $field_type,
@@ -100,7 +100,7 @@ fn struct_basic_fields_total_bytes() {
 }
 
 macro_rules! assert_tuple_struct_basic_field_total_bytes_eq {
-    ($field_type:ty, $expected_size:expr) => {{
+    ($field_type:ty, $expected_size:expr_2021) => {{
         #[derive(DeterministicHeapBytes, Default)]
         struct S($field_type);
         assert_eq!(deterministic_total_bytes(&S::default()), $expected_size);
@@ -167,7 +167,7 @@ fn tuple_struct_basic_fields_total_bytes() {
 }
 
 macro_rules! assert_enum_basic_field_total_bytes_eq {
-    ($field_type:ty, $expected_size:expr) => {{
+    ($field_type:ty, $expected_size:expr_2021) => {{
         #[derive(DeterministicHeapBytes)]
         enum E {
             One($field_type),
@@ -387,7 +387,7 @@ fn vec_basic_total_bytes() {
 }
 
 macro_rules! assert_btree_map_basic_total_bytes_eq {
-    ($field_type:ty, $expected_size:expr) => {{
+    ($field_type:ty, $expected_size:expr_2021) => {{
         let t = <$field_type>::default();
         assert_eq!(
             deterministic_total_bytes(&BTreeMap::from([(t, t)])),

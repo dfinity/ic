@@ -23,12 +23,12 @@ proptest! {
     /// Note: The default arbitrary strategy produces both valid and invalid bytes so we have to filter out the invalid.
     #[test]
     fn proptest_secret_key_parsing_and_serialising_should_be_inverse(secret_key_bytes: SecretKeyBytes) {
-        if let Ok(parsed) = SecretKey::try_from(&secret_key_bytes) {
+        match SecretKey::try_from(&secret_key_bytes) { Ok(parsed) => {
           let serialised = SecretKeyBytes::from(parsed); // Consuming exercises both serialisation methods.
           assert_eq!(secret_key_bytes, serialised, "Parsing followed by serailizing produced a value different from the starting value.");
-        } else {
+        } _ => {
           prop_assume!(false);
-        }
+        }}
     }
 
     /// Verifies that parsing and serializing IndividualSignatureBytes returns the initial value.
@@ -58,10 +58,7 @@ fn test_invalid_public_key_fails_to_parse() {
     let invalid_public_key = PublicKeyBytes([0xCC; 96]);
     match PublicKey::try_from(&invalid_public_key) {
         Err(ThresholdSigPublicKeyBytesConversionError::Malformed { .. }) => (),
-        other => panic!(
-            "Expected a ThresholdSigPublicKeyBytes::Malformed error.  Got: {:?}",
-            other
-        ),
+        other => panic!("Expected a ThresholdSigPublicKeyBytes::Malformed error.  Got: {other:?}"),
     }
 }
 
@@ -79,11 +76,10 @@ fn test_invalid_secret_key_fails_to_parse() {
         match (valid, secret_key) {
             (false, Err(ClibThresholdSignError::MalformedSecretKey { .. })) => (),
             (true, Ok(_)) => (),
-            (false, other) => panic!(
-                "Expected a MalformedSecretKey error for {}.  Got: {:?}",
-                name, other
-            ),
-            (true, other) => panic!("Failed to parse valid secret key {}: {:?}", name, other),
+            (false, other) => {
+                panic!("Expected a MalformedSecretKey error for {name}.  Got: {other:?}")
+            }
+            (true, other) => panic!("Failed to parse valid secret key {name}: {other:?}"),
         }
     }
 }
@@ -98,7 +94,7 @@ fn test_invalid_individual_signature_fails_to_parse() {
     let invalid_individual_signature = IndividualSignatureBytes([0xCC; 48]);
     match IndividualSignature::try_from(&invalid_individual_signature) {
         Err(CryptoError::MalformedSignature { .. }) => (),
-        other => panic!("Expected a MalformedSignature error.  Got: {:?}", other),
+        other => panic!("Expected a MalformedSignature error.  Got: {other:?}"),
     }
 }
 
@@ -112,6 +108,6 @@ fn test_invalid_combined_signature_fails_to_parse() {
     let invalid_combined_signature = CombinedSignatureBytes([0xCC; 48]);
     match CombinedSignature::try_from(&invalid_combined_signature) {
         Err(CryptoError::MalformedSignature { .. }) => (),
-        other => panic!("Expected a MalformedSignature error.  Got: {:?}", other),
+        other => panic!("Expected a MalformedSignature error.  Got: {other:?}"),
     }
 }

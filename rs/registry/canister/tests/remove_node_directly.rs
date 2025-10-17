@@ -23,7 +23,7 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
 use ic_types::{NodeId, ReplicaVersion};
 use maplit::btreemap;

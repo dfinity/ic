@@ -5,28 +5,28 @@ use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgTranscriptInternalBytes, ThresholdSchnorrCreateSigShareVaultError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    DerivationPath, EccCurveType, IDkgTranscriptInternal,
+    ThresholdBip340CombineSigSharesInternalError, ThresholdBip340CombinedSignatureInternal,
+    ThresholdBip340SignatureShareInternal, ThresholdBip340VerifySigShareInternalError,
+    ThresholdBip340VerifySignatureInternalError, ThresholdEd25519CombineSigSharesInternalError,
+    ThresholdEd25519CombinedSignatureInternal, ThresholdEd25519SignatureShareInternal,
+    ThresholdEd25519VerifySigShareInternalError, ThresholdEd25519VerifySignatureInternalError,
     combine_bip340_signature_shares, combine_ed25519_signature_shares,
     verify_bip340_signature_share, verify_ed25519_signature_share,
-    verify_threshold_bip340_signature, verify_threshold_ed25519_signature, DerivationPath,
-    EccCurveType, IDkgTranscriptInternal, ThresholdBip340CombineSigSharesInternalError,
-    ThresholdBip340CombinedSignatureInternal, ThresholdBip340SignatureShareInternal,
-    ThresholdBip340VerifySigShareInternalError, ThresholdBip340VerifySignatureInternalError,
-    ThresholdEd25519CombineSigSharesInternalError, ThresholdEd25519CombinedSignatureInternal,
-    ThresholdEd25519SignatureShareInternal, ThresholdEd25519VerifySigShareInternalError,
-    ThresholdEd25519VerifySignatureInternalError,
+    verify_threshold_bip340_signature, verify_threshold_ed25519_signature,
 };
 use ic_types::{
+    NodeId, NodeIndex,
+    crypto::AlgorithmId,
     crypto::canister_threshold_sig::{
+        MasterPublicKey, ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+        ThresholdSchnorrSigShare,
         error::{
             ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
             ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
         },
         idkg::IDkgReceivers,
-        MasterPublicKey, ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
-        ThresholdSchnorrSigShare,
     },
-    crypto::AlgorithmId,
-    NodeId, NodeIndex,
 };
 use std::collections::BTreeMap;
 
@@ -40,8 +40,8 @@ pub(crate) fn get_tschnorr_master_public_key_from_internal_transcript(
         EccCurveType::Ed25519 => AlgorithmId::Ed25519,
         x => {
             return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
-                format!("Schnorr does not support curve {:?}", x),
-            ))
+                format!("Schnorr does not support curve {x:?}"),
+            ));
         }
     };
     Ok(MasterPublicKey {
@@ -312,12 +312,10 @@ fn internal_bip340_sig_shares_by_index_from_sig_shares(
             let index = inputs
                 .index_for_signer_id(id)
                 .ok_or(ThresholdSchnorrCombineSigSharesError::SignerNotAllowed { node_id: id })?;
-            let internal_share = ThresholdBip340SignatureShareInternal::deserialize(
-                &share.sig_share_raw,
-            )
-            .map_err(|e| {
-                ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{:?}", e))
-            })?;
+            let internal_share =
+                ThresholdBip340SignatureShareInternal::deserialize(&share.sig_share_raw).map_err(
+                    |e| ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{e:?}")),
+                )?;
             Ok((index, internal_share))
         })
         .collect()

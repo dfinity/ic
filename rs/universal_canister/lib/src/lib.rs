@@ -22,18 +22,14 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
     let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
     std::fs::read(&uc_wasm_path)
-        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
 
 pub fn get_universal_canister_no_heartbeat_wasm() -> Vec<u8> {
     let uc_no_heartbeat_wasm_path = std::env::var("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH not set");
-    std::fs::read(&uc_no_heartbeat_wasm_path).unwrap_or_else(|e| {
-        panic!(
-            "Could not read WASM from {:?}: {e:?}",
-            uc_no_heartbeat_wasm_path
-        )
-    })
+    std::fs::read(&uc_no_heartbeat_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_no_heartbeat_wasm_path:?}: {e:?}"))
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
@@ -278,6 +274,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn canister_status(mut self) -> Self {
+        self.0.push(Ops::CanisterStatus as u8);
+        self
+    }
+
     pub fn canister_version(mut self) -> Self {
         self.0.push(Ops::CanisterVersion as u8);
         self
@@ -454,6 +455,14 @@ impl PayloadBuilder {
         self
     }
 
+    /// This function should only be used for testing the system API `ic0.call_data_append`,
+    /// but *not* for testing inter-canister calls.
+    pub fn call_data_append(mut self, bytes: &[u8]) -> Self {
+        self = self.push_bytes(bytes);
+        self.0.push(Ops::CallDataAppend as u8);
+        self
+    }
+
     pub fn message_payload(mut self) -> Self {
         self.0.push(Ops::MessagePayload as u8);
         self
@@ -605,6 +614,12 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pushes the method name onto the stack.
+    pub fn msg_method_name(mut self) -> Self {
+        self.0.push(Ops::MsgMethodName as u8);
+        self
+    }
+
     /// Pushes the size of the argument data onto the stack.
     pub fn msg_arg_data_size(mut self) -> Self {
         self.0.push(Ops::MsgArgDataSize as u8);
@@ -697,6 +712,11 @@ impl PayloadBuilder {
     pub fn certified_data_set(mut self, data: &[u8]) -> Self {
         self = self.push_bytes(data);
         self.0.push(Ops::CertifiedDataSet as u8);
+        self
+    }
+
+    pub fn data_certificate_present(mut self) -> Self {
+        self.0.push(Ops::DataCertificatePresent as u8);
         self
     }
 

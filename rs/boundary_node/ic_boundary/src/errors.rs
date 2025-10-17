@@ -1,8 +1,8 @@
 use anyhow::anyhow;
 use axum::{
+    BoxError,
     http::StatusCode,
     response::{IntoResponse, Response},
-    BoxError,
 };
 
 use ic_bn_lib::http::headers::X_IC_ERROR_CAUSE;

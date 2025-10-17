@@ -171,7 +171,7 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "stable_memory_bytes",
-        ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+        ic_cdk::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
         "Size of the stable memory allocated by this canister.",
     )?;
     metrics.encode_gauge(
@@ -180,7 +180,7 @@ pub fn encode_metrics(
         "Size of the heap memory allocated by this canister.",
     )?;
 
-    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    let cycle_balance = ic_cdk::api::canister_cycle_balance() as f64;
 
     metrics.encode_gauge(
         "ckbtc_minter_cycle_balance",

@@ -195,12 +195,12 @@ use std::collections::BTreeMap;
 use strum::EnumIter;
 
 pub use ic_crypto_internal_seed::Seed;
+pub use ic_types::NodeIndex;
+pub use ic_types::crypto::canister_threshold_sig::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError,
 };
-pub use ic_types::crypto::canister_threshold_sig::PublicKey;
-pub use ic_types::NodeIndex;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterThresholdError {
@@ -345,7 +345,7 @@ impl From<CanisterThresholdError> for IdkgCreateDealingInternalError {
             CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
             CanisterThresholdError::InvalidSecretShare => Self::InvalidSecretShare,
             CanisterThresholdError::InvalidThreshold(t, r) => Self::InvalidThreshold(t, r),
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -389,7 +389,7 @@ impl From<CanisterThresholdError> for IDkgCreateTranscriptInternalError {
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InsufficientDealings => Self::InsufficientDealings,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -397,7 +397,7 @@ impl From<CanisterThresholdError> for IDkgCreateTranscriptInternalError {
 impl From<XmdError> for CanisterThresholdError {
     fn from(e: XmdError) -> Self {
         match e {
-            XmdError::InvalidOutputLength(x) => Self::InvalidArguments(format!("{:?}", x)),
+            XmdError::InvalidOutputLength(x) => Self::InvalidArguments(format!("{x:?}")),
         }
     }
 }
@@ -434,7 +434,7 @@ impl From<IDkgVerifyTranscriptInternalError> for IDkgVerifyTranscriptError {
         match verify_transcript_internal_error {
             Vtie::IncorrectTranscript => Vte::InvalidTranscript,
             Vtie::FailedToCreateTranscript(create_transcript_error) => Vte::InvalidArgument(
-                format!("failed to create transcript: {:?}", create_transcript_error),
+                format!("failed to create transcript: {create_transcript_error:?}"),
             ),
         }
     }
@@ -592,7 +592,7 @@ impl From<CanisterThresholdError> for IDkgVerifyDealingInternalError {
             CanisterThresholdError::InvalidProof => Self::InvalidProof,
             CanisterThresholdError::InvalidCommitment => Self::InvalidCommitment,
             CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -603,9 +603,9 @@ impl From<IDkgVerifyDealingInternalError> for IDkgVerifyDealingPrivateError {
         type Vdpe = IDkgVerifyDealingPrivateError;
         match error {
             Vdie::InvalidCommitment | Vdie::InvalidProof | Vdie::InvalidRecipients => {
-                Vdpe::InvalidDealing(format!("{:?}", error))
+                Vdpe::InvalidDealing(format!("{error:?}"))
             }
-            Vdie::UnsupportedAlgorithm => Vdpe::InvalidArgument(format!("{:?}", error)),
+            Vdie::UnsupportedAlgorithm => Vdpe::InvalidArgument(format!("{error:?}")),
             Vdie::InternalError(e) => Vdpe::InternalError(e),
         }
     }
@@ -691,6 +691,20 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
     }
 }
 
+impl From<ExtendedDerivationPath> for DerivationPath {
+    fn from(extended_derivation_path: ExtendedDerivationPath) -> Self {
+        // We use generalized derivation for all path bytestrings after prepending
+        // the caller's principal. It means only big-endian encoded 4-byte values
+        // less than 2^31 are compatible with BIP-32 non-hardened derivation path.
+        Self::new(
+            std::iter::once(extended_derivation_path.caller.to_vec())
+                .chain(extended_derivation_path.derivation_path)
+                .map(crate::signing::key_derivation::DerivationIndex)
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEcdsaGenerateSigShareInternalError {
     InvalidArguments(String),
@@ -703,7 +717,7 @@ impl From<CanisterThresholdError> for ThresholdEcdsaGenerateSigShareInternalErro
         match e {
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -742,8 +756,11 @@ pub fn create_ecdsa_signature_share(
     })?;
 
     if hashed_message.len() != hash_len {
-        return Err(ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(
-            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len()))
+        return Err(
+            ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(format!(
+                "length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})",
+                hashed_message.len()
+            )),
         );
     }
 
@@ -775,7 +792,7 @@ impl From<CanisterThresholdError> for ThresholdEcdsaVerifySigShareInternalError 
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -806,8 +823,11 @@ pub fn verify_ecdsa_signature_share(
 
     if hashed_message.len() != hash_len {
         return Err(ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(
-            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len()))
-        );
+            format!(
+                "length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})",
+                hashed_message.len()
+            ),
+        ));
     }
 
     sig_share
@@ -840,7 +860,7 @@ impl From<CanisterThresholdError> for ThresholdEcdsaCombineSigSharesInternalErro
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -893,7 +913,7 @@ impl From<CanisterThresholdError> for ThresholdEcdsaVerifySignatureInternalError
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -921,9 +941,12 @@ pub fn verify_ecdsa_threshold_signature(
     })?;
 
     if hashed_message.len() != hash_len {
-        return Err(ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(
-            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len())
-        ));
+        return Err(
+            ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(format!(
+                "length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})",
+                hashed_message.len()
+            )),
+        );
     }
 
     signature
@@ -950,7 +973,7 @@ impl From<CanisterThresholdError> for ThresholdBip340GenerateSigShareInternalErr
         match e {
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1005,7 +1028,7 @@ impl From<CanisterThresholdError> for ThresholdBip340VerifySigShareInternalError
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1051,7 +1074,7 @@ impl From<CanisterThresholdError> for ThresholdBip340CombineSigSharesInternalErr
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1099,7 +1122,7 @@ impl From<CanisterThresholdError> for ThresholdBip340VerifySignatureInternalErro
         match e {
             CanisterThresholdError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
             CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1144,7 +1167,7 @@ impl From<CanisterThresholdError> for ThresholdEd25519GenerateSigShareInternalEr
         match e {
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1194,7 +1217,7 @@ impl From<CanisterThresholdError> for ThresholdEd25519VerifySigShareInternalErro
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1238,7 +1261,7 @@ impl From<CanisterThresholdError> for ThresholdEd25519CombineSigSharesInternalEr
             CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1284,7 +1307,7 @@ impl From<CanisterThresholdError> for ThresholdEd25519VerifySignatureInternalErr
         match e {
             CanisterThresholdError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
             CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }
@@ -1370,9 +1393,8 @@ pub fn derive_threshold_public_key(
 
         x => {
             return Err(DeriveThresholdPublicKeyError::InvalidArgument(format!(
-                "Not a known signature algo related to threshold signatures {:?}",
-                x
-            )))
+                "Not a known signature algo related to threshold signatures {x:?}"
+            )));
         }
     };
 
@@ -1402,7 +1424,7 @@ impl From<IDkgGenerateComplaintsInternalError> for IDkgLoadTranscriptError {
         type Ilte = IDkgLoadTranscriptError;
         match e {
             Igcie::UnsupportedAlgorithm => Ilte::InvalidArguments {
-                internal_error: format!("{:?}", e),
+                internal_error: format!("{e:?}"),
             },
             Igcie::InvalidArguments(internal_error) => Ilte::InvalidArguments { internal_error },
             Igcie::InternalError(internal_error) => Ilte::InternalError { internal_error },
@@ -1420,7 +1442,7 @@ impl From<CanisterThresholdError> for IDkgGenerateComplaintsInternalError {
                 Self::InvalidArguments("invalid random oracle input".to_string())
             }
             Tee::InvalidScalar => Self::InvalidArguments("invalid scalar".to_string()),
-            other => Self::InternalError(format!("{:?}", other)),
+            other => Self::InternalError(format!("{other:?}")),
         }
     }
 }
@@ -1472,7 +1494,7 @@ impl From<CanisterThresholdError> for IDkgVerifyComplaintInternalError {
             CanisterThresholdError::InvalidComplaint => Self::InvalidComplaint,
             CanisterThresholdError::CurveMismatch => Self::InvalidComplaint,
             CanisterThresholdError::InvalidArguments(e) => Self::InvalidArgument(e),
-            other => Self::InternalError(format!("{:?}", other)),
+            other => Self::InternalError(format!("{other:?}")),
         }
     }
 }
@@ -1523,7 +1545,7 @@ pub enum ThresholdOpenDealingInternalError {
 
 impl From<CanisterThresholdError> for ThresholdOpenDealingInternalError {
     fn from(e: CanisterThresholdError) -> Self {
-        Self::InternalError(format!("{:?}", e))
+        Self::InternalError(format!("{e:?}"))
     }
 }
 
@@ -1573,7 +1595,7 @@ impl From<CanisterThresholdError> for ThresholdVerifyOpeningInternalError {
     fn from(e: CanisterThresholdError) -> Self {
         match e {
             CanisterThresholdError::InconsistentOpeningAndCommitment => Self::MismatchingType,
-            x => Self::InternalError(format!("{:?}", x)),
+            x => Self::InternalError(format!("{x:?}")),
         }
     }
 }

@@ -1,15 +1,15 @@
 use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
-use ic_heap_bytes::{total_bytes, DeterministicHeapBytes, HeapBytes};
+use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Cycles, DiskBytes, Time, UserId,
     batch::QueryStats,
     ingress::WasmResult,
     messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query},
-    Cycles, DiskBytes, Time, UserId,
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};

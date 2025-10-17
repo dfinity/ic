@@ -45,8 +45,7 @@ impl TokenDef {
         let parts: Vec<&str> = token_description.split(':').collect();
         if parts.is_empty() || parts.len() > 3 {
             return Err(anyhow::Error::msg(format!(
-                "Invalid token description: {}",
-                token_description
+                "Invalid token description: {token_description}"
             )));
         }
 
@@ -61,27 +60,24 @@ impl TokenDef {
             if let Some(symbol) = part.strip_prefix("s=") {
                 if icrc1_symbol.is_some() {
                     return Err(anyhow::Error::msg(format!(
-                        "Invalid token description: {}. Symbol (s=) can only be specified once",
-                        token_description
+                        "Invalid token description: {token_description}. Symbol (s=) can only be specified once"
                     )));
                 }
                 icrc1_symbol = Some(symbol.to_string());
             } else if let Some(decimals) = part.strip_prefix("d=") {
                 if icrc1_decimals.is_some() {
                     return Err(anyhow::Error::msg(format!(
-                        "Invalid token description: {}. Decimals (d=) can only be specified once",
-                        token_description
+                        "Invalid token description: {token_description}. Decimals (d=) can only be specified once"
                     )));
                 }
                 icrc1_decimals = Some(
                     decimals
                         .parse()
-                        .context(format!("Failed to parse u8 from {}", part))?,
+                        .context(format!("Failed to parse u8 from {part}"))?,
                 );
             } else {
                 return Err(anyhow::Error::msg(format!(
-                    "Invalid token description: {}. It must be canister_id[:s=symbol][:d=decimals]",
-                    token_description
+                    "Invalid token description: {token_description}. It must be canister_id[:s=symbol][:d=decimals]"
                 )));
             }
         }
@@ -197,7 +193,9 @@ impl ParsedConfig {
 
         let network_type = match args.network_type {
             Some(network_type) => {
-                eprintln!("WARNING: The --network-type argument is deprecated and will be removed in a future version.");
+                eprintln!(
+                    "WARNING: The --network-type argument is deprecated and will be removed in a future version."
+                );
                 network_type
             }
             None => NetworkType::Mainnet,
@@ -210,7 +208,7 @@ impl ParsedConfig {
         });
 
         let network_url = Url::parse(&network_url_str)
-            .context(format!("Failed to parse network URL: {}", network_url_str))?;
+            .context(format!("Failed to parse network URL: {network_url_str}"))?;
 
         // Construct the appropriate store type
         let store = match args.store_type {
@@ -365,10 +363,12 @@ mod tests {
         let result = TokenDef::from_string("");
         assert!(result.is_err());
         // Empty string gets split into one empty part, so it fails on principal parsing
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse PrincipalId"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse PrincipalId")
+        );
     }
 
     #[test]
@@ -376,20 +376,24 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:s=ICP:d=8:extra";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid token description"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid token description")
+        );
     }
 
     #[test]
     fn test_token_def_from_string_invalid_principal() {
         let result = TokenDef::from_string("invalid-principal");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse PrincipalId"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse PrincipalId")
+        );
     }
 
     #[test]
@@ -397,10 +401,12 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:invalid=value";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("It must be canister_id[:s=symbol][:d=decimals]"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("It must be canister_id[:s=symbol][:d=decimals]")
+        );
     }
 
     #[test]
@@ -408,10 +414,12 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:d=invalid";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse u8"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse u8")
+        );
     }
 
     #[test]
@@ -419,10 +427,12 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:s=ICP:s=ckBTC";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Symbol (s=) can only be specified once"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Symbol (s=) can only be specified once")
+        );
     }
 
     #[test]
@@ -430,10 +440,12 @@ mod tests {
         let token_desc = "rdmx6-jaaaa-aaaaa-aaadq-cai:d=8:d=12";
         let result = TokenDef::from_string(token_desc);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Decimals (d=) can only be specified once"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Decimals (d=) can only be specified once")
+        );
     }
 
     #[test]
@@ -499,10 +511,12 @@ mod tests {
         let args = create_test_args();
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No token definitions provided"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No token definitions provided")
+        );
     }
 
     #[test]
@@ -513,10 +527,12 @@ mod tests {
 
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot provide both multi-tokens and ledger-id"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot provide both multi-tokens and ledger-id")
+        );
     }
 
     #[test]
@@ -527,10 +543,12 @@ mod tests {
 
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot provide both multi-tokens and icrc1-symbol"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot provide both multi-tokens and icrc1-symbol")
+        );
     }
 
     #[test]
@@ -541,10 +559,12 @@ mod tests {
 
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot provide both multi-tokens and icrc1-decimals"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot provide both multi-tokens and icrc1-decimals")
+        );
     }
 
     #[test]
@@ -600,10 +620,12 @@ mod tests {
 
         let result = ParsedConfig::from_args(args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse network URL"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse network URL")
+        );
     }
 
     #[test]

@@ -5,13 +5,13 @@ use ic_crypto_utils_threshold_sig_der::{
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
-use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
+use ic_rosetta_api::{DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL, ledger_client};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use rosetta_core::metrics::RosettaMetrics;
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
 use tracing::level_filters::LevelFilter;
-use tracing::{error, info, warn, Level};
+use tracing::{Level, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::FilterExt;
 use tracing_subscriber::filter::FilterFn;
@@ -95,12 +95,12 @@ impl ParsedNetworkConfig {
                 Environment::Production | Environment::Test => MAINNET_URL,
             },
         };
-        let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {}", e))?;
+        let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {e}"))?;
 
         let root_key = match config.root_key {
             Some(root_key_path) => Some(
                 parse_threshold_sig_key(root_key_path.as_path())
-                    .map_err(|e| format!("Unable to parse root key from file: {}", e))?,
+                    .map_err(|e| format!("Unable to parse root key from file: {e}"))?,
             ),
             None => {
                 match environment {
@@ -143,17 +143,13 @@ impl ParsedCanisterConfig {
         // Apply environment preset defaults when no explicit value provided
         let ledger_canister_id = match config.ledger_canister_id {
             Some(explicit_value) => CanisterId::unchecked_from_principal(
-                PrincipalId::from_str(&explicit_value).map_err(|e| {
-                    format!("Invalid ledger canister ID '{}': {}", explicit_value, e)
-                })?,
+                PrincipalId::from_str(&explicit_value)
+                    .map_err(|e| format!("Invalid ledger canister ID '{explicit_value}': {e}"))?,
             ),
             None => match environment {
                 Environment::Test => CanisterId::unchecked_from_principal(
                     PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
-                        format!(
-                            "Invalid test ledger canister ID '{}': {}",
-                            TEST_LEDGER_CANISTER_ID, e
-                        )
+                        format!("Invalid test ledger canister ID '{TEST_LEDGER_CANISTER_ID}': {e}")
                     })?,
                 ),
                 Environment::Production | Environment::DeprecatedTestnet => LEDGER_CANISTER_ID,
@@ -173,7 +169,7 @@ impl ParsedCanisterConfig {
         let governance_canister_id = match config.governance_canister_id {
             Some(explicit_value) => CanisterId::unchecked_from_principal(
                 PrincipalId::from_str(&explicit_value).map_err(|e| {
-                    format!("Invalid governance canister ID '{}': {}", explicit_value, e)
+                    format!("Invalid governance canister ID '{explicit_value}': {e}")
                 })?,
             ),
             None => GOVERNANCE_CANISTER_ID,
@@ -292,7 +288,9 @@ async fn main() -> std::io::Result<()> {
 
     // Check for conflicting flags
     if opt.mainnet && opt.environment != Environment::DeprecatedTestnet {
-        eprintln!("Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet.");
+        eprintln!(
+            "Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet."
+        );
         std::process::exit(1);
     }
 
@@ -394,7 +392,7 @@ async fn main() -> std::io::Result<()> {
         } else {""};
         (e, msg)
     })
-    .unwrap_or_else(|(e, is_403)| panic!("Failed to initialize ledger client{}: {:?}", is_403, e));
+    .unwrap_or_else(|(e, is_403)| panic!("Failed to initialize ledger client{is_403}: {e:?}"));
 
     let ledger = Arc::new(client);
     let canister_id_str = canister_config.ledger_canister_id.to_string();

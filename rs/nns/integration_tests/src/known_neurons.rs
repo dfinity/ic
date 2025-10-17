@@ -1,196 +1,369 @@
-use dfn_candid::{candid, candid_one};
-use ic_canister_client_sender::Sender;
+use ic_base_types::PrincipalId;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_3_ID,
+    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
-    manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
-    GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, MakeProposalRequest,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NeuronInfo,
-    ProposalActionRequest, ProposalStatus,
+    DeregisterKnownNeuron, GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse,
+    MakeProposalRequest, Motion, ProposalActionRequest, TopicToFollow, Vote,
+    governance_error::ErrorType, manage_neuron_response::Command,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    governance::wait_for_final_state,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    state_test_helpers::{
+        list_known_neurons, nns_claim_or_refresh_neuron, nns_deregister_known_neuron,
+        nns_governance_get_neuron_info, nns_governance_make_proposal, nns_increase_dissolve_delay,
+        nns_list_neuron_votes, nns_list_neuron_votes_or_panic, nns_register_known_neuron,
+        nns_send_icp_to_claim_or_refresh_neuron, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
+    },
 };
+use ic_state_machine_tests::StateMachine;
+use icp_ledger::{AccountIdentifier, Tokens};
+use std::time::Duration;
 
-/// Integration test for the known neuron functionality.
+/// Integration test for the known neuron functionality including deregistration.
 ///
 /// The test does the following:
 /// - Start with 3 neurons, none of them "known".
-/// - Register a name for two of them.
-/// - Assert than when querying the known neurons by id the result is the
-///   expected one.
-/// - Assert than when querying all known neurons the result is the expected
-///   one.
+/// - Assert entire list_known_neurons response equals empty list initially.
+/// - Register a name for two of them via governance proposals.
+/// - Assert entire list_known_neurons response equals expected 2-neuron list.
+/// - Deregister one of the known neurons via governance proposal.
+/// - Assert entire list_known_neurons response equals expected 1-neuron list.
+/// - Update the remaining known neuron to have a description.
+/// - Assert entire list_known_neurons response equals expected 1-neuron list with description.
 #[test]
-fn test_known_neurons() {
-    state_machine_test_on_nns_subnet(|runtime| async move {
-        let nns_init_payload = NnsInitPayloadsBuilder::new()
-            .with_initial_invariant_compliant_mutations()
-            .with_test_neurons()
-            .build();
+fn test_known_neurons_lifecycle() {
+    // Step 1.1: Prepare the world by setting up NNS canisters with 2 principals both with 10 ICP.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let principal_1 = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let principal_2 = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_accounts(vec![
+            (
+                AccountIdentifier::new(principal_1, None),
+                Tokens::from_e8s(1_000_000_000),
+            ),
+            (
+                AccountIdentifier::new(principal_2, None),
+                Tokens::from_e8s(1_000_000_000),
+            ),
+        ])
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
 
-        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
+    // Step 1.2: Claim 3 neurons - principal 1 has 2 neurons, principal 2 has 1 neuron. All with 2 ICPs.
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal_1,
+        Tokens::from_e8s(200_000_000),
+        1,
+    );
+    let neuron_id_1 = nns_claim_or_refresh_neuron(&state_machine, principal_1, 1);
 
-        // Submit two proposal to register a name for a neuron, and then wait until both
-        // are executed. Proposals are submitted by neuron 1, because it has
-        // enough stake to have them accepted immediately.
-        let result_1: ManageNeuronResponse = nns_canisters
-            .governance
-            .update_from_sender(
-                "manage_neuron",
-                candid_one,
-                ManageNeuronRequest {
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        ic_nns_common::pb::v1::NeuronId {
-                            id: TEST_NEURON_1_ID,
-                        },
-                    )),
-                    id: None,
-                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
-                        MakeProposalRequest {
-                            title: Some("Naming neuron 2.".to_string()),
-                            summary: "".to_string(),
-                            url: "".to_string(),
-                            action: Some(ProposalActionRequest::RegisterKnownNeuron(KnownNeuron {
-                                id: Some(NeuronId {
-                                    id: TEST_NEURON_2_ID,
-                                }),
-                                known_neuron_data: Some(KnownNeuronData {
-                                    name: "NeuronTwo".to_string(),
-                                    description: None,
-                                }),
-                            })),
-                        },
-                    ))),
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal_1,
+        Tokens::from_e8s(200_000_000),
+        2,
+    );
+    let neuron_id_2 = nns_claim_or_refresh_neuron(&state_machine, principal_1, 2);
+
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal_2,
+        Tokens::from_e8s(200_000_000),
+        3,
+    );
+    let neuron_id_3 = nns_claim_or_refresh_neuron(&state_machine, principal_2, 3);
+
+    // Step 1.3: Increase dissolve delay to enable proposal making.
+    nns_increase_dissolve_delay(&state_machine, principal_1, neuron_id_1, ONE_YEAR_SECONDS)
+        .expect("Failed to increase dissolve delay for neuron 1");
+
+    // Step 1.4: Verify that initially there are no known neurons.
+    assert_eq!(
+        list_known_neurons(&state_machine),
+        ListKnownNeuronsResponse {
+            known_neurons: vec![],
+        }
+    );
+
+    // Step 2: Register two neurons as known neurons.
+    nns_register_known_neuron(
+        &state_machine,
+        principal_1,
+        neuron_id_1,
+        KnownNeuron {
+            id: Some(NeuronId { id: neuron_id_2.id }),
+            known_neuron_data: Some(KnownNeuronData {
+                name: "NeuronTwo".to_string(),
+                description: Some("Second test neuron".to_string()),
+                links: Some(vec![]),
+                committed_topics: Some(vec![]),
+            }),
+        },
+    );
+    nns_register_known_neuron(
+        &state_machine,
+        principal_1,
+        neuron_id_1,
+        KnownNeuron {
+            id: Some(NeuronId { id: neuron_id_3.id }),
+            known_neuron_data: Some(KnownNeuronData {
+                name: "NeuronThree".to_string(),
+                description: None,
+                links: Some(vec![]),
+                committed_topics: Some(vec![]),
+            }),
+        },
+    );
+
+    // Step 3: Verify that both neurons are now known neurons and get_neuron_info returns the KnownNeuronData.
+    assert_eq!(
+        list_known_neurons(&state_machine),
+        ListKnownNeuronsResponse {
+            known_neurons: vec![
+                KnownNeuron {
+                    id: Some(NeuronId { id: neuron_id_3.id }),
+                    known_neuron_data: Some(KnownNeuronData {
+                        name: "NeuronThree".to_string(),
+                        description: None,
+                        links: Some(vec![]),
+                        committed_topics: Some(vec![]),
+                    }),
                 },
-                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-            )
-            .await
-            .expect("Error calling the manage_neuron api.");
-        let result_2: ManageNeuronResponse = nns_canisters
-            .governance
-            .update_from_sender(
-                "manage_neuron",
-                candid_one,
-                ManageNeuronRequest {
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        ic_nns_common::pb::v1::NeuronId {
-                            id: TEST_NEURON_1_ID,
-                        },
-                    )),
-                    id: None,
-                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
-                        MakeProposalRequest {
-                            title: Some("Naming neuron 3.".to_string()),
-                            summary: "".to_string(),
-                            url: "".to_string(),
-                            action: Some(ProposalActionRequest::RegisterKnownNeuron(KnownNeuron {
-                                id: Some(NeuronId {
-                                    id: TEST_NEURON_3_ID,
-                                }),
-                                known_neuron_data: Some(KnownNeuronData {
-                                    name: "NeuronThree".to_string(),
-                                    description: None,
-                                }),
-                            })),
-                        },
-                    ))),
+                KnownNeuron {
+                    id: Some(NeuronId { id: neuron_id_2.id }),
+                    known_neuron_data: Some(KnownNeuronData {
+                        name: "NeuronTwo".to_string(),
+                        description: Some("Second test neuron".to_string()),
+                        links: Some(vec![]),
+                        committed_topics: Some(vec![]),
+                    }),
                 },
-                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-            )
-            .await
-            .expect("Error calling the manage_neuron api.");
-
-        let pid_1 = match result_1
-            .panic_if_error("Error making proposal")
-            .command
+            ],
+        }
+    );
+    assert_eq!(
+        nns_governance_get_neuron_info(&state_machine, principal_1, neuron_id_2.id)
             .unwrap()
-        {
-            CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            some_error => {
-                panic!(
-                    "Cannot find proposal id in response. The response is: {:?}",
-                    some_error
-                )
-            }
-        };
-        let pid_2 = match result_2
-            .panic_if_error("Error making proposal")
-            .command
+            .known_neuron_data
+            .unwrap(),
+        KnownNeuronData {
+            name: "NeuronTwo".to_string(),
+            description: Some("Second test neuron".to_string()),
+            links: Some(vec![]),
+            committed_topics: Some(vec![]),
+        }
+    );
+    assert_eq!(
+        nns_governance_get_neuron_info(&state_machine, principal_1, neuron_id_3.id)
             .unwrap()
-        {
-            CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            some_error => {
-                panic!(
-                    "Cannot find proposal id in response. The response is: {:?}",
-                    some_error
-                )
-            }
-        };
+            .known_neuron_data
+            .unwrap(),
+        KnownNeuronData {
+            name: "NeuronThree".to_string(),
+            description: None,
+            links: Some(vec![]),
+            committed_topics: Some(vec![]),
+        }
+    );
 
-        assert_eq!(
-            wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid_1))
-                .await
-                .status,
-            ProposalStatus::Executed as i32
-        );
-        assert_eq!(
-            wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid_2))
-                .await
-                .status,
-            ProposalStatus::Executed as i32
-        );
+    // Step 4: Deregister one of the known neurons.
+    nns_deregister_known_neuron(
+        &state_machine,
+        principal_1,
+        neuron_id_1,
+        DeregisterKnownNeuron {
+            id: Some(NeuronId { id: neuron_id_2.id }),
+        },
+    );
 
-        // Check that neuron 2 has the correct name
-        let ni: Result<NeuronInfo, GovernanceError> = nns_canisters
-            .governance
-            .query_("get_neuron_info", candid, (TEST_NEURON_2_ID,))
-            .await
-            .expect("Error calling the neuron_info api.");
-        assert_eq!(
-            "NeuronTwo",
-            ni.as_ref()
-                .unwrap()
-                .known_neuron_data
-                .as_ref()
-                .unwrap()
-                .name
-        );
-
-        let expected_known_neurons = vec![
-            KnownNeuron {
-                id: Some(NeuronId {
-                    id: TEST_NEURON_2_ID,
-                }),
-                known_neuron_data: Some(KnownNeuronData {
-                    name: "NeuronTwo".to_string(),
-                    description: None,
-                }),
-            },
-            KnownNeuron {
-                id: Some(NeuronId {
-                    id: TEST_NEURON_3_ID,
-                }),
+    // Step 5: Verify that only one known neuron remains and the get_neuron_info doesn't return the
+    // KnownNeuronData for the deregistered neuron.
+    assert_eq!(
+        list_known_neurons(&state_machine),
+        ListKnownNeuronsResponse {
+            known_neurons: vec![KnownNeuron {
+                id: Some(NeuronId { id: neuron_id_3.id }),
                 known_neuron_data: Some(KnownNeuronData {
                     name: "NeuronThree".to_string(),
                     description: None,
+                    links: Some(vec![]),
+                    committed_topics: Some(vec![]),
                 }),
-            },
-        ];
-        let list_known_neurons_response: ListKnownNeuronsResponse = nns_canisters
-            .governance
-            .query_("list_known_neurons", candid, ())
-            .await
-            .expect("Error calling list known neurons api.");
-        let mut sorted_response_known_neurons = list_known_neurons_response.known_neurons;
-        sorted_response_known_neurons
-            .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
-        assert_eq!(sorted_response_known_neurons, expected_known_neurons);
+            }],
+        }
+    );
+    assert_eq!(
+        nns_governance_get_neuron_info(&state_machine, principal_1, neuron_id_2.id)
+            .unwrap()
+            .known_neuron_data,
+        None,
+    );
 
-        Ok(())
-    });
+    // Step 6: Upate the remaininig known neuron to have a description.
+    nns_register_known_neuron(
+        &state_machine,
+        principal_1,
+        neuron_id_1,
+        KnownNeuron {
+            id: Some(NeuronId { id: neuron_id_3.id }),
+            known_neuron_data: Some(KnownNeuronData {
+                name: "NeuronThree".to_string(),
+                description: Some("Third test neuron".to_string()),
+                links: Some(vec!["https://example.com".to_string()]),
+                committed_topics: Some(vec![
+                    Some(TopicToFollow::NetworkEconomics),
+                    Some(TopicToFollow::Governance),
+                ]),
+            }),
+        },
+    );
+
+    // Step 7: Verify that the known neuron now has a description through list_known_neurons and get_neuron_info.
+    assert_eq!(
+        list_known_neurons(&state_machine),
+        ListKnownNeuronsResponse {
+            known_neurons: vec![KnownNeuron {
+                id: Some(NeuronId { id: neuron_id_3.id }),
+                known_neuron_data: Some(KnownNeuronData {
+                    name: "NeuronThree".to_string(),
+                    description: Some("Third test neuron".to_string()),
+                    links: Some(vec!["https://example.com".to_string()]),
+                    committed_topics: Some(vec![
+                        Some(TopicToFollow::NetworkEconomics),
+                        Some(TopicToFollow::Governance)
+                    ]),
+                }),
+            }],
+        }
+    );
+    assert_eq!(
+        nns_governance_get_neuron_info(&state_machine, principal_1, neuron_id_3.id)
+            .unwrap()
+            .known_neuron_data
+            .unwrap(),
+        KnownNeuronData {
+            name: "NeuronThree".to_string(),
+            description: Some("Third test neuron".to_string()),
+            links: Some(vec!["https://example.com".to_string()]),
+            committed_topics: Some(vec![
+                Some(TopicToFollow::NetworkEconomics),
+                Some(TopicToFollow::Governance)
+            ]),
+        }
+    );
+}
+
+fn make_motion_proposal(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) -> ProposalId {
+    let response = nns_governance_make_proposal(
+        state_machine,
+        sender,
+        neuron_id,
+        &MakeProposalRequest {
+            title: Some("Some title".to_string()),
+            summary: "Some summary".to_string(),
+            url: "".to_string(),
+            action: Some(ProposalActionRequest::Motion(Motion {
+                motion_text: "Motion text".to_string(),
+            })),
+        },
+    );
+    match response.command {
+        Some(Command::MakeProposal(make_proposal_response)) => {
+            make_proposal_response.proposal_id.unwrap()
+        }
+        _ => panic!("Failed to make motion proposal: {response:?}"),
+    }
+}
+
+#[test]
+fn test_known_neurons_voting_history() {
+    // Step 1: Prepare the world by setting up NNS canisters with a principal with 10 ICP.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(principal, None),
+            Tokens::from_e8s(1_000_000_000),
+        )
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // Step 2: Claim 2 neurons, while the first neuron has majority of voting power.
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal,
+        Tokens::from_e8s(700_000_000),
+        1,
+    );
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal,
+        Tokens::from_e8s(200_000_000),
+        2,
+    );
+    let neuron_id_1 = nns_claim_or_refresh_neuron(&state_machine, principal, 1);
+    let neuron_id_2 = nns_claim_or_refresh_neuron(&state_machine, principal, 2);
+
+    // Step 3: Increase dissolve delay so both neurons are voting eligible.
+    nns_increase_dissolve_delay(&state_machine, principal, neuron_id_1, ONE_YEAR_SECONDS)
+        .expect("Failed to increase dissolve delay for neuron 1");
+    nns_increase_dissolve_delay(&state_machine, principal, neuron_id_2, ONE_YEAR_SECONDS)
+        .expect("Failed to increase dissolve delay for neuron 2");
+
+    // Step 3: Register neuron 1 as a known neuron.
+    let proposal_id_register_known_neuron = nns_register_known_neuron(
+        &state_machine,
+        principal,
+        neuron_id_1,
+        KnownNeuron {
+            id: Some(NeuronId { id: neuron_id_1.id }),
+            known_neuron_data: Some(KnownNeuronData {
+                name: "NeuronOne".to_string(),
+                description: Some("First test neuron".to_string()),
+                links: Some(vec![]),
+                committed_topics: Some(vec![]),
+            }),
+        },
+    );
+
+    // Step 4: Make 2 proposals, one voted by neuron 1 and one not voted by neuron 1.
+    let proposal_id_voted_by_neuron_1 =
+        make_motion_proposal(&state_machine, principal, neuron_id_1);
+    let proposal_id_not_voted_by_neuron_1 =
+        make_motion_proposal(&state_machine, principal, neuron_id_2);
+
+    // Step 5: Advance time and tick so that the proposals reach their deadline.
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 10));
+    for _ in 0..10 {
+        state_machine.tick();
+    }
+
+    // Step 6: Verify the votes of neuron 1 (including abstentions).
+    assert_eq!(
+        nns_list_neuron_votes_or_panic(&state_machine, neuron_id_1),
+        vec![
+            (proposal_id_not_voted_by_neuron_1, Vote::Unspecified),
+            (proposal_id_voted_by_neuron_1, Vote::Yes),
+            (proposal_id_register_known_neuron, Vote::Yes),
+        ]
+    );
+
+    // Step 7: Verify that there are no votes for neuron 2 as it's not a known neuron.
+    assert_eq!(
+        nns_list_neuron_votes(&state_machine, neuron_id_2),
+        Err(GovernanceError {
+            error_type: ErrorType::PreconditionFailed as i32,
+            error_message: "Neuron is not a known neuron".to_string(),
+        })
+    );
 }

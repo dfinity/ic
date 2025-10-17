@@ -9,13 +9,14 @@ use ic_canister_client::{Agent, Sender};
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
-    dechunkify_delta, dechunkify_get_value_response_content, deserialize_atomic_mutate_response,
-    deserialize_get_changes_since_response, deserialize_get_value_response,
+    Error, GetChunk, dechunkify_delta, dechunkify_get_value_response_content,
+    deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
+    deserialize_get_value_response,
     pb::v1::{Precondition, RegistryDelta, RegistryGetLatestVersionResponse, RegistryMutation},
     serialize_atomic_mutate_request, serialize_get_changes_since_request,
-    serialize_get_value_request, Error, GetChunk,
+    serialize_get_value_request,
 };
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
+use ic_types::{CanisterId, RegistryVersion, Time, crypto::threshold_sig::ThresholdSigPublicKey};
 
 pub const MAX_NUM_SSH_KEYS: usize = 50;
 
@@ -35,7 +36,7 @@ impl GetChunk for AgentBasedGetChunk<'_> {
     /// Just calls the Registry canister's get_chunk method.
     async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
         fn new_err(cause: impl std::fmt::Debug) -> String {
-            format!("Unable to fetch large registry record: {:?}", cause,)
+            format!("Unable to fetch large registry record: {cause:?}",)
         }
 
         // Call get_chunk.
@@ -145,8 +146,7 @@ impl RegistryCanister {
                 )),
             },
             Err(error_string) => Err(ic_registry_transport::Error::UnknownError(format!(
-                "Error on registry_get_changes_since: {}",
-                error_string
+                "Error on registry_get_changes_since: {error_string}"
             ))),
         }
     }
@@ -203,7 +203,7 @@ impl RegistryCanister {
             },
         )
         .await
-        .map_err(|err| Error::UnknownError(format!("{:?}", err)))
+        .map_err(|err| Error::UnknownError(format!("{err:?}")))
     }
 
     pub async fn get_latest_version(&self) -> Result<u64, Error> {
@@ -307,8 +307,7 @@ impl RegistryCanister {
                 )]),
             },
             Err(error_string) => Err(vec![ic_registry_transport::Error::UnknownError(format!(
-                "Error on registry_atomic_mutate: {}",
-                error_string
+                "Error on registry_atomic_mutate: {error_string}"
             ))]),
         }
     }
@@ -362,7 +361,7 @@ async fn deserialize_and_dechunk_get_value_result(
     let breadcrumbs = || -> String {
         let key = String::from_utf8_lossy(key);
 
-        format!("key={:?} version={:?} agent={:?}", key, version, agent,)
+        format!("key={key:?} version={version:?} agent={agent:?}",)
     };
 
     // Handle Err.

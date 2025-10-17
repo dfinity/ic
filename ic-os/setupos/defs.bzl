@@ -79,18 +79,26 @@ def _custom_partitions(mode):
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
         nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
+        include_nns_public_key_override = True
+        deployment_environment = "testnet"
     elif mode == "local-base-dev":
         guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
         nns_urls = '["https://cloudflare.com/cdn-cgi/trace"]'
+        include_nns_public_key_override = True
+        deployment_environment = "testnet"
     elif mode == "local-base-prod":
         guest_image = Label("//ic-os/guestos/envs/local-base-prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-prod:disk-img.tar.zst")
         nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
+        include_nns_public_key_override = False
+        deployment_environment = "mainnet"
     elif mode == "prod":
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.zst")
         nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
+        include_nns_public_key_override = False
+        deployment_environment = "mainnet"
     else:
         fail("Unkown mode detected: " + mode)
 
@@ -142,18 +150,22 @@ def _custom_partitions(mode):
         name = "deployment_json",
         srcs = [Label("//ic-os/setupos:data/deployment.json.template")],
         outs = ["deployment.json"],
-        cmd = "sed -e 's#NNS_URLS#{nns_urls}#' < $< > $@".format(nns_urls = nns_urls),
+        cmd = "sed -e 's#NNS_URLS#{nns_urls}#' -e 's#DEPLOYMENT_ENVIRONMENT#{deployment_environment}#' < $< > $@".format(deployment_environment = deployment_environment, nns_urls = nns_urls),
         tags = ["manual"],
     )
 
+    data_srcs = [
+        ":deployment.json",
+        ":guest-os.img.tar.zst",
+        ":host-os.img.tar.zst",
+    ]
+
+    if include_nns_public_key_override:
+        data_srcs.append(Label("//ic-os/setupos:data/nns_public_key_override.pem"))
+
     pkg_tar(
         name = "data_tar",
-        srcs = [
-            Label("//ic-os/setupos:data/nns_public_key.pem"),
-            ":deployment.json",
-            ":guest-os.img.tar.zst",
-            ":host-os.img.tar.zst",
-        ],
+        srcs = data_srcs,
         mode = "0644",
         package_dir = "data",
         tags = ["manual", "no-cache"],
@@ -174,3 +186,20 @@ def _custom_partitions(mode):
         ":partition-config.tzst",
         ":partition-data.tzst",
     ]
+
+def create_test_img(name, source, **kwargs):
+    native.genrule(
+        name = name,
+        srcs = [source],
+        outs = [name + ".tar.zst"],
+        cmd = """
+            tmpdir="$$(mktemp -d)"
+            trap "rm -rf $$tmpdir" EXIT
+            tar -xf $< -C $$tmpdir
+            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img
+            tar --zstd -Scf $@ -C $$tmpdir disk.img
+        """,
+        target_compatible_with = ["@platforms//os:linux"],
+        tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
+        **kwargs
+    )

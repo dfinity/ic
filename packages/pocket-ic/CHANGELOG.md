@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIcBuilder::with_initial_time` to specify the initial timestamp of the newly created PocketIC instance.
+- The parameter `ttl` to `StartServerParams` to specify the TTL of the PocketIC server.
+
+### Changed
+- Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
+- The function `start_server` only downloads the PocketIC server binary
+  if no path to the PocketIC server binary is provided explicitly.
+
+### Removed
+- The constant `EXPECTED_SERVER_VERSION`: semantic version is now used instead of a fixed expected PocketIC server version.
 
 
-## 10.0.0 - 2025-09-05
+
+## 10.0.0 - 2025-09-12
 
 ### Added
 - The function `start_server` and its input type `StartServerParams` to manually start a PocketIC server.
@@ -22,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+- The deprecated function `PocketIc::make_deterministic`.
+
+### Changed
+- Renamed `PocketIcBuilder::with_nonmainnet_features` to `PocketIcBuilder::with_icp_config` and changed the argument type
+  from a simple Boolean to a record with separate settings for the individual configuration options.
 
 
 

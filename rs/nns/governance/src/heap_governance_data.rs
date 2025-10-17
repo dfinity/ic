@@ -1,12 +1,13 @@
 use crate::{
     neuron::Neuron,
     pb::v1::{
-        governance::{GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
         Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
-        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
+        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent, Topic,
         XdrConversionRate as XdrConversionRatePb,
+        governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };
+use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_governance_api::{
     Governance as ApiGovernance, XdrConversionRate as ApiXdrConversionRate,
 };
@@ -33,9 +34,11 @@ pub struct HeapGovernanceData {
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,
-    pub making_sns_proposal: Option<MakingSnsProposal>,
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
+    pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
+    // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+    pub first_proposal_id_to_record_voting_history: ProposalId,
 }
 
 /// Internal representation for `XdrConversionRatePb`.
@@ -135,7 +138,6 @@ pub fn initialize_governance(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
         xdr_conversion_rate,
         restore_aging_summary,
     } = initial_governance;
@@ -156,7 +158,6 @@ pub fn initialize_governance(
     let metrics = metrics.map(|x| x.into());
     let most_recent_monthly_node_provider_rewards =
         most_recent_monthly_node_provider_rewards.map(|x| x.into());
-    let making_sns_proposal = making_sns_proposal.map(|x| x.into());
     let restore_aging_summary = restore_aging_summary.map(|x| x.into());
 
     // Third, fill in the missing fields.
@@ -179,6 +180,8 @@ pub fn initialize_governance(
     let neuron_management_voting_period_seconds =
         neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
     let xdr_conversion_rate = XdrConversionRate::from(xdr_conversion_rate);
+    let first_proposal_id_to_record_voting_history =
+        initialize_first_proposal_id_to_record_voting_history(&proposals);
 
     // Fourth, convert the neurons.
     let neurons = neurons
@@ -204,9 +207,10 @@ pub fn initialize_governance(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals: HashMap::new(),
+        first_proposal_id_to_record_voting_history,
     };
 
     // Finally, return the result.
@@ -243,9 +247,10 @@ pub fn split_governance_proto(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals,
+        first_proposal_id_to_record_voting_history,
         rng_seed,
     } = governance_proto;
 
@@ -257,12 +262,16 @@ pub fn split_governance_proto(
 
     let xdr_conversion_rate =
         XdrConversionRate::try_from(xdr_conversion_rate).unwrap_or_else(|err| {
-            panic!("Deserialization failed for XdrConversionRate: {}", err);
+            panic!("Deserialization failed for XdrConversionRate: {err}");
         });
 
     let rng_seed = rng_seed
         .map(|seed| vec_to_array(seed).ok())
         .and_then(|seed| seed);
+
+    // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+    let first_proposal_id_to_record_voting_history = first_proposal_id_to_record_voting_history
+        .unwrap_or_else(|| initialize_first_proposal_id_to_record_voting_history(&proposals));
 
     (
         HeapGovernanceData {
@@ -282,9 +291,14 @@ pub fn split_governance_proto(
             cached_daily_maturity_modulation_basis_points,
             maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons,
-            making_sns_proposal,
+
             xdr_conversion_rate,
             restore_aging_summary,
+            topic_of_garbage_collected_proposals: topic_of_garbage_collected_proposals
+                .into_iter()
+                .map(|(k, v)| (k, Topic::try_from(v).unwrap_or(Topic::Unspecified)))
+                .collect(),
+            first_proposal_id_to_record_voting_history,
         },
         rng_seed,
     )
@@ -318,9 +332,11 @@ pub fn reassemble_governance_proto(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
+
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals,
+        first_proposal_id_to_record_voting_history,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -344,11 +360,28 @@ pub fn reassemble_governance_proto(
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
-        making_sns_proposal,
+
         xdr_conversion_rate: Some(xdr_conversion_rate),
         restore_aging_summary,
+        topic_of_garbage_collected_proposals: topic_of_garbage_collected_proposals
+            .into_iter()
+            .map(|(k, v)| (k, v as i32))
+            .collect(),
+        first_proposal_id_to_record_voting_history: Some(
+            first_proposal_id_to_record_voting_history,
+        ),
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
     }
+}
+
+// TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+fn initialize_first_proposal_id_to_record_voting_history(
+    proposals: &BTreeMap<u64, ProposalData>,
+) -> ProposalId {
+    proposals
+        .last_key_value()
+        .map(|(k, _)| ProposalId { id: k + 1 })
+        .unwrap_or_else(|| ProposalId { id: 1 })
 }
 
 #[cfg(test)]
@@ -380,12 +413,13 @@ mod tests {
             cached_daily_maturity_modulation_basis_points: Some(6),
             maturity_modulation_last_updated_at_timestamp_seconds: Some(7),
             spawning_neurons: Some(true),
-            making_sns_proposal: Some(MakingSnsProposal::default()),
             xdr_conversion_rate: Some(XdrConversionRatePb {
                 timestamp_seconds: Some(1),
                 xdr_permyriad_per_icp: Some(50_000),
             }),
             restore_aging_summary: None,
+            topic_of_garbage_collected_proposals: hashmap! { 1 => Topic::Unspecified as i32 },
+            first_proposal_id_to_record_voting_history: Some(ProposalId { id: 1 }),
             rng_seed: Some(vec![1u8; 32]),
         }
     }
@@ -400,6 +434,28 @@ mod tests {
             reassemble_governance_proto(heap_governance_data, rng_seed);
 
         assert_eq!(reassembled_governance_proto, governance_proto);
+    }
+
+    // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+    #[test]
+    fn split_and_reassemble_with_none_first_proposal_id_to_record_voting_history() {
+        let governance_proto = GovernanceProto {
+            first_proposal_id_to_record_voting_history: None,
+            ..simple_governance_proto()
+        };
+
+        let (heap_governance_data, rng_seed) = split_governance_proto(governance_proto.clone());
+
+        let reassembled_governance_proto =
+            reassemble_governance_proto(heap_governance_data, rng_seed);
+
+        assert_eq!(
+            reassembled_governance_proto,
+            GovernanceProto {
+                first_proposal_id_to_record_voting_history: Some(ProposalId { id: 2 }),
+                ..governance_proto
+            }
+        );
     }
 
     #[test]
@@ -431,6 +487,11 @@ mod tests {
                 rounds_since_last_distribution: Some(0),
                 latest_round_available_e8s_equivalent: Some(0),
             })
+        );
+        // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+        assert_eq!(
+            heap_governance_data.first_proposal_id_to_record_voting_history,
+            ProposalId { id: 1 }
         );
     }
 }

@@ -20,14 +20,14 @@ use std::{
 use ic_base_types::{RegistryVersion, SubnetId};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::SubnetTopology;
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use metrics::PeerManagerMetrics;
 use tokio::{
     runtime::Handle,
-    sync::watch::{channel, Receiver},
+    sync::watch::{Receiver, channel},
     task::JoinHandle,
 };
 

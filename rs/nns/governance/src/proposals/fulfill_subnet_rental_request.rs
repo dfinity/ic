@@ -1,10 +1,16 @@
 use crate::{
-    are_fulfill_subnet_rental_request_proposals_enabled,
-    governance::Environment,
-    pb::v1::{governance_error::ErrorType, FulfillSubnetRentalRequest, GovernanceError},
+    governance::{Environment, LOG_PREFIX},
+    pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
 };
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+#[allow(unused)]
+use ic_cdk::println;
+use ic_limits::{
+    DKG_DEALINGS_PER_BLOCK, DKG_INTERVAL_HEIGHT, INITIAL_NOTARY_DELAY, MAX_BLOCK_PAYLOAD_SIZE,
+    MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK,
+    UNIT_DELAY_APP_SUBNET,
+};
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
@@ -34,13 +40,6 @@ impl FulfillSubnetRentalRequest {
     /// because that would require calling other canisters, which makes
     /// validation code fraught with peril.
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-        if !are_fulfill_subnet_rental_request_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "FulfillSubnetRentalRequest proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         let Self {
             user,
             node_ids,
@@ -64,8 +63,7 @@ impl FulfillSubnetRentalRequest {
 
         if !is_potential_full_git_commit_id(replica_version_id) {
             defects.push(format!(
-                "The `replica_version_id` is not a 40 character hexidecimal string (it was {:?})",
-                replica_version_id,
+                "The `replica_version_id` is not a 40 character hexidecimal string (it was {replica_version_id:?})",
             ));
         }
 
@@ -87,19 +85,13 @@ impl FulfillSubnetRentalRequest {
         proposal_id: ProposalId,
         env: &Arc<dyn Environment>,
     ) -> Result<(), GovernanceError> {
-        if !are_fulfill_subnet_rental_request_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "FulfillSubnetRentalRequest proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         // The last step also does this, but we do this first to avoid creating
         // a subnet (in the next step) that needs to be immediately "disbanded"
         // due to it being "orphaned" (i.e. nobody can create canisters in it).
         self.verify_rental_request_exists(env).await?;
 
         let new_subnet_id = self.create_subnet(env).await?;
+
         self.notify_subnet_rental_canister_that_the_subnet_has_been_created(
             new_subnet_id,
             proposal_id,
@@ -135,16 +127,19 @@ impl FulfillSubnetRentalRequest {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Unable to verify that user {} has a rental request, because \
+                        "Unable to verify that user {user} has a rental request, because \
                          unable call SubnetRentalCanister.list_rental_requests \
-                         (while executing a FulfillSubnetRentalRequest proposal): {:?}: {}",
-                        user, code, message,
+                         (while executing a FulfillSubnetRentalRequest proposal): {code:?}: {message}",
                     ),
                 )
             })?;
 
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code schrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct RentalRequest {
             user: Principal,
@@ -155,9 +150,8 @@ impl FulfillSubnetRentalRequest {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Unable to verify that user {} has a rental request, because \
-                     unable to decode SubnetRentalCanister.list_rental_requests response: {}",
-                    user, err,
+                    "Unable to verify that user {user} has a rental request, because \
+                     unable to decode SubnetRentalCanister.list_rental_requests response: {err}",
                 ),
             )
         })?;
@@ -170,11 +164,10 @@ impl FulfillSubnetRentalRequest {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "The user ({}) of this FulfillSubnetRentalRequest proposal \
+                    "The user ({user}) of this FulfillSubnetRentalRequest proposal \
                      is not the user of any existing rental request in the Subnet\
                      Rental canister. Thus, we cannot proceed with executing this \
                      FulfillSubnetRentalRequest proposal.",
-                    user,
                 ),
             ));
         }
@@ -184,6 +177,27 @@ impl FulfillSubnetRentalRequest {
 
     async fn create_subnet(&self, env: &Arc<dyn Environment>) -> Result<SubnetId, GovernanceError> {
         // Construct create_subnet request.
+        let unit_delay_millis = u64::try_from(UNIT_DELAY_APP_SUBNET.as_millis()).unwrap_or_else(|err| {
+            println!(
+                "{}WARNING: unable to convert UNIT_DELAY_APP_SUBNET ({:?}) to u64 (in ms); falling back to 1_000 ms: {}",
+                LOG_PREFIX, UNIT_DELAY_APP_SUBNET, err,
+            );
+            1_000
+        });
+        let initial_notary_delay_millis = u64::try_from(INITIAL_NOTARY_DELAY.as_millis()).unwrap_or_else(|err| {
+            println!(
+                "{}WARNING: unable to convert INITIAL_NOTARY_DELAY ({:?}) to u64 (in ms); falling back to 300 ms: {}",
+                LOG_PREFIX, INITIAL_NOTARY_DELAY, err,
+            );
+            300
+        });
+        let dkg_dealings_per_block = u64::try_from(DKG_DEALINGS_PER_BLOCK).unwrap_or_else(|err| {
+            println!(
+                "{}WARNING: unable to convert DKG_DEALINGS_PER_BLOCK ({:?}) to u64; falling back to 1: {}",
+                LOG_PREFIX, DKG_DEALINGS_PER_BLOCK, err,
+            );
+            1
+        });
         let create_subnet_payload = Encode!(&CreateSubnetPayload {
             // This is the main thing that distinguishes this subnet from "normal" subnets.
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
@@ -196,10 +210,9 @@ impl FulfillSubnetRentalRequest {
                 .collect(),
             replica_version_id: self.replica_version_id.clone(),
 
-            // Remaining fields contain standard values.
-            // TODO(NNS1-3931): Confirm that the hard-coded values used
-            // below are appropriate for rented subnets. (I ripped these
-            // from a create_subnet proposal.)
+            // Remaining fields contain standard values. If the value is not
+            // from an ic_limits constant, then, I most likely grabbed the value
+            // seen here from an adopted create application subnet NNS proposal.
             features: SubnetFeatures {
                 canister_sandboxing: false,
                 http_requests: true,
@@ -213,13 +226,13 @@ impl FulfillSubnetRentalRequest {
             chain_key_config: None,
 
             // Sizes
-            max_ingress_bytes_per_message: 2 << 20, // 2 MiB
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 << 20,
-            unit_delay_millis: 1000,
-            initial_notary_delay_millis: 300,
-            dkg_dealings_per_block: 1,
-            dkg_interval_length: 499,
+            max_ingress_bytes_per_message: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
+            max_ingress_messages_per_block: MAX_INGRESS_MESSAGES_PER_BLOCK,
+            max_block_payload_size: MAX_BLOCK_PAYLOAD_SIZE,
+            unit_delay_millis,
+            initial_notary_delay_millis,
+            dkg_dealings_per_block,
+            dkg_interval_length: DKG_INTERVAL_HEIGHT,
             max_number_of_canisters: 0,
 
             // Authorization.
@@ -246,23 +259,24 @@ impl FulfillSubnetRentalRequest {
             .map_err(|(code, message)| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!(
-                        "Unable to call the Registry.create_subnet: {:?}: {}",
-                        code, message,
-                    ),
+                    format!("Unable to call the Registry.create_subnet: {code:?}: {message}",),
                 )
             })?;
 
         // Decode response.
-        let NewSubnet { new_subnet_id } = Decode!(&result, NewSubnet).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Unable to decode the response from Registry.create_subnet: {}",
-                    err,
-                ),
-            )
-        })?;
+        let NewSubnet { new_subnet_id } = Decode!(&result, Result<NewSubnet, String>)
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Unable to decode the response from Registry.create_subnet: {err}",),
+                )
+            })?
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("create_subnet reply from the Registry canister was an Err: {err}",),
+                )
+            })?;
 
         // Convert to return type.
         let new_subnet_id = new_subnet_id.ok_or_else(|| {
@@ -277,8 +291,7 @@ impl FulfillSubnetRentalRequest {
                 ErrorType::External,
                 format!(
                     "Was able to decode Registry.create_subnet response, but the new_subnet_id \
-                 value could not be converted into a SubnetId: {}",
-                    err,
+                 value could not be converted into a SubnetId: {err}",
                 ),
             )
         })
@@ -304,8 +317,12 @@ impl FulfillSubnetRentalRequest {
         let proposal_id = proposal_id.id;
 
         // Assemble the request.
-        // TODO(NNS1-3965): Source definition from an official Subnet Rental
-        // canister library.
+        // This is a partial copy n' paste from the subnet-rental-canister repo.
+        // Trying to depend on that creates a bunch of headaches, and maybe
+        // requires a different set of hack(s). In particular, it slightly grows
+        // the sizes of a couple of wasms. Therefore, leaving this piece of
+        // "code shrapnel in the body" seems like the least harmful thing, but
+        // if you find a way to do it, more power to you.
         #[derive(CandidType, Deserialize, Serialize)]
         struct CreateRentalAgreementPayload {
             user: Principal,
@@ -331,8 +348,7 @@ impl FulfillSubnetRentalRequest {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Unable to call SubnetRentalCanister.execute_create_rental_agreement: {:?}: {}",
-                    code, message,
+                    "Unable to call SubnetRentalCanister.execute_create_rental_agreement: {code:?}: {message}",
                 ),
             )
         })?;

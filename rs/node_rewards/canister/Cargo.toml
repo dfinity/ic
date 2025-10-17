@@ -24,9 +24,9 @@ ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = "1.1.1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
-ic-node-rewards-canister-protobuf = { path = "./protobuf" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
@@ -38,6 +38,7 @@ mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 itertools = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }

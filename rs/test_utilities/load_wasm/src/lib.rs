@@ -9,7 +9,7 @@ fn env_var_name(bin_name: &str, features: &[&str]) -> String {
     } else {
         format!("_{}", features.join("_"))
     };
-    format!("{}{}_WASM_PATH", bin_name, features_part)
+    format!("{bin_name}{features_part}_WASM_PATH")
         .replace('-', "_")
         .to_uppercase()
 }
@@ -37,10 +37,7 @@ pub fn load_wasm(manifest_dir: impl AsRef<Path>, binary_name: &str, features: &[
     match env::var_os(&var_name) {
         Some(path) => {
             let bytes = std::fs::read(&path).unwrap_or_else(|e| {
-                panic!(
-                    "failed to load Wasm file from path {:?} (env var {}): {}",
-                    path, var_name, e
-                )
+                panic!("failed to load Wasm file from path {path:?} (env var {var_name}): {e}")
             });
             eprintln!(
                 "Using pre-built binary for {} (size = {} bytes)",
@@ -54,14 +51,13 @@ pub fn load_wasm(manifest_dir: impl AsRef<Path>, binary_name: &str, features: &[
                 eprintln!("Environment variables with name containing \"WASM_PATH\":");
                 for (k, v) in env::vars() {
                     if k.contains("WASM_PATH") {
-                        eprintln!("  {}: {}", k, v);
+                        eprintln!("  {k}: {v}");
                     }
                 }
 
                 panic!(
-                    "Running on CI and expected canister env var {0}\n\
-                         Please add {1} as a data dependency in the test's BUILD.bazel target:\n",
-                    var_name, binary_name
+                    "Running on CI and expected canister env var {var_name}\n\
+                         Please add {binary_name} as a data dependency in the test's BUILD.bazel target:\n"
                 )
             }
         }

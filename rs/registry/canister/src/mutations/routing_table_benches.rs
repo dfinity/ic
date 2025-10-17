@@ -3,7 +3,7 @@ use crate::{
     registry_lifecycle::canister_post_upgrade,
 };
 
-use canbench_rs::{bench, bench_fn, bench_scope, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn, bench_scope};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_registry_routing_table::CANISTER_IDS_PER_SUBNET;
 use prost::Message;
@@ -97,16 +97,14 @@ fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
             registry_storage.encode_to_vec()
         };
 
-        let new_registry = {
+        {
             let _s2 = bench_scope("post_upgrade");
             let registry_storage = RegistryCanisterStableStorage::decode(bytes.as_slice())
                 .expect("Error decoding from stable.");
             let mut new_registry = Registry::new();
             canister_post_upgrade(&mut new_registry, registry_storage);
             new_registry
-        };
-
-        new_registry
+        }
     })
 }
 

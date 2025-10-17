@@ -5,10 +5,10 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
-    FIREWALL_FILE_DEFAULT_PATH,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig, FIREWALL_FILE_DEFAULT_PATH,
+    ReplicaConfig as ReplicaFirewallConfig,
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
@@ -132,16 +132,14 @@ impl Firewall {
             (Err(err), Ok(None)) => Err(OrchestratorError::RoleError(
                 format!(
                     "The node is not assigned to any subnet \
-                    but we failed to retrieve the `boundary_node_record` from the registry: {}",
-                    err
+                    but we failed to retrieve the `boundary_node_record` from the registry: {err}"
                 ),
                 registry_version,
             )),
             (Err(err_1), Err(err_2)) => Err(OrchestratorError::RoleError(
                 format!(
                     "Failed to retrieve both the `boundary_node_record` \
-                    and the `subnet_id` from the registry: \n{}\n{}",
-                    err_1, err_2
+                    and the `subnet_id` from the registry: \n{err_1}\n{err_2}"
                 ),
                 registry_version,
             )),
@@ -713,6 +711,7 @@ mod tests {
     use std::{io::Write, path::Path};
 
     use ic_config::{ConfigOptional, ConfigSource};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
@@ -724,16 +723,13 @@ mod tests {
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{
-        add_single_subnet_record, add_subnet_list_record, SubnetRecordBuilder,
+        SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
     use super::*;
 
-    const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES: &[u8] =
@@ -933,7 +929,7 @@ mod tests {
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
         let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
-        let file_name = format!("nftables_{}.conf", label);
+        let file_name = format!("nftables_{label}.conf");
         if nftables != golden {
             maybe_write_golden(nftables, &file_name);
             panic!(
@@ -946,20 +942,26 @@ mod tests {
 
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
-        // Make the string parsable by filling the template placeholders with dummy values
-        let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
-            .unwrap()
-            .replace("{{ ipv6_address }}", "::")
-            .replace("{{ backup_retention_time_secs }}", "0")
-            .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
-            .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_epoch_length }}", "600");
-        let config_source = ConfigSource::Literal(cfg);
+        let template = config::guestos::generate_ic_config::IcConfigTemplate {
+            ipv6_address: "::".to_string(),
+            ipv6_prefix: "::/64".to_string(),
+            ipv4_address: "".to_string(),
+            ipv4_gateway: "".to_string(),
+            nns_urls: "http://www.fakeurl.com/".to_string(),
+            backup_retention_time_secs: "0".to_string(),
+            backup_purging_interval_secs: "0".to_string(),
+            query_stats_epoch_length: "600".to_string(),
+            jaeger_addr: "".to_string(),
+            domain_name: "".to_string(),
+            node_reward_type: "".to_string(),
+            malicious_behavior: "null".to_string(),
+        };
 
-        let config: ConfigOptional = config_source.load().unwrap();
-
-        config
+        let ic_json = config::guestos::generate_ic_config::render_ic_config(template)
+            .expect("Failed to render config template");
+        ConfigSource::Literal(ic_json)
+            .load()
+            .expect("Failed to parse dummy config")
     }
 
     /// When `TEST_UNDECLARED_OUTPUTS_DIR` is set, writes the `content` to a file in the specified
@@ -1196,6 +1198,7 @@ mod tests {
                     public_ipv4_config: None,
                     domain: None,
                     node_reward_type: None,
+                    ssh_node_state_write_access: vec![],
                 }),
             )
             .expect("Failed to add node record.");

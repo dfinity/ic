@@ -1,6 +1,6 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::prelude::*;
@@ -9,12 +9,14 @@ use std::time::Duration;
 
 const KIBIBYTE: u128 = 1024; // 2 ^ 10
 const MEBIBYTE: u128 = 1_048_576; // 2 ^ 20
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
 
 criterion_main!(benches);
 criterion_group!(benches, bench_hash);
 
 fn bench_hash(criterion: &mut Criterion) {
     let group = &mut criterion.benchmark_group("crypto_hash");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -115,7 +117,7 @@ fn random_bytes_chunked<R: Rng>(n: u128, chunk_size: u128, rng: &mut R) -> Vec<V
 }
 
 fn random_bytes<R: Rng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.gen::<u8>()).collect()
+    (0..n).map(|_| rng.r#gen::<u8>()).collect()
 }
 
 fn as_u64(u128: u128) -> u64 {

@@ -1,4 +1,4 @@
-use crate::{crypto::SignedBytesWithoutDomainSeparator, messages::Blob, CountBytes};
+use crate::{CountBytes, crypto::SignedBytesWithoutDomainSeparator, messages::Blob};
 use base64::URL_SAFE_NO_PAD;
 use ic_crypto_sha2::Sha256;
 use serde::{Deserialize, Serialize};
@@ -56,7 +56,7 @@ impl TryFrom<&[u8]> for WebAuthnSignature {
 
     fn try_from(blob: &[u8]) -> Result<Self, Self::Error> {
         let signature: WebAuthnSignature = serde_cbor::from_slice(blob)
-            .map_err(|err| format!("Signature CBOR parsing failed with: {}", err))?;
+            .map_err(|err| format!("Signature CBOR parsing failed with: {err}"))?;
         Ok(signature)
     }
 }
@@ -88,12 +88,12 @@ impl TryFrom<&WebAuthnSignature> for WebAuthnEnvelope {
         let client_data: ClientData =
             match serde_json::from_slice(&signature.client_data_json.0[..]) {
                 Ok(client_data) => client_data,
-                Err(err) => return Err(format!("ClientDataJSON parsing failed with: {}", err)),
+                Err(err) => return Err(format!("ClientDataJSON parsing failed with: {err}")),
             };
 
         let challenge = match base64::decode_config(&client_data.challenge, URL_SAFE_NO_PAD) {
             Ok(challenge) => challenge,
-            Err(err) => return Err(format!("Challenge base64url parsing failed with: {}", err)),
+            Err(err) => return Err(format!("Challenge base64url parsing failed with: {err}")),
         };
 
         let mut signed_bytes = signature.authenticator_data.0.clone();
@@ -122,7 +122,9 @@ mod tests {
 
     #[test]
     fn try_from_cbor_ok() {
-        let cbor_bytes = hex!("D9D9F7A37261757468656E74696361746F725F6461746158252F1B671A93F444B8EC77E0211F9624C9C2612182B864F0D4AC9D335F5B4FE502010000005370636C69656E745F646174615F6A736F6E78987B2274797065223A22776562617574686E2E676574222C226368616C6C656E6765223A225044786863476B74636D56786457567A644331705A43776758334A6C6358566C6333516761575266506A34222C226F726967696E223A2268747470733A2F2F63636763652D62616261612D61616161612D61616161612D63616161612D61616161612D61616161612D712E6963302E617070227D697369676E617475726558473045022100C69C75C6D6C449EA936094476E8BFCAD90D831A6437A87117615ADD6D6A5168802201E2E4535976794286FA264EB81D7B14B3F168AB7F62AD5C0B9D6EBFC64EB0C8C");
+        let cbor_bytes = hex!(
+            "D9D9F7A37261757468656E74696361746F725F6461746158252F1B671A93F444B8EC77E0211F9624C9C2612182B864F0D4AC9D335F5B4FE502010000005370636C69656E745F646174615F6A736F6E78987B2274797065223A22776562617574686E2E676574222C226368616C6C656E6765223A225044786863476B74636D56786457567A644331705A43776758334A6C6358566C6333516761575266506A34222C226F726967696E223A2268747470733A2F2F63636763652D62616261612D61616161612D61616161612D63616161612D61616161612D61616161612D712E6963302E617070227D697369676E617475726558473045022100C69C75C6D6C449EA936094476E8BFCAD90D831A6437A87117615ADD6D6A5168802201E2E4535976794286FA264EB81D7B14B3F168AB7F62AD5C0B9D6EBFC64EB0C8C"
+        );
         let signature = WebAuthnSignature::try_from(&cbor_bytes[..]);
         assert!(signature.is_ok());
         let signature = signature.ok().unwrap();

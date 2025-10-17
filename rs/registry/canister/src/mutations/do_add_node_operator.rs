@@ -8,7 +8,7 @@ use serde::Serialize;
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 
 use prost::Message;
 use std::collections::BTreeMap;
@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 impl Registry {
     /// Add a new Node Operator
     pub fn do_add_node_operator(&mut self, payload: AddNodeOperatorPayload) {
-        println!("{}do_add_node_operator: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_add_node_operator: {payload:?}");
 
         let node_operator_record_key =
             make_node_operator_record_key(payload.node_operator_principal_id.unwrap()).into_bytes();

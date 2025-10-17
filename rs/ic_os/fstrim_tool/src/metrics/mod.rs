@@ -116,7 +116,7 @@ fn is_f64_finite_and_0_or_larger(value: f64) -> bool {
 }
 
 fn parse_metrics_value(key: &str, value: &str) -> Result<f64> {
-    parse_go_f64(value).with_context(|| format!("key: {}", key))
+    parse_go_f64(value).with_context(|| format!("key: {key}"))
 }
 
 fn parse_go_f64(value: &str) -> Result<f64> {

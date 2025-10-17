@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use std::str::FromStr;
 use std::{
     fmt::Debug,
@@ -112,6 +112,9 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         version: &V,
     ) -> UpgradeResult<(Vec<String>, Option<String>)>;
 
+    /// Runs the disk encryption key exchange process if SEV is active. NOOP otherwise.
+    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
+
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
@@ -140,8 +143,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         let url_count = release_package_urls.len();
         if url_count == 0 {
             return Err(UpgradeError::GenericError(format!(
-                "No download URLs are provided for version {:?}",
-                version
+                "No download URLs are provided for version {version:?}"
             )));
         }
 
@@ -154,10 +156,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         // We will always either set `error`, or return `Ok` from this loop.
         let mut error = UpgradeError::GenericError("unreachable".to_string());
         for release_package_url in release_package_urls.iter() {
-            let req = format!(
-                "Request to download image {:?} from {}",
-                version, release_package_url
-            );
+            let req = format!("Request to download image {version:?} from {release_package_url}");
             let file_downloader =
                 FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
@@ -206,15 +205,17 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             .output()
             .await
             .map_err(|e| UpgradeError::file_command_error(e, &c))?;
-        if out.status.success() {
-            self.set_prepared_version(Some(version.clone()));
-            Ok(())
-        } else {
+
+        if !out.status.success() {
             warn!(self.log(), "upgrade-install has failed");
-            Err(UpgradeError::GenericError(
+            return Err(UpgradeError::GenericError(
                 "upgrade-install failed".to_string(),
-            ))
+            ));
         }
+
+        self.maybe_exchange_disk_encryption_key().await?;
+        self.set_prepared_version(Some(version.clone()));
+        Ok(())
     }
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)

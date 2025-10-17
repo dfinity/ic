@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
@@ -37,7 +37,6 @@ pub fn activate_crypt_device(
 }
 
 /// Deactivates the cryptographic device with the given name.
-#[cfg(test)] // Currently only used in tests
 pub fn deactivate_crypt_device(crypt_name: &str) -> Result<()> {
     CryptDevice::from_ptr(std::ptr::null_mut())
         .activate_handle()
@@ -89,7 +88,6 @@ pub fn format_crypt_device(device_path: &Path, encryption_key: &[u8]) -> Result<
 }
 
 /// Opens a LUKS2 device at the specified path and loads its context.
-#[cfg(test)] // Currently only used in tests
 fn open_luks2_device(device_path: &Path) -> Result<CryptDevice> {
     let mut crypt_device =
         CryptInit::init(device_path).context("Failed to initialize cryptographic device")?;
@@ -103,7 +101,6 @@ fn open_luks2_device(device_path: &Path) -> Result<CryptDevice> {
 
 /// Checks if the provided encryption key can activate the cryptographic device at the given path.
 /// Does not activate the device.
-#[cfg(test)] // Currently only used in tests
 pub fn check_encryption_key(device_path: &Path, encryption_key: &[u8]) -> Result<()> {
     let mut crypt_device = open_luks2_device(device_path).context("Failed to open LUKS2 device")?;
 

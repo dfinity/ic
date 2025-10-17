@@ -4,10 +4,10 @@ use std::{
 };
 
 use axum::{
+    Extension, Json,
     body::Body,
     extract::Path,
     http::{Request, Response},
-    Extension, Json,
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,13 +43,13 @@ pub async fn create_handler(
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
         Err(err) => {
             return Response::builder()
                 .status(400)
                 .body(Body::from(err.to_string()))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -61,16 +61,15 @@ pub async fn create_handler(
             return Response::builder()
                 .status(429)
                 .body(Body::from(format!(
-                    "rate limit exceeded for domain {}",
-                    domain
+                    "rate limit exceeded for domain {domain}"
                 )))
-                .unwrap()
+                .unwrap();
         }
         Err(CreateError::UnexpectedError(_)) => {
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -82,7 +81,7 @@ pub async fn create_handler(
                 return Response::builder()
                     .status(500)
                     .body(Body::from("unexpected error"))
-                    .unwrap()
+                    .unwrap();
             }
         };
 
@@ -100,7 +99,7 @@ pub async fn create_handler(
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -122,14 +121,14 @@ pub async fn get_handler(
             return Response::builder()
                 .status(404)
                 .body(Body::from("not found"))
-                .unwrap()
+                .unwrap();
         }
 
         Err(GetError::UnexpectedError(_)) => {
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -139,7 +138,7 @@ pub async fn get_handler(
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -162,14 +161,14 @@ pub async fn update_handler(
             return Response::builder()
                 .status(404)
                 .body(Body::from("not found"))
-                .unwrap()
+                .unwrap();
         }
 
         Err(GetError::UnexpectedError(_)) => {
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -180,13 +179,13 @@ pub async fn update_handler(
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
         Err(err) => {
             return Response::builder()
                 .status(400)
                 .body(Body::from(err.to_string()))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -198,14 +197,14 @@ pub async fn update_handler(
                 return Response::builder()
                     .status(404)
                     .body(Body::from("not found"))
-                    .unwrap()
+                    .unwrap();
             }
 
             Err(UpdateError::UnexpectedError(_)) => {
                 return Response::builder()
                     .status(500)
                     .body(Body::from("unexpected error"))
-                    .unwrap()
+                    .unwrap();
             }
         };
     }
@@ -226,14 +225,14 @@ pub async fn remove_handler(
             return Response::builder()
                 .status(404)
                 .body(Body::from("not found"))
-                .unwrap()
+                .unwrap();
         }
 
         Err(GetError::UnexpectedError(_)) => {
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -259,14 +258,14 @@ pub async fn remove_handler(
             return Response::builder()
                 .status(404)
                 .body(Body::from("not found"))
-                .unwrap()
+                .unwrap();
         }
 
         Err(RemoveError::UnexpectedError(_)) => {
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -289,7 +288,7 @@ pub async fn export_handler(
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 
@@ -299,7 +298,7 @@ pub async fn export_handler(
             return Response::builder()
                 .status(500)
                 .body(Body::from("unexpected error"))
-                .unwrap()
+                .unwrap();
         }
     };
 

@@ -1,7 +1,7 @@
 [package]
 name = "ic-nervous-system-long-message"
 version = "0.0.1"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "long-message-canister"

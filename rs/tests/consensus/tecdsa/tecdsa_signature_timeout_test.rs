@@ -3,8 +3,8 @@ use std::time::Duration;
 use anyhow::Result;
 
 use canister_test::Canister;
-use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_agent::AgentError;
+use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing_with_timeout, get_public_key_with_logger, get_signature_with_logger,
@@ -19,7 +19,7 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister},
+    util::{MessageCanister, block_on, runtime_from_url},
 };
 
 /// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` can be timed out when setting signature_request_timeout_ns.
@@ -74,7 +74,7 @@ fn test(env: TestEnv) {
             };
             match error {
                 AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
-                _ => panic!("Unexpected error: {:?}", error),
+                _ => panic!("Unexpected error: {error:?}"),
             };
         }
     });

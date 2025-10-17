@@ -28,7 +28,7 @@ pub fn deserialize_registry_value<T: RegistryValue + Default>(
     raw_result?
         .map(|bytes| {
             T::decode(bytes.as_slice()).map_err(|err| DecodeError {
-                error: format!("Deserialize registry value failed with {}", err),
+                error: format!("Deserialize registry value failed with {err}"),
             })
         })
         .transpose()

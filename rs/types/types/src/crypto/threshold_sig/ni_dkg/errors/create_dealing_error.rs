@@ -21,24 +21,27 @@ impl fmt::Display for DkgCreateDealingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let prefix = "Failed to create dealing: ";
         match self {
-            DkgCreateDealingError::NotADealer(error) => write!(f, "{}{}", prefix, error),
+            DkgCreateDealingError::NotADealer(error) => write!(f, "{prefix}{error}"),
             DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
-            DkgCreateDealingError::Registry(error) => write!(f, "{}{}", prefix, error),
+            DkgCreateDealingError::Registry(error) => write!(f, "{prefix}{error}"),
             DkgCreateDealingError::MalformedFsEncryptionPublicKey(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(error) => {
-                write!(f, "{}{}. `NiDkgAlgorithm::load_transcript` must be called prior to calling this method", prefix, error)
+                write!(
+                    f,
+                    "{prefix}{error}. `NiDkgAlgorithm::load_transcript` must be called prior to calling this method"
+                )
             }
             DkgCreateDealingError::TransientInternalError(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             DkgCreateDealingError::ReshareKeyIdComputationError(InvalidArgumentError {
                 message,
             }) => {
-                write!(f, "{}{}", prefix, message)
+                write!(f, "{prefix}{message}")
             }
         }
     }
@@ -46,6 +49,6 @@ impl fmt::Display for DkgCreateDealingError {
 
 impl fmt::Debug for DkgCreateDealingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }

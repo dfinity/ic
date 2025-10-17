@@ -166,7 +166,7 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 expires_at: value.expires_at,
                 fee: value.fee,
             },
-            unknown_op => return Err(format!("Unknown operation name {}", unknown_op)),
+            unknown_op => return Err(format!("Unknown operation name {unknown_op}")),
         };
         Ok(Transaction {
             operation,
@@ -564,7 +564,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
     fn decode(encoded_block: EncodedBlock) -> Result<Self, String> {
         let bytes = encoded_block.into_vec();
         let tagged_block: TaggedBlock<Tokens> = ciborium::de::from_reader(&bytes[..])
-            .map_err(|e| format!("failed to decode a block: {}", e))?;
+            .map_err(|e| format!("failed to decode a block: {e}"))?;
         Ok(tagged_block.0)
     }
 

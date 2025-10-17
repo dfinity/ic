@@ -200,10 +200,10 @@ pub fn parse_proc_smaps(data: &[u8]) -> Vec<VMAInfo> {
                     // Keys are always ascii, hence valid utf8, so this
                     // always succeeds. Formally, ignore malformed field names.
                     let value = std::mem::take(&mut current_value);
-                    if let Ok(key) = std::str::from_utf8(&current_key) {
-                        if let Some(vma_info) = current_vma_info.as_mut() {
-                            vma_info.fields.insert(key.to_string(), value);
-                        }
+                    if let Ok(key) = std::str::from_utf8(&current_key)
+                        && let Some(vma_info) = current_vma_info.as_mut()
+                    {
+                        vma_info.fields.insert(key.to_string(), value);
                     }
                     current_key.clear();
                     parse_state = ParseState::HeaderLineOrKey;
@@ -253,10 +253,10 @@ fn compute_memory_allocator_rss_total(vma_infos: &[VMAInfo]) -> u64 {
                 .filter(|&(x, y)| x == y)
                 .count();
 
-            if matching == EXTENSION.len() {
-                if let Ok(size) = get_named_field_kb(&vma_info.fields, "Rss") {
-                    total += size;
-                }
+            if matching == EXTENSION.len()
+                && let Ok(size) = get_named_field_kb(&vma_info.fields, "Rss")
+            {
+                total += size;
             }
         }
     }
@@ -287,16 +287,13 @@ fn get_named_field_kb(
     fields: &std::collections::HashMap<String, Vec<u8>>,
     name: &str,
 ) -> std::io::Result<u64> {
-    if let Some(rss_anon) = fields.get(name) {
-        if let Ok(rss_anon_str) = std::str::from_utf8(rss_anon) {
-            if let Some(caps) = MEMORY_KIB_PARSE_RE.captures(rss_anon_str) {
-                if let Some(size_str) = caps.get(1) {
-                    if let Ok(size) = size_str.as_str().parse::<u64>() {
-                        return Ok(size);
-                    }
-                }
-            }
-        }
+    if let Some(rss_anon) = fields.get(name)
+        && let Ok(rss_anon_str) = std::str::from_utf8(rss_anon)
+        && let Some(caps) = MEMORY_KIB_PARSE_RE.captures(rss_anon_str)
+        && let Some(size_str) = caps.get(1)
+        && let Ok(size) = size_str.as_str().parse::<u64>()
+    {
+        return Ok(size);
     }
 
     Err(std::io::Error::new(
@@ -947,7 +944,7 @@ VmFlags: rd wr sh mr mw me ms sd
     #[test]
     fn test_parse_available_memory() {
         macro_rules! check {
-            ($meminfo: expr, $kib: expr) => {
+            ($meminfo: expr_2021, $kib: expr_2021) => {
                 assert_eq!(
                     parse_available_memory($meminfo),
                     $kib.map(|kib: u64| (kib * 1024).into())

@@ -3,8 +3,8 @@ use std::time::Duration;
 use ic_base_types::NumBytes;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
-    MAX_WASM_MEMORY_IN_BYTES,
+    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    NumInstructions, NumOsPages,
 };
 use serde::{Deserialize, Serialize};
 
@@ -135,7 +135,7 @@ impl FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
-            environment_variables: FlagStatus::Disabled,
+            environment_variables: FlagStatus::Enabled,
         }
     }
 }

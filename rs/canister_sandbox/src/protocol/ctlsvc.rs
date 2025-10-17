@@ -71,7 +71,7 @@ mod tests {
     };
     use ic_management_canister_types_private::Global;
     use ic_replicated_state::{NumWasmPages, PageMap};
-    use ic_types::{ingress::WasmResult, NumBytes, NumInstructions};
+    use ic_types::{NumBytes, NumInstructions, ingress::WasmResult};
 
     use crate::protocol::{
         ctlsvc::{ExecutionFinishedReply, ExecutionPausedReply, ExecutionPausedRequest, Reply},

@@ -1,22 +1,21 @@
 mod update_balance {
-    use crate::management::{get_utxos, sign_with_ecdsa, CallError, CallSource};
+    use crate::management::{CallError, CallSource, get_utxos, sign_with_ecdsa};
     use crate::metrics::{Histogram, NumUtxoPages};
     use crate::metrics::{LatencyHistogram, MetricsResult};
-    use crate::state::{audit, eventlog::EventType, mutate_state, read_state, SuspendedReason};
+    use crate::state::{SuspendedReason, audit, eventlog::EventType, mutate_state, read_state};
     use crate::test_fixtures::{
-        ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, utxo, BTC_CHECKER_CANISTER_ID, DAY,
-        MINTER_CANISTER_ID, NOW,
+        BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, ecdsa_public_key, get_uxos_response,
+        ignored_utxo, init_args, init_state, ledger_account, mock::MockCanisterRuntime,
+        quarantined_utxo, utxo,
     };
     use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::updates::update_balance;
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{storage, CanisterRuntime, GetUtxosResponse, Timestamp};
+    use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, storage};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
-    use ic_cdk::api::call::RejectionCode;
     use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
@@ -637,9 +636,12 @@ mod update_balance {
 
             let mock_result = match result {
                 MetricsResult::Ok => Ok(vec![]),
-                MetricsResult::Err => Err(CallError::from_cdk_error(
-                    "sign_with_ecdsa",
-                    (RejectionCode::Unknown, "mock error".to_string()),
+                MetricsResult::Err => Err(CallError::from_sign_error(
+                    ic_cdk::management_canister::SignCallError::CallFailed(
+                        ic_cdk::call::CallFailed::CallPerformFailed(
+                            ic_cdk::call::CallPerformFailed {},
+                        ),
+                    ),
                 )),
             };
             runtime.expect_sign_with_ecdsa().return_const(mock_result);

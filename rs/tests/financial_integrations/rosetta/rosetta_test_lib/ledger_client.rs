@@ -9,7 +9,7 @@ use ic_system_test_driver::util::{assert_create_agent, block_on};
 use icp_ledger::protobuf::TipOfChainRequest;
 use icp_ledger::{AccountBalanceArgs, AccountIdentifier, Certification, TipOfChainRes, Tokens};
 use on_wire::{FromWire, IntoWire};
-use slog::{debug, Logger};
+use slog::{Logger, debug};
 
 pub struct LedgerClient {
     agent: Agent,

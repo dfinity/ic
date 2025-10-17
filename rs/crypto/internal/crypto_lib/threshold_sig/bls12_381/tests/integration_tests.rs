@@ -27,11 +27,11 @@ fn potpourri() {
     }
     let epoch10 = Epoch::from(10);
 
-    let associated_data = rng.gen::<[u8; 32]>();
+    let associated_data = rng.r#gen::<[u8; 32]>();
 
     let mut keys = Vec::new();
     for i in 0..=3 {
-        println!("generating key pair {}...", i);
+        println!("generating key pair {i}...");
         keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng));
     }
     let pks = keys
@@ -100,7 +100,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
     let receiver_fs_keys: Vec<_> = (0..num_receivers)
         .map(|i| {
-            println!("generating key pair {}...", i);
+            println!("generating key pair {i}...");
             let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
             println!("{:#?}", &key_pair.0);
             key_pair
@@ -137,7 +137,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .iter()
         .map(PlaintextChunks::from_scalar)
         .collect();
-    println!("Messages: {:#?}", plaintext_chunks);
+    println!("Messages: {plaintext_chunks:#?}");
 
     let keys_and_chunks = receiver_fs_public_keys
         .iter()
@@ -146,14 +146,14 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .collect::<Vec<_>>();
 
     // Encrypt
-    let associated_data = rng.gen::<[u8; 10]>();
+    let associated_data = rng.r#gen::<[u8; 10]>();
     let (crsz, encryption_witness) =
         enc_chunks(&keys_and_chunks, epoch, &associated_data, sys, rng);
 
     // Check that decryption succeeds
     let dk = &receiver_fs_keys[1].1;
     let out = dec_chunks(dk, 1, &crsz, epoch, &associated_data);
-    println!("decrypted: {:?}", out);
+    println!("decrypted: {out:?}");
     assert_eq!(out.unwrap(), plaintext_chunks[1].recombine_to_scalar(),);
 
     // chunking proof and verification

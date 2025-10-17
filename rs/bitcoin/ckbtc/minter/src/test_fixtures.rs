@@ -1,5 +1,5 @@
 use crate::lifecycle::init::InitArgs;
-use crate::{lifecycle, ECDSAPublicKey, GetUtxosResponse, Network, Timestamp};
+use crate::{ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp, lifecycle};
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};
@@ -35,7 +35,7 @@ pub fn init_args() -> InitArgs {
 }
 
 pub fn init_state(args: InitArgs) {
-    lifecycle::init::init(args)
+    lifecycle::init::init(args, &IC_CANISTER_RUNTIME)
 }
 
 pub fn ecdsa_public_key() -> ECDSAPublicKey {
@@ -116,8 +116,7 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 ) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
     let error = result.expect_err(&format!(
-        "Expected panic with message containing: {}",
-        expected_message
+        "Expected panic with message containing: {expected_message}"
     ));
     let panic_message = {
         if let Some(s) = error.downcast_ref::<String>() {
@@ -125,26 +124,26 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
         } else if let Some(s) = error.downcast_ref::<&str>() {
             s.to_string()
         } else {
-            format!("{:?}", error)
+            format!("{error:?}")
         }
     };
     assert!(
         panic_message.contains(expected_message),
-        "Expected panic message to contain: {}, but got: {}",
-        expected_message,
-        panic_message
+        "Expected panic message to contain: {expected_message}, but got: {panic_message}"
     );
 }
 
 pub mod mock {
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
-    use crate::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network};
+    use crate::{
+        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetUtxosRequest, GetUtxosResponse,
+        Network, tx,
+    };
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::Utxo;
-    use ic_management_canister_types_private::DerivationPath;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
@@ -159,27 +158,29 @@ pub mod mock {
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
-            async fn bitcoin_get_utxos(&self, request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
+            fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
+            async fn bitcoin_get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
-            async fn sign_with_ecdsa(&self, key_name: String, derivation_path: DerivationPath, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
+            async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
             async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
+            async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String, ) -> Result<BtcAddressCheckStatus, CallError>;
         }
     }
 }
 
 pub mod arbitrary {
     use crate::{
+        WithdrawalFee,
         address::BitcoinAddress,
         reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
         signature::EncodedSignature,
         state::{
-            eventlog::{Event, EventType, ReplacedReason},
             ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
+            eventlog::{Event, EventType, ReplacedReason},
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
-        WithdrawalFee,
     };
     use candid::Principal;
     pub use event::event_type;
@@ -189,16 +190,16 @@ pub mod arbitrary {
     use proptest::{
         array::uniform20,
         array::uniform32,
-        collection::{vec as pvec, SizeRange},
+        collection::{SizeRange, vec as pvec},
         option,
-        prelude::{any, Just, Strategy},
+        prelude::{Just, Strategy, any},
         prop_oneof,
     };
     use serde_bytes::ByteBuf;
 
     // Macro to simplify writing strategies that generate structs.
     macro_rules! prop_struct {
-        ($struct_path:path { $($field_name:ident: $strategy:expr),* $(,)? }) => {
+        ($struct_path:path { $($field_name:ident: $strategy:expr_2021),* $(,)? }) => {
             #[allow(unused_parens)]
             ($($strategy),*).prop_map(|($($field_name),*)| {
                 $struct_path {
@@ -382,8 +383,8 @@ pub mod arbitrary {
     #[allow(deprecated)]
     mod event {
         use super::*;
-        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
         use crate::Network;
+        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
 
         fn btc_network() -> impl Strategy<Value = Network> {
             prop_oneof![

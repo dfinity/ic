@@ -9,17 +9,16 @@
 //! bazel run //rs/execution_environment:execute_query_bench
 //! ```
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions,
-    execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,
-    NonReplicatedQueryKind, RoundLimits,
+    ExecutionEnvironment, NonReplicatedQueryKind, RoundLimits, as_num_instructions,
+    as_round_instructions, execution::nonreplicated_query::execute_non_replicated_query,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
+use ic_types::PrincipalId;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::methods::WasmMethod;
-use ic_types::PrincipalId;
 
 use crate::common::Wasm64;
 

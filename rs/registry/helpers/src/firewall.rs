@@ -9,8 +9,8 @@ use ic_protobuf::registry::{
     node::v1::ConnectionEndpoint,
 };
 use ic_registry_keys::{
-    get_node_record_node_id, make_firewall_config_record_key, make_firewall_rules_record_key,
-    make_node_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    FirewallRulesScope, NODE_RECORD_KEY_PREFIX, get_node_record_node_id,
+    make_firewall_config_record_key, make_firewall_rules_record_key, make_node_record_key,
 };
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{collections::HashSet, net::IpAddr};
@@ -19,7 +19,7 @@ use std::{collections::HashSet, net::IpAddr};
 pub trait FirewallRegistry {
     // TODO: Remove when IC-1026 is fully integrated
     fn get_firewall_config(&self, version: RegistryVersion)
-        -> RegistryClientResult<FirewallConfig>;
+    -> RegistryClientResult<FirewallConfig>;
 
     fn get_firewall_rules(
         &self,

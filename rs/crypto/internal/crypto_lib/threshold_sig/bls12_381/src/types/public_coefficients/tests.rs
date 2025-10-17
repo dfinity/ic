@@ -29,10 +29,7 @@ fn test_integer_polynomial_evaluation_is_correct(x: u32, polynomial: &[u32], y: 
     assert_eq!(
         evaluate_integer_polynomial(x, polynomial),
         y,
-        "Expected f({:?})={:?} for polynomial with coefficients {:?}",
-        x,
-        y,
-        polynomial
+        "Expected f({x:?})={y:?} for polynomial with coefficients {polynomial:?}"
     );
 }
 #[test]
@@ -193,12 +190,12 @@ mod public_coefficients {
         for num_coefficients in 1..50 {
             let mut inputs = vec![];
 
-            let dup_r = rng.gen::<NodeIndex>();
+            let dup_r = rng.r#gen::<NodeIndex>();
 
             inputs.push(dup_r);
 
             for _i in 0..=num_coefficients {
-                let r = rng.gen::<NodeIndex>();
+                let r = rng.r#gen::<NodeIndex>();
                 inputs.push(r);
             }
             inputs.push(dup_r);

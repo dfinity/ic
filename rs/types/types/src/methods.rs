@@ -1,12 +1,12 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
-use crate::{messages::CallContextId, time::CoarseTime, Cycles};
+use crate::{Cycles, messages::CallContextId, time::CoarseTime};
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_heap_bytes::DeterministicHeapBytes;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
 use serde::{Deserialize, Serialize};
@@ -57,9 +57,9 @@ impl WasmMethod {
 impl fmt::Display for WasmMethod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            Self::Update(name) => write!(f, "canister_update {}", name),
-            Self::Query(name) => write!(f, "canister_query {}", name),
-            Self::CompositeQuery(name) => write!(f, "canister_composite_query {}", name),
+            Self::Update(name) => write!(f, "canister_update {name}"),
+            Self::Query(name) => write!(f, "canister_query {name}"),
+            Self::CompositeQuery(name) => write!(f, "canister_composite_query {name}"),
             Self::System(system_method) => system_method.fmt(f),
         }
     }
@@ -84,7 +84,7 @@ impl TryFrom<String> for WasmMethod {
         } else {
             match SystemMethod::try_from(name.as_ref()) {
                 Ok(name) => Ok(WasmMethod::System(name)),
-                _ => Err(format!("Cannot convert {} to WasmFunction.", name)),
+                _ => Err(format!("Cannot convert {name} to WasmFunction.")),
             }
         }
     }
@@ -178,7 +178,7 @@ impl TryFrom<&str> for SystemMethod {
             "canister_heartbeat" => Ok(SystemMethod::CanisterHeartbeat),
             "canister_global_timer" => Ok(SystemMethod::CanisterGlobalTimer),
             "canister_on_low_wasm_memory" => Ok(SystemMethod::CanisterOnLowWasmMemory),
-            _ => Err(format!("Cannot convert {} to SystemMethod.", value)),
+            _ => Err(format!("Cannot convert {value} to SystemMethod.")),
         }
     }
 }
@@ -224,7 +224,7 @@ impl TryFrom<pb::wasm_method::SystemMethod> for SystemMethod {
         match method {
             PbSystemMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "SystemMethod",
-                err: format!("Unknown value for system method {:?}", method),
+                err: format!("Unknown value for system method {method:?}"),
             }),
             PbSystemMethod::CanisterStart => Ok(SystemMethod::CanisterStart),
             PbSystemMethod::CanisterInit => Ok(SystemMethod::CanisterInit),

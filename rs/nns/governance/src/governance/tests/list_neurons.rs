@@ -6,7 +6,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{
-    list_neurons::NeuronSubaccount, Governance as ApiGovernance, ListNeurons, NetworkEconomics,
+    Governance as ApiGovernance, ListNeurons, NetworkEconomics, list_neurons::NeuronSubaccount,
 };
 use icp_ledger::Subaccount;
 use std::sync::Arc;
@@ -44,9 +44,7 @@ fn test_list_neurons_with_paging() {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     let mut request = ListNeurons {
@@ -140,9 +138,7 @@ fn test_list_neurons_by_subaccounts_and_ids() {
     );
 
     for neuron in neurons {
-        governance
-            .add_neuron(neuron.id().id, neuron, false)
-            .unwrap();
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
     }
 
     let request = ListNeurons {

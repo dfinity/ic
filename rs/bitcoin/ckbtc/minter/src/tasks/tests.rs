@@ -1,4 +1,4 @@
-use crate::tasks::{pop_if_ready, run_task, schedule_now, Task, TaskQueue, TaskType, TASKS};
+use crate::tasks::{TASKS, Task, TaskQueue, TaskType, pop_if_ready, run_task, schedule_now};
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use proptest::{collection::vec as pvec, prop_assert_eq, proptest};
 use std::time::Duration;

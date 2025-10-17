@@ -104,9 +104,8 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
         .unwrap_err();
 
     let expected_error_sub_message = format!(
-        "The maximum number of Neurons' Fund participants ({}) \
-        must not exceed MAX_NEURONS_FUND_PARTICIPANTS ({}).",
-        num_neurons_fund_neurons, MAX_NEURONS_FUND_PARTICIPANTS,
+        "The maximum number of Neurons' Fund participants ({num_neurons_fund_neurons}) \
+        must not exceed MAX_NEURONS_FUND_PARTICIPANTS ({MAX_NEURONS_FUND_PARTICIPANTS}).",
     );
     assert_matches!(err, GovernanceError {
         error_type,
@@ -115,9 +114,7 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
         assert_eq!(ErrorType::try_from(error_type).unwrap(), ErrorType::InvalidProposal);
         assert!(
             error_message.contains(&expected_error_sub_message),
-            "Observed error:\n{}\ndoes not contain expected substring `{}`.",
-            error_message,
-            expected_error_sub_message
+            "Observed error:\n{error_message}\ndoes not contain expected substring `{expected_error_sub_message}`."
         );
     });
 }
@@ -154,9 +151,7 @@ fn proposal_fails_if_no_nf_neurons_exist() {
         assert_eq!(ErrorType::try_from(error_type).unwrap(), ErrorType::InvalidProposal);
         assert!(
             error_message.contains(expected_error_sub_message),
-            "Observed error:\n{}\ndoes not contain expected substring `{}`.",
-            error_message,
-            expected_error_sub_message
+            "Observed error:\n{error_message}\ndoes not contain expected substring `{expected_error_sub_message}`."
         );
     });
 }

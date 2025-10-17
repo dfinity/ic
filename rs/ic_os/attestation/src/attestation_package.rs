@@ -1,6 +1,6 @@
 use crate::custom_data::EncodeSevCustomData;
 use crate::{SevAttestationPackage, SevCertificateChain};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::SevGuestFirmware;
 use sev::firmware::guest::AttestationReport;

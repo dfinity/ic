@@ -4,7 +4,6 @@ import os
 import shutil
 import subprocess
 import sys
-from unittest import mock
 
 import pytest
 
@@ -33,7 +32,6 @@ def run_example_did_git_test(test_bin="TEST_BIN"):
         env={
             "BUILD_WORKSPACE_DIRECTORY": workspace_dir,
             "TEST_TMPDIR": os.environ["TEST_TMPDIR"],
-            "OVERRIDE_DIDC_CHECK": os.environ.get("OVERRIDE_DIDC_CHECK", ""),
         },
         capture_output=True,
     )
@@ -157,21 +155,6 @@ def test_adding_optional_field_reverse_succeeds():
     message = "bazel/candid_integration_tests/example.did passed candid checks"
     assert message in res.stdout.decode("utf-8")
     assert res.returncode == 0
-
-
-def test_override_didc_checks_failing_check_succeeds():
-    modify_file_contents(path=did_file_path, find="happy; sad", replacement="happy")
-
-    res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
-
-    error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()"
-    assert error_message in res.stderr.decode("utf-8")
-    assert res.returncode == 101
-
-    with mock.patch.dict(os.environ, {"OVERRIDE_DIDC_CHECK": "true"}):
-        res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
-        assert res.returncode == 0
-        assert "Override didc check requested. Skipping didc_check." in res.stdout.decode("utf-8")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, net::SocketAddr, sync::Arc};
 
 use anyhow::Error;
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use clap::Parser;
 use client::ReqwestClient;
 use reqwest::Client;

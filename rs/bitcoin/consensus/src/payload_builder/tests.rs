@@ -1,4 +1,4 @@
-use crate::{payload_builder::parse, BitcoinPayloadBuilder};
+use crate::{BitcoinPayloadBuilder, payload_builder::parse};
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network,
@@ -21,10 +21,10 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
+    Height, NumBytes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     crypto::{CryptoHash, CryptoHashOf},
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, SubnetId,
 };
 use mockall::mock;
 use std::sync::Arc;
@@ -88,7 +88,7 @@ pub(crate) fn mock_registry_client(max_block_payload_size: NumBytes) -> MockRegi
 /// NOTE: This function was copied from the registry (to not have an unnecessary dependency)
 fn make_subnet_record_key(subnet_id: SubnetId) -> String {
     const SUBNET_RECORD_KEY_PREFIX: &str = "subnet_record_";
-    format!("{}{}", SUBNET_RECORD_KEY_PREFIX, subnet_id)
+    format!("{SUBNET_RECORD_KEY_PREFIX}{subnet_id}")
 }
 
 fn bitcoin_payload_builder_test(
@@ -279,8 +279,7 @@ fn includes_responses_in_the_payload() {
             );
             assert!(
                 validation_result.is_ok(),
-                "validation did not pass {:?}",
-                validation_result
+                "validation did not pass {validation_result:?}"
             );
 
             assert_eq!(payload, expected_payload);
@@ -383,8 +382,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             );
             assert!(
                 validation_result.is_ok(),
-                "validation did not pass {:?}",
-                validation_result
+                "validation did not pass {validation_result:?}"
             );
 
             assert_eq!(payload, expected_payload);
@@ -442,8 +440,7 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
             );
             assert!(
                 validation_result.is_ok(),
-                "validation did not pass {:?}",
-                validation_result
+                "validation did not pass {validation_result:?}"
             );
             assert!(!payload.is_empty());
 

@@ -6,17 +6,16 @@ use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_common_test_utils::SpyLedger;
 use ic_sns_governance::pb::v1::{
-    manage_neuron_response, manage_neuron_response::ClaimOrRefreshResponse,
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
-    SetModeResponse,
+    SetModeResponse, manage_neuron_response, manage_neuron_response::ClaimOrRefreshResponse,
 };
 use ic_sns_swap::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterClients,
     pb::v1::{
-        set_dapp_controllers_request::CanisterIds, CanisterCallError, SetDappControllersRequest,
-        SetDappControllersResponse, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse,
+        CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        set_dapp_controllers_request::CanisterIds,
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -173,8 +172,7 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
             SnsGovernanceClientReply::SetMode(reply) => Ok(reply),
             SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
             unexpected_reply => panic!(
-                "Unexpected reply in the SnsGovernanceClientCall queue. Expected SetMode | CanisterCallError: {:?}",
-                unexpected_reply
+                "Unexpected reply in the SnsGovernanceClientCall queue. Expected SetMode | CanisterCallError: {unexpected_reply:?}"
             ),
         }
     }
@@ -193,8 +191,7 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
             SnsGovernanceClientReply::ClaimSwapNeurons(reply) => Ok(reply),
             SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
             unexpected_reply => panic!(
-                "Unexpected reply in the SnsGovernanceClientCall queue: {:?}",
-                unexpected_reply
+                "Unexpected reply in the SnsGovernanceClientCall queue: {unexpected_reply:?}"
             ),
         }
     }
@@ -299,11 +296,10 @@ impl ICRC1Ledger for MockLedger {
                 assert_eq!(from_subaccount_, from_subaccount);
                 assert_eq!(to_, to);
                 assert_eq!(memo_, memo);
-                return result.map_err(|x| NervousSystemError::new_with_message(format!("{}", x)));
+                return result.map_err(|x| NervousSystemError::new_with_message(format!("{x}")));
             }
             x => panic!(
-                "Received transfer_funds({}, {}, {:?}, {}, {}), expected {:?}",
-                amount_e8s, fee_e8s, from_subaccount, to, memo, x
+                "Received transfer_funds({amount_e8s}, {fee_e8s}, {from_subaccount:?}, {to}, {memo}), expected {x:?}"
             ),
         }
     }
@@ -316,9 +312,9 @@ impl ICRC1Ledger for MockLedger {
         match self.pop() {
             Some(LedgerExpect::AccountBalance(account_, result)) => {
                 assert_eq!(account_, account);
-                return result.map_err(|x| NervousSystemError::new_with_message(format!("{}", x)));
+                return result.map_err(|x| NervousSystemError::new_with_message(format!("{x}")));
             }
-            x => panic!("Received account_balance({}), expected {:?}", account, x),
+            x => panic!("Received account_balance({account}), expected {x:?}"),
         }
     }
 

@@ -7,9 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 dfn_json = { path = "../dfn_json" }
-dfn_macro = { path = "../dfn_macro" }
+ic-cdk = { workspace = true }
 on_wire = { path = "../on_wire" }
 rand = { workspace = true }
 rand_pcg = "0.3.1"
@@ -42,7 +43,6 @@ path = "src/panics.rs"
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 criterion = { workspace = true }
 dfn_candid = { path = "../dfn_candid" }

@@ -3,7 +3,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPool,
     p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*},
 };
-use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
+use ic_types::{Height, artifact::ConsensusMessageId, consensus::ConsensusMessageHash};
 
 use crate::consensus::ACCEPTABLE_NOTARIZATION_CUP_GAP;
 
@@ -119,7 +119,7 @@ fn compute_bouncer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
     use ic_test_utilities_consensus::fake::FakeContent;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

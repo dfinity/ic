@@ -1,12 +1,12 @@
 use ic_interfaces::canister_http::InvalidCanisterHttpPayloadReason;
 use ic_types::{
+    NodeId, RegistryVersion,
     batch::ValidationContext,
     canister_http::{
         CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
     crypto::crypto_hash,
     messages::CallbackId,
-    NodeId, RegistryVersion,
 };
 use std::collections::{BTreeMap, BTreeSet};
 

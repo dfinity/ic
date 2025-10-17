@@ -10,7 +10,7 @@ use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
-use std::sync::{atomic, atomic::Ordering as AOrdering, Arc};
+use std::sync::{Arc, atomic, atomic::Ordering as AOrdering};
 
 pub mod test_data;
 

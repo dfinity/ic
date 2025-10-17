@@ -1,33 +1,29 @@
 use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
+use ic_ledger_core::block::BlockType;
+use ic_ledger_suite_in_memory_ledger::{
     AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
-use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
+use ic_ledger_suite_state_machine_helpers::{
+    TransactionGenerationParameters, generate_transactions, parse_metric, retrieve_metrics,
+};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_ledger_tip};
-use ic_nns_constants::{
-    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
-};
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
-    AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
+    AccountIdentifier, Archives, Block, FeatureFlags, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
+    LedgerCanisterPayload, UpgradeArgs,
 };
 use std::time::{Duration, Instant};
 
 /// The number of instructions that can be executed in a single canister upgrade as per
 /// https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
 const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 300_000_000_000;
-const INDEX_CANISTER_ID: CanisterId =
-    CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
-const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
 const NUM_TRANSACTIONS_PER_TYPE: usize = 200;
 const MINT_MULTIPLIER: u64 = 10_000;
 const TRANSFER_MULTIPLIER: u64 = 1000;
@@ -205,14 +201,14 @@ impl LedgerState {
         }
         let now = Instant::now();
         // Wait for the index to sync with the ledger and archives
-        wait_until_sync_is_completed(state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
+        wait_until_sync_is_completed(state_machine, LEDGER_INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
         println!(
             "Retrieving {} blocks from the index",
             ledger_and_archive_blocks.blocks.len()
         );
         let index_blocks = get_all_blocks(
             state_machine,
-            INDEX_CANISTER_ID,
+            LEDGER_INDEX_CANISTER_ID,
             ledger_and_archive_blocks.start_index as u64,
             ledger_and_archive_blocks.blocks.len() as u64,
         )
@@ -287,7 +283,7 @@ impl Setup {
 
         let master_wasms = Wasms {
             ledger: Wasm::from_bytes(
-                std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+                std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap())
                     .expect("Could not read ledger wasm"),
             ),
             index: Wasm::from_bytes(
@@ -361,10 +357,7 @@ impl Setup {
                 );
             }
             (true, Err(err)) => {
-                panic!(
-                    "should successfully downgrade ledger to mainnet version: {}",
-                    err
-                );
+                panic!("should successfully downgrade ledger to mainnet version: {err}");
             }
         }
         self.check_ledger_metrics();
@@ -379,7 +372,7 @@ impl Setup {
         self.previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
             &self.state_machine,
             LEDGER_CANISTER_ID,
-            INDEX_CANISTER_ID,
+            LEDGER_INDEX_CANISTER_ID,
             None,
             self.previous_ledger_state.take(),
             should_verify_balances_and_allowances,
@@ -391,7 +384,7 @@ impl Setup {
         let metrics = retrieve_metrics(&self.state_machine, LEDGER_CANISTER_ID);
         println!("Ledger metrics:");
         for metric in metrics {
-            println!("  {}", metric);
+            println!("  {metric}");
         }
         let upgrade_instructions = parse_metric(
             &self.state_machine,
@@ -400,9 +393,7 @@ impl Setup {
         );
         assert!(
             upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
-            "Upgrade instructions ({}) should be less than the instruction limit ({})",
-            upgrade_instructions,
-            CANISTER_UPGRADE_INSTRUCTION_LIMIT
+            "Upgrade instructions ({upgrade_instructions}) should be less than the instruction limit ({CANISTER_UPGRADE_INSTRUCTION_LIMIT})"
         );
     }
 
@@ -433,7 +424,7 @@ impl Setup {
 
     fn upgrade_index(&self, wasm: &Wasm) {
         self.state_machine
-            .upgrade_canister(INDEX_CANISTER_ID, wasm.clone().bytes(), vec![])
+            .upgrade_canister(LEDGER_INDEX_CANISTER_ID, wasm.clone().bytes(), vec![])
             .expect("should successfully upgrade index to new local version");
     }
 

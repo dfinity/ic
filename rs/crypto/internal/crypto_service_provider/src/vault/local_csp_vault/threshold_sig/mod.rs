@@ -99,12 +99,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     bls12381_clib::api::generate_threshold_key(seed, threshold, receivers)?;
                 let key_ids: Vec<KeyId> = secret_keys
                     .iter()
-                    .map(|secret_key| loop {
-                        let key_id = KeyId::from(self.rng_write_lock().gen::<[u8; 32]>());
-                        let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key.clone());
-                        let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
-                        if result.is_ok() {
-                            break key_id;
+                    .map(|secret_key| {
+                        loop {
+                            let key_id = KeyId::from(self.rng_write_lock().r#gen::<[u8; 32]>());
+                            let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key.clone());
+                            let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
+                            if result.is_ok() {
+                                break key_id;
+                            }
                         }
                     })
                     .collect();
@@ -149,7 +151,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
-        let result = match algorithm_id {
+        match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
                 let maybe_csp_key = self.sks_read_lock().get(&key_id);
                 let csp_key = maybe_csp_key.ok_or({
@@ -168,7 +170,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             _ => Err(CspThresholdSignError::UnsupportedAlgorithm {
                 algorithm: algorithm_id,
             }),
-        };
-        result
+        }
     }
 }

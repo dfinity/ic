@@ -1,9 +1,9 @@
 use assert_matches::assert_matches;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, Label, LabeledTree, MixedHashTree, MixedHashTreeConversionError,
+    Digest, Label, LabeledTree, MixedHashTree, MixedHashTreeConversionError, flatmap,
 };
 use ic_crypto_tree_hash_test_utils::{
-    arbitrary::arbitrary_well_formed_mixed_hash_tree, MAX_HASH_TREE_DEPTH,
+    MAX_HASH_TREE_DEPTH, arbitrary::arbitrary_well_formed_mixed_hash_tree,
 };
 use std::convert::TryInto;
 
@@ -28,9 +28,7 @@ fn prop_well_formed_trees_are_convertible(
     let r: Result<TreeOfBlobs, _> = t.clone().try_into();
     assert!(
         r.is_ok(),
-        "Failed to convert a well-formed mixed hash tree {:?} into a labeled tree: {:?}",
-        t,
-        r
+        "Failed to convert a well-formed mixed hash tree {t:?} into a labeled tree: {r:?}"
     );
 }
 

@@ -28,11 +28,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{block_on, MessageCanister},
+    util::{MessageCanister, block_on},
 };
 use ic_types::{ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -310,7 +310,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
     const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
-    let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
+    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
 
     let ssh_session = node
         .block_on_ssh_session()

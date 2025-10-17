@@ -3,10 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// Create a link to this section of the Execution Errors documentation.
 pub fn doc_ref(section: &str) -> String {
-    format!(
-        "https://internetcomputer.org/docs/current/references/execution-errors#{}",
-        section
-    )
+    format!("https://internetcomputer.org/docs/current/references/execution-errors#{section}")
 }
 
 pub enum ErrorHelp {
@@ -21,20 +18,29 @@ pub enum ErrorHelp {
 impl std::fmt::Display for ErrorHelp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorHelp::UserError { suggestion, doc_link } => {
+            ErrorHelp::UserError {
+                suggestion,
+                doc_link,
+            } => {
                 if !suggestion.is_empty() {
-                    write!(f, "{}", suggestion)?;
+                    write!(f, "{suggestion}")?;
                     if !doc_link.is_empty() {
-                        write!(f, " See documentation: {}", doc_link)
+                        write!(f, " See documentation: {doc_link}")
                     } else {
                         Ok(())
                     }
                 } else {
                     Ok(())
                 }
-            },
-            ErrorHelp::ToolchainError => write!(f, "If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister."),
-            ErrorHelp::InternalError => write!(f, "This is an internal error on the IC. Please report it to IC devs on the forum: https://forum.dfinity.org"),
+            }
+            ErrorHelp::ToolchainError => write!(
+                f,
+                "If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister."
+            ),
+            ErrorHelp::InternalError => write!(
+                f,
+                "This is an internal error on the IC. Please report it to IC devs on the forum: https://forum.dfinity.org"
+            ),
         }
     }
 }
@@ -324,22 +330,20 @@ impl std::fmt::Display for WasmInstrumentationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WasmDeserializeError(err) => {
-                write!(f, "Failed to deserialize wasm module with {}", err)
+                write!(f, "Failed to deserialize wasm module with {err}")
             }
             Self::WasmSerializeError(err) => {
-                write!(f, "Failed to serialize wasm module with {}", err)
+                write!(f, "Failed to serialize wasm module with {err}")
             }
             Self::IncorrectNumberMemorySections { expected, got } => write!(
                 f,
-                "Wasm module has {} memory sections but should have had {}",
-                got, expected
+                "Wasm module has {got} memory sections but should have had {expected}"
             ),
             Self::InvalidDataSegment { offset, len } => write!(
                 f,
-                "Wasm module has invalid data segment of {} bytes at {}",
-                len, offset
+                "Wasm module has invalid data segment of {len} bytes at {offset}"
             ),
-            Self::InvalidFunctionType(err) => write!(f, "Invalid function type: {}", err),
+            Self::InvalidFunctionType(err) => write!(f, "Invalid function type: {err}"),
         }
     }
 }
@@ -377,7 +381,7 @@ impl std::fmt::Display for WasmEngineError {
                 write!(f, "Failed to initialize engine")
             }
             Self::FailedToInstantiateModule(s) => {
-                write!(f, "Failed to instantiate module: {}", s)
+                write!(f, "Failed to instantiate module: {s}")
             }
             Self::FailedToSetWasmStack => {
                 write!(f, "Failed to set Wasm stack")
@@ -386,19 +390,19 @@ impl std::fmt::Display for WasmEngineError {
                 write!(f, "Failed to set async stack")
             }
             Self::FailedToSerializeModule(s) => {
-                write!(f, "Failed to serialize module: {}", s)
+                write!(f, "Failed to serialize module: {s}")
             }
             Self::FailedToDeserializeModule(s) => {
-                write!(f, "Failed to deserialize module: {}", s)
+                write!(f, "Failed to deserialize module: {s}")
             }
             Self::FailedToApplySystemChanges(s) => {
-                write!(f, "Failed to apply system changes: {}", s)
+                write!(f, "Failed to apply system changes: {s}")
             }
             Self::Other(s) => {
-                write!(f, "WasmEngineError: {}", s)
+                write!(f, "WasmEngineError: {s}")
             }
             Self::Unexpected(s) => {
-                write!(f, "Unexpected WasmEngineError: {}", s)
+                write!(f, "Unexpected WasmEngineError: {s}")
             }
         }
     }

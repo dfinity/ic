@@ -9,18 +9,18 @@ use ic_interfaces::{
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationResult,
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::{
-    buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, linear_buckets},
 };
 use ic_types::{
+    Height, NodeId, ReplicaVersion,
     consensus::dkg::{DealingContent, DkgMessageId, InvalidDkgPayloadReason, Message},
     crypto::{
-        threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTargetSubnet},
         Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet, config::NiDkgConfig},
     },
-    Height, NodeId, ReplicaVersion,
 };
 use prometheus::Histogram;
 use rayon::prelude::*;
@@ -116,15 +116,14 @@ impl DkgImpl {
 
         // If the transcript is being loaded at the moment, we return early.
         // The transcript will be available at a later point in time.
-        if let Some(transcript) = config.resharing_transcript() {
-            if !self
+        if let Some(transcript) = config.resharing_transcript()
+            && !self
                 .dkg_key_manager
                 .lock()
                 .unwrap()
                 .is_transcript_loaded(&transcript.dkg_id)
-            {
-                return None;
-            }
+        {
+            return None;
         }
 
         let content =
@@ -212,12 +211,9 @@ impl DkgImpl {
             None => {
                 return get_handle_invalid_change_action(
                     message,
-                    format!(
-                        "No DKG configuration for Id={:?} was found.",
-                        message_dkg_id
-                    ),
+                    format!("No DKG configuration for Id={message_dkg_id:?} was found."),
                 )
-                .into()
+                .into();
             }
         };
 
@@ -245,7 +241,7 @@ impl DkgImpl {
             Err(DkgPayloadValidationError::InvalidArtifact(err)) => {
                 get_handle_invalid_change_action(
                     message,
-                    format!("Dealing verification failed: {:?}", err),
+                    format!("Dealing verification failed: {err:?}"),
                 )
                 .into()
             }
@@ -403,10 +399,11 @@ mod tests {
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
-        dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
+        Dependencies, dependencies, dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
     };
     use ic_consensus_utils::pool_reader::PoolReader;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -416,17 +413,16 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        RegistryVersion, ReplicaVersion,
         consensus::{Block, BlockPayload},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTargetId, NiDkgTargetSubnet,
         },
         time::UNIX_EPOCH,
-        RegistryVersion, ReplicaVersion,
     };
     use std::{collections::BTreeSet, convert::TryFrom};
     use utils::{tags_iter, vetkd_key_ids_for_subnet};
@@ -558,8 +554,11 @@ mod tests {
                 // pool.
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 match &change_set.as_slice() {
-                    &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] =>
-                        {}
+                    &[
+                        ChangeAction::MoveToValidated(_),
+                        ChangeAction::MoveToValidated(_),
+                        ChangeAction::MoveToValidated(_),
+                    ] => {}
                     val => panic!("Unexpected change set: {:?}", val),
                 };
                 dkg_pool.write().unwrap().apply(change_set);
@@ -623,7 +622,10 @@ mod tests {
                 sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
-                    &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
+                    &[
+                        ChangeAction::AddToValidated(_),
+                        ChangeAction::AddToValidated(_),
+                    ] => {}
                     val => panic!("Unexpected change set: {:?}", val),
                 };
 
@@ -651,7 +653,10 @@ mod tests {
                 // And then we validate...
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
-                    &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
+                    &[
+                        ChangeAction::AddToValidated(_),
+                        ChangeAction::AddToValidated(_),
+                    ] => {}
                     val => panic!("Unexpected change set: {:?}", val),
                 };
                 // Just check again, we do not reproduce a dealing once changes are applied.
@@ -714,7 +719,10 @@ mod tests {
                 sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
-                    &[ChangeAction::AddToValidated(a), ChangeAction::AddToValidated(b)] => {
+                    &[
+                        ChangeAction::AddToValidated(a),
+                        ChangeAction::AddToValidated(b),
+                    ] => {
                         assert_eq!(a.content.dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                         assert_eq!(b.content.dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                     }
@@ -741,8 +749,12 @@ mod tests {
                 // And then we validate two local and two remote dealings.
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
-                    &[ChangeAction::AddToValidated(a), ChangeAction::AddToValidated(b), ChangeAction::AddToValidated(c), ChangeAction::AddToValidated(d)] =>
-                    {
+                    &[
+                        ChangeAction::AddToValidated(a),
+                        ChangeAction::AddToValidated(b),
+                        ChangeAction::AddToValidated(c),
+                        ChangeAction::AddToValidated(d),
+                    ] => {
                         assert_eq!(
                             [a, b, c, d]
                                 .iter()
@@ -920,8 +932,10 @@ mod tests {
             let valid_dealing_message = {
                 node_1.sync_key_manager();
                 match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
-                    &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
-                    {
+                    &[
+                        ChangeAction::AddToValidated(message),
+                        ChangeAction::AddToValidated(message2),
+                    ] => {
                         node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message.clone(),
                             peer_id: node_id_1,
@@ -942,7 +956,10 @@ mod tests {
             node_2.sync_key_manager();
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
+                &[
+                    ChangeAction::AddToValidated(_),
+                    ChangeAction::AddToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
             node_2.dkg_pool.apply(change_set);
@@ -951,7 +968,10 @@ mod tests {
             // the changes.
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
+                &[
+                    ChangeAction::MoveToValidated(_),
+                    ChangeAction::MoveToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
             node_2.dkg_pool.apply(change_set);
@@ -982,8 +1002,10 @@ mod tests {
             let valid_dealing_message = {
                 node_1.sync_key_manager();
                 match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
-                    &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
-                    {
+                    &[
+                        ChangeAction::AddToValidated(message),
+                        ChangeAction::AddToValidated(message2),
+                    ] => {
                         node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message2.clone(),
                             peer_id: node_id_1,
@@ -1004,7 +1026,10 @@ mod tests {
             node_2.sync_key_manager();
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
+                &[
+                    ChangeAction::AddToValidated(_),
+                    ChangeAction::AddToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
             node_2.dkg_pool.apply(change_set);
@@ -1013,7 +1038,10 @@ mod tests {
             // the changes.
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
+                &[
+                    ChangeAction::MoveToValidated(_),
+                    ChangeAction::MoveToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
             node_2.dkg_pool.apply(change_set);
@@ -1145,8 +1173,10 @@ mod tests {
             let valid_dealing_message = {
                 node_1.sync_key_manager();
                 match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
-                    &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
-                    {
+                    &[
+                        ChangeAction::AddToValidated(message),
+                        ChangeAction::AddToValidated(message2),
+                    ] => {
                         node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message.clone(),
                             peer_id: node_id_1,
@@ -1176,7 +1206,10 @@ mod tests {
             node_2.sync_key_manager();
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
+                &[
+                    ChangeAction::AddToValidated(_),
+                    ChangeAction::AddToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
             node_2.dkg_pool.apply(change_set);
@@ -1185,7 +1218,10 @@ mod tests {
             node_2.sync_key_manager();
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
+                &[
+                    ChangeAction::MoveToValidated(_),
+                    ChangeAction::MoveToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
         });
@@ -1201,7 +1237,10 @@ mod tests {
             // insert as unvalidated messages into the pool of replica 2.
             node_1.sync_key_manager();
             match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
-                &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] => {
+                &[
+                    ChangeAction::AddToValidated(message),
+                    ChangeAction::AddToValidated(message2),
+                ] => {
                     node_2.dkg_pool.insert(UnvalidatedArtifact {
                         message: message.clone(),
                         peer_id: node_id_1,
@@ -1220,7 +1259,10 @@ mod tests {
             node_2.sync_key_manager();
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
+                &[
+                    ChangeAction::AddToValidated(_),
+                    ChangeAction::AddToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
             node_2.dkg_pool.apply(change_set);
@@ -1228,7 +1270,10 @@ mod tests {
             // Make sure we validate both dealings from replica 1
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
+                &[
+                    ChangeAction::MoveToValidated(_),
+                    ChangeAction::MoveToValidated(_),
+                ] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
         });
@@ -1369,8 +1414,12 @@ mod tests {
                     // configs.
                     let change_set = dkg_1.on_state_change(&dkg_pool_1);
                     match &change_set.as_slice() {
-                        &[ChangeAction::AddToValidated(a), ChangeAction::AddToValidated(b), ChangeAction::AddToValidated(c), ChangeAction::AddToValidated(d)] =>
-                        {
+                        &[
+                            ChangeAction::AddToValidated(a),
+                            ChangeAction::AddToValidated(b),
+                            ChangeAction::AddToValidated(c),
+                            ChangeAction::AddToValidated(d),
+                        ] => {
                             assert_eq!(
                                 [a, b, c, d]
                                     .iter()
@@ -1420,8 +1469,12 @@ mod tests {
                     // into the validated pool.
                     let change_set = dkg_2.on_state_change(&dkg_pool_2);
                     match &change_set.as_slice() {
-                        &[ChangeAction::MoveToValidated(a), ChangeAction::MoveToValidated(b), ChangeAction::MoveToValidated(c), ChangeAction::MoveToValidated(d)] =>
-                        {
+                        &[
+                            ChangeAction::MoveToValidated(a),
+                            ChangeAction::MoveToValidated(b),
+                            ChangeAction::MoveToValidated(c),
+                            ChangeAction::MoveToValidated(d),
+                        ] => {
                             assert_eq!(
                                 [a, b, c, d]
                                     .iter()

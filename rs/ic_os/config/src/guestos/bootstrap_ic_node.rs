@@ -10,112 +10,6 @@ use walkdir::WalkDir;
 const CONFIG_ROOT_PATH: &str = "/boot/config";
 const STATE_ROOT_PATH: &str = "/var/lib/ic";
 
-/// Validate that the bootstrap tar contains only regular files and directories
-fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
-    for entry in WalkDir::new(extracted_dir) {
-        let entry = entry
-            .with_context(|| format!("Failed to read entry in {}", extracted_dir.display()))?;
-
-        let metadata = entry
-            .metadata()
-            .with_context(|| format!("Failed to get metadata for {}", entry.path().display()))?;
-
-        if metadata.is_file() || metadata.is_dir() {
-            continue;
-        } else {
-            anyhow::bail!(
-                "Bootstrap contains non-regular file: {} (file type: {:?})",
-                entry.path().display(),
-                metadata.file_type()
-            );
-        }
-    }
-
-    Ok(())
-}
-
-/// Process the bootstrap package to populate SSH keys and injected data
-pub fn process_bootstrap(
-    bootstrap_tar: &Path,
-    config_root: &Path,
-    state_root: &Path,
-) -> Result<()> {
-    let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
-
-    let status = Command::new("tar")
-        .args(["xf", bootstrap_tar.to_str().unwrap()])
-        .current_dir(tmpdir.path())
-        .status()
-        .context("Failed to extract bootstrap tar file")?;
-
-    anyhow::ensure!(
-        status.success(),
-        "tar extraction failed with status: {}",
-        status
-    );
-
-    validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
-
-    let ic_crypto_src = tmpdir.path().join("ic_crypto");
-    let ic_crypto_dst = state_root.join("crypto");
-    if ic_crypto_src.exists() {
-        println!("Installing initial crypto material");
-        copy_directory_recursive(&ic_crypto_src, &ic_crypto_dst)?;
-    }
-
-    let ic_state_src = tmpdir.path().join("ic_state");
-    let ic_state_dst = state_root.join("data/ic_state");
-    if ic_state_src.exists() {
-        println!("Installing initial state");
-        copy_directory_recursive(&ic_state_src, &ic_state_dst)?;
-    }
-
-    let ic_registry_src = tmpdir.path().join("ic_registry_local_store");
-    let ic_registry_dst = state_root.join("data/ic_registry_local_store");
-    if ic_registry_src.exists() {
-        println!("Setting up initial ic_registry_local_store");
-        copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
-    }
-
-    let nns_key_src = tmpdir.path().join("nns_public_key.pem");
-    let nns_key_dst = state_root.join("data/nns_public_key.pem");
-    if nns_key_src.exists() {
-        println!("Setting up initial nns_public_key.pem");
-        fs::copy(&nns_key_src, &nns_key_dst)?;
-        fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
-    }
-
-    let node_op_key_src = tmpdir.path().join("node_operator_private_key.pem");
-    let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
-    if node_op_key_src.exists() {
-        println!("Setting up initial node_operator_private_key.pem");
-        fs::copy(&node_op_key_src, &node_op_key_dst)?;
-        fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
-    }
-
-    // set up initial ssh authorized keys
-    let ssh_keys_src = tmpdir.path().join("accounts_ssh_authorized_keys");
-    let ssh_keys_dst = config_root.join("accounts_ssh_authorized_keys");
-    if ssh_keys_src.exists() {
-        println!("Setting up accounts_ssh_authorized_keys");
-        copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
-    }
-
-    // Fix up permissions. Ideally this is specific to only what is copied. If
-    // we do make this change, we need to make sure `data` itself has the
-    // correct permissions.
-    let _ = Command::new("chown")
-        .args(["ic-replica:nogroup", "-R"])
-        .arg(state_root.join("data"))
-        .status();
-
-    // Synchronize the above cached writes to persistent storage
-    // to make sure the system can boot successfully after a hard shutdown.
-    let _ = Command::new("sync").status();
-
-    Ok(())
-}
-
 /// Bootstrap IC Node from a bootstrap package
 pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
     let config_root = Path::new(CONFIG_ROOT_PATH);
@@ -143,6 +37,134 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
 
     File::create(&configured_marker)?;
 
+    Ok(())
+}
+
+/// Process the bootstrap package to copy config contents
+fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+    let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
+
+    let status = Command::new("tar")
+        .args(["xf", bootstrap_tar.to_str().unwrap()])
+        .current_dir(tmpdir.path())
+        .status()
+        .context("Failed to extract bootstrap tar file")?;
+
+    anyhow::ensure!(
+        status.success(),
+        "tar extraction failed with status: {}",
+        status
+    );
+
+    validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
+
+    copy_bootstrap_files(tmpdir.path(), config_root, state_root)?;
+
+    // Fix up permissions. Ideally this is specific to only what is copied. If
+    // we do make this change, we need to make sure `data` itself has the
+    // correct permissions.
+    let _ = Command::new("chown")
+        .args(["ic-replica:nogroup", "-R"])
+        .arg(state_root.join("data"))
+        .status();
+
+    // Synchronize the above cached writes to persistent storage
+    // to make sure the system can boot successfully after a hard shutdown.
+    let _ = Command::new("sync").status();
+
+    Ok(())
+}
+
+/// Validate that the bootstrap tar contains only regular files and directories
+fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
+    for entry in WalkDir::new(extracted_dir) {
+        let entry = entry
+            .with_context(|| format!("Failed to read entry in {}", extracted_dir.display()))?;
+
+        let metadata = entry
+            .metadata()
+            .with_context(|| format!("Failed to get metadata for {}", entry.path().display()))?;
+
+        if metadata.is_file() || metadata.is_dir() {
+            continue;
+        } else {
+            anyhow::bail!(
+                "Bootstrap contains non-regular file: {} (file type: {:?})",
+                entry.path().display(),
+                metadata.file_type()
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Copy select bootstrap files from extracted directory to their destinations
+fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+    let ic_crypto_src = extracted_dir.join("ic_crypto");
+    let ic_crypto_dst = state_root.join("crypto");
+    if ic_crypto_src.exists() {
+        println!("Installing initial crypto material");
+        copy_directory_recursive(&ic_crypto_src, &ic_crypto_dst)?;
+    }
+
+    let ic_state_src = extracted_dir.join("ic_state");
+    let ic_state_dst = state_root.join("data/ic_state");
+    if ic_state_src.exists() {
+        println!("Installing initial state");
+        copy_directory_recursive(&ic_state_src, &ic_state_dst)?;
+    }
+
+    let ic_registry_src = extracted_dir.join("ic_registry_local_store");
+    let ic_registry_dst = state_root.join("data/ic_registry_local_store");
+    if ic_registry_src.exists() {
+        println!("Setting up initial ic_registry_local_store");
+        copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
+    }
+
+    let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
+    let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
+    if node_op_key_src.exists() {
+        println!("Setting up initial node_operator_private_key.pem");
+        copy_file_with_parent_dir(&node_op_key_src, &node_op_key_dst)?;
+        fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
+    }
+
+    // set up initial ssh authorized keys
+    let ssh_keys_src = extracted_dir.join("accounts_ssh_authorized_keys");
+    let ssh_keys_dst = config_root.join("accounts_ssh_authorized_keys");
+    if ssh_keys_src.exists() {
+        println!("Setting up accounts_ssh_authorized_keys");
+        copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
+    }
+
+    let nns_key_src = Path::new("/opt/ic/share/nns_public_key.pem");
+    let nns_key_dst = state_root.join("data/nns_public_key.pem");
+    if nns_key_src.exists() {
+        println!("Copying /opt/ic/share/nns_public_key.pem to data/nns_public_key.pem");
+        copy_file_with_parent_dir(nns_key_src, &nns_key_dst)?;
+        fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
+    }
+    #[cfg(feature = "dev")]
+    {
+        let nns_key_override_src = extracted_dir.join("nns_public_key_override.pem");
+        if nns_key_override_src.exists() {
+            println!(
+                "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
+            );
+            copy_file_with_parent_dir(&nns_key_override_src, &nns_key_dst)?;
+            fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn copy_file_with_parent_dir(src: &Path, dst: &Path) -> Result<()> {
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(src, dst)?;
     Ok(())
 }
 
@@ -229,7 +251,6 @@ mod tests {
         )
         .unwrap();
 
-        fs::write(bootstrap_dir.join("nns_public_key.pem"), "test_nns_key").unwrap();
         fs::write(
             bootstrap_dir.join("node_operator_private_key.pem"),
             "test_node_op_key",
@@ -254,7 +275,6 @@ mod tests {
                 "./ic_crypto",
                 "./ic_state",
                 "./ic_registry_local_store",
-                "./nns_public_key.pem",
                 "./node_operator_private_key.pem",
                 "./accounts_ssh_authorized_keys",
             ])
@@ -281,18 +301,18 @@ mod tests {
         // Verify files were copied correctly
         assert!(state_root.join("crypto").join("key.pem").exists());
         assert!(state_root.join("data/ic_state").join("state.dat").exists());
-        assert!(state_root
-            .join("data/ic_registry_local_store")
-            .join("registry.dat")
-            .exists());
-        assert!(state_root.join("data/nns_public_key.pem").exists());
-        assert!(state_root
-            .join("data/node_operator_private_key.pem")
-            .exists());
-        assert!(config_root
-            .join("accounts_ssh_authorized_keys")
-            .join("authorized_keys")
-            .exists());
+        assert!(
+            state_root
+                .join("data/ic_registry_local_store")
+                .join("registry.dat")
+                .exists()
+        );
+        assert!(
+            config_root
+                .join("accounts_ssh_authorized_keys")
+                .join("authorized_keys")
+                .exists()
+        );
 
         // Verify file contents
         assert_eq!(
@@ -387,5 +407,171 @@ mod tests {
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("non-regular file"));
         assert!(error_msg.contains("symlink_in_subdir.txt"));
+    }
+
+    #[test]
+    fn test_copy_bootstrap_files_normal() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create test files and directories
+        fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_crypto").join("key.pem"),
+            "test_crypto_key",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("ic_state")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_state").join("state.dat"),
+            "test_state_data",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("ic_registry_local_store")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("ic_registry_local_store")
+                .join("registry.dat"),
+            "test_registry_data",
+        )
+        .unwrap();
+
+        fs::write(
+            extracted_dir.join("node_operator_private_key.pem"),
+            "test_node_op_key",
+        )
+        .unwrap();
+
+        fs::create_dir_all(extracted_dir.join("accounts_ssh_authorized_keys")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("accounts_ssh_authorized_keys")
+                .join("authorized_keys"),
+            "ssh-rsa test_key",
+        )
+        .unwrap();
+
+        // Call copy_bootstrap_files
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        assert!(result.is_ok());
+
+        // Verify files were copied correctly
+        assert!(state_root.join("crypto").join("key.pem").exists());
+        assert!(state_root.join("data/ic_state").join("state.dat").exists());
+        assert!(
+            state_root
+                .join("data/ic_registry_local_store")
+                .join("registry.dat")
+                .exists()
+        );
+        assert!(
+            state_root
+                .join("data/node_operator_private_key.pem")
+                .exists()
+        );
+        assert!(
+            config_root
+                .join("accounts_ssh_authorized_keys")
+                .join("authorized_keys")
+                .exists()
+        );
+
+        // Verify file contents
+        assert_eq!(
+            fs::read_to_string(state_root.join("crypto").join("key.pem")).unwrap(),
+            "test_crypto_key"
+        );
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/ic_state").join("state.dat")).unwrap(),
+            "test_state_data"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                state_root
+                    .join("data/ic_registry_local_store")
+                    .join("registry.dat")
+            )
+            .unwrap(),
+            "test_registry_data"
+        );
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/node_operator_private_key.pem")).unwrap(),
+            "test_node_op_key"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                config_root
+                    .join("accounts_ssh_authorized_keys")
+                    .join("authorized_keys")
+            )
+            .unwrap(),
+            "ssh-rsa test_key"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "dev")]
+    fn test_copy_bootstrap_files_with_dev() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create nns_public_key_override file
+        fs::write(
+            extracted_dir.join("nns_public_key_override.pem"),
+            "override_nns_key",
+        )
+        .unwrap();
+
+        // Call copy_bootstrap_files
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        assert!(result.is_ok());
+
+        // Verify that the override key was copied
+        assert!(state_root.join("data/nns_public_key.pem").exists());
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
+            "override_nns_key"
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "dev"))]
+    fn test_copy_bootstrap_files_without_dev() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create nns_public_key_override file
+        fs::write(
+            extracted_dir.join("nns_public_key_override.pem"),
+            "override_nns_key",
+        )
+        .unwrap();
+
+        // Call copy_bootstrap_files
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        assert!(result.is_ok());
+
+        // Verify that the override key was not copied
+        assert!(!state_root.join("data/nns_public_key.pem").exists());
     }
 }

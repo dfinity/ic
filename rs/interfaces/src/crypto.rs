@@ -25,11 +25,11 @@ pub use vetkd::*;
 
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
+    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
     certification::CertificationContent,
     dkg as consensus_dkg,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
-    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use ic_types::{
     crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},

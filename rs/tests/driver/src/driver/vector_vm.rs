@@ -1,26 +1,22 @@
 use std::{
     collections::BTreeMap,
-    fs::File,
     hash::{DefaultHasher, Hash, Hasher},
     net::{IpAddr, SocketAddr},
     path::Path,
 };
 
 use chrono::{DateTime, Utc};
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
-use slog::{debug, info, warn, Logger};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
+use slog::{Logger, debug, info, warn};
 
-use crate::{
-    driver::{
-        farm::HostFeature,
-        log_events::LogEvent,
-        prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
-        test_env::TestEnvAttribute,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
-        test_setup::GroupSetup,
-        universal_vm::UniversalVms,
-    },
-    retry_with_msg,
+use crate::driver::{
+    farm::HostFeature,
+    log_events::LogEvent,
+    nested::HasNestedVms,
+    test_env::TestEnvAttribute,
+    test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession, scp_send_to},
+    test_setup::GroupSetup,
+    universal_vm::UniversalVms,
 };
 
 use super::{
@@ -132,39 +128,79 @@ impl VectorVm {
 
         let log = env.logger();
         info!(log, "Syncing vector targets.");
-        let snapshot = env.topology_snapshot();
-        let nodes = snapshot
-            .subnets()
-            .flat_map(|s| s.nodes())
-            .chain(snapshot.unassigned_nodes())
-            .chain(snapshot.api_boundary_nodes());
 
-        for node in nodes {
-            let node_id = node.node_id.get();
-            let ip = node.get_ip_addr();
+        match env.safe_topology_snapshot() {
+            Err(e) => warn!(
+                log,
+                "Skipping adding IC nodes as vector targets for now because could not fetch topology snapshot because: {e:?}"
+            ),
+            Ok(snapshot) => {
+                let nodes = snapshot
+                    .subnets()
+                    .flat_map(|s| s.nodes())
+                    .chain(snapshot.unassigned_nodes())
+                    .chain(snapshot.api_boundary_nodes());
 
-            let labels = [
-                // We don't have host os in these tests so this is the only job.
-                // It is here to keep consistency between mainnet and testnet logs.
-                (JOB, "node_exporter".to_string()),
-                (IS_API_BN, node.is_api_boundary_node().to_string()),
-                (IS_MALICIOUS, node.is_malicious().to_string()),
-            ]
-            .into_iter()
-            .chain(match node.subnet_id() {
-                None => vec![],
-                Some(s) => vec![(IC_SUBNET, s.get().to_string())],
-            })
-            .map(|(key, val)| (key.to_string(), val))
-            .collect();
+                for node in nodes {
+                    let node_id = node.node_id.get();
+                    let ip = node.get_ip_addr();
 
-            add_vector_target(
-                &mut sources,
-                &mut transforms,
-                node_id.to_string(),
-                ip,
-                Some(labels),
-            );
+                    let labels = [
+                        // We don't have host os in these tests so this is the only job.
+                        // It is here to keep consistency between mainnet and testnet logs.
+                        (JOB, "node_exporter".to_string()),
+                        (IS_API_BN, node.is_api_boundary_node().to_string()),
+                        (IS_MALICIOUS, node.is_malicious().to_string()),
+                    ]
+                    .into_iter()
+                    .chain(match node.subnet_id() {
+                        None => vec![],
+                        Some(s) => vec![(IC_SUBNET, s.get().to_string())],
+                    })
+                    .map(|(key, val)| (key.to_string(), val))
+                    .collect();
+
+                    add_vector_target(
+                        &mut sources,
+                        &mut transforms,
+                        node_id.to_string(),
+                        ip,
+                        Some(labels),
+                    );
+                }
+            }
+        }
+
+        for vm in env.get_all_nested_vms()? {
+            let vm_name = vm.vm_name();
+            let network = match vm.get_nested_network() {
+                Ok(network) => network,
+                Err(e) => {
+                    warn!(
+                        log,
+                        "Skipping adding vector target for {vm_name} because: {e:?}"
+                    );
+                    continue;
+                }
+            };
+
+            for (job, ip) in [
+                ("node_exporter", network.guest_ip),
+                ("host_node_exporter", network.host_ip),
+            ] {
+                add_vector_target(
+                    &mut sources,
+                    &mut transforms,
+                    format!("{vm_name}-{job}"),
+                    ip.into(),
+                    Some(
+                        [("job", job)]
+                            .into_iter()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
+                    ),
+                )
+            }
         }
 
         // Extend with custom targets
@@ -235,20 +271,7 @@ impl VectorVm {
 
             let from = file.path();
             let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
-            let size = std::fs::metadata(&from).unwrap().len();
-            retry_with_msg!(
-                format!("scp {from:?} to vector:{to:?}"),
-                env.logger(),
-                SCP_RETRY_TIMEOUT,
-                SCP_RETRY_BACKOFF,
-                || {
-                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-                    let mut from_file = File::open(&from)?;
-                    std::io::copy(&mut from_file, &mut remote_file)?;
-                    Ok(())
-                }
-            )
-            .unwrap_or_else(|e| panic!("Failed to scp {from:?} to vector:{to:?} because: {e:?}!",));
+            scp_send_to(env.logger(), &session, &from, &to, 0o644);
         }
 
         if !self.container_running {
@@ -294,8 +317,11 @@ fn emit_kibana_url_event(log: &slog::Logger, network_name: &str, start_time: &Da
         "kibana_url_created_event".to_string(),
         KibanaUrl {
             message: "Pulled replica logs will appear in Kibana".to_string(),
-            url: format!("https://kibana.testnet.dfinity.network/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:{},to:now))&_a=(columns:!(MESSAGE,ic_subnet,ic_node),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,field:ic,index:testnet-vector-push,key:ic,negate:!f,params:(query:{network_name}),type:phrase),query:(match_phrase:(ic:{network_name})))),hideChart:!f,index:testnet-vector-push,interval:auto,query:(language:kuery,query:''),sort:!(!(timestamp,desc)))", fmt(start_time))
-        }
+            url: format!(
+                "https://kibana.testnet.dfinity.network/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:{},to:now))&_a=(columns:!(MESSAGE,ic_subnet,ic_node),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,field:ic,index:testnet-vector-push,key:ic,negate:!f,params:(query:{network_name}),type:phrase),query:(match_phrase:(ic:{network_name})))),hideChart:!f,index:testnet-vector-push,interval:auto,query:(language:kuery,query:''),sort:!(!(timestamp,desc)))",
+                fmt(start_time)
+            ),
+        },
     );
 
     event.emit_log(log);
@@ -318,11 +344,11 @@ impl VectorSource {
         let command = [
             "/log-fetcher",
             "--url",
-            &format!("http://{}/entries?follow", socket),
+            &format!("http://{socket}/entries?follow"),
             "--name",
-            &format!("{}-node_exporter", target_id),
+            &format!("{target_id}-node_exporter"),
             "--cursor-path",
-            &format!("/data/{}-node_exporter/checkpoint.txt", target_id),
+            &format!("/data/{target_id}-node_exporter/checkpoint.txt"),
         ]
         .iter()
         .map(|s| s.to_string())
@@ -365,7 +391,7 @@ impl VectorTransform {
             .iter()
             // Might be dangerous as the tag value is coming from an outside source and
             // is not escaped.
-            .map(|(k, v)| format!(".{} = \"{}\"", k, v))
+            .map(|(k, v)| format!(".{k} = \"{v}\""))
             .collect::<Vec<String>>()
             .join("\n")
     }
@@ -392,7 +418,7 @@ fn add_vector_target(
     labels: Option<BTreeMap<String, String>>,
 ) {
     let source = VectorSource::new(target_id.clone(), ip);
-    let source_key = format!("{}-source", target_id);
+    let source_key = format!("{target_id}-source");
 
     let mut extended_labels = labels.unwrap_or_default();
     extended_labels.extend([
@@ -403,7 +429,7 @@ fn add_vector_target(
     let transform = VectorTransform::new(source_key.clone(), extended_labels);
 
     sources.insert(source_key, source);
-    transforms.insert(format!("{}-transform", target_id), transform);
+    transforms.insert(format!("{target_id}-transform"), transform);
 }
 
 pub trait HasVectorTargets {

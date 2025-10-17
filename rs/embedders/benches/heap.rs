@@ -7,7 +7,7 @@
 //! bazel run //rs/embedders:heap_bench
 //! ```
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use embedders_bench::SetupAction;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::PAGE_SIZE;

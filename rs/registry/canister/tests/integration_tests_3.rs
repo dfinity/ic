@@ -9,8 +9,9 @@ use ic_nns_test_utils::{
 use ic_registry_transport::{
     insert,
     pb::v1::{
-        RegistryAtomicMutateRequest, RegistryAtomicMutateResponse, RegistryGetValueRequest,
-        RegistryGetValueResponse,
+        HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryGetValueRequest,
+        high_capacity_registry_get_value_response,
     },
     precondition, upsert,
 };
@@ -18,6 +19,7 @@ use registry_canister::{
     init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder},
     proto_on_wire::protobuf,
 };
+use std::time::{Duration, SystemTime};
 
 pub async fn install_registry_canister(
     runtime: &Runtime,
@@ -114,45 +116,62 @@ fn test_initial_mutations_ok() {
             })
             .build();
         let canister = install_registry_canister(&runtime, init_payload).await;
-        // The following assert_eq have the expected value first and expression second,
-        // otherwise type inference does not work
+
+        let read_result: HighCapacityRegistryGetValueResponse = canister
+            .query_(
+                "get_value",
+                protobuf,
+                get_value_request("dufourspitze", None),
+            )
+            .await
+            .unwrap();
         assert_eq!(
-            RegistryGetValueResponse {
+            read_result,
+            HighCapacityRegistryGetValueResponse {
                 error: None,
                 version: 2_u64,
-                value: b"4634 m".to_vec()
+                content: Some(high_capacity_registry_get_value_response::Content::Value(
+                    b"4634 m".to_vec()
+                )),
+                timestamp_nanoseconds: read_result.timestamp_nanoseconds,
             },
-            canister
-                .query_(
-                    "get_value",
-                    protobuf,
-                    get_value_request("dufourspitze", None)
-                )
-                .await
-                .unwrap()
         );
+        assert_a_short_while_ago(&read_result);
+
+        let read_result: HighCapacityRegistryGetValueResponse = canister
+            .query_("get_value", protobuf, get_value_request("dom", None))
+            .await
+            .unwrap();
         assert_eq!(
-            RegistryGetValueResponse {
+            read_result,
+            HighCapacityRegistryGetValueResponse {
                 error: None,
                 version: 2_u64,
-                value: b"4545 m".to_vec()
+                content: Some(high_capacity_registry_get_value_response::Content::Value(
+                    b"4545 m".to_vec()
+                )),
+                timestamp_nanoseconds: read_result.timestamp_nanoseconds,
             },
-            canister
-                .query_("get_value", protobuf, get_value_request("dom", None))
-                .await
-                .unwrap(),
         );
+        assert_a_short_while_ago(&read_result);
+
+        let read_result: HighCapacityRegistryGetValueResponse = canister
+            .query_("get_value", protobuf, get_value_request("matterhorn", None))
+            .await
+            .unwrap();
         assert_eq!(
-            RegistryGetValueResponse {
+            read_result,
+            HighCapacityRegistryGetValueResponse {
                 error: None,
                 version: 3_u64,
-                value: b"4478 m".to_vec()
+                content: Some(high_capacity_registry_get_value_response::Content::Value(
+                    b"4478 m".to_vec()
+                )),
+                timestamp_nanoseconds: read_result.timestamp_nanoseconds,
             },
-            canister
-                .query_("get_value", protobuf, get_value_request("matterhorn", None))
-                .await
-                .unwrap(),
         );
+        assert_a_short_while_ago(&read_result);
+
         Ok(())
     });
 }
@@ -182,4 +201,18 @@ fn test_that_init_traps_if_any_init_mutation_fails() {
                 Err(msg) if msg.contains("Verification of the mutation type failed"));
         Ok(())
     });
+}
+
+#[track_caller]
+fn assert_a_short_while_ago(read_result: &HighCapacityRegistryGetValueResponse) {
+    let value_set_at = SystemTime::UNIX_EPOCH
+        .checked_add(Duration::from_nanos(read_result.timestamp_nanoseconds))
+        .unwrap();
+    let now = SystemTime::now();
+    assert!(
+        now.duration_since(value_set_at).unwrap() < Duration::from_secs(60),
+        "now={:?} vs. value_set_at={:?}",
+        now,
+        value_set_at,
+    );
 }

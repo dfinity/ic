@@ -9,7 +9,7 @@ use ic_config::adapters::AdaptersConfig;
 use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};

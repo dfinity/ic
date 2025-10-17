@@ -1,0 +1,85 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1",
+    "//rs/ledger_suite/icrc1/test_utils",
+    "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
+    "//rs/state_machine_tests",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/types",
+]
+
+MACRO_DEPENDENCIES = []
+
+[
+    rust_library(
+        name = "ic-ledger-suite-in-memory-ledger" + name_suffix,
+        testonly = True,
+        srcs = glob([
+            "src/**/*.rs",
+        ]),
+        crate_features = features,
+        crate_name = "ic_ledger_suite_in_memory_ledger",
+        data = [
+            "//rs/ledger_suite/icrc1/ledger:block.cddl",
+        ],
+        proc_macro_deps = MACRO_DEPENDENCIES,
+        version = "0.9.0",
+        deps = DEPENDENCIES + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/ledger_suite/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+        (
+            "_icp",
+            ["icp-tokens"],
+            [],
+        ),
+    ]
+]
+
+[
+    rust_test(
+        name = "ic-ledger-suite-in-memory-ledger-unit-tests" + name_suffix,
+        crate = ":ic-ledger-suite-in-memory-ledger" + name_suffix,
+        crate_features = features,
+        deps = DEPENDENCIES + DEV_DEPENDENCIES + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/ledger_suite/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+        (
+            "_icp",
+            ["icp-tokens"],
+            [],
+        ),
+    ]
+]

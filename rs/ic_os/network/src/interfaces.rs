@@ -26,7 +26,7 @@ pub fn has_ipv6_connectivity(
     ping_target: &str,
 ) -> Result<bool> {
     // Format with the prefix length
-    let ip = format!("{}/{}", generated_ipv6, ipv6_prefix_length);
+    let ip = format!("{generated_ipv6}/{ipv6_prefix_length}");
 
     eprintln!(
         "Bringing {} up with ip address {}",
@@ -70,8 +70,7 @@ pub fn get_interface_name(interface_path: &PathBuf) -> Result<String> {
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .context(format!(
-            "Error getting filename from path: {:?}",
-            interface_path
+            "Error getting filename from path: {interface_path:?}"
         ))
 }
 
@@ -133,7 +132,7 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
                 result_vec.push(interface);
             }
             Ok(None) => eprintln!("Cable is NOT ATTACHED"),
-            Err(e) => eprintln!("ERROR: {:#?}", e),
+            Err(e) => eprintln!("ERROR: {e:#?}"),
         }
     }
     Ok(result_vec)
@@ -144,14 +143,14 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
 ///   Do not contain the string 'virtual'
 pub fn get_interfaces() -> Result<Vec<Interface>> {
     let interfaces = get_interface_paths();
-    eprintln!("Found raw network interfaces: {:?}", interfaces);
+    eprintln!("Found raw network interfaces: {interfaces:?}");
 
     // Valid == (not virtual) && first-3-letters in {enp, eno, ens}
     let valid_interfaces: Vec<&PathBuf> = interfaces
         .iter()
         .filter(is_valid_network_interface)
         .collect();
-    eprintln!("Found valid network interfaces: {:?}", valid_interfaces);
+    eprintln!("Found valid network interfaces: {valid_interfaces:?}");
 
     let interface_names = valid_interfaces
         .into_iter()
@@ -172,7 +171,7 @@ pub fn get_interfaces() -> Result<Vec<Interface>> {
             .map(AsRef::as_ref)
             .collect::<Vec<&str>>(),
     )?;
-    eprintln!("Proceeding with interfaces: {:?}", result);
+    eprintln!("Proceeding with interfaces: {result:?}");
 
     for name in interface_names.iter() {
         deactivate_link(name).context("Error deactivating interface links!")?;
@@ -239,8 +238,7 @@ fn is_link_up_from_ethtool_output(output: &str) -> Result<bool> {
         .find(|s| s.starts_with("Link detected: "))
         .map(|s| s.contains("yes"))
         .context(format!(
-            "Could not parse link line from ethtool output: {}",
-            output
+            "Could not parse link line from ethtool output: {output}"
         ))
 }
 
@@ -274,7 +272,7 @@ pub fn get_interface_paths() -> Vec<PathBuf> {
 
 fn is_valid_network_interface(path: &&PathBuf) -> bool {
     let Some(filename) = path.file_name() else {
-        eprintln!("ERROR: Invalid network interface path: {:#?}", path);
+        eprintln!("ERROR: Invalid network interface path: {path:#?}");
         return false;
     };
     let filename = filename.to_string_lossy();

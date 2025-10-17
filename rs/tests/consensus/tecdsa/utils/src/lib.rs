@@ -34,12 +34,12 @@ use ic_system_test_driver::{
         },
     },
     nns::vote_and_execute_proposal,
-    util::{block_on, MessageCanister, SignerCanister},
+    util::{MessageCanister, SignerCanister, block_on},
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
-use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
+use k256::ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier};
 use registry_canister::mutations::{
     do_create_subnet::{
         CanisterCyclesCostSchedule, CreateSubnetPayload, InitialChainKeyConfig,
@@ -48,7 +48,7 @@ use registry_canister::mutations::{
     do_recover_subnet::RecoverSubnetPayload,
     do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::{fmt::Debug, time::Duration};
 
 pub const KEY_ID1: &str = "secp256k1";
@@ -595,7 +595,7 @@ pub async fn execute_update_subnet_proposal(
         governance,
         NnsFunction::UpdateConfigOfSubnet,
         proposal_payload,
-        &format!("<subnet update proposal created by system test>: {}", title),
+        &format!("<subnet update proposal created by system test>: {title}"),
         logger,
     )
     .await;
@@ -1124,10 +1124,9 @@ pub fn verify_bip340_signature(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     };
 
     // from_bytes takes just the x coordinate encoding:
-    if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
-        bip340.verify_raw(msg, &signature).is_ok()
-    } else {
-        false
+    match k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
+        Ok(bip340) => bip340.verify_raw(msg, &signature).is_ok(),
+        _ => false,
     }
 }
 

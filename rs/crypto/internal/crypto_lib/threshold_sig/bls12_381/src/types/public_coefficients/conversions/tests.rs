@@ -12,7 +12,7 @@ fn invalid_size_conversion_should_work() {
     let result = u32::try_from(too_big).map_err(invalid_size);
     match result {
         Err(CryptoError::InvalidArgument { .. }) => (),
-        other => panic!("Expected InvalidArgument.  Got: {:?}", other),
+        other => panic!("Expected InvalidArgument.  Got: {other:?}"),
     }
 }
 

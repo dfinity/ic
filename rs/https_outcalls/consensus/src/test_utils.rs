@@ -3,9 +3,9 @@ use ic_interfaces::{
     consensus::PayloadValidationError,
 };
 use ic_types::{
+    Height, NumBytes,
     batch::{CanisterHttpPayload, ValidationContext},
     canister_http::CanisterHttpResponseWithConsensus,
-    Height, NumBytes,
 };
 
 use crate::payload_builder::parse::payload_to_bytes;

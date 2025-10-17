@@ -1,6 +1,6 @@
 [package]
 name = "ic_sev"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "sev_active"

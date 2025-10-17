@@ -51,7 +51,7 @@ impl TryFrom<ProposalInfo> for UpgradeProposalSummary {
 
     fn try_from(proposal: ProposalInfo) -> Result<Self, Self::Error> {
         let canister_id = Principal::from_text(proposal.payload.canister_id)
-            .map_err(|e| format!("Failed to parse canister ID: {}", e))?;
+            .map_err(|e| format!("Failed to parse canister ID: {e}"))?;
         let canister = TargetCanister::find_by_id(&canister_id)
             .ok_or_else(|| format!("ERROR: no known target canister for {canister_id}"))?;
         let install_mode = proposal.payload.install_mode_name.parse()?;
@@ -85,7 +85,7 @@ impl FromStr for CanisterInstallMode {
             "CANISTER_INSTALL_MODE_INSTALL" => Ok(Self::Install),
             "CANISTER_INSTALL_MODE_REINSTALL" => Ok(Self::Reinstall),
             "CANISTER_INSTALL_MODE_UPGRADE" => Ok(Self::Upgrade),
-            _ => Err(format!("Unknown install mode: {}", s)),
+            _ => Err(format!("Unknown install mode: {s}")),
         }
     }
 }
@@ -280,7 +280,7 @@ impl DiscourseClient {
             .await
             .map_err(|e| e.to_string())?;
         if !response.status().is_success() {
-            return Err(format!("HTTP error: {:?}", response));
+            return Err(format!("HTTP error: {response:?}"));
         }
         response.json().await.map_err(|e| e.to_string())
     }

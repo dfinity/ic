@@ -2,8 +2,7 @@ use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_types::{
-    ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
-    MemoryAllocation, PrincipalId,
+    ComputeAllocation, Cycles, InvalidComputeAllocationError, MemoryAllocation, PrincipalId,
 };
 use num_traits::cast::ToPrimitive;
 use std::collections::BTreeMap;
@@ -104,11 +103,10 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         };
 
         let memory_allocation = match input.memory_allocation {
-            Some(ma) => Some(MemoryAllocation::try_from(NumBytes::from(
-                ma.0.to_u64().ok_or_else(|| {
-                    UpdateSettingsError::MemoryAllocation(InvalidMemoryAllocationError::new(ma))
-                })?,
-            ))?),
+            Some(ma) => Some(MemoryAllocation::from(NumBytes::from(
+                ma.0.to_u64()
+                    .ok_or(UpdateSettingsError::MemoryAllocationOutOfRange { provided: ma })?,
+            ))),
             None => None,
         };
 
@@ -303,7 +301,7 @@ impl CanisterSettingsBuilder {
 
 pub enum UpdateSettingsError {
     ComputeAllocation(InvalidComputeAllocationError),
-    MemoryAllocation(InvalidMemoryAllocationError),
+    MemoryAllocationOutOfRange { provided: candid::Nat },
     FreezingThresholdOutOfRange { provided: candid::Nat },
     ReservedCyclesLimitOutOfRange { provided: candid::Nat },
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
@@ -323,39 +321,32 @@ impl From<UpdateSettingsError> for UserError {
                     err.given()
                 ),
             ),
-            UpdateSettingsError::MemoryAllocation(err) => UserError::new(
+            UpdateSettingsError::MemoryAllocationOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!(
-                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
-                ),
+                format!("MemoryAllocation expected to be in the range [0..2^64-1], got {provided}"),
             ),
             UpdateSettingsError::FreezingThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Freezing threshold expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Freezing threshold expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {}",
-                    provided
+                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::WasmMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(
@@ -369,12 +360,6 @@ impl From<UpdateSettingsError> for UserError {
 impl From<InvalidComputeAllocationError> for UpdateSettingsError {
     fn from(err: InvalidComputeAllocationError) -> Self {
         Self::ComputeAllocation(err)
-    }
-}
-
-impl From<InvalidMemoryAllocationError> for UpdateSettingsError {
-    fn from(err: InvalidMemoryAllocationError) -> Self {
-        Self::MemoryAllocation(err)
     }
 }
 

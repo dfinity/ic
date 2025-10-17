@@ -5,7 +5,7 @@ use crate::{
     runtime::Runtime,
 };
 use ic_base_types::CanisterId;
-use ic_canister_log::{log, Sink};
+use ic_canister_log::{Sink, log};
 use ic_ledger_core::approvals::{
     AllowanceTable, AllowancesData, ApproveError, InsufficientAllowance,
 };
@@ -139,10 +139,10 @@ pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
     type Block: BlockType<
-        Transaction = Self::Transaction,
-        AccountId = Self::AccountId,
-        Tokens = Self::Tokens,
-    >;
+            Transaction = Self::Transaction,
+            AccountId = Self::AccountId,
+            Tokens = Self::Tokens,
+        >;
     type Transaction: LedgerTransaction<AccountId = Self::AccountId, Tokens = Self::Tokens>
         + Ord
         + Clone;
@@ -171,7 +171,7 @@ pub trait LedgerData: LedgerContext {
     // Ledger data structures
 
     fn blockchain(&self)
-        -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
+    -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
     fn blockchain_mut(
         &mut self,
     ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
@@ -280,10 +280,10 @@ where
         .blockchain_mut()
         .add_block(block)
         .expect("failed to add block");
-    if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
-        if fee_collector.block_index.is_none() {
-            fee_collector.block_index = Some(height);
-        }
+    if let Some(fee_collector) = ledger.fee_collector_mut().as_mut()
+        && fee_collector.block_index.is_none()
+    {
+        fee_collector.block_index = Some(height);
     }
 
     if let Some((_, tx_hash)) = maybe_time_and_hash {
@@ -400,7 +400,7 @@ pub fn purge_old_transactions<L: LedgerData>(ledger: &mut L, now: TimeStamp) -> 
 /// NOTE: only one archiving task can run at each point in time.
 /// If archiving is already in process, this function returns immediately.
 pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_message_size: u64) {
-    use crate::archive::{send_blocks_to_archive, ArchivingGuardError};
+    use crate::archive::{ArchivingGuardError, send_blocks_to_archive};
 
     let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
 
@@ -546,9 +546,7 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
             .concat()
             .as_slice()
         ),
-        "overlapping block ranges - local_blocks: {:?}, archived_blocks: {:?}",
-        local_blocks,
-        archived_blocks
+        "overlapping block ranges - local_blocks: {local_blocks:?}, archived_blocks: {archived_blocks:?}"
     );
 
     BlockLocations {

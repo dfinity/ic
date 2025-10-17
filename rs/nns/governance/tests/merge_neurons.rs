@@ -11,18 +11,18 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::MAX_DISSOLVE_DELAY_SECONDS,
     pb::v1::{
-        manage_neuron::{Command, Merge},
         ManageNeuron,
+        manage_neuron::{Command, Merge},
     },
 };
 use ic_nns_governance_api::{
-    manage_neuron_response::{Command as CommandResponse, MergeResponse},
     NetworkEconomics,
+    manage_neuron_response::{Command as CommandResponse, MergeResponse},
 };
-use proptest::prelude::{proptest, TestCaseError};
+use proptest::prelude::{TestCaseError, proptest};
 
 #[cfg(feature = "tla")]
-use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -151,7 +151,7 @@ fn do_test_merge_neurons(
                     .unwrap()
             );
         }
-        CommandResponse::Error(e) => panic!("Received Error: {}", e),
+        CommandResponse::Error(e) => panic!("Received Error: {e}"),
         _ => panic!("Wrong response received"),
     }
 

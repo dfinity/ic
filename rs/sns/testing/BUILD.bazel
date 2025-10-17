@@ -52,12 +52,10 @@ HEAD_NNS_DEV_DATA = [
     # Keep sorted
     ":sns_testing_canister",
     "//rs/pocket_ic_server:pocket-ic-server-head-nns",
-    "@nns_dapp_canister//file",
 ]
 
 HEAD_NNS_DEV_ENV = {
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
-    "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
     "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
 }
 
@@ -65,12 +63,10 @@ MAINNET_NNS_DEV_DATA = [
     # Keep sorted
     ":sns_testing_canister",
     "//rs/pocket_ic_server:pocket-ic-server",
-    "@nns_dapp_canister//file",
 ]
 
 MAINNET_NNS_DEV_ENV = {
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-    "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
     "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
 }
 

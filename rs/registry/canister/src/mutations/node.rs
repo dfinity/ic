@@ -9,10 +9,7 @@ impl Registry {
     /// Get the Node record or panic on error with a message.
     pub fn get_node_or_panic(&self, node_id: NodeId) -> NodeRecord {
         self.get_node(node_id).unwrap_or_else(|| {
-            panic!(
-                "{}node record for {:} not found in the registry.",
-                LOG_PREFIX, node_id
-            );
+            panic!("{LOG_PREFIX}node record for {node_id:} not found in the registry.");
         })
     }
 

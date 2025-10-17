@@ -41,7 +41,7 @@ impl TreasuryManager for MockTreasuryManager {
 declare_log_buffer!(name = LOG, capacity = 100);
 
 fn log(msg: &str) {
-    let msg = format!("[MockTreasuryManager] {}", msg);
+    let msg = format!("[MockTreasuryManager] {msg}");
     ic_cdk::api::debug_print(&msg);
     log!(LOG, "{}", msg);
 }
@@ -145,7 +145,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {

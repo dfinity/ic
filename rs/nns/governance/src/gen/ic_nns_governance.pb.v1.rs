@@ -427,7 +427,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -506,6 +506,9 @@ pub mod proposal {
         /// Register Known Neuron
         #[prost(message, tag = "21")]
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Deregister Known Neuron
+        #[prost(message, tag = "29")]
+        DeregisterKnownNeuron(super::DeregisterKnownNeuron),
         /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
         #[prost(message, tag = "22")]
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
@@ -2164,6 +2167,25 @@ pub struct KnownNeuronData {
     pub name: ::prost::alloc::string::String,
     #[prost(string, optional, tag = "2")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag = "3")]
+    pub links: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(enumeration = "Topic", repeated, tag = "4")]
+    pub committed_topics: ::prost::alloc::vec::Vec<i32>,
+}
+/// Proposal action to deregister a known neuron by removing its name and description.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DeregisterKnownNeuron {
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
 }
 /// Proposal action to call the "open" method of an SNS token swap canister.
 #[derive(
@@ -2862,8 +2884,6 @@ pub struct Governance {
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "19")]
     pub spawning_neurons: ::core::option::Option<bool>,
-    #[prost(message, optional, tag = "20")]
-    pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
@@ -2874,6 +2894,14 @@ pub struct Governance {
     /// source of randomness (from the platform)
     #[prost(bytes = "vec", optional, tag = "28")]
     pub rng_seed: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Map of proposal IDs to their topics for those garbage collected.
+    #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
+    pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// First proposal id to record voting history for known neurons.
+    /// TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+    #[prost(message, optional, tag = "30")]
+    pub first_proposal_id_to_record_voting_history:
+        ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -3106,31 +3134,6 @@ pub mod governance {
             #[prost(map = "uint64, uint64", tag = "14")]
             pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
-    }
-    /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
-    /// proposal is in progress. We only want one of these to be happening at the same time,
-    /// because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
-    /// unique. In particular, the result of checking that the proposal currently being made
-    /// would be unique is liable to becoming invalid during an .await.
-    ///
-    /// This is a temporary measure, because OSTS is part of the SNS flow that will
-    /// be replaced by 1-proposal very soon.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct MakingSnsProposal {
-        #[prost(message, optional, tag = "1")]
-        pub proposer_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-        #[prost(message, optional, tag = "2")]
-        pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
-        #[prost(message, optional, tag = "3")]
-        pub proposal: ::core::option::Option<super::Proposal>,
     }
 }
 #[derive(
@@ -4181,7 +4184,7 @@ pub enum Topic {
     SubnetManagement = 7,
     /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
     /// Management or Service Nervous System Management).
-    NetworkCanisterManagement = 8,
+    ApplicationCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
     /// form of neurons.
@@ -4238,7 +4241,7 @@ impl Topic {
             Self::NodeAdmin => "TOPIC_NODE_ADMIN",
             Self::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
             Self::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
-            Self::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
+            Self::ApplicationCanisterManagement => "TOPIC_APPLICATION_CANISTER_MANAGEMENT",
             Self::Kyc => "TOPIC_KYC",
             Self::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
             Self::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
@@ -4261,7 +4264,7 @@ impl Topic {
             "TOPIC_NODE_ADMIN" => Some(Self::NodeAdmin),
             "TOPIC_PARTICIPANT_MANAGEMENT" => Some(Self::ParticipantManagement),
             "TOPIC_SUBNET_MANAGEMENT" => Some(Self::SubnetManagement),
-            "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
+            "TOPIC_APPLICATION_CANISTER_MANAGEMENT" => Some(Self::ApplicationCanisterManagement),
             "TOPIC_KYC" => Some(Self::Kyc),
             "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
             "TOPIC_IC_OS_VERSION_DEPLOYMENT" => Some(Self::IcOsVersionDeployment),
@@ -4711,6 +4714,12 @@ pub enum NnsFunction {
     DeployHostosToSomeNodes = 51,
     /// The proposal requests a subnet rental.
     SubnetRentalRequest = 52,
+    /// Instruct the migration canister to not accept any more migration requests.
+    PauseCanisterMigrations = 53,
+    /// Instruct the migration canister to accept migration requests again.
+    UnpauseCanisterMigrations = 54,
+    /// Take subnet offline or bring back online. Used as part of subnet recovery.
+    SetSubnetOperationalLevel = 55,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4781,6 +4790,9 @@ impl NnsFunction {
             Self::ReviseElectedHostosVersions => "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS",
             Self::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
             Self::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
+            Self::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
+            Self::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
+            Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4858,6 +4870,9 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
             "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
+            "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
+            "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
+            "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             _ => None,
         }
     }

@@ -4,7 +4,7 @@ use candid::{CandidType, Principal};
 use ic_cdk::{call::Call, println};
 use serde::Deserialize;
 
-use crate::{processing::ProcessingResult, ValidationError};
+use crate::{ValidationError, processing::ProcessingResult};
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 
@@ -18,9 +18,7 @@ struct GetSubnetForCanisterResponse {
     subnet_id: Option<Principal>,
 }
 
-pub async fn get_subnet_for_canister(
-    canister_id: Principal,
-) -> ProcessingResult<Principal, ValidationError> {
+pub async fn get_subnet_for_canister(canister_id: Principal) -> Result<Principal, ValidationError> {
     let args = GetSubnetForCanisterArgs {
         principal: Some(canister_id),
     };
@@ -33,25 +31,41 @@ pub async fn get_subnet_for_canister(
     .await
     {
         Err(e) => {
-            println!(
-                "Call `get_subnet_for_canister` for {:?} failed: {:?}",
+            let msg = format!(
+                "Call `get_subnet_for_canister` for {} failed: {:?}",
                 canister_id, e
             );
-            ProcessingResult::NoProgress
+            println!("{}", msg);
+            Err(ValidationError::CallFailed { reason: msg })
         }
-        Ok(response) => match response.candid::<GetSubnetForCanisterResponse>() {
-            Ok(GetSubnetForCanisterResponse { subnet_id }) => match subnet_id {
-                None => ProcessingResult::FatalFailure(ValidationError::CanisterNotFound {
+        Ok(response) => match response.candid::<Result<GetSubnetForCanisterResponse, String>>() {
+            Ok(Ok(GetSubnetForCanisterResponse { subnet_id })) => match subnet_id {
+                None => Err(ValidationError::CanisterNotFound {
                     canister: canister_id,
                 }),
-                Some(subnet_id) => ProcessingResult::Success(subnet_id),
+                Some(subnet_id) => Ok(subnet_id),
             },
-            Err(e) => {
-                println!(
-                    "Decoding `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
+            Ok(Err(e)) => {
+                let msg = format!(
+                    "Call `GetSubnetForCanisterResponse` for {} failed: {}",
                     canister_id, e
                 );
-                ProcessingResult::NoProgress
+                println!("{}", msg);
+                if e.contains("is not assigned to any subnet") {
+                    Err(ValidationError::CanisterNotFound {
+                        canister: canister_id,
+                    })
+                } else {
+                    Err(ValidationError::CallFailed { reason: msg })
+                }
+            }
+            Err(e) => {
+                let msg = format!(
+                    "Decoding `get_subnet_for_canister` for {} failed: {:?}",
+                    canister_id, e
+                );
+                println!("{}", msg);
+                Err(ValidationError::CallFailed { reason: msg })
             }
         },
     }
@@ -88,9 +102,20 @@ pub async fn migrate_canister(
     .await
     {
         Err(e) => {
-            println!("Call `migrate_canisters` for {:?} failed: {:?}", source, e);
+            println!("Call `migrate_canisters` for {} failed: {:?}", source, e);
             ProcessingResult::NoProgress
         }
-        Ok(_) => ProcessingResult::Success(42 /* TODO */),
+        Ok(response) => match response.candid::<MigrateCanisterResponse>() {
+            Ok(MigrateCanisterResponse { registry_version }) => {
+                ProcessingResult::Success(registry_version)
+            }
+            Err(e) => {
+                println!(
+                    "Decoding `migrate_canisters` for {} failed: {:?}",
+                    source, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
     }
 }

@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use config_types::DeploymentEnvironment;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use url::Url;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -55,7 +55,7 @@ pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSetti
 mod test {
     use super::*;
     use once_cell::sync::Lazy;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
         json!({

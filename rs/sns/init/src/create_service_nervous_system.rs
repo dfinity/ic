@@ -1,15 +1,14 @@
 use crate::pb::v1::{
-    sns_init_payload, DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower,
-    NeuronDistribution, SnsInitPayload, SwapDistribution, TreasuryDistribution,
+    DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+    SnsInitPayload, SwapDistribution, TreasuryDistribution, sns_init_payload,
 };
-use ic_nns_governance_api::{create_service_nervous_system, CreateServiceNervousSystem};
+use ic_nns_governance_api::{CreateServiceNervousSystem, create_service_nervous_system};
 
 fn divide_perfectly(field_name: &str, dividend: u64, divisor: u64) -> Result<u64, String> {
     match dividend.checked_rem(divisor) {
         None => Err(format!(
-            "Attempted to divide by zero while validating {}. \
+            "Attempted to divide by zero while validating {field_name}. \
                  (This is likely due to an internal bug.)",
-            field_name,
         )),
 
         Some(0) => Ok(dividend.saturating_div(divisor)),
@@ -17,9 +16,8 @@ fn divide_perfectly(field_name: &str, dividend: u64, divisor: u64) -> Result<u64
         Some(remainder) => {
             assert_ne!(remainder, 0);
             Err(format!(
-                "{} is supposed to contain a value that is evenly divisible by {}, \
-                 but it contains {}, which leaves a remainder of {}.",
-                field_name, divisor, dividend, remainder,
+                "{field_name} is supposed to contain a value that is evenly divisible by {divisor}, \
+                 but it contains {dividend}, which leaves a remainder of {remainder}.",
             ))
         }
     }
@@ -176,23 +174,20 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
         // Check if the deprecated fields are set.
         if let Some(neurons_fund_investment_icp) = swap_parameters.neurons_fund_investment_icp {
             defects.push(format!(
-                "neurons_fund_investment_icp ({:?}) is deprecated; please set \
+                "neurons_fund_investment_icp ({neurons_fund_investment_icp:?}) is deprecated; please set \
                     neurons_fund_participation instead.",
-                neurons_fund_investment_icp,
             ));
         }
         if let Some(minimum_icp) = swap_parameters.minimum_icp {
             defects.push(format!(
-                "minimum_icp ({:?}) is deprecated; please set \
+                "minimum_icp ({minimum_icp:?}) is deprecated; please set \
                     min_direct_participation_icp_e8s instead.",
-                minimum_icp,
             ));
         };
         if let Some(maximum_icp) = swap_parameters.maximum_icp {
             defects.push(format!(
-                "maximum_icp ({:?}) is deprecated; please set \
+                "maximum_icp ({maximum_icp:?}) is deprecated; please set \
                     max_direct_participation_icp_e8s instead.",
-                maximum_icp,
             ));
         };
 
@@ -398,9 +393,8 @@ impl TryFrom<create_service_nervous_system::initial_token_distribution::Develope
                     Ok(ok) => Some(ok),
                     Err(err) => {
                         defects.push(format!(
-                            "Failed to convert element at index {} in field \
-                             `developer_neurons`: {}",
-                            i, err,
+                            "Failed to convert element at index {i} in field \
+                             `developer_neurons`: {err}",
                         ));
                         None
                     }

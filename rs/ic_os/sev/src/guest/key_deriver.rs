@@ -85,7 +85,7 @@ mod tests {
                 derive_key_from_sev_measurement(
                     &mut mock_sev_guest_firmware,
                     Key::DiskEncryptionKey {
-                        device_path: Path::new(&format!("/dev/vda{}", i)),
+                        device_path: Path::new(&format!("/dev/vda{i}")),
                     },
                 )
                 .unwrap()

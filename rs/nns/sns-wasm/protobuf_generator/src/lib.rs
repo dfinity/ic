@@ -53,14 +53,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     ];
     for field in blob_fields {
         config.field_attribute(
-            format!(".ic_sns_wasm.pb.v1.{}", field),
+            format!(".ic_sns_wasm.pb.v1.{field}"),
             "#[serde(with = \"serde_bytes\")]",
         );
     }
     let option_blob_fields = vec!["GetWasmMetadataRequest.hash", "MetadataSection.contents"];
     for field in option_blob_fields {
         config.field_attribute(
-            format!(".ic_sns_wasm.pb.v1.{}", field),
+            format!(".ic_sns_wasm.pb.v1.{field}"),
             "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
         );
     }

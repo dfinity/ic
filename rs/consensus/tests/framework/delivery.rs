@@ -2,7 +2,7 @@
 
 use super::types::*;
 use ic_logger::trace;
-use rand::{seq::SliceRandom, Rng};
+use rand::{Rng, seq::SliceRandom};
 use std::time::Duration;
 
 fn get_instance_with_least_outgoing_message_timestamp<'a, 'b>(
@@ -32,29 +32,29 @@ impl DeliveryStrategy for Sequential {
     fn deliver_next(&self, runner: &dyn ConsensusInstances<'_>) -> bool {
         let logger = runner.logger();
         let instances = runner.instances();
-        if let Some(instance) = get_instance_with_least_outgoing_message_timestamp(instances) {
-            if let Some(x) = instance.out_queue.borrow_mut().pop() {
-                let time_step = Duration::from_millis(UNIT_TIME_STEP);
-                let timestamp = x.timestamp + time_step;
-                let msg = Message {
-                    message: x.message,
-                    timestamp,
-                };
-                for other in instances.iter() {
-                    if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
-                        trace!(
-                            logger,
-                            "Deliver from instance {} to {}: {:?}",
-                            instance.deps.replica_config.node_id,
-                            other.deps.replica_config.node_id,
-                            msg,
-                        );
-                        let mut in_queue = other.in_queue.borrow_mut();
-                        in_queue.push(Input::Message(msg.clone()));
-                    }
+        if let Some(instance) = get_instance_with_least_outgoing_message_timestamp(instances)
+            && let Some(x) = instance.out_queue.borrow_mut().pop()
+        {
+            let time_step = Duration::from_millis(UNIT_TIME_STEP);
+            let timestamp = x.timestamp + time_step;
+            let msg = Message {
+                message: x.message,
+                timestamp,
+            };
+            for other in instances.iter() {
+                if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
+                    trace!(
+                        logger,
+                        "Deliver from instance {} to {}: {:?}",
+                        instance.deps.replica_config.node_id,
+                        other.deps.replica_config.node_id,
+                        msg,
+                    );
+                    let mut in_queue = other.in_queue.borrow_mut();
+                    in_queue.push(Input::Message(msg.clone()));
                 }
-                return true;
             }
+            return true;
         }
         false
     }
@@ -79,29 +79,29 @@ impl DeliveryStrategy for RandomReceive {
     fn deliver_next(&self, runner: &dyn ConsensusInstances<'_>) -> bool {
         let logger = runner.logger();
         let instances = runner.instances();
-        if let Some(instance) = get_instance_with_least_outgoing_message_timestamp(instances) {
-            if let Some(x) = instance.out_queue.borrow_mut().pop() {
-                let mut rng = runner.rng();
-                for other in instances.iter() {
-                    if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
-                        let mut in_queue = other.in_queue.borrow_mut();
-                        let delay = rng.gen_range(UNIT_TIME_STEP..self.max_delta);
-                        let msg = Message {
-                            message: x.message.clone(),
-                            timestamp: x.timestamp + Duration::from_millis(delay),
-                        };
-                        trace!(
-                            logger,
-                            "Deliver from instance {} to {}: {:?}",
-                            instance.deps.replica_config.node_id,
-                            other.deps.replica_config.node_id,
-                            msg,
-                        );
-                        in_queue.push(Input::Message(msg));
-                    }
+        if let Some(instance) = get_instance_with_least_outgoing_message_timestamp(instances)
+            && let Some(x) = instance.out_queue.borrow_mut().pop()
+        {
+            let mut rng = runner.rng();
+            for other in instances.iter() {
+                if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
+                    let mut in_queue = other.in_queue.borrow_mut();
+                    let delay = rng.gen_range(UNIT_TIME_STEP..self.max_delta);
+                    let msg = Message {
+                        message: x.message.clone(),
+                        timestamp: x.timestamp + Duration::from_millis(delay),
+                    };
+                    trace!(
+                        logger,
+                        "Deliver from instance {} to {}: {:?}",
+                        instance.deps.replica_config.node_id,
+                        other.deps.replica_config.node_id,
+                        msg,
+                    );
+                    in_queue.push(Input::Message(msg));
                 }
-                return true;
             }
+            return true;
         }
         false
     }
@@ -120,29 +120,29 @@ impl DeliveryStrategy for RandomGraph {
     fn deliver_next(&self, runner: &dyn ConsensusInstances<'_>) -> bool {
         let logger = runner.logger();
         let instances = runner.instances();
-        if let Some(instance) = get_instance_with_least_outgoing_message_timestamp(instances) {
-            if let Some(x) = instance.out_queue.borrow_mut().pop() {
-                for other in instances.iter() {
-                    if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
-                        let mut in_queue = other.in_queue.borrow_mut();
-                        let delay =
-                            self.distances[instance.index][other.index] as u32 * self.unit_latency;
-                        let msg = Message {
-                            message: x.message.clone(),
-                            timestamp: x.timestamp + delay,
-                        };
-                        trace!(
-                            logger,
-                            "Deliver from instance {} to {}: {:?}",
-                            instance.deps.replica_config.node_id,
-                            other.deps.replica_config.node_id,
-                            msg,
-                        );
-                        in_queue.push(Input::Message(msg));
-                    }
+        if let Some(instance) = get_instance_with_least_outgoing_message_timestamp(instances)
+            && let Some(x) = instance.out_queue.borrow_mut().pop()
+        {
+            for other in instances.iter() {
+                if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
+                    let mut in_queue = other.in_queue.borrow_mut();
+                    let delay =
+                        self.distances[instance.index][other.index] as u32 * self.unit_latency;
+                    let msg = Message {
+                        message: x.message.clone(),
+                        timestamp: x.timestamp + delay,
+                    };
+                    trace!(
+                        logger,
+                        "Deliver from instance {} to {}: {:?}",
+                        instance.deps.replica_config.node_id,
+                        other.deps.replica_config.node_id,
+                        msg,
+                    );
+                    in_queue.push(Input::Message(msg));
                 }
-                return true;
             }
+            return true;
         }
         false
     }
@@ -169,9 +169,7 @@ impl RandomGraph {
             tries += 1;
             assert!(
                 tries < 10,
-                "Insufficient degree {} for {} nodes",
-                degree,
-                num_nodes
+                "Insufficient degree {degree} for {num_nodes} nodes"
             );
         }
     }
@@ -215,11 +213,7 @@ fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
         .iter()
         .fold(0, |max, v| std::cmp::max(max, *v.iter().max().unwrap()));
     let connected = distances.iter().all(|v| v.iter().all(|x| *x < n));
-    if connected {
-        Some(max_distance)
-    } else {
-        None
-    }
+    if connected { Some(max_distance) } else { None }
 }
 
 #[allow(clippy::needless_range_loop)]
@@ -227,7 +221,7 @@ fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
 mod test {
     use super::*;
     use rand::thread_rng;
-    use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+    use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
 
     fn check_distance(graph: &[Vec<usize>], degree: usize) {
         let n = graph.len();

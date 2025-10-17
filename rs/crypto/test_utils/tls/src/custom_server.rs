@@ -1,19 +1,19 @@
 //! A custom, configurable TLS server that does not rely on the crypto
 //! implementation. It is purely for testing the client.
-use crate::x509_certificates::CertWithPrivateKey;
 use crate::CipherSuite;
 use crate::CipherSuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use crate::TlsVersion;
+use crate::x509_certificates::CertWithPrivateKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use rand::{CryptoRng, Rng};
 use rustls::{
-    pki_types::{CertificateDer, PrivateKeyDer},
     SupportedCipherSuite, SupportedProtocolVersion,
+    pki_types::{CertificateDer, PrivateKeyDer},
 };
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
+use tokio_rustls::{TlsAcceptor, rustls::ServerConfig};
 
 static DEFAULT_PROTOCOL_VERSIONS: &[TlsVersion] = &[TlsVersion::TLS1_3];
 static DEFAULT_ALLOWED_CIPHER_SUITES: &[CipherSuite] =
@@ -136,15 +136,11 @@ impl CustomServer {
             let error = result.as_ref().expect_err("expected error");
             if !error.to_string().contains(expected_error) {
                 panic!(
-                    "expected the server error to contain \"{}\" but got error: {:?}",
-                    expected_error, error
+                    "expected the server error to contain \"{expected_error}\" but got error: {error:?}"
                 )
             }
         } else if let Err(error) = &result {
-            panic!(
-                "expected the server result to be ok but got error: {}",
-                error
-            )
+            panic!("expected the server result to be ok but got error: {error}")
         }
         result.map(|_tls_stream| ())
     }

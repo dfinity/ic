@@ -2,7 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
-use ic_rosetta_test_utils::test_http_request_decoding_quota;
+use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;

@@ -4,19 +4,18 @@ In general, upcoming/unreleased behavior changes are described here. For details
 on the process that this file is part of, see
 `rs/nervous_system/changelog_process.md`.
 
+
 # Next Upgrade Proposal
 
 ## Added
+
+- Added `environment_variables` to canister settings for `create_canister` and `notify_create_canister`
 
 ## Changed
 
 ## Deprecated
 
 ## Removed
-
-- Removed `transaction_notification` and `transaction_notification_pb` endpoints as they
-  no longer be called. The ICP ledger removed the notify flow, and these methods were not
-  callable by callers other than the ICP ledger.
 
 ## Fixed
 

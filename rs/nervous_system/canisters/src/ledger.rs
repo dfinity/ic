@@ -130,13 +130,12 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(format!(
-                    "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'transfer' of the ledger canister. Code: {code:?}. Message: {msg}"
                 ))
             })
             .and_then(|inner_result: (Result<u64, TransferError>,)| {
                 inner_result.0.map_err(|e: TransferError| {
-                    NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
+                    NervousSystemError::new_with_message(format!("Error transferring funds: {e}"))
                 })
             })
     }
@@ -153,8 +152,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {code:?}. Message: {msg}"
                 )
             )
         })
@@ -177,8 +175,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'account_balance' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'account_balance' of the ledger canister. Code: {code:?}. Message: {msg}"
                 )
             )
         })
@@ -215,13 +212,12 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(format!(
-                "Error calling method 'icrc2_approve' of the ledger canister. Code: {:?}. Message: {}",
-                code, msg
+                "Error calling method 'icrc2_approve' of the ledger canister. Code: {code:?}. Message: {msg}"
             ))
         })
         .and_then(|inner_result: (Result<Nat, ApproveError>,)| {
             inner_result.0.map_err(|e: ApproveError| {
-                NervousSystemError::new_with_message(format!("Error approving funds: {}", e))
+                NervousSystemError::new_with_message(format!("Error approving funds: {e}"))
             })
         })
     }

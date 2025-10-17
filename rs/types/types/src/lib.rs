@@ -94,13 +94,13 @@ pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;
 pub use ic_base_types::{
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId, CanisterIdBlobParseError,
-    NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId, PrincipalIdBlobParseError,
-    PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
+    PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_management_canister_types_private::GlobalTimer;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
@@ -515,15 +515,6 @@ impl PartialOrd for MemoryAllocation {
     }
 }
 
-/// The error that occurs when an end-user specifies an invalid
-/// [`MemoryAllocation`].
-#[derive(Clone, Debug)]
-pub struct InvalidMemoryAllocationError {
-    pub min: candid::Nat,
-    pub max: candid::Nat,
-    pub given: candid::Nat,
-}
-
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// The upper limit on the stable memory size.
@@ -541,35 +532,14 @@ pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
 pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 6 * GIB;
 
-const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
-pub const MAX_MEMORY_ALLOCATION: NumBytes =
-    NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES);
-
-impl InvalidMemoryAllocationError {
-    pub fn new(given: candid::Nat) -> Self {
-        Self {
-            min: candid::Nat::from(MIN_MEMORY_ALLOCATION.get()),
-            max: candid::Nat::from(MAX_MEMORY_ALLOCATION.get()),
-            given,
-        }
-    }
-}
-
-impl TryFrom<NumBytes> for MemoryAllocation {
-    type Error = InvalidMemoryAllocationError;
-
-    fn try_from(bytes: NumBytes) -> Result<Self, Self::Error> {
-        if bytes > MAX_MEMORY_ALLOCATION {
-            return Err(InvalidMemoryAllocationError::new(candid::Nat::from(
-                bytes.get(),
-            )));
-        }
+impl From<NumBytes> for MemoryAllocation {
+    fn from(bytes: NumBytes) -> Self {
         // A memory allocation of 0 means that the canister's memory growth will be
         // best-effort.
         if bytes.get() == 0 {
-            Ok(MemoryAllocation::BestEffort)
+            MemoryAllocation::BestEffort
         } else {
-            Ok(MemoryAllocation::Reserved(bytes))
+            MemoryAllocation::Reserved(bytes)
         }
     }
 }

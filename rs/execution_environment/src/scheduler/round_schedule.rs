@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
-use ic_logger::{error, ReplicaLogger};
-use ic_replicated_state::{canister_state::NextExecution, CanisterState};
+use ic_logger::{ReplicaLogger, error};
+use ic_replicated_state::{CanisterState, canister_state::NextExecution};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 
 use crate::{

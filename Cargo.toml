@@ -13,6 +13,7 @@ members = [
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
     "packages/ic-metrics-assert",
+    "packages/ic-pub-key",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
@@ -64,6 +65,7 @@ members = [
     "rs/config",
     "rs/consensus",
     "rs/consensus/certification",
+    "rs/consensus/cup_utils",
     "rs/consensus/dkg",
     "rs/consensus/idkg",
     "rs/consensus/mocks",
@@ -113,6 +115,7 @@ members = [
     "rs/crypto/test_utils",
     "rs/crypto/test_utils/canister_sigs",
     "rs/crypto/test_utils/canister_threshold_sigs",
+    "rs/crypto/test_utils/crypto_returning_ok",
     "rs/crypto/test_utils/csp",
     "rs/crypto/test_utils/keygen",
     "rs/crypto/test_utils/keys",
@@ -138,6 +141,7 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
+    "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
@@ -171,11 +175,14 @@ members = [
     "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/deterministic_ips",
     "rs/ic_os/device",
-    "rs/ic_os/dev_test_tools/launch-single-vm",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
     "rs/ic_os/grub",
+    "rs/ic_os/guest_upgrade/client",
+    "rs/ic_os/guest_upgrade/server",
+    "rs/ic_os/guest_upgrade/shared",
+    "rs/ic_os/guest_upgrade/tests",
     "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
@@ -218,6 +225,9 @@ members = [
     "rs/ledger_suite/icrc1/tokens_u256",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",
+    "rs/ledger_suite/tests/sm-tests/constants",
+    "rs/ledger_suite/test_utils/in_memory_ledger",
+    "rs/ledger_suite/test_utils/state_machine_helpers",
     "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
@@ -258,6 +268,7 @@ members = [
     "rs/nervous_system/proto",
     "rs/nervous_system/proto/protobuf_generator",
     "rs/nervous_system/proxied_canister_calls_tracker",
+    "rs/nervous_system/rate_limits",
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
@@ -266,6 +277,7 @@ members = [
     "rs/nervous_system/timers",
     "rs/nervous_system/timer_task",
     "rs/nervous_system/timestamp",
+    "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
@@ -364,7 +376,6 @@ members = [
     "rs/rosetta-api/icrc1",
     "rs/rosetta-api/icrc1/client",
     "rs/rosetta-api/icrc1/runner",
-    "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/backtrace_canister",
     "rs/rust_canisters/call_loop_canister",
     "rs/rust_canisters/call_tree_test",
@@ -378,7 +389,6 @@ members = [
     "rs/rust_canisters/dfn_http",
     "rs/rust_canisters/dfn_http_metrics",
     "rs/rust_canisters/dfn_json",
-    "rs/rust_canisters/dfn_macro",
     "rs/rust_canisters/dfn_protobuf",
     "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
@@ -394,6 +404,7 @@ members = [
     "rs/rust_canisters/statesync_test",
     "rs/rust_canisters/tests",
     "rs/rust_canisters/xnet_test",
+    "rs/rust_canisters/xrc_mock",
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
@@ -453,6 +464,7 @@ members = [
     "rs/tests/message_routing/xnet",
     "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/nested",
+    "rs/tests/nested/nns_recovery",
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
@@ -519,6 +531,8 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/ic_os/remote_attestation/shared",
+    "rs/ic_os/remote_attestation/server",
 ]
 
 resolver = "2"
@@ -530,7 +544,7 @@ version = "0.9.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Autonomous serverless cloud functionality for the public Internet."
 documentation = "https://internetcomputer.org/docs/"
-edition = "2021"
+edition = "2024"
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
@@ -590,7 +604,11 @@ axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
-bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db", features = ["default", "rand", "serde"] }
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "cda2b5ec270017c82abd6ef2e71b7fe583a133fd", features = [
+    "default",
+    "rand",
+    "serde",
+] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
@@ -661,19 +679,21 @@ ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
 ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
     "acme_alpn",
 ] }
-ic-btc-interface = "0.2.2"
+ic-btc-interface = "0.2.3"
 ic-canister-sig-creation = "1.3.0"
 ic-cbor = "3"
 ic-cdk = "0.18.7"
 ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
+ic-ed25519 = "0.4.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
+ic-secp256k1 = "0.3.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
@@ -689,6 +709,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
+indoc = "1.0.9"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
@@ -702,15 +723,14 @@ k256 = { version = "0.13.4", default-features = false, features = [
     "schnorr",
     "std",
 ] }
-# kube is used by our test driver
-k8s-openapi = { version = "0.22.0", features = ["v1_28", "schemars"] }
-kube = { version = "0.94.0", features = ["client", "derive"] }
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
 libcryptsetup-rs = "0.13"
 libflate = "2.1.0"
 libnss = "0.5.0"
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 macaddr = "1.0"
@@ -791,9 +811,11 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
     "std",
     "brotli",
+    "tls12",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
@@ -845,6 +867,7 @@ tonic = "0.12.3"
 tonic-build = "0.12.3"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
+    "add-extension",
     "cors",
     "limit",
     "trace",
@@ -872,12 +895,13 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
-wasmparser = "0.228.0"
-wasmprinter = "0.228.0"
-wast = "228.0.0"
-wat = "1.228.0"
+wasm-encoder = { version = "0.235.0", features = ["wasmparser"] }
+wasmparser = "0.235.0"
+wasmprinter = "0.235.0"
+wast = "235.0.0"
+wat = "1.235.0"
 which = "6.0.3"
+wirm = { version = "2.1.0", features = ["parallel"] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
@@ -887,4 +911,3 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
-

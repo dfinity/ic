@@ -23,15 +23,16 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_canister_ranges_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_crypto_threshold_signing_pubkey_key,
+    make_crypto_tls_cert_key, make_node_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, replica_version::ReplicaVersion, time::Time,
-    CanisterId, RegistryVersion, SubnetId,
+    CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
+    replica_version::ReplicaVersion, time::Time,
 };
 use reqwest;
 
@@ -41,7 +42,7 @@ use crate::{
     core::setup_router,
     http::middleware::cache::CacheState,
     persist::{Persist, Persister, Routes},
-    snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
+    snapshot::{RegistrySnapshot, Snapshot, Snapshotter, Subnet, node_test_id, subnet_test_id},
 };
 
 #[derive(Debug)]

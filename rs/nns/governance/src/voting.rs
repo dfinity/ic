@@ -10,7 +10,7 @@ use ic_nervous_system_long_message::is_message_over_threshold;
 #[cfg(test)]
 use ic_nervous_system_temporary::Temporary;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
+use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use prost::Message;
 use std::{
     borrow::Cow,
@@ -113,7 +113,7 @@ fn proposal_ballots(
                 "{} Proposal {} not found, cannot operate on ballots",
                 LOG_PREFIX, proposal_id
             );
-            Err(format!("Proposal {} not found.", proposal_id))
+            Err(format!("Proposal {proposal_id} not found."))
         }
     }
 }
@@ -212,7 +212,12 @@ impl Governance {
         };
 
         while !machine.is_completely_finished() {
-            machine.continue_processing(&mut self.neuron_store, ballots, is_over_soft_limit);
+            machine.continue_processing(
+                &mut self.neuron_store,
+                ballots,
+                is_over_soft_limit,
+                self.heap_data.first_proposal_id_to_record_voting_history,
+            );
 
             if is_over_soft_limit() {
                 break;
@@ -224,22 +229,24 @@ impl Governance {
     /// It processes voting state machines until the soft limit is reached or there is no work to do.
     pub async fn process_voting_state_machines(&mut self) {
         let mut proposals_with_new_votes_cast = vec![];
-        with_voting_state_machines_mut(|voting_state_machines| loop {
-            if voting_state_machines
-                .with_next_machine(|(proposal_id, machine)| {
-                    if !machine.is_voting_finished() {
-                        proposals_with_new_votes_cast.push(proposal_id);
-                    }
-                    // We need to keep track of which proposals we processed
-                    self.process_machine_until_soft_limit(machine, over_soft_message_limit);
-                })
-                .is_none()
-            {
-                break;
-            };
+        with_voting_state_machines_mut(|voting_state_machines| {
+            loop {
+                if voting_state_machines
+                    .with_next_machine(|(proposal_id, machine)| {
+                        if !machine.is_voting_finished() {
+                            proposals_with_new_votes_cast.push(proposal_id);
+                        }
+                        // We need to keep track of which proposals we processed
+                        self.process_machine_until_soft_limit(machine, over_soft_message_limit);
+                    })
+                    .is_none()
+                {
+                    break;
+                };
 
-            if over_soft_message_limit() {
-                break;
+                if over_soft_message_limit() {
+                    break;
+                }
             }
         });
 
@@ -506,6 +513,8 @@ impl ProposalVotingStateMachine {
         neuron_store: &mut NeuronStore,
         ballots: &mut HashMap<u64, Ballot>,
         is_over_instructions_limit: fn() -> bool,
+        // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
+        first_proposal_id_to_record_voting_history: ProposalId,
     ) {
         let voting_finished = self.is_voting_finished();
 
@@ -531,7 +540,10 @@ impl ProposalVotingStateMachine {
                         // This is a bad inconsistency, but there is
                         // nothing that can be done about it at this
                         // place.  We somehow have followers recorded that don't exist.
-                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                        eprintln!(
+                            "error in cast_vote_and_cascade_follow when gathering induction votes: {:?}",
+                            e
+                        );
                         Vote::Unspecified
                     }
                 };
@@ -546,18 +558,22 @@ impl ProposalVotingStateMachine {
             }
         } else {
             while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
-                match neuron_store.register_recent_neuron_ballot(
+                match neuron_store.record_neuron_vote(
                     neuron_id,
                     self.topic,
                     self.proposal_id,
                     vote,
+                    first_proposal_id_to_record_voting_history,
                 ) {
                     Ok(_) => {}
                     Err(e) => {
                         // This is a bad inconsistency, but there is
                         // nothing that can be done about it at this
                         // place.  We somehow have followers recorded that don't exist.
-                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                        eprintln!(
+                            "error in cast_vote_and_cascade_follow when gathering induction votes: {:?}",
+                            e
+                        );
                     }
                 };
 
@@ -594,16 +610,16 @@ mod test {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
-            proposal::Action, Ballot, Followees, Motion, Proposal, ProposalData, Tally, Topic,
-            Vote, VotingPowerEconomics, WaitForQuietState,
+            Ballot, Followees, Motion, Proposal, ProposalData, Tally, Topic, Vote,
+            VotingPowerEconomics, WaitForQuietState, proposal::Action,
         },
         storage::with_voting_state_machines_mut,
         test_utils::{
             ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
         },
         voting::{
-            temporarily_set_over_soft_message_limit, ProposalVotingStateMachine,
-            VotingStateMachines,
+            ProposalVotingStateMachine, VotingStateMachines,
+            temporarily_set_over_soft_message_limit,
         },
     };
     use candid::Encode;
@@ -765,7 +781,7 @@ mod test {
     #[test]
     fn test_cast_vote_and_cascade_works() {
         let now = 1000;
-        let topic = Topic::NetworkCanisterManagement;
+        let topic = Topic::ApplicationCanisterManagement;
 
         let make_neuron = |id: u64, followees: Vec<u64>| {
             make_neuron(
@@ -953,7 +969,12 @@ mod test {
         );
 
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
 
         assert_eq!(
             ballots,
@@ -967,7 +988,12 @@ mod test {
         assert!(!state_machine.is_voting_finished());
 
         // Now we see voting finished but not recording recent ballots finished
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
         assert!(!state_machine.is_completely_finished());
         assert!(state_machine.is_voting_finished());
 
@@ -988,7 +1014,12 @@ mod test {
             None
         );
 
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
         assert!(state_machine.is_completely_finished());
 
         assert_eq!(
@@ -1079,9 +1110,24 @@ mod test {
 
         // We assert it is done after checking both sets of followers
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
-        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
+        state_machine.continue_processing(
+            &mut neuron_store,
+            &mut ballots,
+            || false,
+            ProposalId { id: 0 },
+        );
         assert!(state_machine.is_completely_finished());
     }
 
@@ -1275,7 +1321,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: i }, |n| n.recent_ballots.clone())
                 .unwrap();
-            assert_eq!(recent_ballots.len(), 0, "Neuron {} has recent ballots", i);
+            assert_eq!(recent_ballots.len(), 0, "Neuron {i} has recent ballots");
         }
 
         // Now let's run the "timer job" to make sure it eventually drains everything.
@@ -1300,7 +1346,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: i }, |n| n.recent_ballots.clone())
                 .unwrap();
-            assert_eq!(recent_ballots.len(), 1, "Neuron {} has recent ballots", i);
+            assert_eq!(recent_ballots.len(), 1, "Neuron {i} has recent ballots");
         }
     }
 
@@ -1379,7 +1425,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: i }, |n| n.recent_ballots.clone())
                 .unwrap();
-            assert_eq!(recent_ballots.len(), 1, "Neuron {} has recent ballots", i);
+            assert_eq!(recent_ballots.len(), 1, "Neuron {i} has recent ballots");
         }
 
         let proposal = governance.heap_data.proposals.get(&1).unwrap();

@@ -8,10 +8,10 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
 };
-use ic_types::{epoch_from_height, Height};
+use ic_types::{Height, epoch_from_height};
 use ic_universal_canister::wasm;
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::time::Duration;
 
 pub mod aggregation;

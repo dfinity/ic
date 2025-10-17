@@ -15,7 +15,7 @@ use ic_system_test_driver::util::*;
 use ic_system_test_driver::{driver::test_env_api::*, util::runtime_from_url};
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 

@@ -1,19 +1,20 @@
 use bit_vec::BitVec;
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_replicated_state::{
-    page_map::{FileDescriptor, MemoryInstructions},
     PageIndex, PageMap,
+    page_map::{FileDescriptor, MemoryInstructions},
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{NumBytes, NumOsPages};
 use nix::{
     errno::Errno,
-    sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
+    sys::mman::{MapFlags, ProtFlags, mmap, mprotect},
 };
 use std::{
     cell::{Cell, RefCell},
     ops::Range,
     sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+    time::Duration,
 };
 
 // The upper bound on the number of pages that are memory mapped from the
@@ -242,25 +243,21 @@ impl PageBitmap {
     }
 }
 
-struct ReadBeforeWriteStats {
+#[derive(Default)]
+pub struct MemoryTrackerMetrics {
     read_before_write_count: AtomicUsize,
     direct_write_count: AtomicUsize,
-}
-
-struct MemoryInstructionsStats {
+    sigsegv_count: AtomicUsize,
     mmap_count: AtomicUsize,
     mprotect_count: AtomicUsize,
     copy_page_count: AtomicUsize,
-}
-
-#[derive(Default)]
-pub struct MemoryTrackerMetrics {
-    pub sigsegv_handler_duration_nanos: AtomicU64,
+    sigsegv_handler_duration_nanos: AtomicU64,
 }
 
 pub struct SigsegvMemoryTracker {
     memory_area: MemoryArea,
     accessed_bitmap: RefCell<PageBitmap>,
+    accessed_pages: RefCell<Vec<PageIndex>>,
     dirty_bitmap: RefCell<PageBitmap>,
     dirty_pages: RefCell<Vec<PageIndex>>,
     speculatively_dirty_pages: RefCell<Vec<PageIndex>>,
@@ -269,9 +266,6 @@ pub struct SigsegvMemoryTracker {
     use_new_signal_handler: bool,
     #[cfg(feature = "sigsegv_handler_checksum")]
     checksum: RefCell<checksum::SigsegChecksum>,
-    read_before_write_stats: ReadBeforeWriteStats,
-    sigsegv_count: AtomicUsize,
-    memory_instructions_stats: MemoryInstructionsStats,
     pub metrics: MemoryTrackerMetrics,
 }
 
@@ -293,6 +287,7 @@ impl SigsegvMemoryTracker {
 
         let memory_area = MemoryArea::new(addr, size);
         let accessed_bitmap = RefCell::new(PageBitmap::new(num_pages));
+        let accessed_pages = RefCell::new(Vec::new());
         let dirty_bitmap = RefCell::new(PageBitmap::new(num_pages));
         let dirty_pages = RefCell::new(Vec::new());
         let speculatively_dirty_pages = RefCell::new(Vec::new());
@@ -300,6 +295,7 @@ impl SigsegvMemoryTracker {
         let tracker = SigsegvMemoryTracker {
             memory_area,
             accessed_bitmap,
+            accessed_pages,
             dirty_bitmap,
             dirty_pages,
             speculatively_dirty_pages,
@@ -308,16 +304,6 @@ impl SigsegvMemoryTracker {
             use_new_signal_handler,
             #[cfg(feature = "sigsegv_handler_checksum")]
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
-            read_before_write_stats: ReadBeforeWriteStats {
-                read_before_write_count: AtomicUsize::new(0),
-                direct_write_count: AtomicUsize::new(0),
-            },
-            sigsegv_count: AtomicUsize::new(0),
-            memory_instructions_stats: MemoryInstructionsStats {
-                mmap_count: AtomicUsize::new(0),
-                mprotect_count: AtomicUsize::new(0),
-                copy_page_count: AtomicUsize::new(0),
-            },
             metrics: MemoryTrackerMetrics::default(),
         };
 
@@ -332,7 +318,7 @@ impl SigsegvMemoryTracker {
         } else {
             unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
             tracker
-                .memory_instructions_stats
+                .metrics
                 .mprotect_count
                 .fetch_add(1, Ordering::Relaxed);
         }
@@ -345,7 +331,7 @@ impl SigsegvMemoryTracker {
         access_kind: Option<AccessKind>,
         fault_address: *mut libc::c_void,
     ) -> bool {
-        self.sigsegv_count.fetch_add(1, Ordering::Relaxed);
+        self.metrics.sigsegv_count.fetch_add(1, Ordering::Relaxed);
         if self.use_new_signal_handler {
             sigsegv_fault_handler_new(self, access_kind.unwrap(), fault_address)
         } else {
@@ -368,6 +354,10 @@ impl SigsegvMemoryTracker {
         );
         self.accessed_bitmap.borrow_mut().grow(delta_pages);
         self.dirty_bitmap.borrow_mut().grow(delta_pages);
+    }
+
+    pub fn take_accessed_pages(&self) -> Vec<PageIndex> {
+        self.accessed_pages.take()
     }
 
     pub fn take_dirty_pages(&self) -> Vec<PageIndex> {
@@ -408,6 +398,15 @@ impl SigsegvMemoryTracker {
         self.accessed_bitmap.borrow().page_range()
     }
 
+    fn add_accessed_pages(&self, prefetched_range: &Range<PageIndex>) {
+        let range = prefetched_range.start.get() as usize..prefetched_range.end.get() as usize;
+        let mut accessed_pages = self.accessed_pages.borrow_mut();
+        for i in range {
+            let page_index = PageIndex::new(i as u64);
+            accessed_pages.push(page_index);
+        }
+    }
+
     fn add_dirty_pages(&self, dirty_page: PageIndex, prefetched_range: Range<PageIndex>) {
         let range = prefetched_range.start.get() as usize..prefetched_range.end.get() as usize;
         let mut dirty_pages = self.dirty_pages.borrow_mut();
@@ -430,45 +429,51 @@ impl SigsegvMemoryTracker {
         &self.accessed_bitmap
     }
 
-    /// The number of pages that first had a read access and then a write
-    /// access.
+    /// The number of pages that first had a read access and then a write access.
     pub fn read_before_write_count(&self) -> usize {
-        self.read_before_write_stats
-            .read_before_write_count
-            .load(Ordering::Relaxed)
+        self.metrics.read_before_write_count.load(Ordering::Relaxed)
     }
 
     /// The number of pages that had an initial write access.
     pub fn direct_write_count(&self) -> usize {
-        self.read_before_write_stats
-            .direct_write_count
-            .load(Ordering::Relaxed)
+        self.metrics.direct_write_count.load(Ordering::Relaxed)
     }
 
     /// The number of calls to `handle_sigsegv`.
     pub fn sigsegv_count(&self) -> usize {
-        self.sigsegv_count.load(Ordering::Relaxed)
+        self.metrics.sigsegv_count.load(Ordering::Relaxed)
     }
 
     /// The number of calls to `mmap`.
     pub fn mmap_count(&self) -> usize {
-        self.memory_instructions_stats
-            .mmap_count
-            .load(Ordering::Relaxed)
+        self.metrics.mmap_count.load(Ordering::Relaxed)
     }
 
     /// The number of calls to `mprotect`.
     pub fn mprotect_count(&self) -> usize {
-        self.memory_instructions_stats
-            .mprotect_count
-            .load(Ordering::Relaxed)
+        self.metrics.mprotect_count.load(Ordering::Relaxed)
     }
 
     /// The number of pages copied as part of memory instructions.
     pub fn copy_page_count(&self) -> usize {
-        self.memory_instructions_stats
-            .copy_page_count
-            .load(Ordering::Relaxed)
+        self.metrics.copy_page_count.load(Ordering::Relaxed)
+    }
+
+    /// The total time spent in SIGSEGV signal handler.
+    pub fn sigsegv_handler_duration(&self) -> Duration {
+        Duration::from_nanos(
+            self.metrics
+                .sigsegv_handler_duration_nanos
+                .load(Ordering::Relaxed),
+        )
+    }
+
+    /// Add the total time spent in SIGSEGV signal handler.
+    pub fn add_sigsegv_handler_duration(&self, elapsed: Duration) {
+        let elapsed_nanos = elapsed.as_nanos() as u64;
+        self.metrics
+            .sigsegv_handler_duration_nanos
+            .fetch_add(elapsed_nanos, Ordering::Relaxed);
     }
 }
 
@@ -484,7 +489,9 @@ pub fn sigsegv_fault_handler_old(
     // address down to page boundary
     let fault_address_page_boundary = fault_address as usize & !(PAGE_SIZE - 1);
 
-    let page_num = (fault_address_page_boundary - tracker.memory_area.addr()) / PAGE_SIZE;
+    let page_idx = PageIndex::new(
+        ((fault_address_page_boundary - tracker.memory_area.addr()) / PAGE_SIZE) as u64,
+    );
 
     // Ensure `fault_address` falls within tracked memory area
     if !tracker.memory_area.is_within(fault_address) {
@@ -499,11 +506,7 @@ pub fn sigsegv_fault_handler_old(
     );
 
     #[allow(clippy::branches_sharing_code)]
-    if tracker
-        .accessed_bitmap
-        .borrow()
-        .is_marked(PageIndex::new(page_num as u64))
-    {
+    if tracker.accessed_bitmap.borrow().is_marked(page_idx) {
         // This page has already been accessed, hence this fault must be for writing.
         // Upgrade its protection to read+write.
         unsafe {
@@ -515,10 +518,7 @@ pub fn sigsegv_fault_handler_old(
             .map_err(print_enomem_help)
             .unwrap()
         };
-        tracker
-            .dirty_pages
-            .borrow_mut()
-            .push(PageIndex::new(page_num as u64));
+        tracker.dirty_pages.borrow_mut().push(page_idx);
     } else {
         // This page has not been accessed yet.
         // The fault could be for reading or writing.
@@ -539,7 +539,7 @@ pub fn sigsegv_fault_handler_old(
         // is set up for a memory area mmap-ed to a file, the contents of each
         // page will be initialized by the kernel from that file.
 
-        let page = page_map.get_page(PageIndex::new(page_num as u64));
+        let page = page_map.get_page(page_idx);
         unsafe {
             std::ptr::copy_nonoverlapping(
                 page.as_ptr(),
@@ -557,10 +557,8 @@ pub fn sigsegv_fault_handler_old(
             .map_err(print_enomem_help)
             .unwrap()
         };
-        tracker
-            .accessed_bitmap
-            .borrow_mut()
-            .mark(PageIndex::new(page_num as u64));
+        tracker.accessed_bitmap.borrow_mut().mark(page_idx);
+        tracker.accessed_pages.borrow_mut().push(page_idx);
     };
     true
 }
@@ -656,6 +654,7 @@ pub fn sigsegv_fault_handler_new(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            tracker.add_accessed_pages(&prefetch_range);
         }
         (AccessKind::Read, DirtyPageTracking::Track) => {
             // Set up the page mapping as read-only in order to get a signal on subsequent
@@ -673,6 +672,7 @@ pub fn sigsegv_fault_handler_new(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            tracker.add_accessed_pages(&prefetch_range);
         }
         (AccessKind::Write, DirtyPageTracking::Track) => {
             let mut dirty_bitmap = tracker.dirty_bitmap.borrow_mut();
@@ -684,7 +684,7 @@ pub fn sigsegv_fault_handler_new(
                 dirty_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             if accessed_bitmap.is_marked(faulting_page) {
                 tracker
-                    .read_before_write_stats
+                    .metrics
                     .read_before_write_count
                     .fetch_add(1, Ordering::Relaxed);
                 // Ensure that all pages in the range have already been accessed because we are
@@ -705,14 +705,14 @@ pub fn sigsegv_fault_handler_new(
                     .unwrap()
                 };
                 tracker
-                    .memory_instructions_stats
+                    .metrics
                     .mprotect_count
                     .fetch_add(1, Ordering::Relaxed);
                 dirty_bitmap.mark_range(&prefetch_range);
                 tracker.add_dirty_pages(faulting_page, prefetch_range);
             } else {
                 tracker
-                    .read_before_write_stats
+                    .metrics
                     .direct_write_count
                     .fetch_add(1, Ordering::Relaxed);
                 // The first access to the page is a write access. This is a good case because
@@ -732,6 +732,7 @@ pub fn sigsegv_fault_handler_new(
                     prefetch_range,
                 );
                 accessed_bitmap.mark_range(&prefetch_range);
+                tracker.add_accessed_pages(&prefetch_range);
                 dirty_bitmap.mark_range(&prefetch_range);
                 tracker.add_dirty_pages(faulting_page, prefetch_range);
             }
@@ -759,9 +760,7 @@ fn map_unaccessed_pages(
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
             && min_prefetch_range.end <= max_prefetch_range.end,
-        "Error checking min_prefetch_range:{:?} ⊆ max_prefetch_range:{:?}",
-        min_prefetch_range,
-        max_prefetch_range
+        "Error checking min_prefetch_range:{min_prefetch_range:?} ⊆ max_prefetch_range:{max_prefetch_range:?}"
     );
 
     let instructions = tracker
@@ -801,10 +800,7 @@ fn apply_memory_instructions(
                 FileDescriptor { fd },
                 offset,
             ) => {
-                tracker
-                    .memory_instructions_stats
-                    .mmap_count
-                    .fetch_add(1, Ordering::Relaxed);
+                tracker.metrics.mmap_count.fetch_add(1, Ordering::Relaxed);
                 unsafe {
                     mmap(
                         tracker.page_start_addr_from(range.start),
@@ -819,7 +815,7 @@ fn apply_memory_instructions(
                 };
             }
             ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
-                tracker.memory_instructions_stats.copy_page_count.fetch_add(
+                tracker.metrics.copy_page_count.fetch_add(
                     (range.end.get() - range.start.get()) as usize,
                     Ordering::Relaxed,
                 );
@@ -836,7 +832,7 @@ fn apply_memory_instructions(
                         .unwrap()
                     };
                     tracker
-                        .memory_instructions_stats
+                        .metrics
                         .mprotect_count
                         .fetch_add(1, Ordering::Relaxed);
                 }
@@ -867,7 +863,7 @@ fn apply_memory_instructions(
             .unwrap()
         };
         tracker
-            .memory_instructions_stats
+            .metrics
             .mprotect_count
             .fetch_add(1, Ordering::Relaxed);
     }

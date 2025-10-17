@@ -1,11 +1,11 @@
 use crate::protobuf::{send::Extension as PExt, transaction::Transfer as PTransfer};
-use crate::{protobuf, TransferFee, TransferFeeArgs};
 use crate::{
-    AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
-    GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs, IterBlocksRes, Memo, NotifyCanisterArgs,
-    Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, TotalSupplyArgs,
-    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse,
+    DEFAULT_TRANSFER_FEE, EncodedBlock, GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs,
+    IterBlocksRes, Memo, NotifyCanisterArgs, Operation, SendArgs, Subaccount, TimeStamp,
+    TipOfChainRes, Tokens, TotalSupplyArgs, Transaction, TransactionNotification,
 };
+use crate::{TransferFee, TransferFeeArgs, protobuf};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
 use ic_ledger_hash_of::HASH_LENGTH;
@@ -644,7 +644,7 @@ impl ToProto for Transaction {
                     }
                 }
             },
-            t => return Err(format!("Transaction lacked a required field: {:?}", t)),
+            t => return Err(format!("Transaction lacked a required field: {t:?}")),
         };
         Ok(Transaction {
             operation,
@@ -743,7 +743,7 @@ pub fn hash_from_proto<T>(pb: protobuf::Hash) -> Result<HashOf<T>, String> {
                 "Expected a Vec of length {} but it was {}",
                 HASH_LENGTH,
                 boxed_slice.len(),
-            ))
+            ));
         }
     };
     Ok(HashOf::new(*hash))

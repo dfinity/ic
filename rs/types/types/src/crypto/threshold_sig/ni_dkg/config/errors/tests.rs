@@ -1,6 +1,6 @@
 use super::*;
-use crate::crypto::tests::set_of;
 use crate::PrincipalId;
+use crate::crypto::tests::set_of;
 
 fn node_id(id: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(id))
@@ -107,6 +107,6 @@ fn should_correctly_display_threshold_zero_error() {
 }
 
 fn assert_display_msg_eq(error: NiDkgConfigValidationError, msg: &str) {
-    let display_msg = format!("{}", error);
+    let display_msg = format!("{error}");
     assert_eq!(display_msg.as_str(), msg);
 }

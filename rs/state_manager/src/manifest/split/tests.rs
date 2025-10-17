@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, SnapshotId};
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
-use ic_types::{state_sync::CURRENT_STATE_SYNC_VERSION, Height};
+use ic_types::{Height, state_sync::CURRENT_STATE_SYNC_VERSION};
 
 /// Expected hash of a zero length file.
 const EMPTY_FILE_HASH: [u8; 32] = [
@@ -24,8 +24,7 @@ fn manifest_builder_out_of_order_files() {
         builder.build(),
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "file paths are not sorted: {}, {}",
-                SYSTEM_METADATA_FILE, SPLIT_MARKER_FILE
+                "file paths are not sorted: {SYSTEM_METADATA_FILE}, {SPLIT_MARKER_FILE}"
             )
         })
     );
@@ -41,8 +40,7 @@ fn manifest_builder_duplicate_files() {
         builder.build(),
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "file paths are not sorted: {}, {}",
-                SYSTEM_METADATA_FILE, SYSTEM_METADATA_FILE
+                "file paths are not sorted: {SYSTEM_METADATA_FILE}, {SYSTEM_METADATA_FILE}"
             )
         })
     );
@@ -58,8 +56,7 @@ fn manifest_builder_out_of_order_generated_files() {
         builder.build(),
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "file paths are not sorted: {}, {}",
-                SYSTEM_METADATA_FILE, SPLIT_MARKER_FILE
+                "file paths are not sorted: {SYSTEM_METADATA_FILE}, {SPLIT_MARKER_FILE}"
             )
         })
     );
@@ -112,8 +109,7 @@ fn split_manifest_unassigned_canister() {
     assert_eq!(
         Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
-                "canister {} is mapped to neither subnet A' ({}) nor subnet B ({})",
-                canister_id, SUBNET_0, SUBNET_1
+                "canister {canister_id} is mapped to neither subnet A' ({SUBNET_0}) nor subnet B ({SUBNET_1})"
             )
         }),
         split_manifest(
@@ -220,14 +216,14 @@ fn split_manifest_3_canisters() {
         non_empty_file_and_chunk_infos(INGRESS_HISTORY_FILE);
     builder.append(
         &ingress_history_file_info,
-        &[ingress_history_chunk_info.clone()],
+        std::slice::from_ref(&ingress_history_chunk_info),
     );
     builder.append(&empty_file_info(&snapshot_pbuf_path(snapshot_1)), &[]);
     let (subnet_queues_file_info, subnet_queues_chunk_info) =
         non_empty_file_and_chunk_infos(SUBNET_QUEUES_FILE);
     builder.append(
         &subnet_queues_file_info,
-        &[subnet_queues_chunk_info.clone()],
+        std::slice::from_ref(&subnet_queues_chunk_info),
     );
     builder.append(&empty_file_info(SYSTEM_METADATA_FILE), &[]);
     let manifest = builder.build().unwrap();
@@ -239,7 +235,7 @@ fn split_manifest_3_canisters() {
     let mut assign_ranges = |ranges: Vec<CanisterIdRange>, subnet_id: SubnetId| {
         CanisterIdRanges::try_from(ranges.clone())
             .and_then(|ranges| routing_table.assign_ranges(ranges, subnet_id))
-            .map_err(|e| format!("Failed to assign ranges {:?}: {:?}", ranges, e))
+            .map_err(|e| format!("Failed to assign ranges {ranges:?}: {e:?}"))
     };
     // Start off with everything assigned to `SUBNET_0`.
     assign_ranges(
@@ -269,10 +265,13 @@ fn split_manifest_3_canisters() {
     builder_0.append(&empty_file_info(&canister_pbuf_path(CANISTER_1)), &[]);
     builder_0.append(
         &ingress_history_file_info,
-        &[ingress_history_chunk_info.clone()],
+        std::slice::from_ref(&ingress_history_chunk_info),
     );
     builder_0.append(&empty_file_info(&snapshot_pbuf_path(snapshot_1)), &[]);
-    builder_0.append(&split_marker_file_info, &[split_marker_chunk_info.clone()]);
+    builder_0.append(
+        &split_marker_file_info,
+        std::slice::from_ref(&split_marker_chunk_info),
+    );
     builder_0.append(&subnet_queues_file_info, &[subnet_queues_chunk_info]);
     builder_0.append(&empty_file_info(SYSTEM_METADATA_FILE), &[]);
     let expected_manifest_0 = builder_0.build().unwrap();

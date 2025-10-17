@@ -1,4 +1,4 @@
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;
 use std::{net::IpAddr, str::FromStr};
 use url::Url;
@@ -21,7 +21,7 @@ fn endpoint_to_url(protocol: &str, http: &ConnectionEndpoint) -> Result<Url, Str
     let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
         Ok(v) => {
             if v.is_ipv6() {
-                format!("[{}]", v)
+                format!("[{v}]")
             } else {
                 v.to_string()
             }
@@ -33,5 +33,5 @@ fn endpoint_to_url(protocol: &str, http: &ConnectionEndpoint) -> Result<Url, Str
     };
 
     let url = format!("{}://{}:{}/", protocol, host_str, http.port);
-    Url::parse(&url).map_err(|e| format!("Invalid {} endpoint: {}: {:?}", protocol, url, e))
+    Url::parse(&url).map_err(|e| format!("Invalid {protocol} endpoint: {url}: {e:?}"))
 }

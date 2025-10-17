@@ -27,7 +27,7 @@ runs:
         CARGO_AUDIT_VERSION: "0.21.0"
         CARGO_WASMPACK_VERSION: "0.12.1"
         DEFAULT_NODE_VERSION: "20"
-        OISY_NODE_VERSION: "22.11.0"
+        OISY_NODE_VERSION: "22.12.0"
     - name: Run Dependency Scan Nightly
       id: dependency-scan-nightly
       shell: bash

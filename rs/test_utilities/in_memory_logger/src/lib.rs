@@ -4,7 +4,7 @@
 //! Fluent assertions on written log entries are provided in [`assertions::LogEntriesAssert`].
 
 use ic_config::logger::{Config as LoggerConfig, LogFormat};
-use ic_logger::{new_logger, new_replica_logger, LoggerImpl, ReplicaLogger};
+use ic_logger::{LoggerImpl, ReplicaLogger, new_logger, new_replica_logger};
 use ic_protobuf::log::log_entry::v1::LogEntry;
 use parking_lot::RwLock;
 use slog_async::AsyncGuard;

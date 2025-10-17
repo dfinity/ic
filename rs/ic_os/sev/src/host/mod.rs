@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use der::pem::LineEnding;
 use der::{Decode, Document};
 use firmware::SevHostFirmware;
@@ -148,7 +148,7 @@ impl HostSevCertificateProviderImpl {
             .context("Failed to create certificate cache directory")?;
 
         // Save to temp file and rename to prevent race conditions
-        let temp_file = NamedTempFile::new_in(&self.certificate_cache_dir)
+        let temp_file = NamedTempFile::with_prefix_in("vcek", &self.certificate_cache_dir)
             .context("Failed to create temporary file")?;
         fs::write(&temp_file, vcek_der).context("Failed to write VCEK")?;
         temp_file
@@ -223,10 +223,7 @@ impl HostSevCertificateProviderImpl {
         let reported_tcb = status.reported_tcb_version;
         format!(
             "{KDS_CERT_SITE}{KDS_VCEK}/{SEV_PROD_NAME}/{hw_id}?blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
-            reported_tcb.bootloader,
-            reported_tcb.tee,
-            reported_tcb.snp,
-            reported_tcb.microcode,
+            reported_tcb.bootloader, reported_tcb.tee, reported_tcb.snp, reported_tcb.microcode,
         )
     }
 }
@@ -337,15 +334,14 @@ mod tests {
         let cache_path = cache_dir.join(cache_filename);
         fs::write(&cache_path, b"invalid der data").unwrap();
 
-        assert!(HostSevCertificateProvider::new_for_test(
-            cache_dir,
-            Box::new(mock_sev_host_firmware())
-        )
-        .load_certificate_chain_pem()
-        .await
-        .expect_err("Expected error")
-        .to_string()
-        .contains("Failed to parse VCEK"));
+        assert!(
+            HostSevCertificateProvider::new_for_test(cache_dir, Box::new(mock_sev_host_firmware()))
+                .load_certificate_chain_pem()
+                .await
+                .expect_err("Expected error")
+                .to_string()
+                .contains("Failed to parse VCEK")
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
-use darling::{ast::Data, FromDeriveInput, FromField, FromVariant};
+use darling::{FromDeriveInput, FromField, FromVariant, ast::Data};
 use quote::quote;
-use syn::{parse_macro_input, spanned::Spanned, DeriveInput, Expr, Ident};
+use syn::{DeriveInput, Expr, Ident, parse_macro_input, spanned::Spanned};
 
 #[derive(FromDeriveInput)]
 struct DeriveInputReceiver {
@@ -110,7 +110,7 @@ fn enum_sum(variants: &[VariantReceiver], method_name: &str) -> proc_macro2::Tok
                 let (field_pat, accessor, span) = if let Some(ident) = &field.ident {
                     (quote! { #ident }, quote! { #ident }, ident.span())
                 } else {
-                    let var_name = format!("v{}", index);
+                    let var_name = format!("v{index}");
                     let ident = Ident::new(&var_name, field.ty.span());
                     (quote! { #ident }, quote! { #ident }, field.ty.span())
                 };

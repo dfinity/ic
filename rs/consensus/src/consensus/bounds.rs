@@ -3,7 +3,7 @@
 //! want to uphold at all times.
 
 use ic_consensus_utils::{
-    pool_reader::PoolReader, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
+    MINIMUM_CHAIN_LENGTH, pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -186,7 +186,7 @@ pub fn validated_pool_within_bounds(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
@@ -236,12 +236,14 @@ mod tests {
 
             // One too many finalizations should trigger excess event.
             pool.advance_round_normal_operation();
-            assert!(validated_pool_within_bounds(
-                &PoolReader::new(&pool),
-                registry.as_ref(),
-                &replica_config,
-            )
-            .is_some());
+            assert!(
+                validated_pool_within_bounds(
+                    &PoolReader::new(&pool),
+                    registry.as_ref(),
+                    &replica_config,
+                )
+                .is_some()
+            );
         });
     }
 }

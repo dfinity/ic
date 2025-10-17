@@ -3,15 +3,15 @@
 use super::hash::domain_separator::DomainSeparator;
 use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
+    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
     certification::CertificationContent,
     dkg::DealingContent,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
-    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
+use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
 use std::convert::TryFrom;
 

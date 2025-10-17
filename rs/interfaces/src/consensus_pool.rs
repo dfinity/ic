@@ -3,10 +3,11 @@
 use crate::p2p::consensus::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
 use ic_types::{
+    Height,
     artifact::ConsensusMessageId,
     consensus::{
         Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq,
@@ -15,7 +16,6 @@ use ic_types::{
     },
     crypto::CryptoHashOf,
     time::Time,
-    Height,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -91,11 +91,7 @@ pub trait ChangeSetOperation: Sized {
 
 impl ChangeSetOperation for Mutations {
     fn or_else<F: FnOnce() -> Mutations>(self, f: F) -> Mutations {
-        if self.is_empty() {
-            f()
-        } else {
-            self
-        }
+        if self.is_empty() { f() } else { self }
     }
 
     fn dedup_push(&mut self, action: ChangeAction) -> Option<ChangeAction> {
@@ -250,10 +246,7 @@ pub trait PoolSection<T> {
         // this function on other things implementing PoolSection
         pb::CatchUpPackage::from(
             &self.catch_up_package().get_highest().unwrap_or_else(|err| {
-                panic!(
-                    "Error getting highest CatchUpPackage in the validated pool: {:?}",
-                    err
-                )
+                panic!("Error getting highest CatchUpPackage in the validated pool: {err:?}")
             }),
         )
     }

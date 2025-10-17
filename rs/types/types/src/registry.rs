@@ -23,7 +23,7 @@ impl fmt::Display for RegistryDataProviderError {
             RegistryDataProviderError::Timeout => write!(f, "Registry transport client timed out."),
             RegistryDataProviderError::Transfer { source } => write!(
                 f,
-                "Registry transport client failed to fetch registry update from registry canister: {}", source
+                "Registry transport client failed to fetch registry update from registry canister: {source}"
             ),
         }
     }

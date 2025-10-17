@@ -1,5 +1,5 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -12,19 +12,19 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::BatchSummary,
     consensus::certification::Certification,
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         CryptoHash, CryptoHashOf,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
-    messages::{Request, RequestOrResponse, Response},
+    messages::{Refund, Request, Response, StreamMessage},
     state_manager::{StateManagerError, StateManagerResult},
     xnet::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
         StreamIndexedQueue, StreamSlice,
     },
-    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, VecDeque};
@@ -228,14 +228,13 @@ impl StateManager for FakeStateManager {
         // should have a matching commit_and_certify.(#4618)
         assert!(
             tip.is_none(),
-            "Attempt to submit a state not borrowed from this StateManager Height {}",
-            height
+            "Attempt to submit a state not borrowed from this StateManager Height {height}"
         );
         *tip = Some((height, state));
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
-        panic!("Diverged at height {}", height)
+        panic!("Diverged at height {height}")
     }
 }
 
@@ -293,9 +292,10 @@ impl StateReader for FakeStateManager {
             .ok_or(StateManagerError::StateRemoved(height))
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         _paths: &LabeledTree<()>,
+        _exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
         None
     }
@@ -308,35 +308,30 @@ impl StateReader for FakeStateManager {
 }
 
 /// Local helper to enable serialization and deserialization of
-/// [`RequestOrResponse`] for testing.
+/// [`StreamMessage`] for testing.
 #[derive(Deserialize, Serialize)]
-enum SerializableRequestOrResponse {
+enum SerializableStreamMessage {
     Request(Request),
     Response(Response),
+    Refund(Refund),
 }
 
-impl From<&RequestOrResponse> for SerializableRequestOrResponse {
-    fn from(msg: &RequestOrResponse) -> Self {
+impl From<&StreamMessage> for SerializableStreamMessage {
+    fn from(msg: &StreamMessage) -> Self {
         match msg {
-            RequestOrResponse::Request(req) => {
-                SerializableRequestOrResponse::Request((**req).clone())
-            }
-            RequestOrResponse::Response(rep) => {
-                SerializableRequestOrResponse::Response((**rep).clone())
-            }
+            StreamMessage::Request(req) => SerializableStreamMessage::Request((**req).clone()),
+            StreamMessage::Response(rep) => SerializableStreamMessage::Response((**rep).clone()),
+            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund((**refund).clone()),
         }
     }
 }
 
-impl From<SerializableRequestOrResponse> for RequestOrResponse {
-    fn from(msg: SerializableRequestOrResponse) -> RequestOrResponse {
+impl From<SerializableStreamMessage> for StreamMessage {
+    fn from(msg: SerializableStreamMessage) -> StreamMessage {
         match msg {
-            SerializableRequestOrResponse::Request(req) => {
-                RequestOrResponse::Request(Arc::new(req))
-            }
-            SerializableRequestOrResponse::Response(rep) => {
-                RequestOrResponse::Response(Arc::new(rep))
-            }
+            SerializableStreamMessage::Request(req) => StreamMessage::Request(Arc::new(req)),
+            SerializableStreamMessage::Response(rep) => StreamMessage::Response(Arc::new(rep)),
+            SerializableStreamMessage::Refund(refund) => StreamMessage::Refund(Arc::new(refund)),
         }
     }
 }
@@ -471,11 +466,11 @@ impl From<SerializableStreamFlags> for StreamFlags {
 #[derive(Deserialize, Serialize)]
 struct SerializableStreamIndexedQueue {
     begin: StreamIndex,
-    queue: VecDeque<SerializableRequestOrResponse>,
+    queue: VecDeque<SerializableStreamMessage>,
 }
 
-impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQueue {
-    fn from(q: &StreamIndexedQueue<RequestOrResponse>) -> Self {
+impl From<&StreamIndexedQueue<StreamMessage>> for SerializableStreamIndexedQueue {
+    fn from(q: &StreamIndexedQueue<StreamMessage>) -> Self {
         SerializableStreamIndexedQueue {
             begin: q.begin(),
             queue: q.iter().map(|(_, msg)| msg.into()).collect(),
@@ -483,8 +478,8 @@ impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQ
     }
 }
 
-impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<RequestOrResponse> {
-    fn from(q: SerializableStreamIndexedQueue) -> StreamIndexedQueue<RequestOrResponse> {
+impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<StreamMessage> {
+    fn from(q: SerializableStreamIndexedQueue) -> StreamIndexedQueue<StreamMessage> {
         let mut queue = StreamIndexedQueue::with_begin(q.begin);
         q.queue
             .into_iter()
@@ -737,11 +732,15 @@ impl StateReader for RefMockStateManager {
         self.mock.read().unwrap().get_state_at(height)
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
-        self.mock.read().unwrap().read_certified_state(paths)
+        self.mock
+            .read()
+            .unwrap()
+            .read_certified_state_with_exclusion(paths, exclusion)
     }
 
     fn get_certified_state_snapshot(
