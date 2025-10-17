@@ -39,7 +39,10 @@ use ic_interfaces_state_manager::{
     StateHashError, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, warn};
-use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use ic_metrics::{
+    MetricsRegistry,
+    buckets::{decimal_buckets, exponential_buckets},
+};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
@@ -125,6 +128,8 @@ const LABEL_FETCH: &str = "fetch";
 const LABEL_HARDLINK_FILES: &str = "hardlink_files";
 const LABEL_COPY_CHUNKS: &str = "copy_chunks";
 const LABEL_PREALLOCATE: &str = "preallocate";
+const LABEL_PREALLOCATE_DIRECTORIES: &str = "preallocate_directories";
+const LABEL_PREALLOCATE_FILES: &str = "preallocate_files";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
 const LABEL_FETCH_META_MANIFEST_CHUNK: &str = "fetch_meta_manifest_chunk";
 const LABEL_FETCH_MANIFEST_CHUNK: &str = "fetch_manifest_chunk";
@@ -173,6 +178,10 @@ pub struct ManifestMetrics {
     file_group_chunks: IntGauge,
     sub_manifest_chunks: IntGauge,
     chunk_id_usage_nearing_limits_critical: IntCounter,
+    file_size_bytes: HistogramVec,
+    new_file_sizes_bytes: HistogramVec,
+    duplicated_chunks_num: IntGauge,
+    duplicated_chunks_size_bytes: IntGauge,
 }
 
 #[derive(Clone)]
@@ -528,6 +537,43 @@ impl ManifestMetrics {
             "Number of chunks of the manifest after it is encoded and split into sub-manifests.",
         );
 
+        let file_size_bytes = metrics_registry.histogram_vec(
+            "state_manager_file_size_bytes",
+            "File sizes in bytes by file type (canister.pbuf, overlay, queues.pbuf, snapshot.pbuf, software.wasm).",
+            // 1KiB, 2KiB, 4KiB, 8KiB(current limit for grouping), 16KiB, …,
+            // 1MiB(state manager chunk size), 2MiB, …, 1GiB
+            exponential_buckets(1024.0, 2.0, 21),
+            &["file_type"],
+        );
+
+        let new_file_sizes_bytes = metrics_registry.histogram_vec(
+            "state_manager_new_file_sizes_bytes",
+            "File sizes in bytes for files that are new since the previous manifest, by file type.",
+            // 1KiB, 2KiB, 4KiB, 8KiB(current limit for grouping), 16KiB, …,
+            // 1MiB(state manager chunk size), 2MiB, …, 1GiB
+            exponential_buckets(1024.0, 2.0, 21),
+            &["file_type"],
+        );
+
+        // Note [Metrics preallocation]
+        for file_type in crate::manifest::FILE_TYPES_TO_OBSERVE_SIZE
+            .iter()
+            .chain(std::iter::once(&"other"))
+        {
+            file_size_bytes.with_label_values(&[*file_type]);
+            new_file_sizes_bytes.with_label_values(&[*file_type]);
+        }
+
+        let duplicated_chunks_num = metrics_registry.int_gauge(
+            "state_manager_duplicated_chunks_num",
+            "Number of all duplicated chunks in the manifest.",
+        );
+
+        let duplicated_chunks_size_bytes = metrics_registry.int_gauge(
+            "state_manager_duplicated_chunks_size_bytes",
+            "Size of all duplicated chunks in bytes in the manifest.",
+        );
+
         Self {
             // Number of bytes that are either reused, hashed, or hashed and compared during the
             // manifest computation
@@ -543,6 +589,10 @@ impl ManifestMetrics {
             sub_manifest_chunks,
             chunk_id_usage_nearing_limits_critical: metrics_registry
                 .error_counter(CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS),
+            file_size_bytes,
+            new_file_sizes_bytes,
+            duplicated_chunks_num,
+            duplicated_chunks_size_bytes,
         }
     }
 }
@@ -592,7 +642,7 @@ impl StateSyncMetrics {
 
         let step_duration = metrics_registry.histogram_vec(
             "state_sync_step_duration_seconds",
-            "Duration of state sync sub-steps in seconds indexed by step ('hardlink_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint')",
+            "Duration of state sync sub-steps in seconds indexed by step ('hardlink_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint', 'preallocate', 'preallocate_directories', 'preallocate_files')",
             // 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, …, 1000s, 2000s, 5000s
             decimal_buckets(-1, 3),
             &["step"],
@@ -604,6 +654,9 @@ impl StateSyncMetrics {
             LABEL_COPY_CHUNKS,
             LABEL_FETCH,
             LABEL_STATE_SYNC_MAKE_CHECKPOINT,
+            LABEL_PREALLOCATE,
+            LABEL_PREALLOCATE_DIRECTORIES,
+            LABEL_PREALLOCATE_FILES,
         ] {
             step_duration.with_label_values(&[*step]);
         }
@@ -819,6 +872,8 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
+    /// The height at which this StateManager was started. Set once during initialization and never modified.
+    started_height: Height,
 }
 
 #[cfg(debug_assertions)]
@@ -1180,6 +1235,12 @@ impl StateManagerImpl {
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
+
+        let _timer = metrics
+            .api_call_duration
+            .with_label_values(&["new"])
+            .start_timer();
+
         info!(
             log,
             "Using path '{}' to manage local state",
@@ -1383,6 +1444,7 @@ impl StateManagerImpl {
                 ReplicatedState::new(own_subnet_id, own_subnet_type),
             ),
         };
+        let started_height = Height::new(latest_state_height.load(Ordering::Relaxed));
 
         let snapshots: VecDeque<Snapshot> = std::iter::once(initial_snapshot)
             .chain(
@@ -1424,7 +1486,7 @@ impl StateManagerImpl {
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             // Find the largest height where both the `manifest` and the `checkpoint_layout` are available;
             // build the manifest data from this height.
-            let manifest_delta = states
+            let base_manifest_info = states
                 .read()
                 .states_metadata
                 .iter()
@@ -1435,7 +1497,7 @@ impl StateManagerImpl {
                         checkpoint_layout: Some(checkpoint_layout),
                         bundled_manifest: Some(bundled_manifest),
                         ..
-                    } => Some(crate::manifest::ManifestDelta {
+                    } => Some(crate::manifest::BaseManifestInfo {
                         base_manifest: bundled_manifest.manifest.clone(),
                         base_height: *height,
                         target_height: checkpoint_layout.height(),
@@ -1447,7 +1509,7 @@ impl StateManagerImpl {
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
-                    manifest_delta,
+                    base_manifest_info,
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
@@ -1473,6 +1535,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            started_height,
         }
     }
 
@@ -1487,6 +1550,11 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Returns the height at which this StateManager was started.
+    pub fn started_height(&self) -> Height {
+        self.started_height
     }
 
     /// Populate `num_page_maps_by_load_status` in the metrics with their actual
@@ -1729,11 +1797,15 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            certifications_metadata.insert(
+            let certification = Self::compute_certification_metadata(metrics, log, &state)
+                .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
+            info!(
+                log,
+                "Certification hash for height {} at startup: {:?}",
                 height,
-                Self::compute_certification_metadata(metrics, log, &state)
-                    .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
+                certification.certified_state_hash
             );
+            certifications_metadata.insert(height, certification);
 
             let metadata = metadatas.remove(&height);
 
@@ -2281,7 +2353,7 @@ impl StateManagerImpl {
             //   4) Resetting the tip and merging the overlays.
             //
             // In particular, we need the previous manifest computation to complete because:
-            //   1) We need it to speed up the next manifest computation using ManifestDelta
+            //   1) We need it to speed up the next manifest computation using BaseManifestInfo
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
 
@@ -2347,12 +2419,12 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        let manifest_delta = {
+        let base_manifest_info = {
             let _timer = self
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["manifest_delta"])
+                .with_label_values(&["base_manifest_info"])
                 .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
@@ -2360,7 +2432,7 @@ impl StateManagerImpl {
                      base_manifest,
                      base_height,
                  }| {
-                    manifest::ManifestDelta {
+                    manifest::BaseManifestInfo {
                         base_manifest,
                         base_height,
                         target_height: height,
@@ -2392,7 +2464,7 @@ impl StateManagerImpl {
                 },
                 compute_manifest_request: TipRequest::ComputeManifest {
                     checkpoint_layout: cp_layout,
-                    manifest_delta,
+                    base_manifest_info,
                     states: self.states.clone(),
                     persist_metadata_guard: self.persist_metadata_guard.clone(),
                 },
@@ -3059,6 +3131,15 @@ impl StateManager for StateManagerImpl {
         let certification_metadata =
             Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+
+        if scope == CertificationScope::Full {
+            info!(
+                self.log,
+                "Certification hash for height {}: {:?}",
+                height,
+                certification_metadata.certified_state_hash
+            );
+        }
 
         // This step is expensive, so we do it before the write lock for `states`.
         let next_tip = {
@@ -3781,6 +3862,21 @@ impl PageAllocatorFileDescriptorImpl {
 
 pub mod testing {
     use super::*;
+
+    /// Trait for test-only functionality on StateSync
+    pub trait StateSyncTesting {
+        /// Force validation to be enabled for testing purposes
+        fn set_test_force_validate(&mut self);
+    }
+
+    impl StateSyncTesting for crate::state_sync::StateSync {
+        fn set_test_force_validate(&mut self) {
+            #[cfg(debug_assertions)]
+            {
+                self.test_force_validate = true;
+            }
+        }
+    }
 
     pub trait StateManagerTesting {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.

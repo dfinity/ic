@@ -1217,6 +1217,10 @@ pub mod nns {
     }
 
     pub mod registry {
+        use ic_registry_transport::{
+            deserialize_get_value_response, pb::v1::HighCapacityRegistryGetValueResponse,
+            serialize_get_value_request,
+        };
         use registry_canister::mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload;
 
         use super::*;
@@ -1235,6 +1239,32 @@ pub mod nns {
                     err => {
                         panic!("Unexpected error when performing swap in subnet directly: {err:?}")
                     }
+                })
+        }
+
+        pub async fn get_value<A: AsRef<str>>(
+            pocket_ic: &PocketIc,
+            key: A,
+            version_opt: Option<u64>,
+        ) -> Result<HighCapacityRegistryGetValueResponse, RejectResponse> {
+            pocket_ic
+                .query_call(
+                    REGISTRY_CANISTER_ID.get().0,
+                    PrincipalId::new_anonymous().0,
+                    "get_value",
+                    serialize_get_value_request(key.as_ref().as_bytes().to_vec(), version_opt)
+                        .unwrap(),
+                )
+                .await
+                .map(|res| {
+                    let response = deserialize_get_value_response(res)
+                        .expect("Failed to deserialize get value response");
+
+                    if let Some(err) = response.error {
+                        panic!("Received error from registry: {err:?}");
+                    }
+
+                    response
                 })
         }
     }

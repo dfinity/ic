@@ -47,6 +47,7 @@ use candid::Principal;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use pocket_ic::PocketIc;
 use serde::Deserialize;
+use std::fmt::Display;
 
 /// Represents an identifiable operation on PocketIC.
 pub trait Operation {
@@ -67,6 +68,12 @@ pub trait Operation {
 /// Uniquely identifies an operation.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
 pub struct OpId(pub String);
+
+impl Display for OpId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 // Index into a vector of PocketIc instances
 pub type InstanceId = usize;

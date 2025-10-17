@@ -5,11 +5,10 @@ shopt -s nocasematch
 ## Top-level script to run all execution and embedder benchmarks.
 ##
 ## Usage:
-##   To run all benchmarks and compare them to the committed baseline
-##   in a dev container on the `zh1-spm34` host:
+##   To run all benchmarks and compare them to the committed baseline:
 ##
 ##   ```sh
-##   HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+##   ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
 ##   ```
 ##
 ## The best (minimum) results are located in the `*.min` files in the current directory.
@@ -27,14 +26,18 @@ shopt -s nocasematch
 ## For example, run only the Embedders Heap benchmarks for `wasm32` query reads:
 ##
 ##   ```sh
-##   INCLUDE=heap FILTER=wasm32_query_read HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh
+##   INCLUDE=heap FILTER=wasm32_query_read ./rs/execution_environment/benches/run-all-benchmarks.sh
 ##   ```
 ##
+
+# Use host's hostname when in a dev container.
+hostname="${HOSTHOSTNAME:-$(hostname)}"
+hostname="${hostname%%.*}"
 
 printf "%-12s := %s\n" \
     "COMMIT_ID" "${COMMIT_ID:=$(git rev-list --abbrev-commit -1 HEAD)}" \
     "FILTER" "${FILTER:=}" \
-    "HOST" "${HOST:=$(hostname -s)}" \
+    "HOST" "${HOST:=${hostname}}" \
     "INCLUDE" "${INCLUDE:=${1:-}}" \
     "REPEAT" "${REPEAT:=3}" >&2
 

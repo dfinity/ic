@@ -6,6 +6,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
+use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -93,6 +94,7 @@ pub(crate) struct Upgrade {
     registry_replicator: Arc<RegistryReplicator>,
     pub logger: ReplicaLogger,
     node_id: NodeId,
+    disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
@@ -113,6 +115,7 @@ impl Upgrade {
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
+        disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     ) -> Self {
         let value = Self {
             registry,
@@ -128,6 +131,7 @@ impl Upgrade {
             logger: logger.clone(),
             prepared_upgrade_version: None,
             orchestrator_data_directory,
+            disk_encryption_key_exchange_agent,
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
@@ -584,6 +588,17 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
             record.release_package_urls,
             Some(record.release_package_sha256_hex),
         ))
+    }
+
+    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()> {
+        if let Some(agent) = &self.disk_encryption_key_exchange_agent {
+            agent
+                .exchange_keys()
+                .await
+                .map_err(|e| UpgradeError::DiskEncryptionKeyExchangeError(e.to_string()))
+        } else {
+            Ok(())
+        }
     }
 
     fn log(&self) -> &ReplicaLogger {

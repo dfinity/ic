@@ -69,30 +69,39 @@ function test_validate_domain_name() {
 
 function test_detect_hardware_generation() {
     # Gen1 test
-    test_detect_hardware_generation_helper "1" '[
-    {"id": "cpu:0", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}},
-    {"id": "cpu:1", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}}
-    ]'
+    test_detect_hardware_generation_helper 0 "type1" "1"
+    test_detect_hardware_generation_helper 0 "type1.1" "1"
+    test_detect_hardware_generation_helper 0 "type1.9" "1"
     # Gen2 test
-    test_detect_hardware_generation_helper "2" '[
-    {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}},
-    {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}}
-    ]'
+    test_detect_hardware_generation_helper 0 "type3" "2"
+    test_detect_hardware_generation_helper 0 "type3.1" "2"
+    test_detect_hardware_generation_helper 0 "type3.5" "2"
+
+    test_detect_hardware_generation_helper 1 "type5" "fail"
+    test_detect_hardware_generation_helper 1 "type33" "fail"
 }
 
 function test_detect_hardware_generation_helper() {
-    local expected_hardware_generation="$1"
-    local FAKE_CPU_JSON="$2"
+    local expected_result="$1"
+    local fake_node_reward_type="$2"
+    local expected_hardware_generation="$3"
     echo "Running test: test_detect_hardware_generation for Gen${expected_hardware_generation}"
 
-    function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
+    function get_config_value() { echo "$fake_node_reward_type"; }
     HARDWARE_GENERATION=""
 
-    detect_hardware_generation
-    if [[ "$HARDWARE_GENERATION" == "${expected_hardware_generation}" ]]; then
-        echo "  PASS: Gen${expected_hardware_generation} hardware detected"
+    if [ "$expected_result" -eq 0 ]; then
+        detect_hardware_generation
+        if [[ "$HARDWARE_GENERATION" == "${expected_hardware_generation}" ]]; then
+            echo "  PASS: Gen${expected_hardware_generation} hardware detected"
+        else
+            echo "  FAIL: Gen${expected_hardware_generation} hardware not detected as expected"
+            exit 1
+        fi
+    elif ! (detect_hardware_generation); then
+        echo "  PASS: unknown node rewards type correctly caused failure"
     else
-        echo "  FAIL: Gen${expected_hardware_generation} hardware not detected as expected"
+        echo "  FAIL: detect hardware generation failed unexpectedly"
         exit 1
     fi
 }

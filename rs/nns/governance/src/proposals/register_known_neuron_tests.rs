@@ -3,7 +3,7 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
-    pb::v1::{KnownNeuron, KnownNeuronData, governance_error::ErrorType},
+    pb::v1::{KnownNeuron, KnownNeuronData, Topic, governance_error::ErrorType},
     proposals::register_known_neuron::{
         KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN,
     },
@@ -41,6 +41,7 @@ fn create_test_neuron_store() -> NeuronStore {
         name: "Existing Known Neuron".to_string(),
         description: Some("Already registered".to_string()),
         links: vec!["https://existing.com".to_string()],
+        committed_topics: vec![Topic::NetworkEconomics as i32, Topic::Governance as i32],
     }))
     .build();
 
@@ -58,6 +59,11 @@ fn test_validate_success() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron for registration".to_string()),
             links: vec!["https://example.com".to_string()],
+            committed_topics: vec![
+                Topic::NetworkEconomics as i32,
+                Topic::Governance as i32,
+                Topic::NodeAdmin as i32,
+            ],
         }),
     };
 
@@ -73,6 +79,7 @@ fn test_validate_missing_neuron_id() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -109,6 +116,7 @@ fn test_validate_nonexistent_neuron() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -129,6 +137,7 @@ fn test_validate_name_empty() {
             name: "".to_string(),
             description: Some("A test known neuron".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -150,6 +159,7 @@ fn test_validate_name_too_long() {
             name: long_name,
             description: Some("A test known neuron".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -172,6 +182,7 @@ fn test_validate_description_too_long() {
             name: "Test Known Neuron".to_string(),
             description: Some(long_description),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -197,6 +208,7 @@ fn test_validate_too_many_links() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: too_many_links,
+            committed_topics: vec![],
         }),
     };
 
@@ -220,6 +232,7 @@ fn test_validate_link_too_long() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: vec![long_link],
+            committed_topics: vec![],
         }),
     };
 
@@ -244,6 +257,7 @@ fn test_validate_link_invalid() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: vec![invalid_link],
+            committed_topics: vec![],
         }),
     };
 
@@ -265,6 +279,7 @@ fn test_validate_name_already_exists() {
             name: "Existing Known Neuron".to_string(), // Same as neuron ID 2
             description: Some("A test known neuron".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -272,7 +287,7 @@ fn test_validate_name_already_exists() {
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
-            && error.error_message.contains("already belongs to a known neuron")
+            && error.error_message.contains("already belongs to a different known neuron with ID 2")
             && error.error_message.contains("Existing Known Neuron")
     );
 }
@@ -290,6 +305,7 @@ fn test_validate_maximum_valid_links() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: max_links,
+            committed_topics: vec![],
         }),
     };
 
@@ -312,6 +328,7 @@ fn test_validate_maximum_valid_link_size() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: vec![max_size_link],
+            committed_topics: vec![],
         }),
     };
 
@@ -334,6 +351,7 @@ fn test_execute_success() {
             "https://example.com".to_string(),
             "https://test.com".to_string(),
         ],
+        committed_topics: vec![Topic::NetworkEconomics as i32, Topic::Governance as i32],
     };
     let request = KnownNeuron {
         id: Some(neuron_id),
@@ -380,6 +398,7 @@ fn test_execute_validation_failure() {
             name: "Test Known Neuron".to_string(),
             description: Some("A test known neuron".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -400,6 +419,7 @@ fn test_execute_name_conflict() {
             name: "Existing Known Neuron".to_string(), // Same as neuron ID 2
             description: Some("A test known neuron".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }),
     };
 
@@ -407,6 +427,73 @@ fn test_execute_name_conflict() {
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
-            && error.error_message.contains("already belongs to a known neuron")
+            && error.error_message.contains("already belongs to a different known neuron with ID 2")
+    );
+}
+
+#[test]
+fn test_clobbering_same_neuron_allowed() {
+    let mut neuron_store = create_test_neuron_store();
+    // Try to register neuron ID 2 with its existing name "Existing Known Neuron"
+    // This should succeed (clobbering is allowed when same name and same ID)
+    let updated_data = KnownNeuronData {
+        name: "Existing Known Neuron".to_string(), // Same name as neuron ID 2 already has
+        description: Some("Updated description".to_string()),
+        links: vec!["https://updated.com".to_string()],
+        committed_topics: vec![
+            Topic::NetworkEconomics as i32,
+            Topic::Governance as i32,
+            Topic::SnsAndCommunityFund as i32,
+        ],
+    };
+    let request = KnownNeuron {
+        id: Some(NeuronId { id: 2 }),
+        known_neuron_data: Some(updated_data.clone()),
+    };
+
+    // Execute the registration - should succeed
+    let result = request.execute(&mut neuron_store);
+    assert_eq!(
+        result,
+        Ok(()),
+        "Should allow clobbering when same neuron ID and name"
+    );
+
+    // Verify the known neuron data has been updated
+    let known_data_after = neuron_store
+        .with_neuron(&NeuronId { id: 2 }, |neuron| {
+            neuron.known_neuron_data().cloned()
+        })
+        .expect("Neuron should exist");
+    assert_eq!(
+        known_data_after,
+        Some(updated_data),
+        "Known neuron data should be updated"
+    );
+}
+
+#[test]
+fn test_validate_duplicate_committed_topics() {
+    let neuron_store = create_test_neuron_store();
+    let request = KnownNeuron {
+        id: Some(NeuronId { id: 1 }),
+        known_neuron_data: Some(KnownNeuronData {
+            name: "Test Known Neuron".to_string(),
+            description: Some("A test known neuron with duplicate topics".to_string()),
+            links: vec![],
+            committed_topics: vec![
+                Topic::NetworkEconomics as i32,
+                Topic::Governance as i32,
+                Topic::NetworkEconomics as i32, // Duplicate
+            ],
+        }),
+    };
+
+    let result = request.validate(&neuron_store);
+    assert_matches!(
+        result,
+        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
+            && error.error_message.contains("Duplicate topic found in committed_topics")
+            && error.error_message.contains("3")
     );
 }

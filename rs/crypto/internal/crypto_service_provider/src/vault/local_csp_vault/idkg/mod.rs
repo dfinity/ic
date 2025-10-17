@@ -13,7 +13,7 @@ use crate::secret_key_store::{
 use crate::types::CspSecretKey;
 use crate::vault::api::{
     IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
-    IDkgTranscriptInternalBytes,
+    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternalBytes,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
@@ -35,9 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::{NodeIndex, NumberOfNodes};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
@@ -57,7 +55,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation_internal_bytes: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
         let start_time = self.metrics.now();
@@ -86,8 +84,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             })
             .collect::<Result<Vec<_>, IDkgCreateDealingVaultError>>()?;
         let transcript_operation_internal =
-            IDkgTranscriptOperationInternal::try_from(&transcript_operation)
-                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(format!("{e:?}")))?;
+            IDkgTranscriptOperationInternal::try_from(&transcript_operation_internal_bytes)
+                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(e.0))?;
         let result = self.idkg_create_dealing_internal(
             algorithm_id,
             &context_data,
@@ -143,14 +141,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
-        let internal_dealings = idkg_internal_dealings_from_verified_dealings(&dealings)?;
+        let internal_dealings = idkg_internal_dealings_from_bytes(&dealings)?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
                 internal_error: format!("failed to deserialize internal transcript: {:?}", e.0),
@@ -891,6 +889,23 @@ fn idkg_internal_dealings_from_verified_dealings(
                     internal_error: format!("failed to deserialize internal dealing: {e:?}"),
                 }
             })?;
+            Ok((*index, dealing))
+        })
+        .collect()
+}
+
+fn idkg_internal_dealings_from_bytes(
+    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
+) -> Result<BTreeMap<NodeIndex, IDkgDealingInternal>, IDkgLoadTranscriptError> {
+    verified_dealings
+        .iter()
+        .map(|(index, signed_dealing)| {
+            let dealing =
+                IDkgDealingInternal::deserialize(signed_dealing.as_ref()).map_err(|e| {
+                    IDkgLoadTranscriptError::SerializationError {
+                        internal_error: format!("failed to deserialize internal dealing: {e:?}"),
+                    }
+                })?;
             Ok((*index, dealing))
         })
         .collect()

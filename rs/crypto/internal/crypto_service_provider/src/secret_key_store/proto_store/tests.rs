@@ -280,8 +280,7 @@ fn should_deserialize_all_existing_secret_key_stores() {
     for version in SecretKeyStoreVersion::all_versions() {
         let (_temp_dir, secret_key_store) =
             open_existing_secret_key_store_in_temp_dir(&version, CryptoMetrics::none(), None);
-        let guard = secret_key_store.keys.read();
-        assert_eq!(guard.keys().len(), 5);
+        assert_eq!(secret_key_store.keys.len(), 5);
 
         let test_vecs = vec![
             TestVector::mega_encryption(),
@@ -351,11 +350,11 @@ fn should_have_scope_for_mega_private_key_that_had_no_scope_before_migration() {
         CryptoMetrics::none(),
         None,
     );
-    let (_csp_key, scope) = with_read_lock(&secret_key_store.keys, |keys| {
-        keys.get(&TestVector::mega_encryption().key_id)
-            .map(|(csp_key, scope)| (csp_key.to_owned(), scope.to_owned()))
-    })
-    .expect("missing MEGa private key");
+    let (_csp_key, scope) = secret_key_store
+        .keys
+        .get(&TestVector::mega_encryption().key_id)
+        .map(|(csp_key, scope)| (csp_key.to_owned(), scope.to_owned()))
+        .expect("missing MEGa private key");
 
     assert_eq!(scope, Some(IDKG_MEGA_SCOPE));
 }
@@ -365,8 +364,7 @@ fn should_be_idempotent_when_opening_secret_key_store() {
     for version in SecretKeyStoreVersion::all_versions() {
         let (temp_dir, secret_key_store) =
             open_existing_secret_key_store_in_temp_dir(&version, CryptoMetrics::none(), None);
-        let secret_keys_after_first_opening =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+        let secret_keys_after_first_opening = secret_key_store.keys.clone();
 
         let secret_key_store = ProtoSecretKeyStore::open(
             temp_dir.path(),
@@ -379,8 +377,7 @@ fn should_be_idempotent_when_opening_secret_key_store() {
             None,
             Arc::new(CryptoMetrics::none()),
         );
-        let secret_keys_after_second_opening =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+        let secret_keys_after_second_opening = secret_key_store.keys.clone();
 
         assert_eq!(
             secret_keys_after_first_opening,

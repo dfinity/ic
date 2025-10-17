@@ -4,8 +4,8 @@ use ic_state_machine_tests::StateMachine;
 // This constant has been obtained empirically by running the tests.
 // The old value of the const was 1_820_000.
 // Since, we updated the default stack size for Wasm from 1MiB to 3MiB
-// The new memory usage is 1_820_000 - 1_048_576 + 3_145_728 = 3_917_152
-const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 3_917_152;
+// The new memory usage is 1_820_000 - 1_048_576 + 3_145_728 = 3_991_081
+const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 3_991_081;
 
 const HELLO_WORLD_WAT: &str = r#"
 (module

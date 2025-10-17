@@ -1498,13 +1498,14 @@ impl PocketIc {
     }
 
     pub(crate) async fn do_drop(&mut self) {
-        self.stop_http_gateway().await;
         if self.owns_instance {
             self.reqwest_client
                 .delete(self.instance_url())
                 .send()
                 .await
                 .expect("Failed to send delete request");
+        } else {
+            self.stop_http_gateway().await;
         }
     }
 
@@ -1565,9 +1566,19 @@ impl PocketIc {
                         "instance_id={} Instance has Started: state_label: {}, op_id: {}",
                         self.instance_id, state_label, op_id
                     );
+                    let cleanup = || {
+                        tokio::spawn(
+                            reqwest_client
+                                .delete(
+                                    self.server_url
+                                        .join(&format!("/prune_graph/{state_label}/{op_id}"))
+                                        .unwrap(),
+                                )
+                                .send(),
+                        );
+                    };
                     loop {
                         std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
-                        let reqwest_client = &self.reqwest_client;
                         let result = reqwest_client
                             .get(
                                 self.server_url
@@ -1585,9 +1596,11 @@ impl PocketIc {
                             let status = result.status();
                             match ApiResponse::<_>::from_response(result).await {
                                 ApiResponse::Error { message } => {
+                                    cleanup();
                                     return Err((status, message));
                                 }
                                 ApiResponse::Success(t) => {
+                                    cleanup();
                                     return Ok(t);
                                 }
                                 ApiResponse::Started { state_label, op_id } => {
