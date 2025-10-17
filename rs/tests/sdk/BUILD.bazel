@@ -25,7 +25,7 @@ rust_library(
 )
 
 RUNTIME_DEPS = [
-    "@dfx",
+    "//:dfx",
 ]
 
 system_test_nns(
