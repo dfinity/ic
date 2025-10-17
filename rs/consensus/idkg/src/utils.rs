@@ -140,10 +140,10 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             })
     }
 
-    fn transcript(
+    fn transcript_as_ref(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+    ) -> Result<&IDkgTranscript, TranscriptLookupError> {
         let idkg_payload = match self.chain.get_block_by_height(transcript_ref.height) {
             Ok(block) => {
                 if let Some(idkg_payload) = block.payload.as_ref().as_idkg() {
@@ -167,7 +167,6 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .ok_or(format!(
                 "transcript(): missing idkg_transcript: {transcript_ref:?}"
             ))
-            .cloned()
     }
 
     fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
