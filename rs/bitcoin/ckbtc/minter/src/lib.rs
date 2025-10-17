@@ -1445,6 +1445,7 @@ pub trait CanisterRuntime {
 
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
 
+    /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
