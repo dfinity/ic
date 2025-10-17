@@ -40,6 +40,8 @@ REPO_COMPONENTS = glob(
         "**/*.bzl",
         "**/*.md",
         "**/*.adoc",
+        "hostos/misc/**",
+        "misc/serial-getty@/hostos/**",
     ],
 )
 

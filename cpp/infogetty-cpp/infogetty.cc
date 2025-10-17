@@ -129,6 +129,7 @@ loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const stru
 struct options {
     std::string tty_dev;
     bool allow_root_login = false;
+    bool allow_limited_login = false;
 };
 
 options
@@ -153,6 +154,21 @@ parse_commandline_options(int argc, char** argv)
             if (res == 0) {
                 // File exists, allow root login.
                 opts.allow_root_login = true;
+            }
+        } else if (arg == "-l") {
+            // -l points to a (potential) file. If it exists,
+            // allow limited console login.
+            ++n;
+            if (n >= argc) {
+                sd_journal_print(LOG_ERR, "missing argument to -l switch");
+                _exit(1);
+            }
+
+            struct stat st;
+            int res = ::stat(argv[n], &st);
+            if (res == 0) {
+                // File exists, allow limited login.
+                opts.allow_limited_login = true;
             }
         } else {
             opts.tty_dev = arg;
@@ -203,7 +219,7 @@ main(int argc, char** argv)
         "/usr/bin/login",
         "-f",
         "-p",
-        "root",
+        opts.allow_limited_login ? "limited-console" : "root",
         0
     };
     check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), environ), opts.tty_dev, "execve login failed");

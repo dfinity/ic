@@ -12,6 +12,10 @@ icos_images = icos_build(
     name = "prod",
     image_deps_func = image_deps,
     upgrades = False,
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     vuln_scan = False,
 )
 

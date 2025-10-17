@@ -1,0 +1,75 @@
+#!/bin/bash
+# Limited Console Shell - POC implementation
+# Provides restricted access to HostOS administrative commands
+
+# Log all command attempts
+log_command() {
+    echo "$(date): User $USER attempted: $*" >> /var/log/limited-console.log
+}
+
+# Show available commands
+show_menu() {
+    echo "=== HostOS Limited Console ==="
+    echo "Available commands:"
+    echo "1. system-status    - Show system status"
+    echo "2. service-status   - Show service status" 
+    echo "3. restart-service  - Restart a service"
+    echo "4. view-logs        - View service logs"
+    echo "5. network-config   - Show network configuration"
+    echo "6. exit             - Exit console"
+    echo ""
+}
+
+# Command dispatcher
+execute_command() {
+    case "$1" in
+        "system-status")
+            echo "=== System Status ==="
+            sudo /opt/ic/bin/hostos_tool set-hardware-gen-metric
+            ;;
+        "service-status")
+            echo "Enter service name (e.g., guestos, vsock-agent): "
+            read service
+            sudo systemctl status "$service"
+            ;;
+        "restart-service")
+            echo "Enter service name (e.g., guestos, vsock-agent): "
+            read service
+            sudo systemctl restart "$service"
+            ;;
+        "view-logs")
+            echo "Enter service name (e.g., guestos, vsock-agent): "
+            read service
+            sudo journalctl -u "$service" --no-pager -n 50
+            ;;
+        "network-config")
+            echo "=== Network Configuration ==="
+            sudo /opt/ic/bin/hostos_tool generate-network-config
+            ;;
+        "exit")
+            echo "Exiting limited console..."
+            exit 0
+            ;;
+        *)
+            echo "Unknown command: $1"
+            show_menu
+            ;;
+    esac
+}
+
+# Main loop
+echo "Welcome to HostOS Limited Console"
+echo "Type 'help' for available commands or 'exit' to quit"
+echo ""
+
+while true; do
+    echo -n "limited-console> "
+    read -r command
+    log_command "$command"
+    
+    if [ "$command" = "help" ]; then
+        show_menu
+    else
+        execute_command "$command"
+    fi
+done
