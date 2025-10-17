@@ -169,6 +169,7 @@ impl InternalHttpQueryHandler {
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
         certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+        enable_query_stats_tracking: bool,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -236,7 +237,9 @@ impl InternalHttpQueryHandler {
             };
         }
 
-        let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled {
+        let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
+            && enable_query_stats_tracking
+        {
             Some(&self.local_query_execution_stats)
         } else {
             None
@@ -336,6 +339,7 @@ pub(crate) struct HttpQueryHandler {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_scheduler: QueryScheduler,
     metrics: Arc<HttpQueryHandlerMetrics>,
+    enable_query_stats_tracking: bool,
 }
 
 impl HttpQueryHandler {
@@ -345,12 +349,14 @@ impl HttpQueryHandler {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
         namespace: &str,
+        enable_query_stats_tracking: bool,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
             metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
+            enable_query_stats_tracking,
         })
     }
 }
@@ -378,6 +384,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         let canister_id = query.receiver;
         let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
         let http_query_handler_metrics = Arc::clone(&self.metrics);
+        let enable_query_stats_tracking = self.enable_query_stats_tracking;
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
@@ -411,8 +418,13 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response =
-                            internal.query(query, state, cert, certificate_delegation_metadata);
+                        let response = internal.query(
+                            query,
+                            state,
+                            cert,
+                            certificate_delegation_metadata,
+                            enable_query_stats_tracking,
+                        );
 
                         Ok((response, time))
                     }
