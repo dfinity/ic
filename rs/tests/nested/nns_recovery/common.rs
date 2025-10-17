@@ -4,6 +4,7 @@ use std::time::Duration;
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
     assert_subnet_is_broken, break_nodes, node_with_highest_certification_share_height,
+    remote_recovery,
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
@@ -531,16 +532,6 @@ async fn simulate_node_provider_action(
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
         .expect("Failed to spoof GuestOS DNS");
-}
-
-fn remote_recovery(subnet_recovery_tool: NNSRecoverySameNodes, logger: &Logger) {
-    for (step_type, step) in subnet_recovery_tool {
-        info!(logger, "Next step: {:?}", step_type);
-
-        info!(logger, "{}", step.descr());
-        step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
-    }
 }
 
 fn local_recovery(
