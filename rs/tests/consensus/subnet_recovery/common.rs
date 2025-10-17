@@ -29,7 +29,8 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    assert_subnet_is_broken, break_nodes, node_with_highest_certification_share_height,
+    READONLY_USERNAME, assert_subnet_is_broken, break_nodes,
+    local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
     remote_recovery,
 };
 use anyhow::bail;
@@ -90,8 +91,6 @@ const APP_NODES_LARGE: usize = 37;
 /// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
-
-const READONLY_USERNAME: &str = "readonly";
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 
@@ -682,7 +681,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
-    let session = &node.block_on_ssh_session().unwrap();
+    let session = node.block_on_ssh_session().unwrap();
     let node_id = node.node_id;
     let node_ip = node.get_ip_addr();
     info!(
@@ -691,40 +690,21 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     );
     scp_send_to(
         logger.clone(),
-        session,
+        &session,
         &get_dependency_path_from_env("IC_ADMIN_PATH"),
         Path::new(IC_ADMIN_REMOTE_PATH),
         0o755,
     );
 
-    let nns_url = subnet_recovery.recovery_args.nns_url;
-    let subnet_id = subnet_recovery.params.subnet_id;
-    let maybe_replay_until_height = subnet_recovery
-        .params
-        .replay_until_height
-        .map(|h| format!("--replay-until-height {h} "))
-        .unwrap_or_default();
-    let readonly_pub_key = subnet_recovery.params.readonly_pub_key.unwrap();
-    let readonly_pub_key = readonly_pub_key.trim();
-
+    let command_args = app_subnet_recovery_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
         r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
-        --nns-url {nns_url} \
-        --test --skip-prompts --use-local-binaries \
-        app-subnet-recovery \
-        --subnet-id {subnet_id} \
-        {maybe_replay_until_height}\
-        --readonly-pub-key "{readonly_pub_key}" \
-        --download-method local \
-        --upload-method local \
-        --wait-for-cup-node {node_ip} \
-        --skip DownloadCertifications \
-        --skip MergeCertificationPools
-    "#
+        {command_args}
+        "#
     );
 
     info!(logger, "Executing local recovery command: \n{command}");
-    match node.block_on_bash_script_from_session(session, &command) {
+    match node.block_on_bash_script_from_session(&session, &command) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
