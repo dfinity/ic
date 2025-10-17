@@ -1,11 +1,12 @@
 use candid::Principal;
 use ic_consensus_system_test_utils::rw_message::{can_read_msg, cannot_store_msg};
-use ic_recovery::get_node_metrics;
+use ic_recovery::{get_node_metrics, steps::Step};
 use ic_system_test_driver::{
     driver::test_env_api::{IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot},
     util::block_on,
 };
 use slog::{Logger, info};
+use std::fmt::Debug;
 use url::Url;
 
 /// Break the replica binary on the given nodes
@@ -70,5 +71,20 @@ pub fn node_with_highest_certification_share_height(
         })
         .max_by_key(|&(_, cert_height)| cert_height)
         .expect("No healthy node found")
+}
+
+/// Execute all recovery steps remotely, i.e. from the test driver
+pub fn remote_recovery<Recovery, StepType>(recovery: Recovery, logger: &Logger)
+where
+    Recovery: IntoIterator<Item = (StepType, Box<dyn Step>)>,
+    StepType: Debug,
+{
+    for (step_type, step) in recovery {
+        info!(logger, "Next step: {:?}", step_type);
+
+        info!(logger, "{}", step.descr());
+        step.exec()
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
+    }
 }
 

@@ -30,6 +30,7 @@ end::catalog[] */
 
 use crate::utils::{
     assert_subnet_is_broken, break_nodes, node_with_highest_certification_share_height,
+    remote_recovery,
 };
 use anyhow::bail;
 use canister_test::Canister;
@@ -56,7 +57,6 @@ use ic_recovery::{
     Recovery, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     get_node_metrics,
-    steps::Step,
     util::DataLocation,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
@@ -481,7 +481,11 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         wait_for_cup_node: None, // We will set this after breaking/halting the subnet, see below
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
         next_step: None,
-        skip: None,
+        // Skip validating the output if the CUP is corrupt, as in this case no replica will be
+        // running to compare the heights to.
+        skip: cfg
+            .corrupt_cup
+            .then_some(vec![StepType::ValidateReplayOutput]),
     };
 
     info!(
@@ -594,7 +598,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         local_recovery(&download_node, subnet_recovery, &logger);
     } else {
         info!(logger, "Performing remote recovery");
-        remote_recovery(&cfg, subnet_recovery, &logger);
+        remote_recovery(subnet_recovery, &logger);
     }
 
     info!(logger, "Blocking for newer registry version");
@@ -675,22 +679,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     topology_snapshot.unassigned_nodes().for_each(|n| {
         assert_node_is_unassigned_with_ssh_session(&n, admin_ssh_sessions.get(&n.node_id), &logger);
     });
-}
-
-fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
-    for (step_type, step) in subnet_recovery {
-        info!(logger, "Next step: {:?}", step_type);
-
-        if cfg.corrupt_cup && step_type == StepType::ValidateReplayOutput {
-            // Skip validating the output if the CUP is corrupt, as in this case
-            // no replica will be running to compare the heights to.
-            continue;
-        }
-
-        info!(logger, "{}", step.descr());
-        step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
-    }
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
