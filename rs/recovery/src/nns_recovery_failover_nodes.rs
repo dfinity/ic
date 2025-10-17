@@ -150,10 +150,6 @@ impl NNSRecoveryFailoverNodes {
         }
     }
 
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
-    }
-
     pub fn get_local_store_tar(&self) -> PathBuf {
         self.recovery
             .work_dir
