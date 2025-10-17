@@ -18,7 +18,7 @@ use ic_ckbtc_minter::{
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 
 pub use ic_ckbtc_minter::{
-    OutPoint, Page, Txid, Utxo,
+    Log, LogEntry, OutPoint, Page, Txid, Utxo,
     memo::{BurnMemo, MintMemo, Status, encode as memo_encode},
     state::eventlog::{Event, EventType, GetEventsArg},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},

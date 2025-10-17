@@ -1,5 +1,6 @@
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
+use ic_ckdoge_minter::Log;
 use ic_ckdoge_minter::UtxoStatus;
 use ic_ckdoge_minter::candid_api::{
     GetDogeAddressArgs, RetrieveDogeStatus, RetrieveDogeStatusRequest,
@@ -110,10 +111,32 @@ impl MinterCanister {
                 }
             }
         }
-        // dbg!(self.get_logs());
+        dbg!(self.get_logs());
         panic!(
             "the minter did not submit a transaction in {max_ticks} ticks; last status {last_status:?}"
         )
+    }
+
+    pub fn get_logs(&self) -> Log {
+        use ic_http_types::{HttpRequest, HttpResponse};
+
+        let request = HttpRequest {
+            method: "".to_string(),
+            url: "/logs".to_string(),
+            headers: vec![],
+            body: vec![].into(),
+        };
+        let result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "http_request",
+                Encode!(&request).unwrap(),
+            )
+            .expect("BUG: failed to call get_log");
+        let response = Decode!(&result, HttpResponse).unwrap();
+        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log")
     }
 
     pub fn assert_that_events(&self) -> MinterEventAssert {

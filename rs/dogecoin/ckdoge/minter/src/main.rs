@@ -11,6 +11,7 @@ use ic_ckdoge_minter::{
     lifecycle::init::MinterArg,
     updates,
 };
+use ic_http_types::{HttpRequest, HttpResponse};
 
 #[init]
 fn init(args: MinterArg) {
@@ -133,6 +134,15 @@ fn get_events(args: GetEventsArg) -> Vec<Event> {
         .skip(args.start as usize)
         .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
         .collect()
+}
+
+#[query(hidden = true)]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if ic_cdk::api::in_replicated_execution() {
+        ic_cdk::trap("update call rejected");
+    }
+
+    ic_ckbtc_minter::queries::http_request(req)
 }
 
 fn main() {}
