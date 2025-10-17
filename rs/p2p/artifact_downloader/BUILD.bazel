@@ -61,7 +61,6 @@ rust_test_suite(
     deps = [":artifact_downloader"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-
 rust_ic_bench(
     name = "assembler_bench",
     testonly = True,
