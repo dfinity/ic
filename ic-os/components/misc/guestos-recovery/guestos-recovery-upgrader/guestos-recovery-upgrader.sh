@@ -268,8 +268,8 @@ main() {
     if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
         log_message "ERROR: version and version-hash parameters are required"
         log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
-        # Sleep 30 seconds then repeat error message to ensure visibility after console initialization wipe
-        sleep 30
+        # Sleep 15 seconds then repeat error message to ensure visibility after console initialization wipe
+        sleep 15
         log_message "ERROR: version and version-hash parameters are required"
         log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
         exit 1
