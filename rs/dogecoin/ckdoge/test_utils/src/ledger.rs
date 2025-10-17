@@ -1,5 +1,7 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_management_canister_types::CanisterId;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
 use pocket_ic::PocketIc;
 use std::sync::Arc;
@@ -47,6 +49,40 @@ impl LedgerCanister {
             response.transactions
         );
         response.transactions.pop().unwrap()
+    }
+
+    pub fn icrc2_approve(
+        &self,
+        from: impl Into<Account>,
+        amount: u64,
+        spender: impl Into<Account>,
+    ) -> Result<u64, ApproveError> {
+        use icrc_ledger_types::icrc2::approve::ApproveArgs;
+
+        let from_account = from.into();
+        let spender = spender.into();
+        let request = ApproveArgs {
+            from_subaccount: from_account.subaccount,
+            spender,
+            amount: Nat::from(amount),
+            expected_allowance: None,
+            expires_at: None,
+            fee: None,
+            memo: None,
+            created_at_time: None,
+        };
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                from_account.owner,
+                "icrc2_approve",
+                Encode!(&request).unwrap(),
+            )
+            .expect("BUG: failed to call icrc2_approve");
+        Decode!(&call_result, Result<Nat, ApproveError>)
+            .unwrap()
+            .map(|index| index.0.try_into().unwrap())
     }
 }
 

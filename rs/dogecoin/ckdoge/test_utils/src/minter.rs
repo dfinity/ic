@@ -96,6 +96,10 @@ impl MinterCanister {
         }
     }
 
+    pub fn id(&self) -> CanisterId {
+        self.id
+    }
+
     fn get_events(&self, start: u64, length: u64) -> Vec<Event> {
         use ic_ckdoge_minter::GetEventsArg;
 
