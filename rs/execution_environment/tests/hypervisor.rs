@@ -39,7 +39,7 @@ use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
-    Time,
+    PrincipalId, Time,
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
@@ -1873,28 +1873,32 @@ fn ic0_msg_reply_works() {
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32) (param i32))
             )
-            (func (export "canister_update test_update")
+            (func $test
                 (call $msg_reply_data_append (i32.const 0) (i32.const 4))
                 (call $msg_reply_data_append (i32.const 4) (i32.const 4))
                 (call $msg_reply)
             )
+            (func (export "canister_update test_update")
+                (call $test)
+            )
             (func (export "canister_query test_query")
-                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
-                (call $msg_reply_data_append (i32.const 4) (i32.const 4))
-                (call $msg_reply)
+                (call $test)
             )
             (memory 1 1)
             (data (i32.const 0) "abcdefgh")
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
+    let check_result = |result: WasmResult| {
+        assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result);
+    };
     let result = test.ingress(canister_id, "test_update", vec![]).unwrap();
-    assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result);
+    check_result(result);
     let result = test.ingress(canister_id, "test_query", vec![]).unwrap();
-    assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result);
+    check_result(result);
     let result = test
         .non_replicated_query(canister_id, "test_query", vec![])
         .unwrap();
-    assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result);
+    check_result(result);
 }
 
 #[test]
@@ -1905,11 +1909,14 @@ fn ic0_msg_reply_data_append_has_no_effect_without_ic0_msg_reply() {
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32) (param i32))
             )
-            (func (export "canister_update test_update")
+            (func $test
                 (call $msg_reply_data_append (i32.const 0) (i32.const 8))
             )
+            (func (export "canister_update test_update")
+                (call $test)
+            )
             (func (export "canister_query test_query")
-                (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+                (call $test)
             )
             (memory 1 1)
             (data (i32.const 0) "abcdefgh")
@@ -2001,30 +2008,25 @@ fn ic0_msg_caller_size_and_copy_work_in_update_calls() {
         .inter_query(callee_id, call_args().other_side(get_caller.clone()))
         .build();
 
+    let check_result = |result: WasmResult, principal: PrincipalId| {
+        assert_eq!(result, WasmResult::Reply(principal.as_slice().to_vec()));
+    };
+
     // `ic0.msg_caller_{size,copy}` in an ingress message
     let result = test.ingress(caller_id, "update", get_caller).unwrap();
-    assert_eq!(
-        result,
-        WasmResult::Reply(test.user_id().get().as_slice().to_vec())
-    );
+    check_result(result, test.user_id().get());
 
     // `ic0.msg_caller_{size,copy}` in an inter-canister call to update method
     let result = test
         .ingress(caller_id, "update", inter_canister_update_payload)
         .unwrap();
-    assert_eq!(
-        result,
-        WasmResult::Reply(caller_id.get().as_slice().to_vec())
-    );
+    check_result(result, caller_id.get());
 
     // `ic0.msg_caller_{size,copy}` in an inter-canister call to query method
     let result = test
         .ingress(caller_id, "update", inter_canister_query_payload)
         .unwrap();
-    assert_eq!(
-        result,
-        WasmResult::Reply(caller_id.get().as_slice().to_vec())
-    );
+    check_result(result, caller_id.get());
 }
 
 #[test]
@@ -2105,24 +2107,30 @@ fn ic0_msg_reject_works() {
             (import "ic0" "msg_reject"
                 (func $ic0_msg_reject (param i32) (param i32))
             )
-            (func (export "canister_update test_update")
+            (func $test
                 (call $ic0_msg_reject (i32.const 0) (i32.const 6))
             )
+            (func (export "canister_update test_update")
+                (call $test)
+            )
             (func (export "canister_query test_query")
-                (call $ic0_msg_reject (i32.const 0) (i32.const 6))
+                (call $test)
             )
             (memory 1 1)
             (data (i32.const 0) "panic!")
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
+    let check_result = |result: WasmResult| {
+        assert_eq!(WasmResult::Reject("panic!".to_string()), result);
+    };
     let result = test.ingress(canister_id, "test_update", vec![]).unwrap();
-    assert_eq!(WasmResult::Reject("panic!".to_string()), result);
+    check_result(result);
     let result = test.ingress(canister_id, "test_query", vec![]).unwrap();
-    assert_eq!(WasmResult::Reject("panic!".to_string()), result);
+    check_result(result);
     let result = test
         .non_replicated_query(canister_id, "test_query", vec![])
         .unwrap();
-    assert_eq!(WasmResult::Reject("panic!".to_string()), result);
+    check_result(result);
 }
 
 #[test]
@@ -10170,17 +10178,12 @@ fn ic0_certified_data_set_too_long() {
 }
 
 fn get_global_data(test: &mut ExecutionTest, canister_id: CanisterId) -> Vec<u8> {
-    let res = test
-        .ingress(
-            canister_id,
-            "query",
-            wasm().get_global_data().append_and_reply().build(),
-        )
-        .unwrap();
-    match res {
-        WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    }
+    let res = test.ingress(
+        canister_id,
+        "query",
+        wasm().get_global_data().append_and_reply().build(),
+    );
+    get_reply(res)
 }
 
 #[test]
@@ -10235,14 +10238,13 @@ fn unreplied_update_commits_memory_changes() {
         wasm()
             .inter_update(
                 canister_id,
-                CallArgs::default().other_side(wasm().set_global_data(b"BAR").build()),
+                CallArgs::default()
+                    .other_side(wasm().set_global_data(b"BAR").build())
+                    .on_reject(wasm().reject_message().reject().build()),
             )
             .build(),
     );
-    assert_eq!(
-        get_reject(res).as_bytes(),
-        (RejectCode::CanisterError as u32).to_le_bytes()
-    );
+    assert_eq!(get_reject(res), "No response");
     assert_eq!(get_global_data(&mut test, canister_id), b"BAR");
 }
 
