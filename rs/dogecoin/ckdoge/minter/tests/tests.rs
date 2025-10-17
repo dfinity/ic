@@ -329,5 +329,7 @@ mod withdrawal {
                 }))),
                 created_at_time: None,
             });
+
+        let txid = minter.await_doge_transaction(retrieve_doge_id.block_index);
     }
 }

@@ -1,6 +1,5 @@
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
-use ic_ckdoge_minter::Event;
 use ic_ckdoge_minter::UtxoStatus;
 use ic_ckdoge_minter::candid_api::{
     GetDogeAddressArgs, RetrieveDogeStatus, RetrieveDogeStatusRequest,
@@ -8,6 +7,7 @@ use ic_ckdoge_minter::candid_api::{
 use ic_ckdoge_minter::candid_api::{
     RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
 };
+use ic_ckdoge_minter::{Event, Txid};
 use ic_ckdoge_minter::{UpdateBalanceArgs, UpdateBalanceError};
 use ic_management_canister_types::CanisterId;
 use pocket_ic::{PocketIc, RejectResponse};
@@ -93,6 +93,27 @@ impl MinterCanister {
             )
             .expect("BUg: failed to call retrieve_doge_status");
         Decode!(&call_result, RetrieveDogeStatus).unwrap()
+    }
+
+    pub fn await_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+        let mut last_status = None;
+        let max_ticks = 10;
+        for _ in 0..max_ticks {
+            let status = self.retrieve_doge_status(ledger_burn_index);
+            match status {
+                RetrieveDogeStatus::Submitted { txid } => {
+                    return txid;
+                }
+                status => {
+                    last_status = Some(status);
+                    self.env.tick();
+                }
+            }
+        }
+        // dbg!(self.get_logs());
+        panic!(
+            "the minter did not submit a transaction in {max_ticks} ticks; last status {last_status:?}"
+        )
     }
 
     pub fn assert_that_events(&self) -> MinterEventAssert {
