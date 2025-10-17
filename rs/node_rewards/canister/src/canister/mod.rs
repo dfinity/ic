@@ -170,7 +170,9 @@ impl NodeRewardsCanister {
     }
 }
 
-impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRewardsCanister {
+impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithmInputProvider
+    for &NodeRewardsCanister
+{
     fn get_rewards_table(&self, date: &NaiveDate) -> Result<NodeRewardsTable, String> {
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 

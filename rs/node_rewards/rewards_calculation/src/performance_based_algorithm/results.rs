@@ -19,7 +19,7 @@ pub struct NodeMetricsDaily {
     /// This is the SUBNET_FAILURE_RATE_PERCENTILE of the original_fr all nodes in the subnet.
     /// It is used to adjust individual node failure rates to account for systematic issues
     /// affecting the whole subnet.
-    pub subnet_assigned_fr_percent: Decimal,
+    pub subnet_assigned_failure_rate_percent: Decimal,
 
     /// Number of blocks successfully proposed by this node on this day
     pub num_blocks_proposed: u64,
@@ -31,14 +31,14 @@ pub struct NodeMetricsDaily {
     ///
     /// Calculated as `num_blocks_failed / (num_blocks_proposed + num_blocks_failed)`.
     /// Represents the failure rate of the node before any subnet-level adjustments.
-    pub original_fr_percent: Decimal,
+    pub original_failure_rate_percent: Decimal,
 
     /// Relative Failure Rate
     ///
     /// Failure rate adjusted for subnet performance.
     /// Calculated as `max(0, original_fr - subnet_assigned_fr_percent)`.
     /// TODO: Link documentation about performance based rewards algorithm
-    pub relative_fr_percent: Decimal,
+    pub relative_failure_rate_percent: Decimal,
 }
 
 // TODO: Link documentation about performance based rewards algorithm
@@ -51,7 +51,7 @@ pub enum DailyNodeFailureRate {
     NonSubnetMember {
         /// Extrapolated Failure Rate (EFR)
         /// Used to estimate the node's performance when unassigned
-        extrapolated_fr: Decimal,
+        extrapolated_failure_rate_percent: Decimal,
     },
 }
 
@@ -70,7 +70,7 @@ pub struct DailyNodeRewards {
     pub dc_id: String,
 
     /// Daily node failure rate
-    pub daily_node_fr: DailyNodeFailureRate,
+    pub daily_node_failure_rate: DailyNodeFailureRate,
 
     /// Performance multiplier (1 - rewards_reduction)
     ///
@@ -145,7 +145,7 @@ pub struct DailyNodeProviderRewards {
 #[derive(Serialize, Deserialize)]
 pub struct DailyResults {
     /// Failure rates for all subnets on this day
-    pub subnets_fr_percent: BTreeMap<SubnetId, Decimal>,
+    pub subnets_failure_rate_percent: BTreeMap<SubnetId, Decimal>,
 
     /// Rewards for all node providers on this day
     pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,

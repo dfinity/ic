@@ -18,19 +18,19 @@ impl TryFrom<native_types::NodeMetricsDaily> for NodeMetricsDaily {
         Ok(Self {
             subnet_assigned: Some(src.subnet_assigned.get()),
             subnet_assigned_fr_percent: Some(
-                src.subnet_assigned_fr_percent
+                src.subnet_assigned_failure_rate_percent
                     .to_f64()
                     .ok_or("Conversion to f64 failed (subnet_assigned_fr_percent)")?,
             ),
             num_blocks_proposed: Some(src.num_blocks_proposed),
             num_blocks_failed: Some(src.num_blocks_failed),
             original_fr_percent: Some(
-                src.original_fr_percent
+                src.original_failure_rate_percent
                     .to_f64()
                     .ok_or("Conversion to f64 failed (original_fr_percent)")?,
             ),
             relative_fr_percent: Some(
-                src.relative_fr_percent
+                src.relative_failure_rate_percent
                     .to_f64()
                     .ok_or("Conversion to f64 failed (relative_fr_percent)")?,
             ),
@@ -49,15 +49,15 @@ impl TryFrom<native_types::DailyNodeFailureRate> for DailyNodeFailureRate {
                     node_metrics: Some(NodeMetricsDaily::try_from(node_metrics)?),
                 })
             }
-            native_types::DailyNodeFailureRate::NonSubnetMember { extrapolated_fr } => {
-                Ok(DailyNodeFailureRate::NonSubnetMember {
-                    extrapolated_fr_percent: Some(
-                        extrapolated_fr
-                            .to_f64()
-                            .ok_or("Conversion to f64 failed (extrapolated_fr)")?,
-                    ),
-                })
-            }
+            native_types::DailyNodeFailureRate::NonSubnetMember {
+                extrapolated_failure_rate_percent: extrapolated_fr,
+            } => Ok(DailyNodeFailureRate::NonSubnetMember {
+                extrapolated_fr_percent: Some(
+                    extrapolated_fr
+                        .to_f64()
+                        .ok_or("Conversion to f64 failed (extrapolated_fr)")?,
+                ),
+            }),
         }
     }
 }
@@ -72,7 +72,7 @@ impl TryFrom<native_types::DailyNodeRewards> for DailyNodeRewards {
             node_reward_type: Some(src.node_reward_type.to_string()),
             region: Some(src.region),
             dc_id: Some(src.dc_id),
-            daily_node_fr: Some(DailyNodeFailureRate::try_from(src.daily_node_fr)?),
+            daily_node_fr: Some(DailyNodeFailureRate::try_from(src.daily_node_failure_rate)?),
             performance_multiplier_percent: Some(
                 src.performance_multiplier_percent
                     .to_f64()
@@ -183,7 +183,7 @@ impl TryFrom<native_types::DailyResults> for DailyResults {
     fn try_from(src: native_types::DailyResults) -> Result<Self, Self::Error> {
         Ok(Self {
             subnets_fr: src
-                .subnets_fr_percent
+                .subnets_failure_rate_percent
                 .into_iter()
                 .map(|(k, v)| {
                     v.to_f64()

@@ -1,5 +1,7 @@
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
-use crate::performance_based_algorithm::{DataProvider, PerformanceBasedAlgorithm};
+use crate::performance_based_algorithm::{
+    PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
+};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -37,7 +39,7 @@ impl RewardsCalculationV1 {
     pub fn calculate_rewards(
         from_date: &NaiveDate,
         to_date: &NaiveDate,
-        data_provider: impl DataProvider,
+        data_provider: impl PerformanceBasedAlgorithmInputProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
             from_date,
@@ -103,7 +105,7 @@ mod tests {
 
         // --- Execution ---
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_fr;
+        let subnets_fr = result.subnets_failure_rate;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
@@ -144,7 +146,7 @@ mod tests {
             ],
         )]);
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_fr;
+        let subnets_fr = result.subnets_failure_rate;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
