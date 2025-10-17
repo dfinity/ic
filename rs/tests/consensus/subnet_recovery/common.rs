@@ -431,12 +431,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .map(|n| n.node_id)
         .collect::<Vec<NodeId>>();
 
-    let version_is_broken = cfg.upgrade && unassigned_nodes_ids.is_empty();
-    let working_version = if version_is_broken {
-        get_guestos_update_img_version()
-    } else {
-        current_version.clone()
-    };
+    let maybe_upgrade_version = (cfg.upgrade && unassigned_nodes_ids.is_empty())
+        .then_some(get_guestos_update_img_version());
 
     let recovery_dir = get_dependency_path("rs/tests");
     let binaries_dir = recovery_dir.join("recovery/binaries");
@@ -535,7 +531,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
-        replica_version: Some(current_version),
+        replica_version: Some(current_version.clone()),
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
@@ -546,7 +542,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     // of time.
     let subnet_args = AppSubnetRecoveryArgs {
         subnet_id: app_subnet_id,
-        upgrade_version: version_is_broken.then(|| working_version.clone()),
+        upgrade_version: maybe_upgrade_version.clone(),
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
@@ -621,7 +617,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let new_msg = "subnet recovery still works!";
     assert_subnet_is_healthy(
         &all_app_nodes,
-        &working_version,
+        &maybe_upgrade_version.unwrap_or(current_version),
         app_can_id,
         msg,
         new_msg,
