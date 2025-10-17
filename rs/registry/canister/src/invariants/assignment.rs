@@ -1,6 +1,4 @@
-use std::collections::HashSet;
-
-use ic_base_types::{NodeId, PrincipalId};
+use std::collections::{BTreeMap, HashSet};
 
 use super::{
     common::{
@@ -9,6 +7,8 @@ use super::{
     },
     subnet::get_subnet_records_map,
 };
+use ic_base_types::{NodeId, PrincipalId};
+use ic_protobuf::registry::node::v1::NodeRecord;
 
 /// Checks node assignment invariants:
 ///    * A node can only have one of the following three assignments:
@@ -30,11 +30,17 @@ pub(crate) fn check_node_assignment_invariants(
         .into_keys()
         .collect();
 
-    let errors: Vec<String> = get_node_records_from_snapshot(snapshot).keys().map(|node_id| {
+    let mut unassigned_nodes: BTreeMap<NodeId, NodeRecord> = vec![];
+
+    let mut errors: Vec<String> = get_node_records_from_snapshot(snapshot).into_iter().map(|(node_id, node)| {
             let (is_replica, is_api_boundary_node) = (
-                replicas.contains(node_id),
-                api_boundary_nodes.contains(node_id),
+                replicas.contains(&node_id),
+                api_boundary_nodes.contains(&node_id),
             );
+
+            if !is_replica && !is_api_boundary_node {
+                unassigned_nodes.insert(node_id, node);
+            }
 
             match (is_replica, is_api_boundary_node) {
                 // replica
@@ -50,6 +56,17 @@ pub(crate) fn check_node_assignment_invariants(
                 _ => Err(format!("invalid assignment for node {node_id}: is_replica = {is_replica}, is_api_boundary_node = {is_api_boundary_node}")),
             }
         }).filter_map(Result::err).collect();
+
+    // Unassigned nodes check
+    for (node_id, node) in unassigned_nodes {
+        if !node.ssh_node_state_write_access.is_empty() {
+            errors.push(format!(
+                "node {node_id} is unassigned but has \
+                ssh_node_state_write_access is set.  This value can only be set on nodes currently \
+                in assigned subnets."
+            ));
+        }
+    }
 
     if !errors.is_empty() {
         return Err(InvariantCheckError {
