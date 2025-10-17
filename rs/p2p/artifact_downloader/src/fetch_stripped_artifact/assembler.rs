@@ -173,18 +173,13 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 
         let mut join_set = tokio::task::JoinSet::new();
 
-        let download_missing_ingresses_timer = self
+        let timer = self
             .metrics
             .download_missing_ingress_messages_duration
             .start_timer();
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         let stripped_ingress_ids = assembler.missing_ingress_messages();
-        let get_all_ingresses = self
-            .metrics
-            .op_duration
-            .with_label_values(&["get_all_ingresses"])
-            .start_timer();
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
         for stripped_ingress_id in stripped_ingress_ids {
@@ -217,11 +212,6 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 ingress_messages_from_peers += 1;
             }
 
-            let _insertion_timer = self
-                .metrics
-                .op_duration
-                .with_label_values(&["try_insert"])
-                .start_timer();
             if let Err(err) = assembler.try_insert_ingress_message(ingress) {
                 warn!(
                     self.log,
@@ -232,13 +222,11 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             }
         }
 
-        get_all_ingresses.stop_and_record();
-
         // Only report the metric if we actually downloaded some ingresses from peers
         if ingress_messages_from_peers > 0 {
-            download_missing_ingresses_timer.stop_and_record();
+            timer.stop_and_record();
         } else {
-            download_missing_ingresses_timer.stop_and_discard();
+            timer.stop_and_discard();
         }
 
         self.metrics
@@ -249,11 +237,6 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ingress_messages_from_ingress_pool,
         );
 
-        let _assembler_timer = self
-            .metrics
-            .op_duration
-            .with_label_values(&["try_assemble"])
-            .start_timer();
         match assembler.try_assemble() {
             Ok(reconstructed_block_proposal) => AssembleResult::Done {
                 message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
