@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
+    BACKUP_USERNAME, admin_keys_and_generate_backup_keys, assert_subnet_is_broken, break_nodes,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
     node_with_highest_certification_share_height, remote_recovery,
 };
@@ -28,10 +28,9 @@ use ic_recovery::{
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
-        driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
         nested::{HasNestedVms, NestedNodes, NestedVm},
-        test_env::{SshKeyGen, TestEnv},
+        test_env::TestEnv,
         test_env_api::*,
     },
     nns::change_subnet_membership,
@@ -136,23 +135,20 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
 // the latest certified height of the subnet.
 pub fn grant_backup_access_to_all_nns_nodes(
     env: &TestEnv,
-    ssh_priv_key_path: &Path,
-    ssh_pub_key_path: &Path,
+    backup_auth: &AuthMean,
+    ssh_backup_pub_key: &str,
 ) {
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
     let nns_node = nns_subnet.nodes().next().unwrap();
 
-    let ssh_priv_key =
-        std::fs::read_to_string(ssh_priv_key_path).expect("Failed to read SSH private key");
-    let backup_auth = AuthMean::PrivateKey(ssh_priv_key);
-    let ssh_pub_key =
-        std::fs::read_to_string(ssh_pub_key_path).expect("Failed to read SSH public key");
-
     info!(logger, "Update the registry with the backup key");
-    let payload =
-        get_updatesubnetpayload_with_keys(nns_subnet.subnet_id, None, Some(vec![ssh_pub_key]));
+    let payload = get_updatesubnetpayload_with_keys(
+        nns_subnet.subnet_id,
+        None,
+        Some(vec![ssh_backup_pub_key.to_string()]),
+    );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
 
     for node in nns_subnet.nodes() {
@@ -166,7 +162,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
             &logger,
             &node.get_ip_addr(),
             BACKUP_USERNAME,
-            &backup_auth,
+            backup_auth,
         );
     }
 
@@ -197,23 +193,18 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
-    let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
-    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-
-    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
-    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
-        .expect("Failed to read admin SSH private key");
-    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
-
-    // Generate a new backup keypair
-    env.ssh_keygen_for_user(BACKUP_USERNAME)
-        .expect("ssh-keygen failed for backup key");
-    let ssh_backup_priv_key_path = ssh_authorized_priv_keys_dir.join(BACKUP_USERNAME);
-    let ssh_backup_pub_key_path = ssh_authorized_pub_keys_dir.join(BACKUP_USERNAME);
+    let (
+        ssh_admin_priv_key_path,
+        admin_auth,
+        ssh_backup_priv_key_path,
+        backup_auth,
+        _,
+        ssh_backup_pub_key,
+    ) = admin_keys_and_generate_backup_keys(&env);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
+    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();

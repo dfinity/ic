@@ -29,9 +29,9 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    Cursor, READONLY_USERNAME, assert_subnet_is_broken, break_nodes, halt_subnet,
-    local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
-    remote_recovery, unhalt_subnet,
+    Cursor, admin_keys_and_generate_readonly_keys, assert_subnet_is_broken, break_nodes,
+    halt_subnet, local::app_subnet_recovery_local_cli_args,
+    node_with_highest_certification_share_height, remote_recovery, unhalt_subnet,
 };
 use anyhow::bail;
 use canister_test::Canister;
@@ -40,7 +40,7 @@ use ic_consensus_system_test_utils::{
     node::assert_node_is_unassigned_with_ssh_session,
     rw_message::{install_nns_and_check_progress, store_message},
     set_sandbox_env_vars,
-    ssh_access::{AuthMean, disable_ssh_access_to_node, wait_until_authentication_is_granted},
+    ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
     },
@@ -60,12 +60,9 @@ use ic_recovery::{
 };
 use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::driver_setup::{
-    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
-};
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env_api::scp_send_to;
-use ic_system_test_driver::driver::{constants::SSH_USERNAME, test_env::SshKeyGen};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
 use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
@@ -417,21 +414,14 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let subnet_id = app_subnet.subnet_id;
 
-    let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
-    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-
-    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
-    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
-        .expect("Failed to read admin SSH private key");
-    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
-
-    // Generate a new readonly keypair
-    env.ssh_keygen_for_user(READONLY_USERNAME)
-        .expect("ssh-keygen failed for readonly key");
-    let ssh_readonly_priv_key_path = ssh_authorized_priv_keys_dir.join(READONLY_USERNAME);
-    let ssh_readonly_pub_key_path = ssh_authorized_pub_keys_dir.join(READONLY_USERNAME);
-    let ssh_readonly_pub_key = std::fs::read_to_string(&ssh_readonly_pub_key_path)
-        .expect("Failed to read readonly SSH public key");
+    let (
+        ssh_admin_priv_key_path,
+        admin_auth,
+        ssh_readonly_priv_key_path,
+        _,
+        _,
+        ssh_readonly_pub_key,
+    ) = admin_keys_and_generate_readonly_keys(&env);
 
     let recovery_dir = get_dependency_path("rs/tests");
     let binaries_dir = recovery_dir.join("recovery/binaries");

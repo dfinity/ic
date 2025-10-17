@@ -31,18 +31,15 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, break_nodes, node_with_highest_certification_share_height,
+    admin_keys_and_generate_backup_keys, break_nodes, node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
     SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
-use ic_system_test_driver::driver::driver_setup::{
-    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
-};
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnv, TestEnvAttribute};
+use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
@@ -96,19 +93,11 @@ fn log_instructions(env: TestEnv) {
         );
     }
 
-    // Generate a new backup keypair
-    env.ssh_keygen_for_user(BACKUP_USERNAME)
-        .expect("ssh-keygen failed for backup key");
-    let ssh_backup_priv_key_path = env
-        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-        .join(BACKUP_USERNAME);
-    let ssh_backup_pub_key_path = env
-        .get_path(SSH_AUTHORIZED_PUB_KEYS_DIR)
-        .join(BACKUP_USERNAME);
+    let (_, _, _, backup_auth, _, ssh_backup_pub_key) = admin_keys_and_generate_backup_keys(&env);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
+    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
     env.sync_with_prometheus();
 

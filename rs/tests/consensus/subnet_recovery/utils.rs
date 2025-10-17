@@ -1,25 +1,79 @@
 use anyhow::anyhow;
 use candid::Principal;
-use ic_consensus_system_test_utils::rw_message::{can_read_msg, cannot_store_msg};
+use ic_consensus_system_test_utils::{
+    rw_message::{can_read_msg, cannot_store_msg},
+    ssh_access::AuthMean,
+};
 use ic_recovery::{
     admin_helper::AdminHelper,
     get_node_metrics,
     steps::{AdminStep, Step},
 };
 use ic_system_test_driver::{
-    driver::test_env_api::{
-        IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
+    driver::{
+        constants::SSH_USERNAME,
+        driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
+        test_env::{SshKeyGen, TestEnv},
+        test_env_api::{
+            IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
+        },
     },
     util::block_on,
 };
 use ic_types::SubnetId;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
-use std::fmt::Debug;
+use std::{fmt::Debug, path::PathBuf};
 use url::Url;
 
 pub const READONLY_USERNAME: &str = "readonly";
 pub const BACKUP_USERNAME: &str = "backup";
+
+pub fn admin_keys_and_generate_readonly_keys(
+    env: &TestEnv,
+) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
+    admin_keys_and_generate_keys(env, READONLY_USERNAME)
+}
+
+pub fn admin_keys_and_generate_backup_keys(
+    env: &TestEnv,
+) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
+    admin_keys_and_generate_keys(env, BACKUP_USERNAME)
+}
+
+fn admin_keys_and_generate_keys(
+    env: &TestEnv,
+    username: &str,
+) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
+    let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
+    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+
+    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
+    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
+        .expect("Failed to read admin SSH private key");
+    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
+
+    // Generate a new keypair for the given username
+    env.ssh_keygen_for_user(username)
+        .unwrap_or_else(|_| panic!("ssh-keygen failed for {username} key"));
+    let ssh_user_priv_key_path = ssh_authorized_priv_keys_dir.join(username);
+    let ssh_user_priv_key = std::fs::read_to_string(&ssh_user_priv_key_path)
+        .unwrap_or_else(|_| panic!("Failed to read {username} SSH private key"));
+    let user_auth = AuthMean::PrivateKey(ssh_user_priv_key);
+
+    let ssh_user_pub_key_path = ssh_authorized_pub_keys_dir.join(username);
+    let ssh_user_pub_key = std::fs::read_to_string(&ssh_user_pub_key_path)
+        .unwrap_or_else(|_| panic!("Failed to read {username} SSH public key"));
+
+    (
+        ssh_admin_priv_key_path,
+        admin_auth,
+        ssh_user_priv_key_path,
+        user_auth,
+        ssh_user_pub_key_path,
+        ssh_user_pub_key.trim().to_string(),
+    )
+}
 
 /// Break the replica binary on the given nodes
 pub fn break_nodes<T>(nodes: &[T], logger: &Logger)
