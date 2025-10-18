@@ -9,6 +9,14 @@ on the process that this file is part of, see
 
 ## Added
 
+* New set_subnet_operational_level method. The short story is that this is
+  effectively disabled though. The long story is this: this is only callable by
+  Governance. Currently, Governance has no active code path (in release builds)
+  that calls this method. However, once the SetSubnetOperationalLevel proposal
+  type is enabled, this will effectively become an active feature. This will be
+  used in a slightly improved subnet recovery procedure. Thus, this would only
+  be used in rare extraodinary situations.
+
 ## Changed
 
 ## Deprecated
