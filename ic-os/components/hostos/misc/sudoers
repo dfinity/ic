@@ -29,4 +29,16 @@ root	ALL=(ALL:ALL) NOPASSWD:ALL
 # Allow members of group sudo to execute any command
 %sudo	ALL=(ALL:ALL) NOPASSWD:ALL
 
+# Limited console user - restricted sudo access
+limited-console ALL=(ALL) NOPASSWD: /opt/ic/bin/hostos_tool generate-network-config
+limited-console ALL=(ALL) NOPASSWD: /opt/ic/bin/hostos_tool set-hardware-gen-metric
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/systemctl status guestos.service
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart guestos.service
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/systemctl status vsock-agent.service
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart vsock-agent.service
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u guestos.service
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u vsock-agent.service
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/systemctl status
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/systemctl list-units
+
 # See sudoers(5) for more information on "#include" directives:

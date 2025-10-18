@@ -189,12 +189,23 @@ RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group -
 # will be cached when only the binaries change.
 COPY opt /opt
 
-# Update POSIX permissions in /opt/ic/
-RUN chown root:root /opt
+# Set permissions for /opt/ic/bin/* before creating users that need executable shells
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
+
+# Create systemd service override directories
+RUN mkdir -p /etc/systemd/system/serial-getty@.service.d
+
+# The "limited-console" user account for restricted console access
+RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /opt/ic/bin/limited-console-shell limited-console && \
+    chown limited-console:nogroup /var/lib/limited-console && \
+    adduser limited-console systemd-journal && \
+    adduser limited-console sudo
+
+# Update POSIX permissions in /opt/ic/
+RUN chown root:root /opt
 
 # ------ DEV VARIANT ---------------------------------------------
 

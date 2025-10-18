@@ -45,12 +45,24 @@ def load_base_image_tar_file(container_cmd: str, tar_file: Path):
 def arrange_component_files(context_dir, component_files):
     """Add component files into the context directory by copying them to their defined paths."""
     for component_file in component_files:
-        source_file, install_target = component_file.split(":")
+        parts = component_file.split(":")
+        if len(parts) == 2:
+            source_file, install_target = parts
+            permissions = None
+        elif len(parts) == 3:
+            source_file, install_target, permissions = parts
+        else:
+            raise ValueError(f"Invalid component file format: {component_file}. Expected 'source:target' or 'source:target:permissions'")
+        
         if install_target[0] == "/":
             install_target = install_target[1:]
         install_target = os.path.join(context_dir, install_target)
         os.makedirs(os.path.dirname(install_target), exist_ok=True)
         shutil.copy(source_file, install_target)
+        
+        # Set permissions if specified
+        if permissions:
+            os.chmod(install_target, int(permissions, 8))
 
 
 def build_container(

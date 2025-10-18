@@ -81,6 +81,12 @@ def image_deps(mode, _malicious = False):
 
         deps["rootfs"].pop("//rs/ic_os/release:guest_vm_runner", None)
         deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
+    else:
+        # Add limited console support for prod builds
+        deps["rootfs"].update({
+            "//ic-os/components/hostos/misc:allow_limited_console": "/etc/allow_limited_console:0644",
+            "//ic-os/components/misc/serial-getty@/hostos:override.conf": "/etc/systemd/system/serial-getty@.service.d/override.conf:0644",
+        })
 
     return deps
 

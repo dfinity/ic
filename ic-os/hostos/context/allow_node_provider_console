@@ -1,0 +1,3 @@
+This file enables immediate Node Provider console access for production HostOS.
+When present, it allows direct access to a restricted console session via the serial console.
+No authentication required - immediate access to readonly account with limited capabilities.

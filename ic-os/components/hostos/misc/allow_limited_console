@@ -1,0 +1,3 @@
+This file is put onto PROD images only into /etc/allow_limited_console.
+If present, it will allow limited console access via
+serial console. If missing, no limited console login is possible.
