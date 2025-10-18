@@ -1,7 +1,6 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
     governance::{LOG_PREFIX, TimeWarp},
-    is_known_neuron_voting_history_enabled,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
@@ -721,8 +720,7 @@ impl NeuronStore {
                     proposal_id,
                     vote,
                 )?;
-                let should_record_voting_history = is_known_neuron_voting_history_enabled()
-                    && stable_neuron_store.is_known_neuron(neuron_id)
+                let should_record_voting_history = stable_neuron_store.is_known_neuron(neuron_id)
                     && proposal_id >= first_proposal_id_to_record_voting_history;
                 Ok(should_record_voting_history)
             },

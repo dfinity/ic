@@ -2,7 +2,6 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{DeregisterKnownNeuron, KnownNeuronData, governance_error::ErrorType},
-    temporarily_disable_deregister_known_neuron, temporarily_enable_deregister_known_neuron,
 };
 use assert_matches::assert_matches;
 use ic_nns_common::pb::v1::NeuronId;
@@ -46,24 +45,7 @@ fn create_test_neuron_store() -> NeuronStore {
 }
 
 #[test]
-fn test_validate_feature_disabled() {
-    let _t = temporarily_disable_deregister_known_neuron();
-    let neuron_store = create_test_neuron_store();
-    let request = DeregisterKnownNeuron {
-        id: Some(NeuronId { id: 1 }),
-    };
-
-    let result = request.validate(&neuron_store);
-    assert_matches!(
-        result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("DeregisterKnownNeuron proposals are not enabled yet")
-    );
-}
-
-#[test]
 fn test_validate_success_with_known_neuron() {
-    let _t = temporarily_enable_deregister_known_neuron();
     let neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron {
         id: Some(NeuronId { id: 1 }),
@@ -78,7 +60,6 @@ fn test_validate_success_with_known_neuron() {
 
 #[test]
 fn test_validate_missing_neuron_id() {
-    let _t = temporarily_enable_deregister_known_neuron();
     let neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron { id: None };
 
@@ -92,7 +73,6 @@ fn test_validate_missing_neuron_id() {
 
 #[test]
 fn test_validate_nonexistent_neuron() {
-    let _t = temporarily_enable_deregister_known_neuron();
     let neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron {
         id: Some(NeuronId { id: 999 }),
@@ -109,7 +89,6 @@ fn test_validate_nonexistent_neuron() {
 
 #[test]
 fn test_validate_regular_neuron_not_known() {
-    let _t = temporarily_enable_deregister_known_neuron();
     let neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron {
         id: Some(NeuronId { id: 2 }), // Regular neuron without known data
@@ -126,7 +105,6 @@ fn test_validate_regular_neuron_not_known() {
 
 #[test]
 fn test_execute_success() {
-    let _t = temporarily_enable_deregister_known_neuron();
     let mut neuron_store = create_test_neuron_store();
     let neuron_id = NeuronId { id: 1 };
     let request = DeregisterKnownNeuron {
@@ -185,7 +163,6 @@ fn test_execute_success() {
 
 #[test]
 fn test_execute_missing_neuron_id() {
-    let _t = temporarily_enable_deregister_known_neuron();
     let mut neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron { id: None };
 
@@ -199,7 +176,6 @@ fn test_execute_missing_neuron_id() {
 
 #[test]
 fn test_execute_nonexistent_neuron() {
-    let _t = temporarily_enable_deregister_known_neuron();
     let mut neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron {
         id: Some(NeuronId { id: 999 }),

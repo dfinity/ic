@@ -1,6 +1,5 @@
 use super::*;
 use crate::storage::with_voting_history_store;
-use crate::temporarily_enable_known_neuron_voting_history;
 use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
@@ -1825,8 +1824,6 @@ fn test_validate_add_or_remove_node_provider() {
 
 #[test]
 fn test_record_known_neuron_abstentions() {
-    let _t = temporarily_enable_known_neuron_voting_history();
-
     record_known_neuron_abstentions(
         &[NeuronId { id: 1 }, NeuronId { id: 2 }],
         ProposalId { id: 1 },
@@ -1899,8 +1896,6 @@ fn test_record_known_neuron_abstentions() {
 
 #[test]
 fn test_record_known_neuron_abstentions_filters_by_first_proposal_id() {
-    let _t = temporarily_enable_known_neuron_voting_history();
-
     // Record abstentions for proposal 1 with threshold at proposal 5
     // These should NOT be recorded because proposal_id (1) < threshold (5)
     record_known_neuron_abstentions(
