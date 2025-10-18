@@ -11,7 +11,7 @@ rust_library(
         "vetkeys",
     ],
     crate_name = "ic_pub_key",
-    version = "0.1.0",
+    version = "0.2.0",
     deps = [
         "//packages/ic-ed25519",
         "//packages/ic-secp256k1",
