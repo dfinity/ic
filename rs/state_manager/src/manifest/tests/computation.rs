@@ -653,11 +653,11 @@ fn test_diff_manifest_v1() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
+    let hardlink_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
-            copy_files,
+            hardlink_files,
             copy_chunks: Default::default(),
             fetch_chunks: Default::default(),
             zeros_chunks: 0,
@@ -698,7 +698,7 @@ fn test_diff_manifest_v1() {
 
     let manifest_new = Manifest::new(manifest_new.version, file_table, chunk_table);
 
-    let copy_files: HashMap<usize, usize> = maplit::hashmap! {
+    let hardlink_files: HashMap<usize, usize> = maplit::hashmap! {
         0 => 0,
         2 => 2,
         3 => 3,
@@ -713,7 +713,7 @@ fn test_diff_manifest_v1() {
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
-            copy_files,
+            hardlink_files,
             copy_chunks,
             fetch_chunks,
             zeros_chunks: 0,
@@ -769,7 +769,7 @@ fn test_diff_manifest() {
     )
     .expect("failed to compute manifest");
 
-    let copy_files: HashMap<usize, usize> = maplit::hashmap! {
+    let hardlink_files: HashMap<usize, usize> = maplit::hashmap! {
         0 => 0,
         1 => 1,
     };
@@ -783,7 +783,7 @@ fn test_diff_manifest() {
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
-            copy_files,
+            hardlink_files,
             copy_chunks,
             fetch_chunks: Default::default(),
             zeros_chunks: 2,
@@ -833,11 +833,11 @@ fn test_missing_simple_manifest() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
+    let hardlink_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
-            copy_files,
+            hardlink_files,
             copy_chunks: Default::default(),
             fetch_chunks: Default::default(),
             zeros_chunks: 0,
@@ -851,7 +851,7 @@ fn test_missing_simple_manifest() {
     assert_eq!(
         diff_manifest(&manifest_old, &missing_chunks, &manifest_new),
         DiffScript {
-            copy_files: maplit::hashmap! {
+            hardlink_files: maplit::hashmap! {
                 0 => 0,
                 2 => 2,
                 3 => 3,
@@ -870,7 +870,7 @@ fn test_missing_simple_manifest() {
     assert_eq!(
         diff_manifest(&manifest_old, &missing_chunks, &manifest_new),
         DiffScript {
-            copy_files: maplit::hashmap! {
+            hardlink_files: maplit::hashmap! {
                 0 => 0,
                 2 => 2,
                 3 => 3,
