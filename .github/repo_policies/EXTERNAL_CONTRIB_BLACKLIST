@@ -1,0 +1,2 @@
+# PRs from forks that add or change files that match any of the following patterns will be closed automatically.
+.github/*
