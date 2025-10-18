@@ -3447,7 +3447,7 @@ fn instruction_limit_is_respected() {
 #[test]
 fn subnet_available_memory_is_respected_by_memory_grow() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(9 * WASM_PAGE_SIZE as i64)
+        .with_subnet_execution_memory(9 * WASM_PAGE_SIZE as u64)
         .with_subnet_memory_reservation(0)
         .build();
     let wat = r#"
@@ -7887,8 +7887,8 @@ fn stable_memory_grow_reserves_cycles() {
 
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(subnet_type)
-            .with_subnet_execution_memory(CAPACITY as i64)
-            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_execution_memory(CAPACITY)
+            .with_subnet_memory_threshold(THRESHOLD)
             .with_subnet_memory_reservation(0)
             .with_resource_saturation_scaling(1)
             .build();
@@ -7978,8 +7978,8 @@ fn wasm_memory_grow_reserves_cycles() {
 
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(subnet_type)
-            .with_subnet_execution_memory(CAPACITY as i64)
-            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_execution_memory(CAPACITY)
+            .with_subnet_memory_threshold(THRESHOLD)
             .with_subnet_memory_reservation(0)
             .with_resource_saturation_scaling(1)
             .build();
@@ -8059,8 +8059,8 @@ fn set_reserved_cycles_limit_below_existing_fails() {
     const THRESHOLD: u64 = 500_000_000;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_memory_threshold(THRESHOLD)
         .with_subnet_memory_reservation(0)
         .with_resource_saturation_scaling(1)
         .build();
@@ -8196,8 +8196,8 @@ fn resource_saturation_scaling_works_in_regular_execution() {
     const SCALING: u64 = 4;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory((SCALING * CAPACITY) as i64)
-        .with_subnet_memory_threshold((SCALING * THRESHOLD) as i64)
+        .with_subnet_execution_memory(SCALING * CAPACITY)
+        .with_subnet_memory_threshold(SCALING * THRESHOLD)
         .with_subnet_memory_reservation(0)
         .with_resource_saturation_scaling(SCALING as usize)
         .build();
@@ -8269,7 +8269,7 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
     const CAPACITY: u64 = 1_000_000_000;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_execution_memory(CAPACITY)
         .with_subnet_memory_threshold(0)
         .with_subnet_memory_reservation(0)
         .build();
@@ -8323,8 +8323,8 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
     const THRESHOLD: u64 = 10_000_000;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_memory_threshold(THRESHOLD)
         .with_subnet_memory_reservation(0)
         .build();
 
@@ -8369,8 +8369,8 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_memory_threshold(THRESHOLD)
         .with_subnet_memory_reservation(0)
         .build();
 
