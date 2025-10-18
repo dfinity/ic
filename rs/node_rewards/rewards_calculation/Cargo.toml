@@ -13,6 +13,7 @@ path = "src/lib.rs"
 ic-base-types = { path = "../../types/base_types" }
 itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
+lazy_static = { workspace = true }
 maplit = "1.0"
 rust_decimal = "1.37.1"
 rust_decimal_macros = "1.37.1"
