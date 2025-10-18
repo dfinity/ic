@@ -197,10 +197,6 @@ impl AppSubnetRecovery {
             logger,
         }
     }
-
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
-    }
 }
 
 impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {

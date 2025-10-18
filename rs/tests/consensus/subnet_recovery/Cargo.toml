@@ -1,5 +1,5 @@
 [package]
-name = "consensus-subnet-recovery-system-tests"
+name = "ic_consensus_system_test_subnet_recovery"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -27,11 +27,11 @@ prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+ssh2 = { workspace = true }
 url = { workspace = true }
 
 [lib]
-name = "ic_consensus_system_test_subnet_recovery_common"
-path = "common.rs"
+path = "lib.rs"
 
 [[bin]]
 name = "ic-systest-sr-nns-failover-nodes-test"
