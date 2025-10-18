@@ -52,3 +52,7 @@ path = "request_signature_test.rs"
 [[bin]]
 name = "rpc_csp_vault_reconnection_test"
 path = "rpc_csp_vault_reconnection_test.rs"
+
+[[bin]]
+name = "crypto_ingress_verification_test"
+path = "crypto_ingress_verification_test.rs"
