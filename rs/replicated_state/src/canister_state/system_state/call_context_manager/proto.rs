@@ -105,9 +105,6 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
                 method_name,
             ),
-            pb::call_context::CallOrigin::Query(user_id) => {
-                Self::Query(user_id_try_from_protobuf(user_id)?, String::from(""))
-            }
             pb::call_context::CallOrigin::CanisterQuery(
                 pb::call_context::CanisterUpdateOrQuery {
                     canister_id,
