@@ -163,7 +163,9 @@ impl Drop for IncompleteState {
                     .sub(dropped_chunks as i64);
             }
             DownloadState::Complete => {
-                // state sync duration already recorded earlier in make_checkpoint
+                // State sync duration already recorded:
+                // - in make_checkpoint() if the checkpoint already existed
+                // - after deliver_state_sync() if the checkpoint was successfully synced and delivered
             }
         }
 
@@ -959,15 +961,11 @@ impl IncompleteState {
         match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
                 let elapsed = started_at.elapsed();
-                metrics
-                    .state_sync_metrics
-                    .duration
-                    .with_label_values(&["ok"])
-                    .observe(elapsed.as_secs_f64());
-
                 info!(
                     log,
-                    "Successfully completed sync of state {} in {:?}", height, elapsed
+                    "state sync: elapsed since start: {:?}, successfully made checkpoint at height {}",
+                    elapsed,
+                    height
                 );
                 true
             }
@@ -1540,6 +1538,12 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             manifest.clone(),
                             Arc::new(meta_manifest.clone()),
                         );
+                        self.metrics
+                            .state_sync_metrics
+                            .duration
+                            .with_label_values(&["ok"])
+                            .observe(self.started_at.elapsed().as_secs_f64());
+
                         self.state = DownloadState::Complete;
                         Ok(())
                     } else {
@@ -1733,6 +1737,12 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         manifest.clone(),
                         Arc::new(meta_manifest.clone()),
                     );
+                    self.metrics
+                        .state_sync_metrics
+                        .duration
+                        .with_label_values(&["ok"])
+                        .observe(self.started_at.elapsed().as_secs_f64());
+
                     self.state = DownloadState::Complete;
 
                     // Delay delivery of artifact
