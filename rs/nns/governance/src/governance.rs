@@ -8460,7 +8460,7 @@ fn modify_followees(
     // If in the list of followees, there are any follow relationships
     // that don't adhere to the aforementioned rules, return a GovernanceError
     // including all the invalid followees.
-    let mut invalid_followees = 0_i32;
+    let mut invalid_followees = 0_u32;
     let mut error_message = String::new();
 
     // To avoid looking up the already existing followees of the neuron
@@ -8492,7 +8492,7 @@ fn modify_followees(
                 || followee_hot_keys.contains(&controller);
 
             if !allowed_to_follow {
-                invalid_followees += 1;
+                invalid_followees = invalid_followees.saturating_add(1);
                 error_message.push_str(&format!(
                                 "{}: Neuron {} is a private neuron.\n\
                                 If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
@@ -8503,7 +8503,7 @@ fn modify_followees(
                             ));
             }
         } else {
-            invalid_followees += 1;
+            invalid_followees = invalid_followees.saturating_add(1);
             error_message.push_str(&format!(
                             "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
                             invalid_followees,
