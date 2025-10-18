@@ -1163,7 +1163,7 @@ impl BuildSignatureInputsError {
 #[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputs<'a> {
     Ecdsa(ThresholdEcdsaSigInputs<'a>),
-    Schnorr(ThresholdSchnorrSigInputs),
+    Schnorr(ThresholdSchnorrSigInputs<'a>),
     VetKd(VetKdArgs),
 }
 
@@ -1171,7 +1171,7 @@ impl ThresholdSigInputs<'_> {
     pub fn caller(&self) -> &PrincipalId {
         match self {
             ThresholdSigInputs::Ecdsa(inputs) => inputs.caller(),
-            ThresholdSigInputs::Schnorr(inputs) => &inputs.derivation_path().caller,
+            ThresholdSigInputs::Schnorr(inputs) => inputs.caller(),
             ThresholdSigInputs::VetKd(inputs) => &inputs.context.caller,
         }
     }
