@@ -7071,12 +7071,7 @@ impl Governance {
                     };
                     p.reward_event_round = new_reward_event.day_after_genesis;
                     let ballots = std::mem::take(&mut p.ballots);
-                    record_known_neuron_abstentions(
-                        &known_neuron_ids,
-                        *pid,
-                        ballots,
-                        self.heap_data.first_proposal_id_to_record_voting_history,
-                    );
+                    record_known_neuron_abstentions(&known_neuron_ids, *pid, ballots);
                 }
             };
         }
@@ -8382,13 +8377,8 @@ fn record_known_neuron_abstentions(
     known_neuron_ids: &[NeuronId],
     proposal_id: ProposalId,
     ballots: HashMap<u64, Ballot>,
-    first_proposal_id_to_record_voting_history: ProposalId,
 ) {
-    // TODO(NNS1-4227): clean up `first_proposal_id_to_record_voting_history` after all proposals
-    // before this id have votes finalized.
-    if is_known_neuron_voting_history_enabled()
-        && proposal_id >= first_proposal_id_to_record_voting_history
-    {
+    if is_known_neuron_voting_history_enabled() {
         for known_neuron_id in known_neuron_ids {
             if let Some(ballot) = ballots.get(&known_neuron_id.id)
                 && ballot.vote() == Vote::Unspecified
