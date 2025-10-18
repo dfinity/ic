@@ -19,7 +19,7 @@ type IcAgent = ic_agent::Agent;
 use ic_agent::Identity;
 use ic_agent::identity::{AnonymousIdentity, BasicIdentity, Secp256k1Identity};
 use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+    parse_threshold_sig_key, parse_threshold_sig_key_from_der, threshold_sig_public_key_to_der,
 };
 use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_identity_hsm::HardwareIdentity;
@@ -5223,13 +5223,12 @@ async fn main() {
             .await;
         }
         SubCommand::GetElectedHostosVersions => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    reachable_nns_urls.clone(),
-                )),
-                None,
-            );
+            let registry_client = make_registry_client(
+                reachable_nns_urls.clone(),
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file.clone(),
+            )
+            .await;
 
             // maximum number of retries, let the user ctrl+c if necessary
             registry_client
@@ -6577,7 +6576,11 @@ async fn make_agent_from_identity(
         verify_nns_responses,
         nns_public_key_pem_file,
     ) {
-        agent.set_root_key(nns_public_key.into_bytes().to_vec());
+        // Convert to DER format (133 bytes) as expected by ic-agent
+        let der_encoded_key = threshold_sig_public_key_to_der(nns_public_key)
+            .expect("Failed to convert threshold sig public key to DER");
+
+        agent.set_root_key(der_encoded_key);
     } else if !is_mainnet {
         // For non-mainnet URLs (like localhost), fetch the root key from the replica
         eprintln!("Fetching root key from local replica at {}", nns_url);
