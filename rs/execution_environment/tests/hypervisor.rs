@@ -39,7 +39,7 @@ use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
-    Time,
+    PrincipalId, Time,
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
@@ -1873,17 +1873,32 @@ fn ic0_msg_reply_works() {
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32) (param i32))
             )
-            (func (export "canister_update test")
+            (func $test
                 (call $msg_reply_data_append (i32.const 0) (i32.const 4))
                 (call $msg_reply_data_append (i32.const 4) (i32.const 4))
                 (call $msg_reply)
+            )
+            (func (export "canister_update test_update")
+                (call $test)
+            )
+            (func (export "canister_query test_query")
+                (call $test)
             )
             (memory 1 1)
             (data (i32.const 0) "abcdefgh")
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.ingress(canister_id, "test", vec![]).unwrap();
-    assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result);
+    let check_result = |result: WasmResult| {
+        assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result);
+    };
+    let result = test.ingress(canister_id, "test_update", vec![]).unwrap();
+    check_result(result);
+    let result = test.ingress(canister_id, "test_query", vec![]).unwrap();
+    check_result(result);
+    let result = test
+        .non_replicated_query(canister_id, "test_query", vec![])
+        .unwrap();
+    check_result(result);
 }
 
 #[test]
@@ -1894,15 +1909,66 @@ fn ic0_msg_reply_data_append_has_no_effect_without_ic0_msg_reply() {
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32) (param i32))
             )
-            (func (export "canister_update test")
+            (func $test
                 (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+            )
+            (func (export "canister_update test_update")
+                (call $test)
+            )
+            (func (export "canister_query test_query")
+                (call $test)
             )
             (memory 1 1)
             (data (i32.const 0) "abcdefgh")
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.ingress(canister_id, "test", vec![]);
+    let result = test.ingress(canister_id, "test_update", vec![]);
     expect_canister_did_not_reply(result);
+    let result = test.ingress(canister_id, "test_query", vec![]);
+    expect_canister_did_not_reply(result);
+    let result = test.non_replicated_query(canister_id, "test_query", vec![]);
+    expect_canister_did_not_reply(result);
+}
+
+fn test_canister_contract_violation(payload: Vec<u8>) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let err = test
+        .ingress(canister_id, "update", payload.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    let err = test
+        .ingress(canister_id, "query", payload.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    let err = test
+        .non_replicated_query(canister_id, "query", payload.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
+
+#[test]
+fn ic0_msg_reply_twice() {
+    let payload = wasm().reply().reply().build();
+    test_canister_contract_violation(payload);
+}
+
+#[test]
+fn ic0_msg_reply_data_append_after_ic0_msg_reply() {
+    let payload = wasm().reply().push_bytes(b"").reply_data_append().build();
+    test_canister_contract_violation(payload);
+}
+
+#[test]
+fn ic0_msg_reply_data_append_after_ic0_msg_reject() {
+    let payload = wasm()
+        .push_bytes(b"rejecting")
+        .reject()
+        .push_bytes(b"")
+        .reply_data_append()
+        .build();
+    test_canister_contract_violation(payload);
 }
 
 #[test]
@@ -1933,30 +1999,48 @@ fn ic0_msg_caller_size_and_copy_work_in_update_calls() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
     let callee_id = test.universal_canister().unwrap();
-    let callee = wasm().caller().append_and_reply().build();
-    let caller = wasm()
-        .inter_update(callee_id, call_args().other_side(callee))
+
+    let get_caller = wasm().caller().append_and_reply().build();
+    let inter_canister_update_payload = wasm()
+        .inter_update(callee_id, call_args().other_side(get_caller.clone()))
         .build();
-    let result = test.ingress(caller_id, "update", caller).unwrap();
-    assert_eq!(
-        result,
-        WasmResult::Reply(caller_id.get().as_slice().to_vec())
-    );
+    let inter_canister_query_payload = wasm()
+        .inter_query(callee_id, call_args().other_side(get_caller.clone()))
+        .build();
+
+    let check_result = |result: WasmResult, principal: PrincipalId| {
+        assert_eq!(result, WasmResult::Reply(principal.as_slice().to_vec()));
+    };
+
+    // `ic0.msg_caller_{size,copy}` in an ingress message
+    let result = test.ingress(caller_id, "update", get_caller).unwrap();
+    check_result(result, test.user_id().get());
+
+    // `ic0.msg_caller_{size,copy}` in an inter-canister call to update method
+    let result = test
+        .ingress(caller_id, "update", inter_canister_update_payload)
+        .unwrap();
+    check_result(result, caller_id.get());
+
+    // `ic0.msg_caller_{size,copy}` in an inter-canister call to query method
+    let result = test
+        .ingress(caller_id, "update", inter_canister_query_payload)
+        .unwrap();
+    check_result(result, caller_id.get());
 }
 
 #[test]
 fn ic0_msg_caller_size_and_copy_work_in_query_calls() {
     let mut test = ExecutionTestBuilder::new().build();
-    let caller_id = test.universal_canister().unwrap();
-    let callee_id = test.universal_canister().unwrap();
-    let callee = wasm().caller().append_and_reply().build();
-    let caller = wasm()
-        .inter_query(callee_id, call_args().other_side(callee))
-        .build();
-    let result = test.ingress(caller_id, "update", caller).unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    let get_caller = wasm().caller().append_and_reply().build();
+    let result = test
+        .non_replicated_query(canister_id, "query", get_caller)
+        .unwrap();
     assert_eq!(
         result,
-        WasmResult::Reply(caller_id.get().as_slice().to_vec())
+        WasmResult::Reply(test.user_id().get().as_slice().to_vec())
     );
 }
 
@@ -2023,15 +2107,30 @@ fn ic0_msg_reject_works() {
             (import "ic0" "msg_reject"
                 (func $ic0_msg_reject (param i32) (param i32))
             )
-            (func (export "canister_update test")
+            (func $test
                 (call $ic0_msg_reject (i32.const 0) (i32.const 6))
+            )
+            (func (export "canister_update test_update")
+                (call $test)
+            )
+            (func (export "canister_query test_query")
+                (call $test)
             )
             (memory 1 1)
             (data (i32.const 0) "panic!")
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.ingress(canister_id, "test", vec![]).unwrap();
-    assert_eq!(WasmResult::Reject("panic!".to_string()), result);
+    let check_result = |result: WasmResult| {
+        assert_eq!(WasmResult::Reject("panic!".to_string()), result);
+    };
+    let result = test.ingress(canister_id, "test_update", vec![]).unwrap();
+    check_result(result);
+    let result = test.ingress(canister_id, "test_query", vec![]).unwrap();
+    check_result(result);
+    let result = test
+        .non_replicated_query(canister_id, "test_query", vec![])
+        .unwrap();
+    check_result(result);
 }
 
 #[test]
@@ -10082,35 +10181,30 @@ fn ic0_certified_data_set_too_long() {
     assert_eq!(certified_data(&test), b"FOO");
 }
 
+fn get_global_data(test: &mut ExecutionTest, canister_id: CanisterId) -> Vec<u8> {
+    let res = test.ingress(
+        canister_id,
+        "query",
+        wasm().get_global_data().append_and_reply().build(),
+    );
+    get_reply(res)
+}
+
 #[test]
-fn replicated_query_does_not_commit_memory_changes() {
+fn update_commits_memory_changes() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let global_data = |test: &mut ExecutionTest| {
-        let res = test
-            .ingress(
-                canister_id,
-                "query",
-                wasm().get_global_data().append_and_reply().build(),
-            )
-            .unwrap();
-        match res {
-            WasmResult::Reply(data) => data,
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-        }
-    };
-
-    // Replicated update called as ingress message commits memory changes.
+    // Update called as ingress message commits memory changes.
     test.ingress(
         canister_id,
         "update",
         wasm().set_global_data(b"FOO").reply().build(),
     )
     .unwrap();
-    assert_eq!(global_data(&mut test), b"FOO");
+    assert_eq!(get_global_data(&mut test, canister_id), b"FOO");
 
-    // Replicated update called as inter-canister call commits memory changes.
+    // Update called as inter-canister call commits memory changes.
     test.ingress(
         canister_id,
         "update",
@@ -10122,7 +10216,46 @@ fn replicated_query_does_not_commit_memory_changes() {
             .build(),
     )
     .unwrap();
-    assert_eq!(global_data(&mut test), b"BAR");
+    assert_eq!(get_global_data(&mut test, canister_id), b"BAR");
+}
+
+#[test]
+fn unreplied_update_commits_memory_changes() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Update called as ingress message commits memory changes even if not replied.
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().set_global_data(b"FOO").build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterDidNotReply);
+    assert_eq!(get_global_data(&mut test, canister_id), b"FOO");
+
+    // Update called as inter-canister call commits memory changes even if not replied.
+    let res = test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .inter_update(
+                canister_id,
+                CallArgs::default()
+                    .other_side(wasm().set_global_data(b"BAR").build())
+                    .on_reject(wasm().reject_message().reject().build()),
+            )
+            .build(),
+    );
+    assert_eq!(get_reject(res), "No response");
+    assert_eq!(get_global_data(&mut test, canister_id), b"BAR");
+}
+
+#[test]
+fn replicated_query_does_not_commit_memory_changes() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
 
     // Replicated query called as ingress message does not commit memory changes.
     test.ingress(
@@ -10131,7 +10264,7 @@ fn replicated_query_does_not_commit_memory_changes() {
         wasm().set_global_data(b"FOO").reply().build(),
     )
     .unwrap();
-    assert_eq!(global_data(&mut test), b"BAR");
+    assert_eq!(get_global_data(&mut test, canister_id), b"");
 
     // Replicated query called as inter-canister call does not commit memory changes.
     test.ingress(
@@ -10145,7 +10278,7 @@ fn replicated_query_does_not_commit_memory_changes() {
             .build(),
     )
     .unwrap();
-    assert_eq!(global_data(&mut test), b"BAR");
+    assert_eq!(get_global_data(&mut test, canister_id), b"");
 }
 
 #[test]
@@ -10357,7 +10490,7 @@ fn invalid_inter_canister_callee() {
 }
 
 #[test]
-fn invalid_inter_canister_method_name() {
+fn non_existing_method() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
@@ -10371,6 +10504,16 @@ fn invalid_inter_canister_method_name() {
             )
             .build()
     };
+
+    // Update call to non-existing method name fails with reject code 5.
+    let err = test.ingress(canister_id, "bar", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterMethodNotFound);
+
+    // Query call to non-existing method name fails with reject code 5.
+    let err = test
+        .non_replicated_query(canister_id, "bar", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterMethodNotFound);
 
     // Inter-canister call to non-existing method name fails with reject code 5.
     let res = test.ingress(canister_id, "update", call_args("bar"));

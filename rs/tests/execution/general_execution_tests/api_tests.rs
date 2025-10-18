@@ -1,6 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 
+use candid::Decode;
 use ic_agent::{Agent, agent::RejectCode};
 use ic_base_types::PrincipalId;
 use ic_management_canister_types_private::{self as ic00, EmptyBlob, Method, Payload};
@@ -39,26 +40,30 @@ pub fn test_raw_rand_api(env: TestEnv) {
             )
             .await;
 
-            // Calling raw_rand as a query fails.
-            let result_query = canister
-                .query(wasm().call_simple(
-                    ic00::IC_00,
-                    Method::RawRand,
-                    call_args().other_side(EmptyBlob.encode()),
-                ))
-                .await;
+            let call_raw_rand_payload = wasm().call_simple(
+                ic00::IC_00,
+                Method::RawRand,
+                call_args().other_side(EmptyBlob.encode()),
+            );
+
+            // Calling raw_rand in a query fails.
+            let result_query = canister.query(call_raw_rand_payload.clone()).await;
 
             assert_reject(result_query, RejectCode::CanisterError);
 
-            // Calling raw_rand as an update succeeds.
-            canister
-                .update(wasm().call_simple(
-                    ic00::IC_00,
-                    Method::RawRand,
-                    call_args().other_side(EmptyBlob.encode()),
-                ))
-                .await
-                .unwrap();
+            // Calling raw_rand in an update succeeds and returns different blobs (of length 32 bytes) every time.
+            let raw_rand_bytes = || async {
+                let res = canister
+                    .update(call_raw_rand_payload.clone())
+                    .await
+                    .unwrap();
+                let bytes = Decode!(&res, Vec<u8>).unwrap();
+                assert_eq!(bytes.len(), 32);
+                bytes
+            };
+            let bytes = raw_rand_bytes().await;
+            let other_bytes = raw_rand_bytes().await;
+            assert_ne!(bytes, other_bytes);
         }
     })
 }
