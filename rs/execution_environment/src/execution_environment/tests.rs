@@ -290,6 +290,7 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
         .with_subnet_execution_memory(canister_memory)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
 
@@ -327,6 +328,7 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
@@ -356,6 +358,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
@@ -393,6 +396,7 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
@@ -2689,6 +2693,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
@@ -2709,6 +2714,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
@@ -3823,6 +3829,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .with_initial_canister_cycles(1_000_000_000_000_000)
         .build();

@@ -7,6 +7,7 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -18,7 +19,7 @@ pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, Hypervisor,
     IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions,
-    RoundLimits, execute_canister,
+    RoundLimits, RoundSchedule, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -53,7 +54,7 @@ use ic_replicated_state::{
     },
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
-use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -1110,7 +1111,6 @@ impl ExecutionTest {
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
@@ -1185,6 +1185,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             data_certificate,
             /*certification_delegation_metadata=*/ None,
+            true,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1722,6 +1723,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             data_certificate,
             certificate_delegation_metadata,
+            true,
         )
     }
 
@@ -1849,7 +1851,6 @@ pub struct ExecutionTestBuilder {
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     time: Time,
     current_round: ExecutionRound,
-    resource_saturation_scaling: usize,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cost_schedule: CanisterCyclesCostSchedule,
@@ -1858,7 +1859,8 @@ pub struct ExecutionTestBuilder {
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let subnet_config = SubnetConfig::new(subnet_type);
+        let mut subnet_config = SubnetConfig::new(subnet_type);
+        subnet_config.scheduler_config.scheduler_cores = 2;
         Self {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
@@ -1885,7 +1887,6 @@ impl Default for ExecutionTestBuilder {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: UNIX_EPOCH,
             current_round: ExecutionRound::new(1),
-            resource_saturation_scaling: 1,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -2107,11 +2108,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_deterministic_time_slicing_disabled(mut self) -> Self {
-        self.execution_config.deterministic_time_slicing = FlagStatus::Disabled;
-        self
-    }
-
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
         self
@@ -2257,7 +2253,23 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_resource_saturation_scaling(mut self, scaling: usize) -> Self {
-        self.resource_saturation_scaling = scaling;
+        self.subnet_config.scheduler_config.scheduler_cores = scaling;
+        // If scaling == 1, i.e. a single core is requested in the test, DTS must
+        // be disabled by setting the slice limit to be equal to the message limit.
+        if scaling == 1 {
+            self.subnet_config
+                .scheduler_config
+                .max_instructions_per_slice = self
+                .subnet_config
+                .scheduler_config
+                .max_instructions_per_message;
+            self.subnet_config
+                .scheduler_config
+                .max_instructions_per_install_code_slice = self
+                .subnet_config
+                .scheduler_config
+                .max_instructions_per_install_code;
+        }
         self
     }
 
@@ -2346,6 +2358,28 @@ impl ExecutionTestBuilder {
         state.metadata.init_allocation_ranges_if_empty().unwrap();
         state.metadata.bitcoin_get_successors_follow_up_responses =
             self.bitcoin_get_successors_follow_up_responses;
+
+        // On a single core scheduler, DTS must be disabled.
+        if self.subnet_config.scheduler_config.scheduler_cores == 1 {
+            assert_eq!(
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_message,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_slice,
+                "On a single core scheduler, DTS must be disabled by setting max_instructions_per_message == max_instructions_per_slice"
+            );
+            assert_eq!(
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code_slice,
+                "On a single core scheduler, DTS must be disabled by setting max_instructions_per_install_code == max_instructions_per_install_code_slice"
+            );
+        }
 
         if self.subnet_features.is_empty() {
             state.metadata.own_subnet_features = SubnetFeatures::default();
@@ -2518,12 +2552,12 @@ impl ExecutionTestBuilder {
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            // Compute capacity for 2-core scheduler is 100%
-            // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
-            100,
+            RoundSchedule::compute_capacity_percent(
+                self.subnet_config.scheduler_config.scheduler_cores,
+            ),
             config.clone(),
             Arc::clone(&cycles_account_manager),
-            self.resource_saturation_scaling,
+            self.subnet_config.scheduler_config.scheduler_cores,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.subnet_config.scheduler_config.heap_delta_rate_limit,
             self.subnet_config
@@ -2553,6 +2587,7 @@ impl ExecutionTestBuilder {
         );
         state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
+        let subnet_available_memory = exec_env.scaled_subnet_available_memory(&state);
         ExecutionTest {
             state: Some(state),
             message_id: 0,
@@ -2560,21 +2595,11 @@ impl ExecutionTestBuilder {
             execution_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
-            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
-                self.execution_config.subnet_memory_capacity.get() as i64
-                    - self.execution_config.subnet_memory_reservation.get() as i64,
-                self.execution_config
-                    .guaranteed_response_message_memory_capacity
-                    .get() as i64,
-                self.execution_config
-                    .subnet_wasm_custom_sections_memory_capacity
-                    .get() as i64,
-            ),
+            subnet_available_memory,
             subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_message,
@@ -2583,7 +2608,6 @@ impl ExecutionTestBuilder {
                     .max_instructions_per_slice,
             ),
             install_code_instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
                 self.subnet_config
                     .scheduler_config
                     .max_instructions_per_install_code,
@@ -2773,6 +2797,10 @@ macro_rules! assert_delta {
             assert_eq!($x, $y, "delta: `{:?}`", $d);
         }
     };
+}
+
+fn mock_random_number_generator() -> Box<ReproducibleRng> {
+    Box::new(ReproducibleRng::from_seed_for_debugging([0u8; 32]))
 }
 
 #[cfg(test)]

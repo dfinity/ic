@@ -1965,7 +1965,6 @@ impl PocketIcSubnets {
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
                 feature_flag_continue_from_another_device: Some(true),
-                feature_flag_enable_generic_open_id_fe: None,
             });
             ii_subnet
                 .state_machine
