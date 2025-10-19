@@ -416,7 +416,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 i += 1;
             }
             self.rosetta_metrics.set_synced_height(i - 1);
-            if (i - range.start) % DATABASE_WRITE_BLOCKS_BATCH_SIZE == 0 {
+            if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
                 blockchain.push_batch(block_batch)?;
                 if print_progress {
                     info!("Synced up to {}", i - 1);

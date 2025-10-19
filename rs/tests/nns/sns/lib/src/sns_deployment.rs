@@ -700,17 +700,6 @@ pub fn generate_sns_workload_with_many_users<T, R>(
     env.emit_report(format!("{metrics}"));
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct SnsUsers {
-    participants: Vec<SaleParticipant>,
-}
-
-impl TestEnvAttribute for SnsUsers {
-    fn attribute_name() -> String {
-        "sns_users".to_string()
-    }
-}
-
 /// An SNS sale participant.
 /// Warning: This type should be used for testing purposes only.
 #[derive(Clone, Debug, Deserialize, Serialize)]
