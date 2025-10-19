@@ -37,14 +37,14 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
 
 impl RewardsCalculationV1 {
     pub fn calculate_rewards(
-        from_date: &NaiveDate,
-        to_date: &NaiveDate,
-        data_provider: impl PerformanceBasedAlgorithmInputProvider,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        input_provider: impl PerformanceBasedAlgorithmInputProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
             from_date,
             to_date,
-            data_provider,
+            input_provider,
         )
     }
 }

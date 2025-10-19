@@ -109,21 +109,21 @@ trait PerformanceBasedAlgorithm {
     const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
     fn calculate_rewards(
-        from_date: &NaiveDate,
-        to_date: &NaiveDate,
-        data_provider: impl PerformanceBasedAlgorithmInputProvider,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        input_provider: impl PerformanceBasedAlgorithmInputProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         if from_date > to_date {
             return Err("from_day must be before to_day".to_string());
         }
 
-        let reward_period = from_date.iter_days().take_while(|d| d <= to_date);
+        let reward_period = from_date.iter_days().take_while(|d| d <= &to_date);
         let mut total_rewards_per_provider = BTreeMap::new();
         let mut daily_results = BTreeMap::new();
 
         // Process each day in the reward period
         for day in reward_period {
-            let result_for_day = Self::calculate_daily_rewards(&data_provider, &day)?;
+            let result_for_day = Self::calculate_daily_rewards(&input_provider, &day)?;
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
