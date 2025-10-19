@@ -675,7 +675,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
             let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
             s.submitted_transactions
                 .iter()
-                .filter(|&req| (req.submitted_at + (wait_time.as_nanos() as u64) < now))
+                .filter(|&req| req.submitted_at + (wait_time.as_nanos() as u64) < now)
                 .map(|req| (req.txid, req.clone()))
                 .collect()
         });
