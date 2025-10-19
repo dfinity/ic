@@ -326,6 +326,10 @@ impl ExecutionTest {
             .unwrap()
     }
 
+    pub fn max_instructions_per_message(&self) -> NumInstructions {
+        self.instruction_limits.message()
+    }
+
     pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
         // In case of any error or missing state, default to Wasm32.
         if let Some(state) = self.state.as_ref()
@@ -389,10 +393,15 @@ impl ExecutionTest {
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
-        let memory_usage = self.execution_state(canister_id).memory_usage()
-            + self
-                .canister_state(canister_id)
-                .canister_history_memory_usage();
+        let memory_usage = self.canister_state(canister_id).memory_usage();
+        self.idle_cycles_burned_per_day_for_memory_usage(canister_id, memory_usage)
+    }
+
+    pub fn idle_cycles_burned_per_day_for_memory_usage(
+        &self,
+        canister_id: CanisterId,
+        memory_usage: NumBytes,
+    ) -> Cycles {
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state
@@ -486,11 +495,19 @@ impl ExecutionTest {
 
     pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
         let cost = wasm_compilation_cost(wasm);
+        self.convert_instructions_to_cycles(
+            cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+            WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
+        )
+    }
+
+    pub fn convert_instructions_to_cycles(
+        &self,
+        instructions: NumInstructions,
+        mode: WasmExecutionMode,
+    ) -> Cycles {
         self.cycles_account_manager()
-            .convert_instructions_to_cycles(
-                cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
-                WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
-            )
+            .convert_instructions_to_cycles(instructions, mode)
     }
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
@@ -1833,6 +1850,18 @@ impl ExecutionTest {
 
     pub fn get_own_subnet_id(&self) -> SubnetId {
         self.cycles_account_manager.get_subnet_id()
+    }
+
+    pub fn expected_storage_reservation_cycles(&self, allocated_bytes: NumBytes) -> Cycles {
+        let subnet_memory_saturation = self
+            .exec_env
+            .subnet_memory_saturation(&self.subnet_available_memory);
+        self.cycles_account_manager.storage_reservation_cycles(
+            allocated_bytes,
+            &subnet_memory_saturation,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 }
 
