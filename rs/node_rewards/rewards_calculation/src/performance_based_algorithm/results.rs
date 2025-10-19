@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 pub type Region = String;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct NodeMetricsDaily {
     /// The subnet this node was assigned to on the given day.
     /// This is determined by the subnet assigned to the node in the last registry version
@@ -42,7 +42,7 @@ pub struct NodeMetricsDaily {
 }
 
 // TODO: Link documentation about performance based rewards algorithm
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub enum DailyNodeFailureRate {
     /// Node is assigned to a subnet with recorded metrics
     SubnetMember { node_metrics: NodeMetricsDaily },
@@ -55,7 +55,7 @@ pub enum DailyNodeFailureRate {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct DailyNodeRewards {
     pub node_id: NodeId,
 
@@ -89,7 +89,7 @@ pub struct DailyNodeRewards {
 }
 
 /// Base rewards for NON type 3 nodes.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct NodeTypeRegionBaseRewards {
     /// NodeRewardType
     pub node_reward_type: NodeRewardType,
@@ -109,7 +109,7 @@ pub struct NodeTypeRegionBaseRewards {
 /// Type3 nodes are defined [rs/protobuf/src/gen/registry/registry.node.v1.rs]
 /// For nodes which are type3 special logic is applied to compute base rewards.
 /// Check the documentation of the performance-based rewards algorithm for details.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Type3RegionBaseRewards {
     /// Region for which the rewards are calculated
     pub region: Region,
@@ -127,7 +127,7 @@ pub struct Type3RegionBaseRewards {
     pub daily_xdr_permyriad: Decimal,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct DailyNodeProviderRewards {
     /// Total rewards across all nodes for this provider in XDR permyriad
     pub rewards_total_xdr_permyriad: Decimal,
@@ -142,7 +142,7 @@ pub struct DailyNodeProviderRewards {
     pub daily_nodes_rewards: Vec<DailyNodeRewards>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct DailyResults {
     /// Failure rates for all subnets on this day
     pub subnets_failure_rate_percent: BTreeMap<SubnetId, Decimal>,
@@ -151,6 +151,7 @@ pub struct DailyResults {
     pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct RewardsCalculatorResults {
     /// Total rewards for each provider across the entire reward period
     pub total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64>,

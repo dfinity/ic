@@ -105,16 +105,16 @@ mod tests {
 
         // --- Execution ---
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_failure_rate;
+        let subnets_fr = result.subnets_failure_rate_percent;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr_percent))
+            .map(|(k, v)| (*k, v.original_failure_rate_percent))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr_percent))
+            .map(|(k, v)| (*k, v.relative_failure_rate_percent))
             .collect();
 
         // --- Assertions for Day 1, Subnet 1 ---
@@ -146,16 +146,16 @@ mod tests {
             ],
         )]);
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_failure_rate;
+        let subnets_fr = result.subnets_failure_rate_percent;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr_percent))
+            .map(|(k, v)| (*k, v.original_failure_rate_percent))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr_percent))
+            .map(|(k, v)| (*k, v.relative_failure_rate_percent))
             .collect();
 
         // --- Assertions for Day 2, Subnet 1 ---
