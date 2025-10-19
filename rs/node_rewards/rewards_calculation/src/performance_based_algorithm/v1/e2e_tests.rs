@@ -77,10 +77,6 @@ lazy_static! {
   };
 }
 
-// ================================================================================================
-// Mock DataProvider
-// ================================================================================================
-
 #[derive(Default, Clone)]
 pub struct FakeInputProvider {
     rewards_tables: BTreeMap<NaiveDate, NodeRewardsTable>,
