@@ -779,10 +779,8 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            key_store.retain_would_modify_keystore(
-                move |id, _| id == &key_id_to_retain,
-                selected_scope
-            )
+            key_store
+                .retain_would_modify_keystore(move |id, _| id == &key_id_to_retain, selected_scope)
         );
     }
 
