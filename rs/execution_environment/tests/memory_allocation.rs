@@ -49,6 +49,7 @@ where
         .with_subnet_execution_memory(SUBNET_EXECUTION_MEMORY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(SUBNET_MEMORY_THRESHOLD as i64)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let initial_subnet_available_memory = test.subnet_available_memory();
@@ -69,12 +70,13 @@ where
         test.canister_state(canister_id).memory_allocated_bytes();
 
     // Dummy canister that fills the memory capacity up to the subnet memory threshold.
+    let dummy_canister_initial_cycles = Cycles::from(100_000 * T);
+    let dummy_canister_settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(SUBNET_MEMORY_THRESHOLD - memory_allocated_bytes_after_setup.get())
+        .with_reserved_cycles_limit(dummy_canister_initial_cycles.get())
+        .build();
     let dummy_canister_id = test
-        .create_canister_with_allocation(
-            Cycles::from(100 * T),
-            None,
-            Some(SUBNET_MEMORY_THRESHOLD - memory_allocated_bytes_after_setup.get()),
-        )
+        .create_canister_with_settings(dummy_canister_initial_cycles, dummy_canister_settings)
         .unwrap();
 
     let memory_allocation_exceeded = |test: &ExecutionTest| {
@@ -105,10 +107,6 @@ where
         .canister_state(canister_id)
         .canister_history_memory_usage();
     let initial_allocated_bytes = test.canister_state(canister_id).memory_allocated_bytes();
-    let initial_reserved_balance = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
     let err = (runbook.op)(&mut test, canister_id, res);
     let final_memory_usage = test.canister_state(canister_id).memory_usage()
         - test
@@ -119,11 +117,10 @@ where
         .canister_state(canister_id)
         .memory_allocation()
         .allocated_bytes(final_memory_usage);
-    let final_reserved_balance = test
+    let reserved_cycles = test
         .canister_state(canister_id)
         .system_state
         .reserved_balance();
-    let reserved_cycles = final_reserved_balance - initial_reserved_balance;
     let allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
     if err.is_none() {
         if let Some(expected_reserved_cycles) = expected_reserved_cycles {
