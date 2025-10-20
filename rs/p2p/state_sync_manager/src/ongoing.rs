@@ -365,7 +365,7 @@ impl OngoingStateSync {
             chunk_id,
             err: err.to_string(),
         })
-        .and_then(std::convert::identity);
+        .flatten();
 
         DownloadResult { peer_id, result }
     }
