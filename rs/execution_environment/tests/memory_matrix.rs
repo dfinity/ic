@@ -189,23 +189,42 @@ where
     G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError>,
 {
     let res = run(&runbook);
-    runbook.initial_cycles = res.cycles_used
+    let allocated_bytes = res.allocated_bytes;
+    let minimum_initial_cycles = res.cycles_used
         + res.idle_cycles_burned_per_day * FREEZING_THRESHOLD_DAYS
         + res.unused_cycles_prepayment;
-    runbook.expected_allocated_bytes = Some(res.allocated_bytes);
+    let maximum_subnet_memory_target_before_op =
+        NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes;
+
+    runbook.expected_allocated_bytes = Some(allocated_bytes);
+    runbook.initial_cycles = minimum_initial_cycles;
+    runbook.subnet_memory_target_before_op = maximum_subnet_memory_target_before_op;
     let res = run(&runbook);
     assert!(res.err.is_none());
+
     if res.allocated_bytes > NumBytes::from(0) {
-        runbook.initial_cycles = res.cycles_used
-            + res.idle_cycles_burned_per_day * FREEZING_THRESHOLD_DAYS
-            + res.unused_cycles_prepayment
-            - Cycles::from(1_u128);
+        runbook.subnet_memory_target_before_op =
+            NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes + NumBytes::from(1);
+        let res = run(&runbook);
+        let err = res.err.unwrap();
+        match err.code() {
+            ErrorCode::CanisterOutOfMemory | ErrorCode::SubnetOversubscribed => (),
+            ErrorCode::CanisterCalledTrap => {
+                assert!(err.description().contains("ic0.stable64_grow failed"));
+            }
+            _ => panic!("Unexpected error: {:?}", err),
+        };
+        runbook.subnet_memory_target_before_op =
+            NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes;
+
+        runbook.initial_cycles = minimum_initial_cycles - Cycles::from(1_u128);
         let res = run(&runbook);
         let err = res.err.unwrap();
         assert!(
             err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
                 || err.code() == ErrorCode::CanisterOutOfCycles
         );
+        runbook.initial_cycles = minimum_initial_cycles;
     }
 }
 
@@ -288,7 +307,12 @@ fn test_memory_allocation_suite_grow_stable_memory() {
         test.ingress(
             canister_id,
             "update",
-            wasm().stable64_grow(GIB >> 16).reply().build(),
+            wasm()
+                .stable64_grow(GIB >> 16)
+                .int64_to_blob()
+                .trap_if_eq(u64::MAX.to_le_bytes(), "ic0.stable64_grow failed")
+                .reply()
+                .build(),
         )
         .err()
     };
