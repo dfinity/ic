@@ -160,10 +160,8 @@ impl PayloadBuilder for PayloadBuilderImpl {
 
         let mut accumulated_size = SlotCounter::<NumBytes>::default();
         for builder in &self.section_builder {
-            let size =
+            *accumulated_size.get_mut(builder.slot()) +=
                 builder.validate_payload(height, batch_payload, proposal_context, past_payloads)?;
-
-            *accumulated_size.get_mut(builder.slot()) += size;
         }
 
         // Check the combined size of the payloads using a 2x safety margin.
