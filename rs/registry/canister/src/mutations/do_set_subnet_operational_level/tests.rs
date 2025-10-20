@@ -178,7 +178,8 @@ lazy_static! {
 fn test_validate_ssh_node_state_write_access_ok() {
     validate_ssh_node_state_write_access(&None).unwrap();
     validate_ssh_node_state_write_access(&Some(vec![])).unwrap();
-    validate_ssh_node_state_write_access(&Some(GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone())).unwrap();
+    validate_ssh_node_state_write_access(&Some(GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone()))
+        .unwrap();
 }
 
 #[test]
@@ -320,16 +321,17 @@ fn test_validate_payload_empty() {
 
 #[test]
 fn test_validate_payload_no_subnet_but_operational_level() {
-    let result = REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
-        subnet_id: None,
-        operational_level: Some(operational_level::NORMAL),
-        ssh_readonly_access: None,
+    let result =
+        REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
+            subnet_id: None,
+            operational_level: Some(operational_level::NORMAL),
+            ssh_readonly_access: None,
 
-        ssh_node_state_write_access: Some(vec![NodeSshAccess {
-            node_id: Some(*NODE_ID),
-            public_keys: Some(vec!["fake node state write public key".to_string()]),
-        }]),
-    });
+            ssh_node_state_write_access: Some(vec![NodeSshAccess {
+                node_id: Some(*NODE_ID),
+                public_keys: Some(vec!["fake node state write public key".to_string()]),
+            }]),
+        });
 
     // Step 3: Verify results.
     match result {
@@ -340,16 +342,17 @@ fn test_validate_payload_no_subnet_but_operational_level() {
 
 #[test]
 fn test_validate_payload_no_subnet_but_ssh_readonly_access() {
-    let result = REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
-        subnet_id: None,
-        operational_level: None,
-        ssh_readonly_access: Some(vec!["hello".to_string()]),
+    let result =
+        REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
+            subnet_id: None,
+            operational_level: None,
+            ssh_readonly_access: Some(vec!["hello".to_string()]),
 
-        ssh_node_state_write_access: Some(vec![NodeSshAccess {
-            node_id: Some(*NODE_ID),
-            public_keys: Some(vec!["fake node state write public key".to_string()]),
-        }]),
-    });
+            ssh_node_state_write_access: Some(vec![NodeSshAccess {
+                node_id: Some(*NODE_ID),
+                public_keys: Some(vec!["fake node state write public key".to_string()]),
+            }]),
+        });
 
     match result {
         Ok(()) => panic!("Err not returned"),
