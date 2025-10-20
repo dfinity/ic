@@ -4052,9 +4052,15 @@ async fn main() {
                 .clone()
                 .expect("HSM pin must be provided for --use-hsm");
 
-            // Use a default PKCS#11 library path or environment variable
-            let pkcs11_lib_path = std::env::var("PKCS11_LIB_PATH")
-                .unwrap_or_else(|_| "/usr/lib/softhsm/libsofthsm2.so".to_string());
+            // Use PKCS#11 library path from environment, or auto-detect from pkcs11-tool
+            let pkcs11_lib_path = std::env::var("PKCS11_LIB_PATH").unwrap_or_else(|_| {
+                find_opensc_pkcs11_lib()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .expect(
+                        "Could not find pkcs11 library. Please set PKCS11_LIB_PATH, or \
+                            make sure pkcs11-tool is on your PATH.",
+                    )
+            });
 
             Arc::new(
                 HardwareIdentity::new(pkcs11_lib_path, hsm_slot, hsm_key_id, move || {
@@ -6528,6 +6534,51 @@ fn is_mainnet(url: &Url) -> bool {
             .iter()
             .any(|&ic_domain| domain.contains(ic_domain))
     })
+}
+
+/// Automatically find the OpenSC PKCS11 library by locating pkcs11-tool
+fn find_opensc_pkcs11_lib() -> Result<PathBuf, String> {
+    use std::process::Command;
+
+    // Step 1: Find pkcs11-tool using `which`
+    let output = Command::new("which")
+        .arg("pkcs11-tool")
+        .output()
+        .map_err(|e| format!("Failed to run 'which pkcs11-tool': {}", e))?;
+
+    if !output.status.success() {
+        return Err("pkcs11-tool not found in PATH".to_string());
+    }
+
+    let tool_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if tool_path.is_empty() {
+        return Err("pkcs11-tool path is empty".to_string());
+    }
+
+    // Step 2: Follow symlinks to get the real path
+    let real_path = std::fs::canonicalize(&tool_path).map_err(|e| {
+        format!(
+            "Failed to canonicalize in finding pkcs11-tool home'{}': {}",
+            tool_path, e
+        )
+    })?;
+
+    // Step 3: Go up to the OpenSC root directory (from bin to root)
+    let opensc_root = real_path
+        .parent() // Remove "pkcs11-tool"
+        .and_then(|p| p.parent()) // Remove "bin"
+        .ok_or_else(|| "Failed to find OpenSC root directory".to_string())?;
+
+    // Step 4: Build the library path
+    let lib_path = opensc_root.join("lib").join("opensc-pkcs11.so");
+
+    // Step 5: Verify it exists
+    if !lib_path.exists() {
+        return Err(format!("Library not found at: {}", lib_path.display()));
+    }
+
+    Ok(lib_path)
 }
 
 fn parse_nns_public_key(
