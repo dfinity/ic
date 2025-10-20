@@ -8,6 +8,10 @@ on:
         required: true
         default: ''
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   ci-main:
     name: CI Main
