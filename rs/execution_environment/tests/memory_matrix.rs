@@ -8,7 +8,6 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
 use ic_types::Cycles;
-use ic_types::ingress::WasmResult;
 use num_traits::ops::saturating::SaturatingSub;
 
 const T: u128 = 1_000_000_000_000;
@@ -22,8 +21,12 @@ const FREEZING_THRESHOLD_SECS: u64 = FREEZING_THRESHOLD_DAYS * 24 * 3600;
 const SUBNET_EXECUTION_MEMORY: u64 = 200 * GIB;
 const SUBNET_MEMORY_THRESHOLD: u64 = 100 * GIB;
 
-struct SetupParams {
-    memory_allocation: Option<u64>,
+#[derive(Clone)]
+struct RunbookParams {
+    op_cycles_prepayment: bool,
+    subnet_message: bool,
+    ignore_canister_history_memory_usage: bool,
+    early_prepayment_refund: bool,
 }
 
 struct Runbook<F, G> {
@@ -36,7 +39,7 @@ struct Runbook<F, G> {
     reserved_cycles_increased_after_op: bool,
     memory_allocation_exceeded_before_op: bool,
     memory_allocation_exceeded_after_op: bool,
-    op_cycles_prepayment: bool,
+    params: RunbookParams,
 }
 
 struct RunResult {
@@ -50,7 +53,7 @@ struct RunResult {
 #[must_use]
 fn run<F, G, H>(runbook: &Runbook<F, G>) -> RunResult
 where
-    F: Fn(&mut ExecutionTest, CanisterId, SetupParams) -> H,
+    F: Fn(&mut ExecutionTest, CanisterId) -> H,
     G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError>,
 {
     let scaling = 4;
@@ -65,10 +68,13 @@ where
 
     let initial_cycles = runbook.initial_cycles;
     let canister_id = test.create_canister(initial_cycles);
-    let params = SetupParams {
-        memory_allocation: runbook.memory_allocation,
-    };
-    let res = (runbook.setup)(&mut test, canister_id, params);
+    let res = (runbook.setup)(&mut test, canister_id);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_maybe_memory_allocation(runbook.memory_allocation)
+        .with_reserved_cycles_limit(DEFAULT_INITIAL_CYCLES)
+        .with_freezing_threshold(FREEZING_THRESHOLD_SECS)
+        .build();
+    test.update_settings(canister_id, settings).unwrap();
     let memory_allocated_bytes_after_setup =
         test.canister_state(canister_id).memory_allocated_bytes();
 
@@ -114,18 +120,27 @@ where
     let initial_executed_instructions = test.canister_executed_instructions(canister_id);
     let err = (runbook.op)(&mut test, canister_id, res);
     let final_executed_instructions = test.canister_executed_instructions(canister_id);
-    let unused_cycles_prepayment = if runbook.op_cycles_prepayment {
-        let unused_instructions = test.max_instructions_per_message()
-            - (final_executed_instructions - initial_executed_instructions);
+    let unused_cycles_prepayment = if runbook.params.op_cycles_prepayment {
+        let used_instructions = final_executed_instructions - initial_executed_instructions;
+        let limit = if runbook.params.subnet_message {
+            test.install_code_instructions_limit()
+        } else {
+            test.max_instructions_per_message()
+        };
+        let unused_instructions = limit - used_instructions;
         test.convert_instructions_to_cycles(unused_instructions, WasmExecutionMode::Wasm32)
     } else {
         Cycles::zero()
     };
-    let final_memory_usage = test.canister_state(canister_id).memory_usage()
-        - test
-            .canister_state(canister_id)
-            .canister_history_memory_usage()
-        + initial_history_memory_usage;
+    let final_memory_usage = if runbook.params.ignore_canister_history_memory_usage {
+        test.canister_state(canister_id).memory_usage()
+            - test
+                .canister_state(canister_id)
+                .canister_history_memory_usage()
+            + initial_history_memory_usage
+    } else {
+        test.canister_state(canister_id).memory_usage()
+    };
     let final_allocated_bytes = test
         .canister_state(canister_id)
         .memory_allocation()
@@ -186,7 +201,7 @@ where
 
 fn test_memory_allocation<F, G, H>(mut runbook: Runbook<F, G>)
 where
-    F: Fn(&mut ExecutionTest, CanisterId, SetupParams) -> H,
+    F: Fn(&mut ExecutionTest, CanisterId) -> H,
     G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError>,
 {
     let res = run(&runbook);
@@ -194,6 +209,7 @@ where
     let minimum_initial_cycles = res.cycles_used
         + res.idle_cycles_burned_per_day * FREEZING_THRESHOLD_DAYS
         + res.unused_cycles_prepayment;
+    let unused_cycles_prepayment = res.unused_cycles_prepayment;
     let maximum_subnet_memory_target_before_op =
         NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes;
 
@@ -203,7 +219,7 @@ where
     let res = run(&runbook);
     assert!(res.err.is_none());
 
-    if res.allocated_bytes > NumBytes::from(0) {
+    if allocated_bytes > NumBytes::from(0) {
         runbook.subnet_memory_target_before_op =
             NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes + NumBytes::from(1);
         let res = run(&runbook);
@@ -219,6 +235,9 @@ where
             NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes;
 
         runbook.initial_cycles = minimum_initial_cycles - Cycles::from(1_u128);
+        if runbook.params.early_prepayment_refund {
+            runbook.initial_cycles -= unused_cycles_prepayment;
+        }
         let res = run(&runbook);
         let err = res.err.unwrap();
         assert!(
@@ -229,9 +248,9 @@ where
     }
 }
 
-fn test_memory_allocation_suite<F, G, H>(setup: F, op: G, op_cycles_prepayment: bool)
+fn test_memory_allocation_suite<F, G, H>(setup: F, op: G, params: RunbookParams)
 where
-    F: Fn(&mut ExecutionTest, CanisterId, SetupParams) -> H + Copy,
+    F: Fn(&mut ExecutionTest, CanisterId) -> H + Copy,
     G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError> + Copy,
 {
     // very low memory allocation (exceeded already before executing `op`)
@@ -245,7 +264,7 @@ where
         initial_cycles: DEFAULT_INITIAL_CYCLES.into(),
         memory_allocation_exceeded_before_op: true,
         memory_allocation_exceeded_after_op: true,
-        op_cycles_prepayment,
+        params: params.clone(),
     };
     test_memory_allocation(runbook);
 
@@ -260,42 +279,26 @@ where
         initial_cycles: DEFAULT_INITIAL_CYCLES.into(),
         memory_allocation_exceeded_before_op: false,
         memory_allocation_exceeded_after_op: false,
-        op_cycles_prepayment,
+        params: params.clone(),
     };
     test_memory_allocation(runbook);
 }
 
-fn stable64_grow_checked(
-    test: &mut ExecutionTest,
-    canister_id: CanisterId,
-    pages: u64,
-) -> Result<WasmResult, UserError> {
-    test.ingress(
-        canister_id,
-        "update",
-        wasm()
-            .stable64_grow(pages)
-            .int64_to_blob()
-            .trap_if_eq(u64::MAX.to_le_bytes(), "ic0.stable64_grow failed")
-            .reply()
-            .build(),
-    )
+fn stable64_grow_checked_payload(pages: u64, reply: bool) -> Vec<u8> {
+    let mut payload = wasm()
+        .stable64_grow(pages)
+        .int64_to_blob()
+        .trap_if_eq(u64::MAX.to_le_bytes(), "ic0.stable64_grow failed");
+    if reply {
+        payload = payload.reply();
+    }
+    payload.build()
 }
 
-fn setup_universal_canister(
-    test: &mut ExecutionTest,
-    canister_id: CanisterId,
-    params: SetupParams,
-) {
-    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+fn setup_universal_canister(test: &mut ExecutionTest, canister_id: CanisterId) {
+    let payload = stable64_grow_checked_payload((60 * MIB) >> 16, false);
+    test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), payload)
         .unwrap();
-    stable64_grow_checked(test, canister_id, (60 * MIB) >> 16).unwrap();
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_maybe_memory_allocation(params.memory_allocation)
-        .with_reserved_cycles_limit(DEFAULT_INITIAL_CYCLES)
-        .with_freezing_threshold(FREEZING_THRESHOLD_SECS)
-        .build();
-    test.update_settings(canister_id, settings).unwrap();
 }
 
 #[test]
@@ -311,15 +314,28 @@ fn test_memory_allocation_suite_grow_wasm_memory() {
         )
         .err()
     };
-    test_memory_allocation_suite(setup_universal_canister, op, true);
+    let params = RunbookParams {
+        op_cycles_prepayment: true,
+        subnet_message: false,
+        ignore_canister_history_memory_usage: false,
+        early_prepayment_refund: false,
+    };
+    test_memory_allocation_suite(setup_universal_canister, op, params);
 }
 
 #[test]
 fn test_memory_allocation_suite_grow_stable_memory() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        stable64_grow_checked(test, canister_id, GIB >> 16).err()
+        let payload = stable64_grow_checked_payload(GIB >> 16, true);
+        test.ingress(canister_id, "update", payload).err()
     };
-    test_memory_allocation_suite(setup_universal_canister, op, true);
+    let params = RunbookParams {
+        op_cycles_prepayment: true,
+        subnet_message: false,
+        ignore_canister_history_memory_usage: false,
+        early_prepayment_refund: false,
+    };
+    test_memory_allocation_suite(setup_universal_canister, op, params);
 }
 
 #[test]
@@ -332,13 +348,19 @@ fn test_memory_allocation_suite_take_snapshot() {
         )
         .err()
     };
-    test_memory_allocation_suite(setup_universal_canister, op, false);
+    let params = RunbookParams {
+        op_cycles_prepayment: false,
+        subnet_message: true,
+        ignore_canister_history_memory_usage: false,
+        early_prepayment_refund: false,
+    };
+    test_memory_allocation_suite(setup_universal_canister, op, params);
 }
 
 #[test]
 fn test_memory_allocation_suite_load_snapshot() {
-    let setup = |test: &mut ExecutionTest, canister_id: CanisterId, params: SetupParams| {
-        setup_universal_canister(test, canister_id, params);
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister(test, canister_id);
         let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
@@ -359,5 +381,28 @@ fn test_memory_allocation_suite_load_snapshot() {
         )
         .err()
     };
-    test_memory_allocation_suite(setup, op, false);
+    let params = RunbookParams {
+        op_cycles_prepayment: false,
+        subnet_message: true,
+        ignore_canister_history_memory_usage: true,
+        early_prepayment_refund: false,
+    };
+    test_memory_allocation_suite(setup, op, params);
+}
+
+#[test]
+fn test_memory_allocation_suite_install_code() {
+    let setup = |_test: &mut ExecutionTest, _canister_id: CanisterId| {};
+    let op = |test: &mut ExecutionTest, canister_id, ()| {
+        let payload = stable64_grow_checked_payload((60 * MIB) >> 16, false);
+        test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), payload)
+            .err()
+    };
+    let params = RunbookParams {
+        op_cycles_prepayment: true,
+        subnet_message: true,
+        ignore_canister_history_memory_usage: false,
+        early_prepayment_refund: true,
+    };
+    test_memory_allocation_suite(setup, op, params);
 }
