@@ -1569,7 +1569,7 @@ fn test_min_retrieval_amount_custom() {
 
 fn test_transaction_resubmission_finalize_helper(
     deposit_fn: impl Fn(&CkBtcSetup, Principal),
-) -> (CkBtcSetup, u64, bitcoin::Transaction) {
+) -> (CkBtcSetup, u64, Txid, bitcoin::Transaction) {
     let ckbtc = CkBtcSetup::new();
     let user = Principal::from(ckbtc.caller);
 
@@ -1596,16 +1596,10 @@ fn test_transaction_resubmission_finalize_helper(
         .get(&txid)
         .expect("the mempool does not contain the original transaction");
 
-    // Step 4: wait for the transaction resubmission
-
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY - Duration::from_secs(1));
-
-    (ckbtc, block_index, tx.clone())
+    (ckbtc, block_index, txid, tx.clone())
 }
 
-fn test_transaction_resubmission_finalize_setup() -> (CkBtcSetup, u64, bitcoin::Transaction) {
+fn test_transaction_resubmission_finalize_setup() -> (CkBtcSetup, u64, Txid, bitcoin::Transaction) {
     test_transaction_resubmission_finalize_helper(|ckbtc, user| {
         let deposit_value = 100_000_000;
         let utxo = Utxo {
@@ -1623,7 +1617,7 @@ fn test_transaction_resubmission_finalize_setup() -> (CkBtcSetup, u64, bitcoin::
 
 #[test]
 fn test_transaction_resubmission_finalize_new_above_threshold() {
-    let deposit_value = 1_000_000;
+    let deposit_value = 100_000;
 
     // Step 1: deposit btc
     //
@@ -1631,7 +1625,7 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
     // one, the remaining available count is still greater than the threshold.
     // This is to make sure utxo count optimization is triggered.
     const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
-    let (ckbtc, _, _) = test_transaction_resubmission_finalize_helper(|ckbtc, user| {
+    let (ckbtc, _, _, _) = test_transaction_resubmission_finalize_helper(|ckbtc, user| {
         ckbtc.deposit_utxos_with_value(user, &[deposit_value; COUNT]);
     });
 
@@ -1705,7 +1699,12 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
 
 #[test]
 fn test_transaction_resubmission_finalize_new() {
-    let (ckbtc, block_index, tx) = test_transaction_resubmission_finalize_setup();
+    let (ckbtc, block_index, _, tx) = test_transaction_resubmission_finalize_setup();
+
+    // wait for the transaction resubmission
+    ckbtc
+        .env
+        .advance_time(MIN_RESUBMISSION_DELAY - Duration::from_secs(1));
 
     ckbtc.assert_for_n_ticks("no resubmission before the delay", 5, |ckbtc| {
         ckbtc.mempool().len() == 1
@@ -1736,7 +1735,12 @@ fn test_transaction_resubmission_finalize_new() {
 
 #[test]
 fn test_transaction_resubmission_finalize_old() {
-    let (ckbtc, block_index, tx) = test_transaction_resubmission_finalize_setup();
+    let (ckbtc, block_index, old_txid, tx) = test_transaction_resubmission_finalize_setup();
+
+    // wait for the transaction resubmission
+    ckbtc
+        .env
+        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
 
     let mempool = ckbtc.tick_until("mempool has a replacement transaction", 10, |ckbtc| {
         let mempool = ckbtc.mempool();
@@ -1754,16 +1758,19 @@ fn test_transaction_resubmission_finalize_old() {
     // finalize the old transaction
 
     ckbtc.finalize_transaction(&tx);
-    assert_eq!(
-        ckbtc.await_finalization(block_index, 10).as_ref(),
-        tx.txid().as_ref()
-    );
+    assert_eq!(ckbtc.await_finalization(block_index, 10), old_txid);
     ckbtc.minter_self_check();
 }
 
 #[test]
 fn test_transaction_resubmission_finalize_middle() {
-    let (ckbtc, block_index, original_tx) = test_transaction_resubmission_finalize_setup();
+    let (ckbtc, block_index, old_txid, original_tx) =
+        test_transaction_resubmission_finalize_setup();
+
+    // wait for the transaction resubmission
+    ckbtc
+        .env
+        .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
 
     let mempool_2 = ckbtc.tick_until("mempool contains a replacement transaction", 10, |ckbtc| {
         let mempool = ckbtc.mempool();
@@ -1790,7 +1797,7 @@ fn test_transaction_resubmission_finalize_middle() {
 
     let third_txid = ckbtc.await_btc_transaction(block_index, 10);
     assert_ne!(third_txid, second_txid);
-    assert_ne!(third_txid.as_ref(), original_tx.txid().as_ref());
+    assert_ne!(third_txid, old_txid);
 
     let third_tx = mempool_3
         .get(&third_txid)
