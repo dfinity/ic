@@ -193,7 +193,7 @@ fn wrong_ni_dkg_id(dkg_id: &NiDkgId) -> NiDkgId {
 }
 
 #[test]
-fn should_vetkd_consistently_derive_the_same_vetkey_given_sufficient_shares() {
+fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
     let mut rng = reproducible_rng();
     let server = VetKDTestServer::new(&mut rng);
     let client = VetKDTestClient::new(&mut rng, &server);
@@ -227,58 +227,44 @@ fn should_vetkd_consistently_derive_the_same_vetkey_given_sufficient_shares() {
     assert!(keys.iter().all(|k| *k == keys[0]));
 }
 
-#[test]
-fn should_vetkd_create_encrypted_key_share_err_if_threshold_sig_data_not_loaded() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&wrong_ni_dkg_id(&server.dkg_id));
+mod create_encrypted_key_share {
 
-    let shares = server.create_key_shares(&vetkd_args, &mut rng);
+    use super::*;
 
-    match shares {
-        Err(VetKdKeyShareCreationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
+    #[test]
+    fn should_err_if_threshold_sig_data_not_loaded() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&wrong_ni_dkg_id(&server.dkg_id));
+
+        let shares = server.create_key_shares(&vetkd_args, &mut rng);
+
+        match shares {
+            Err(VetKdKeyShareCreationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
-}
 
-#[test]
-fn should_vetkd_create_encrypted_key_share_err_if_transport_public_key_is_invalid() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let mut vetkd_args = client.create_args(&server.dkg_id);
+    #[test]
+    fn should_err_if_transport_public_key_is_invalid() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let mut vetkd_args = client.create_args(&server.dkg_id);
 
-    // Set the infinity bit which causes the point to become an invalid encoding
-    vetkd_args.transport_public_key[0] ^= 0x40;
+        // Set the infinity bit which causes the point to become an invalid encoding
+        vetkd_args.transport_public_key[0] ^= 0x40;
 
-    let shares = server.create_key_shares(&vetkd_args, &mut rng);
+        let shares = server.create_key_shares(&vetkd_args, &mut rng);
 
-    match shares {
-        Err(VetKdKeyShareCreationError::InvalidArgumentEncryptionPublicKey) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
-    }
-}
-
-#[test]
-fn should_vetkd_verify_key_share_err_with_thresholdsigdatanotfound_if_threshold_sig_data_not_loaded()
- {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let mut vetkd_args = client.create_args(&server.dkg_id);
-
-    let shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
-
-    vetkd_args.ni_dkg_id = wrong_ni_dkg_id(&server.dkg_id);
-    match server.verify_key_shares(&shares, &vetkd_args, &mut rng) {
-        Err(VetKdKeyShareVerificationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
+        match shares {
+            Err(VetKdKeyShareCreationError::InvalidArgumentEncryptionPublicKey) => { /* expected */
+            }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
 }
 
@@ -326,299 +312,331 @@ fn modify_n_random_shares<R: Rng + CryptoRng, F: Fn(&mut VetKdEncryptedKeyShare,
     }
 }
 
-#[test]
-fn should_vetkd_verify_key_share_err_with_verificationerror_if_share_signature_is_invalid() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
+mod verify_key_share {
 
-    let mut shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
+    use super::*;
 
-    modify_random_share(&mut shares, &mut rng, |share, rng| {
-        corrupt_share_signature(share, rng)
-    });
+    #[test]
+    fn should_err_with_thresholdsigdatanotfound_if_threshold_sig_data_not_loaded() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let mut vetkd_args = client.create_args(&server.dkg_id);
 
-    match server.verify_key_shares(&shares, &vetkd_args, &mut rng) {
-        Err(VetKdKeyShareVerificationError::VerificationError(_)) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        vetkd_args.ni_dkg_id = wrong_ni_dkg_id(&server.dkg_id);
+        match server.verify_key_shares(&shares, &vetkd_args, &mut rng) {
+            Err(VetKdKeyShareVerificationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
+    }
+
+    #[test]
+    fn should_err_with_verificationerror_if_share_signature_is_invalid() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        modify_random_share(&mut shares, &mut rng, |share, rng| {
+            corrupt_share_signature(share, rng)
+        });
+
+        match server.verify_key_shares(&shares, &vetkd_args, &mut rng) {
+            Err(VetKdKeyShareVerificationError::VerificationError(_)) => { /* expected */ }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
 }
 
-#[test]
-fn should_vetkd_combine_shares_succeed_if_reconstruction_threshold_many_shares_are_valid() {
-    let mut rng = reproducible_rng();
-    let mut server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
+mod combine_shares {
 
-    let mut shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
+    use super::*;
 
-    let to_corrupt = shares.len() - server.config.threshold().get().get() as usize;
+    #[test]
+    fn should_succeed_if_reconstruction_threshold_many_shares_are_valid() {
+        let mut rng = reproducible_rng();
+        let mut server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
 
-    modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
-        swap_share_c1c3(&mut share.encrypted_key_share);
-    });
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
 
-    match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-        Ok((combiner, _key)) => {
-            /* expected success */
-            let logger = server
-                .env
-                .loggers
-                .remove(&combiner)
-                .expect("Missing loggers");
-            let logs = logger.drain_logs();
-            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+        let to_corrupt = shares.len() - server.config.threshold().get().get() as usize;
+
+        modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
+            swap_share_c1c3(&mut share.encrypted_key_share);
+        });
+
+        match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
+            Ok((combiner, _key)) => {
+                /* expected success */
+                let logger = server
+                    .env
+                    .loggers
+                    .remove(&combiner)
+                    .expect("Missing loggers");
+                let logs = logger.drain_logs();
+                LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
                 &Level::Info,
                 "EncryptedKey::combine_all failed with InvalidShares, falling back to EncryptedKey::combine_valid_shares"
             );
-        }
-        Err(e) => panic!("Combination failed {:?}", e),
-    }
-}
-
-#[test]
-fn should_vetkd_combine_shares_err_with_thresholdsigdatanotfound_if_threshold_sig_data_not_loaded()
-{
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let mut vetkd_args = client.create_args(&server.dkg_id);
-
-    let shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
-
-    vetkd_args.ni_dkg_id = wrong_ni_dkg_id(&server.dkg_id);
-
-    match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-        Err(VetKdKeyShareCombinationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
-    }
-}
-
-#[test]
-fn should_vetkd_combine_shares_err_if_reconstruction_threshold_not_met() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
-
-    let mut shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
-
-    while shares.len() >= server.config.threshold().get().get() as usize {
-        if let Some(dealer) = shares
-            .keys()
-            .collect::<Vec<_>>()
-            .into_iter()
-            .cloned()
-            .choose(&mut rng)
-        {
-            shares.remove(&dealer).expect("Removing share failed");
+            }
+            Err(e) => panic!("Combination failed {:?}", e),
         }
     }
 
-    match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-        Err(VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
-            threshold: _,
-            share_count: _,
-        }) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
+    #[test]
+    fn should_err_with_thresholdsigdatanotfound_if_threshold_sig_data_not_loaded() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let mut vetkd_args = client.create_args(&server.dkg_id);
+
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        vetkd_args.ni_dkg_id = wrong_ni_dkg_id(&server.dkg_id);
+
+        match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
+            Err(VetKdKeyShareCombinationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
+    }
+
+    #[test]
+    fn should_err_if_reconstruction_threshold_not_met() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        while shares.len() >= server.config.threshold().get().get() as usize {
+            if let Some(dealer) = shares
+                .keys()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .cloned()
+                .choose(&mut rng)
+            {
+                shares.remove(&dealer).expect("Removing share failed");
+            }
+        }
+
+        match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
+            Err(VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
+                threshold: _,
+                share_count: _,
+            }) => { /* expected */ }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
+    }
+
+    #[test]
+    fn should_err_if_transport_public_key_is_invalid() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let mut vetkd_args = client.create_args(&server.dkg_id);
+
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        // Set the infinity bit which causes the point to become an invalid encoding
+        vetkd_args.transport_public_key[0] ^= 0x40;
+
+        match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
+            Err(VetKdKeyShareCombinationError::InvalidArgumentEncryptionPublicKey) => { /* expected */
+            }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
+    }
+
+    #[test]
+    fn should_err_if_some_encrypted_key_share_is_invalid() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        modify_random_share(&mut shares, &mut rng, |share, rng| {
+            corrupt_share_contents(share, rng)
+        });
+
+        match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
+            Err(VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare) => { /* expected */
+            }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
+    }
+
+    #[test]
+    fn should_err_if_combination_fails_due_to_too_many_invalid_shares() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        /*
+         * If any of the shares fails to deserialize then the combination step fails
+         * immediately. We avoid this by using the structure of the share; it is c1/c2/c3
+         * where c1 and c3 are in G1 and c2 is G2, and all the values are just concatenated.
+         * So by swapping the first and last 48 bytes we get a valid share encoding which is
+         * still invalid.
+         */
+
+        let to_corrupt = shares.len() - server.config.threshold().get().get() as usize + 1;
+
+        modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
+            swap_share_c1c3(&mut share.encrypted_key_share);
+        });
+
+        match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
+            Err(VetKdKeyShareCombinationError::CombinationError(_)) => { /* expected */ }
+            Ok(_) => panic!("Unexpected success"),
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
 }
 
-#[test]
-fn should_vetkd_combine_shares_err_if_transport_public_key_is_invalid() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let mut vetkd_args = client.create_args(&server.dkg_id);
+mod verify_encrypted_key {
 
-    let shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
+    use super::*;
 
-    // Set the infinity bit which causes the point to become an invalid encoding
-    vetkd_args.transport_public_key[0] ^= 0x40;
+    #[test]
+    fn should_err_with_invalidargumentencryptedkey_if_encrypted_key_is_invalid() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
 
-    match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-        Err(VetKdKeyShareCombinationError::InvalidArgumentEncryptionPublicKey) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        let mut ek = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Share combination failed")
+            .1;
+
+        assert!(
+            server
+                .verify_encrypted_key(&ek, &vetkd_args, &mut rng)
+                .is_ok()
+        );
+
+        flip_random_bit(&mut ek.encrypted_key, &mut rng);
+
+        match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
+            Ok(_) => panic!("Unexpected success"),
+            Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey) => { /* expected */ }
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
-}
 
-#[test]
-fn should_vetkd_combine_shares_err_if_some_encrypted_key_share_is_invalid() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
+    #[test]
+    fn should_err_with_thresholdsigdatanotfound_if_threshold_sig_data_not_loaded() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let mut vetkd_args = client.create_args(&server.dkg_id);
 
-    let mut shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
 
-    modify_random_share(&mut shares, &mut rng, |share, rng| {
-        corrupt_share_contents(share, rng)
-    });
+        let ek = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Share combination failed")
+            .1;
 
-    match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-        Err(VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
+        vetkd_args.ni_dkg_id = wrong_ni_dkg_id(&vetkd_args.ni_dkg_id);
+
+        match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
+            Ok(_) => panic!("Unexpected success"),
+            Err(VetKdKeyVerificationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
-}
 
-#[test]
-fn should_vetkd_combine_shares_err_if_combination_fails_due_to_too_many_invalid_shares() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
+    #[test]
+    fn should_err_with_invalidargumentencryptionpublickey_if_transport_public_key_is_invalid() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let mut vetkd_args = client.create_args(&server.dkg_id);
 
-    let mut shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
 
-    /*
-     * If any of the shares fails to deserialize then the combination step fails
-     * immediately. We avoid this by using the structure of the share; it is c1/c2/c3
-     * where c1 and c3 are in G1 and c2 is G2, and all the values are just concatenated.
-     * So by swapping the first and last 48 bytes we get a valid share encoding which is
-     * still invalid.
-     */
+        let ek = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Share combination failed")
+            .1;
 
-    let to_corrupt = shares.len() - server.config.threshold().get().get() as usize + 1;
+        flip_random_bit(&mut vetkd_args.transport_public_key, &mut rng);
 
-    modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
-        swap_share_c1c3(&mut share.encrypted_key_share);
-    });
-
-    match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-        Err(VetKdKeyShareCombinationError::CombinationError(_)) => { /* expected */ }
-        Ok(_) => panic!("Unexpected success"),
-        Err(e) => panic!("Unexpected error {:?}", e),
+        match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
+            Ok(_) => panic!("Unexpected success"),
+            Err(VetKdKeyVerificationError::InvalidArgumentEncryptionPublicKey) => { /* expected */ }
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
-}
 
-#[test]
-fn should_vetkd_verify_encrypted_key_err_with_invalidargumentencryptedkey_if_encrypted_key_is_invalid()
- {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
+    #[test]
+    fn should_err_with_verificationerror_if_encrypted_key_is_invalid() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
 
-    let shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
 
-    let mut ek = server
-        .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed")
-        .1;
+        let mut ek = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Share combination failed")
+            .1;
 
-    assert!(
-        server
-            .verify_encrypted_key(&ek, &vetkd_args, &mut rng)
-            .is_ok()
-    );
+        let g1_bytes = ic_crypto_internal_bls12_381_vetkd::G1Affine::generator().serialize();
+        ek.encrypted_key[0..48].copy_from_slice(&g1_bytes);
 
-    flip_random_bit(&mut ek.encrypted_key, &mut rng);
-
-    match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
-        Ok(_) => panic!("Unexpected success"),
-        Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey) => { /* expected */ }
-        Err(e) => panic!("Unexpected error {:?}", e),
-    }
-}
-
-#[test]
-fn should_vetkd_verify_encrypted_key_err_with_thresholdsigdatanotfound_if_threshold_sig_data_not_loaded()
- {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let mut vetkd_args = client.create_args(&server.dkg_id);
-
-    let shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
-
-    let ek = server
-        .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed")
-        .1;
-
-    vetkd_args.ni_dkg_id = wrong_ni_dkg_id(&vetkd_args.ni_dkg_id);
-
-    match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
-        Ok(_) => panic!("Unexpected success"),
-        Err(VetKdKeyVerificationError::ThresholdSigDataNotFound(_)) => { /* expected */ }
-        Err(e) => panic!("Unexpected error {:?}", e),
-    }
-}
-
-#[test]
-fn should_vetkd_verify_encrypted_key_err_with_invalidargumentencryptionpublickey_if_transport_public_key_is_invalid()
- {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let mut vetkd_args = client.create_args(&server.dkg_id);
-
-    let shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
-
-    let ek = server
-        .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed")
-        .1;
-
-    flip_random_bit(&mut vetkd_args.transport_public_key, &mut rng);
-
-    match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
-        Ok(_) => panic!("Unexpected success"),
-        Err(VetKdKeyVerificationError::InvalidArgumentEncryptionPublicKey) => { /* expected */ }
-        Err(e) => panic!("Unexpected error {:?}", e),
-    }
-}
-
-#[test]
-fn should_vetkd_verify_encrypted_key_err_with_verificationerror_if_encrypted_key_is_invalid() {
-    let mut rng = reproducible_rng();
-    let server = VetKDTestServer::new(&mut rng);
-    let client = VetKDTestClient::new(&mut rng, &server);
-    let vetkd_args = client.create_args(&server.dkg_id);
-
-    let shares = server
-        .create_key_shares(&vetkd_args, &mut rng)
-        .expect("Share creation unexpectedly failed");
-
-    let mut ek = server
-        .combine_key_shares(&shares, &vetkd_args, &mut rng)
-        .expect("Share combination failed")
-        .1;
-
-    let g1_bytes = ic_crypto_internal_bls12_381_vetkd::G1Affine::generator().serialize();
-    ek.encrypted_key[0..48].copy_from_slice(&g1_bytes);
-
-    match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
-        Ok(_) => panic!("Unexpected success"),
-        Err(VetKdKeyVerificationError::VerificationError) => { /* expected */ }
-        Err(e) => panic!("Unexpected error {:?}", e),
+        match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
+            Ok(_) => panic!("Unexpected success"),
+            Err(VetKdKeyVerificationError::VerificationError) => { /* expected */ }
+            Err(e) => panic!("Unexpected error {:?}", e),
+        }
     }
 }
 
