@@ -7406,7 +7406,6 @@ dependencies = [
  "ic-bitcoin-canister-mock",
  "ic-btc-checker",
  "ic-btc-interface",
- "ic-canister-log 0.2.0",
  "ic-cdk",
  "ic-config",
  "ic-crypto-sha2",

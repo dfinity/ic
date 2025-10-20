@@ -1,5 +1,5 @@
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
-use crate::logs::P1;
+use crate::Priority;
 use crate::memo::{BurnMemo, Status};
 use crate::tasks::{TaskType, schedule_now};
 use crate::{
@@ -9,8 +9,8 @@ use crate::{
     state::{self, RetrieveBtcRequest, mutate_state, read_state},
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
+use canlog::log;
 use ic_base_types::PrincipalId;
-use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -194,7 +194,7 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
-                P1,
+                Priority::P1,
                 "rejected an attempt to withdraw {} BTC to address {} due to failed Bitcoin check",
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
@@ -228,7 +228,7 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
     };
 
     log!(
-        P1,
+        Priority::P1,
         "accepted a retrieve btc request for {} BTC to address {} (block_index = {})",
         crate::tx::DisplayAmount(request.amount),
         args.address,

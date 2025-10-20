@@ -1,6 +1,5 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
-use ic_canister_log::export as export_logs;
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
@@ -23,8 +22,9 @@ use ic_ckbtc_minter::updates::{
 };
 use ic_ckbtc_minter::{IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
+    logs::Priority,
     state::eventlog::{EventType, GetEventsArg},
-    storage, {Log, LogEntry, Priority},
+    storage, {Log, LogEntry},
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
