@@ -139,7 +139,6 @@ rust_test(
     flaky = True,
     tags = [
         "cpu:4",
-        "requires-network",
     ],
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [
