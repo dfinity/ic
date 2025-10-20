@@ -3,6 +3,7 @@ name: CI Main
 on:
   merge_group:
   # Allows you to run this workflow manually from the Actions tab
+  # This is a fantastic new feature!
   workflow_dispatch:
   push:
     branches:
