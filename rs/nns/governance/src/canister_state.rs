@@ -401,7 +401,10 @@ fn get_effective_payload(
         | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
         | NnsFunction::DeployGuestosToAllUnassignedNodes
         | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
-        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Ok(payload),
+        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
+        | NnsFunction::PauseCanisterMigrations
+        | NnsFunction::UnpauseCanisterMigrations
+        | NnsFunction::SetSubnetOperationalLevel => Ok(payload),
     }
 }
 
@@ -470,6 +473,7 @@ mod tests {
                 canister_type,
             }),
             hash: hash.clone(),
+            skip_update_latest_version: Some(false),
         })
         .unwrap();
 
@@ -484,7 +488,8 @@ mod tests {
                     wasm,
                     canister_type
                 }),
-                hash
+                hash,
+                skip_update_latest_version: Some(false),
             }
         );
     }

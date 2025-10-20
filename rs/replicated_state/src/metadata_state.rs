@@ -420,7 +420,9 @@ impl SystemMetadata {
         for range in routing_table_ranges.iter().rev() {
             let start = canister_id_into_u64(range.start);
             let end = canister_id_into_u64(range.end);
-            if start % CANISTER_IDS_PER_SUBNET == 0 && end == start + CANISTER_IDS_PER_SUBNET - 1 {
+            if start.is_multiple_of(CANISTER_IDS_PER_SUBNET)
+                && end == start + CANISTER_IDS_PER_SUBNET - 1
+            {
                 // Found the `[N * 2^20, (N+1) * 2^20 - 1]` (sub)range, use it as allocation
                 // range.
                 //

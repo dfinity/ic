@@ -286,7 +286,12 @@ fn arb_approve<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>>
 }
 
 fn arb_mint<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
-    (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint { to, amount })
+    (
+        arb_account(),
+        arb_amount(),
+        proptest::option::of(arb_amount()),
+    )
+        .prop_map(|(to, amount, fee)| Operation::Mint { to, amount, fee })
 }
 
 fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
@@ -294,11 +299,13 @@ fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
         arb_account(),
         proptest::option::of(arb_account()),
         arb_amount(),
+        proptest::option::of(arb_amount()),
     )
-        .prop_map(|(from, spender, amount)| Operation::Burn {
+        .prop_map(|(from, spender, amount, fee)| Operation::Burn {
             from,
             spender,
             amount,
+            fee,
         })
 }
 
@@ -961,6 +968,112 @@ where
         }),
         transfer(&env, canister_id, p2.0, MINTER, 0),
     );
+}
+
+pub fn test_mint_burn_fee_rejected<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    assert_eq!(0, total_supply(&env, canister_id));
+    assert_eq!(0, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
+
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const TX_AMOUNT: u64 = 1_000_000;
+
+    let mint_error = send_transfer(
+        &env,
+        canister_id,
+        MINTER.owner,
+        &TransferArg {
+            from_subaccount: None,
+            to: p1.0.into(),
+            fee: Some(FEE.into()),
+            created_at_time: None,
+            amount: Nat::from(INITIAL_BALANCE),
+            memo: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        mint_error,
+        TransferError::BadFee {
+            expected_fee: Nat::from(0u64)
+        }
+    );
+
+    transfer(&env, canister_id, MINTER, p1.0, INITIAL_BALANCE).expect("mint failed");
+
+    let mut expected_balance = INITIAL_BALANCE;
+
+    assert_eq!(expected_balance, total_supply(&env, canister_id));
+    assert_eq!(expected_balance, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
+
+    let burn_error = send_transfer(
+        &env,
+        canister_id,
+        p1.0,
+        &TransferArg {
+            from_subaccount: None,
+            to: MINTER,
+            fee: Some(FEE.into()),
+            created_at_time: None,
+            amount: Nat::from(TX_AMOUNT),
+            memo: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        burn_error,
+        TransferError::BadFee {
+            expected_fee: Nat::from(0u64)
+        }
+    );
+
+    transfer(&env, canister_id, p1.0, MINTER, TX_AMOUNT).expect("burn failed");
+
+    expected_balance -= TX_AMOUNT;
+
+    assert_eq!(expected_balance, total_supply(&env, canister_id));
+    assert_eq!(expected_balance, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
+
+    let approve_args = default_approve_args(p2.0, u64::MAX);
+    send_approval(&env, canister_id, p1.into(), &approve_args).expect("approval failed");
+
+    expected_balance -= FEE;
+
+    let mut transfer_from_args = TransferFromArgs {
+        from: p1.0.into(),
+        to: MINTER,
+        fee: Some(FEE.into()),
+        created_at_time: None,
+        amount: Nat::from(TX_AMOUNT),
+        memo: None,
+        spender_subaccount: None,
+    };
+    let burn_from_error =
+        send_transfer_from(&env, canister_id, p2.0, &transfer_from_args).unwrap_err();
+    assert_eq!(
+        burn_from_error,
+        TransferFromError::BadFee {
+            expected_fee: Nat::from(0u64)
+        }
+    );
+
+    transfer_from_args.fee = None;
+    send_transfer_from(&env, canister_id, p2.0, &transfer_from_args).expect("transfer from failed");
+
+    expected_balance -= TX_AMOUNT;
+
+    assert_eq!(expected_balance, total_supply(&env, canister_id));
+    assert_eq!(expected_balance, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
 }
 
 pub fn test_account_canonicalization<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -5126,9 +5239,11 @@ pub mod metadata {
 
 pub mod archiving {
     use super::*;
+    use ic_ledger_canister_core::archive::DEFAULT_CYCLES_FOR_ARCHIVE_CREATION;
     use ic_ledger_canister_core::ledger::MAX_BLOCKS_TO_ARCHIVE;
     use ic_ledger_canister_core::range_utils;
     use ic_ledger_suite_state_machine_helpers::icrc3_get_blocks;
+    use ic_state_machine_tests::StateMachineBuilder;
     use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::messages::MessageId;
     use icp_ledger::{GetEncodedBlocksResult, QueryEncodedBlocksResponse};
@@ -5138,6 +5253,271 @@ pub mod archiving {
     use std::fmt::Debug;
     use std::ops::Range;
     // ----- Tests -----
+
+    /// Verify that archiving fails if the ledger does not have enough cycles to spawn the archive.
+    pub fn test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        const NUM_BLOCKS_TO_ARCHIVE: usize = 1_000;
+        const NUM_INITIAL_BALANCES: u64 = 70_000;
+        const TRIGGER_THRESHOLD: usize = 2_000;
+        let p1 = PrincipalId::new_user_test_id(1);
+        let p2 = PrincipalId::new_user_test_id(2);
+        let archive_controller = PrincipalId::new_user_test_id(1_000_000);
+        let mut initial_balances = vec![];
+        for i in 0..NUM_INITIAL_BALANCES {
+            initial_balances.push((
+                Account::from(PrincipalId::new_user_test_id(i).0),
+                10_000_000,
+            ));
+        }
+
+        let env = StateMachine::new();
+        let args = encode_init_args(InitArgs {
+            archive_options: ArchiveOptions {
+                trigger_threshold: TRIGGER_THRESHOLD,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: archive_controller,
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(
+                    ic_ledger_canister_core::archive::DEFAULT_CYCLES_FOR_ARCHIVE_CREATION,
+                ),
+                max_transactions_per_response: None,
+            },
+            ..init_args(initial_balances)
+        });
+        let args = Encode!(&args).unwrap();
+        let ledger_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .unwrap();
+
+        // Assert no archives exist.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+
+        // Send a transfer that should trigger spawning of an archive.
+        let response = env
+            .execute_ingress_as(
+                p1,
+                ledger_id,
+                "icrc1_transfer",
+                Encode!(&TransferArg {
+                    from_subaccount: None,
+                    to: p2.0.into(),
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                    amount: Nat::from(10_000u64),
+                })
+                .unwrap(),
+            )
+            .expect_err("transfer should fail");
+        response.assert_contains(ErrorCode::CanisterContractViolation, "out of cycles");
+
+        // Assert no archives exist, as the spawning failed.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        // Verify that no new block was created, since the transfer failed (the ledger panicked).
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+    }
+
+    /// Verify that archiving is skipped but transactions succeed if cycles_to_create_archive is
+    /// less than the cost of creating a canister.
+    pub fn test_archiving_skipped_if_cycles_to_create_archive_less_than_cost<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        const NUM_BLOCKS_TO_ARCHIVE: usize = 1_000;
+        const NUM_INITIAL_BALANCES: u64 = 70_000;
+        const TRIGGER_THRESHOLD: usize = 2_000;
+        const EXPECTED_CREATE_CANISTER_ERROR: &str =
+            "only 0 cycles were received with the create_canister request";
+        let p1 = PrincipalId::new_user_test_id(1);
+        let p2 = PrincipalId::new_user_test_id(2);
+        let archive_controller = PrincipalId::new_user_test_id(1_000_000);
+        let mut initial_balances = vec![];
+        for i in 0..NUM_INITIAL_BALANCES {
+            initial_balances.push((
+                Account::from(PrincipalId::new_user_test_id(i).0),
+                10_000_000,
+            ));
+        }
+
+        let env = StateMachineBuilder::new()
+            .with_subnet_type(SubnetType::Application)
+            .build();
+        let args = encode_init_args(InitArgs {
+            archive_options: ArchiveOptions {
+                trigger_threshold: TRIGGER_THRESHOLD,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: archive_controller,
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
+            },
+            ..init_args(initial_balances)
+        });
+        let args = Encode!(&args).unwrap();
+        let ledger_id = env
+            .install_canister_with_cycles(
+                ledger_wasm.clone(),
+                args,
+                None,
+                Cycles::new(
+                    DEFAULT_CYCLES_FOR_ARCHIVE_CREATION
+                        .checked_mul(100)
+                        .unwrap() as u128,
+                ),
+            )
+            .unwrap();
+
+        // Assert no archives exist.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+
+        // Send a transfer that should trigger an attempt to spawn an archive.
+        send_transfer(
+            &env,
+            ledger_id,
+            p1.0,
+            &TransferArg {
+                from_subaccount: None,
+                to: p2.0.into(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(10_000u64),
+            },
+        )
+        .expect("transfer should succeed");
+
+        // Assert no archive was spawned.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        // Verify that a new block was created.
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES + 1);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+        // Verify that the expected create_canister error was logged.
+        let logs = env.canister_log(ledger_id);
+        let mut create_canister_error_found = false;
+        for entry in logs.records() {
+            let log_message = String::from_utf8(entry.content.clone()).unwrap();
+            if log_message.contains(EXPECTED_CREATE_CANISTER_ERROR) {
+                create_canister_error_found = true;
+                break;
+            }
+        }
+        assert!(
+            create_canister_error_found,
+            "No error log message containing '{}' was found in the ledger logs",
+            EXPECTED_CREATE_CANISTER_ERROR
+        );
+    }
+
+    /// Verify that archiving fails if the ledger does not have enough cycles to spawn the archive.
+    pub fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        const NUM_BLOCKS_TO_ARCHIVE: usize = 1_000;
+        const NUM_INITIAL_BALANCES: u64 = 70_000;
+        const TRIGGER_THRESHOLD: usize = 2_000;
+        let p1 = PrincipalId::new_user_test_id(1);
+        let p2 = PrincipalId::new_user_test_id(2);
+        let archive_controller = PrincipalId::new_user_test_id(1_000_000);
+        let mut initial_balances = vec![];
+        for i in 0..NUM_INITIAL_BALANCES {
+            initial_balances.push((
+                Account::from(PrincipalId::new_user_test_id(i).0),
+                10_000_000,
+            ));
+        }
+
+        let env = StateMachine::new();
+        let args = encode_init_args(InitArgs {
+            archive_options: ArchiveOptions {
+                trigger_threshold: TRIGGER_THRESHOLD,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: archive_controller,
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(
+                    ic_ledger_canister_core::archive::DEFAULT_CYCLES_FOR_ARCHIVE_CREATION,
+                ),
+                max_transactions_per_response: None,
+            },
+            ..init_args(initial_balances)
+        });
+        let args = Encode!(&args).unwrap();
+        let ledger_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .unwrap();
+        env.add_cycles(
+            ledger_id,
+            DEFAULT_CYCLES_FOR_ARCHIVE_CREATION.checked_mul(10).unwrap() as u128,
+        );
+
+        // Assert no archives exist.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+
+        // Send a transfer that should trigger spawning of an archive.
+        send_transfer(
+            &env,
+            ledger_id,
+            p1.0,
+            &TransferArg {
+                from_subaccount: None,
+                to: p2.0.into(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(10_000u64),
+            },
+        )
+        .expect("transfer should succeed");
+
+        // Assert an archive was spawned.
+        assert!(!get_archives(&env, ledger_id).is_empty());
+        // Verify that a new block was created.
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES + 1);
+        // Verify that the ledger response contained an archive info.
+        assert!(!get_blocks_res.archived_ranges.is_empty());
+    }
 
     /// Test that while archiving blocks in chunks, the ledger never reports a block to be present
     /// in more than one place (even though a block may actually be present e.g., in the ledger and

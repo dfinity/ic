@@ -104,20 +104,29 @@ pub fn generate_vm_config(
     );
 
     #[cfg(feature = "dev")]
-    let (cpu_domain, vm_memory, nr_of_vcpus) = {
+    let (cpu_domain, base_vm_memory, nr_of_vcpus) = {
         let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
             "qemu".to_string()
         } else {
             "kvm".to_string()
         };
 
-        let vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
+        let base_vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
         let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
 
-        (cpu_domain, vm_memory, vm_nr_of_vcpus)
+        (cpu_domain, base_vm_memory, vm_nr_of_vcpus)
     };
     #[cfg(not(feature = "dev"))]
-    let (cpu_domain, vm_memory, nr_of_vcpus) = ("kvm".to_string(), 490, 64);
+    const DEFAULT_VM_MEMORY_GB: u32 = 486;
+    #[cfg(not(feature = "dev"))]
+    let (cpu_domain, base_vm_memory, nr_of_vcpus) = ("kvm".to_string(), DEFAULT_VM_MEMORY_GB, 64);
+
+    const UPGRADE_VM_MEMORY_GB: u32 = 4;
+
+    let vm_memory = match guest_vm_type {
+        GuestVMType::Default => base_vm_memory,
+        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GB,
+    };
 
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),

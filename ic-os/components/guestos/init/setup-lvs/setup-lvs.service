@@ -13,3 +13,5 @@ StandardError=journal+console
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-lvs.sh
+# Don't run in UpgradeVM
+ExecCondition=/bin/bash -c '[[ "$(jq -r ".guest_vm_type" /run/config/config.json)" =~ ^(default|null)$ ]]'

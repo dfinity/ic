@@ -1,5 +1,4 @@
 use crate::{
-    is_deregister_known_neuron_enabled,
     neuron_store::NeuronStore,
     pb::v1::{DeregisterKnownNeuron, GovernanceError, governance_error::ErrorType},
 };
@@ -11,13 +10,6 @@ impl DeregisterKnownNeuron {
     ///  - A Neuron ID is given in the request and this ID identifies an existing neuron.
     ///  - The neuron currently has known neuron data to be removed.
     pub fn validate(&self, neuron_store: &NeuronStore) -> Result<(), GovernanceError> {
-        if !is_deregister_known_neuron_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "DeregisterKnownNeuron proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         let neuron_id = self.id.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,

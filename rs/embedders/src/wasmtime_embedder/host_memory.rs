@@ -237,7 +237,7 @@ unsafe impl LinearMemory for WasmtimeMemory {
     }
 
     fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
-        if new_size % WASM_PAGE_SIZE as usize != 0 {
+        if !new_size.is_multiple_of(WASM_PAGE_SIZE as usize) {
             bail!(
                 "Requested wasm page size increase wasn't a multiple of the wasm page size: {}",
                 new_size

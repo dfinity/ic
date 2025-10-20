@@ -17,8 +17,6 @@ use ic_system_test_driver::systest;
 use slog::info;
 use std::time::Duration;
 
-const NUM_KILL_START_ITERATIONS: usize = 5;
-
 const POST_KILL_SLEEP_DURATION: Duration = Duration::from_secs(5);
 
 fn setup(env: TestEnv) {
@@ -33,10 +31,14 @@ fn test(env: TestEnv) {
     let node = env.get_first_healthy_system_node_snapshot();
     let node_id = node.node_id;
     let vm = node.vm();
-    for i in 1..NUM_KILL_START_ITERATIONS + 1 {
+    let num_kill_start_iterations = std::env::var("NUM_KILL_START_ITERATIONS")
+        .expect("NUM_KILL_START_ITERATIONS not set")
+        .parse::<usize>()
+        .unwrap();
+    for i in 1..=num_kill_start_iterations {
         info!(
             log,
-            "Kill start iteration: {i}/{NUM_KILL_START_ITERATIONS} ..."
+            "Kill start iteration: {i}/{num_kill_start_iterations} ..."
         );
 
         node.await_status_is_healthy().expect("Node not healthy");
