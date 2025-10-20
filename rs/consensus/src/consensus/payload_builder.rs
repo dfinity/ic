@@ -101,19 +101,20 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.get_max_payload_slot_size_bytes(Slot::Ingress, &subnet_records.context_version);
 
         let mut batch_payload = BatchPayload::default();
-
-        let mut accumulated_other_payloads_total_size = NumBytes::new(0);
-        let mut accumulated_ingress_size = NumBytes::new(0);
+        let mut accumulated_size = SlotCounter::default();
 
         for (priority, section_id) in section_select.into_iter().enumerate() {
             let slot = self.section_builder[section_id].slot();
             let remaining_bytes = match slot {
-                Slot::Rest => max_total_size_of_other_payloads
-                    .saturating_sub(&accumulated_other_payloads_total_size),
-                Slot::Ingress => max_ingress_payload_size.saturating_sub(&accumulated_ingress_size),
+                Slot::Rest => {
+                    max_total_size_of_other_payloads.saturating_sub(&accumulated_size.get(slot))
+                }
+                Slot::Ingress => {
+                    max_ingress_payload_size.saturating_sub(&accumulated_size.get(slot))
+                }
             };
 
-            let section_size = self.section_builder[section_id].build_payload(
+            *accumulated_size.get_mut(slot) += self.section_builder[section_id].build_payload(
                 &mut batch_payload,
                 height,
                 &ProposalContext {
@@ -126,16 +127,11 @@ impl PayloadBuilder for PayloadBuilderImpl {
                 &self.metrics,
                 &self.logger,
             );
-
-            match slot {
-                Slot::Rest => accumulated_other_payloads_total_size += section_size,
-                Slot::Ingress => accumulated_ingress_size += section_size,
-            }
         }
 
-        self.metrics.payload_size_bytes.observe(
-            (accumulated_ingress_size + accumulated_other_payloads_total_size).get() as f64,
-        );
+        self.metrics
+            .payload_size_bytes
+            .observe(accumulated_size.total().get() as f64);
 
         batch_payload
     }
@@ -159,23 +155,17 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let max_ingress_payload_size =
             self.get_max_payload_slot_size_bytes(Slot::Ingress, &subnet_record);
 
-        let mut accumulated_ingress_size = NumBytes::new(0);
-        let mut accumulated_rest_size = NumBytes::new(0);
+        let mut accumulated_size = SlotCounter::default();
         for builder in &self.section_builder {
-            let size =
+            *accumulated_size.get_mut(builder.slot()) +=
                 builder.validate_payload(height, batch_payload, proposal_context, past_payloads)?;
-
-            match builder.slot() {
-                Slot::Ingress => accumulated_ingress_size += size,
-                Slot::Rest => accumulated_rest_size += size,
-            }
         }
 
         // Check the combined size of the payloads using a 2x safety margin.
         // We allow payloads that are bigger than the maximum size but log an error.
         // And reject outright payloads that are more than twice the maximum size.
-        if accumulated_rest_size > max_total_size_of_other_payloads
-            || accumulated_ingress_size > max_ingress_payload_size
+        if accumulated_size.get(Slot::Rest) > max_total_size_of_other_payloads
+            || accumulated_size.get(Slot::Ingress) > max_ingress_payload_size
         {
             error!(
                 self.logger,
@@ -185,22 +175,22 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.metrics.critical_error_payload_too_large.inc();
         }
 
-        if accumulated_rest_size > max_total_size_of_other_payloads * 2 {
+        if accumulated_size.get(Slot::Rest) > max_total_size_of_other_payloads * 2 {
             return Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::PayloadTooBig {
                     slot_name: "rest",
                     expected: max_total_size_of_other_payloads,
-                    received: accumulated_rest_size,
+                    received: accumulated_size.get(Slot::Rest),
                 },
             ));
         }
 
-        if accumulated_ingress_size > max_ingress_payload_size * 2 {
+        if accumulated_size.get(Slot::Ingress) > max_ingress_payload_size * 2 {
             return Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::PayloadTooBig {
                     slot_name: "ingress",
                     expected: max_ingress_payload_size,
-                    received: accumulated_ingress_size,
+                    received: accumulated_size.get(Slot::Ingress),
                 },
             ));
         }
@@ -258,6 +248,32 @@ impl PayloadBuilderImpl {
                 NumBytes::new(max_block_payload_size)
             }
         }
+    }
+}
+
+#[derive(Default)]
+struct SlotCounter {
+    rest: NumBytes,
+    ingress: NumBytes,
+}
+
+impl SlotCounter {
+    fn get(&self, slot: Slot) -> NumBytes {
+        match slot {
+            Slot::Ingress => self.ingress,
+            Slot::Rest => self.rest,
+        }
+    }
+
+    fn get_mut(&mut self, slot: Slot) -> &mut NumBytes {
+        match slot {
+            Slot::Ingress => &mut self.ingress,
+            Slot::Rest => &mut self.rest,
+        }
+    }
+
+    fn total(&self) -> NumBytes {
+        self.rest + self.ingress
     }
 }
 
