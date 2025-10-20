@@ -1,0 +1,19 @@
+# Exports the various test suites that we use
+
+filegroup(
+    name = "base_wast_files",
+    srcs = glob(["*.wast"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "multi_memory_wast_files",
+    srcs = glob(["proposals/multi-memory/*.wast"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "memory64_wast_files",
+    srcs = glob(["proposals/memory64/*.wast"]),
+    visibility = ["//visibility:public"],
+)

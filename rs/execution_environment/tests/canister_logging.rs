@@ -355,7 +355,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
                 call_args()
                     .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
                     .on_reject(wasm().reject_message().reject()),
-                Cycles::new(2_000_000),
+                Cycles::new(50_000_000_000),
             )
             .build(),
     );

@@ -459,26 +459,7 @@ exports_files([ "bin/apalache-mc" ])
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(
     name = "wasm_spec_testsuite",
-    build_file_content = """
-# Exports the various test suites that we use
-
-filegroup(
-    name = "base_wast_files",
-    srcs = glob(["*.wast"]),
-    visibility = ["//visibility:public"]
-)
-filegroup(
-    name = "multi_memory_wast_files",
-    srcs = glob(["proposals/multi-memory/*.wast"]),
-    visibility = ["//visibility:public"]
-)
-filegroup(
-    name = "memory64_wast_files",
-    srcs = glob(["proposals/memory64/*.wast"]),
-    visibility = ["//visibility:public"]
-)
-
-     """,
+    build_file = "@//third_party:BUILD.wasmtestsuite.bazel",
     sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
     strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
     url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
@@ -721,116 +702,7 @@ http_archive(
 
 http_archive(
     name = "miracl-core",
-    build_file_content = """
-load("@rules_cc//cc:defs.bzl", "cc_library")
-load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
-py_binary(
-    name = "generate",
-    srcs = ["c/config64.py"],
-    main = "c/config64.py",
-    data = [],
-    deps = [],
-)
-run_binary(
-    name = "cbits",
-    srcs = glob(["c/*.c", "c/*.h"]),
-    outs = [
-      "aes.c",
-      "big_384_58.c",
-      "bls_BLS12381.c",
-      "ecp2_BLS12381.c",
-      "ecp_BLS12381.c",
-      "fp12_BLS12381.c",
-      "fp2_BLS12381.c",
-      "fp4_BLS12381.c",
-      "fp_BLS12381.c",
-      "gcm.c",
-      "hash.c",
-      "hmac.c",
-      "newhope.c",
-      "oct.c",
-      "pair_BLS12381.c",
-      "randapi.c",
-      "rand.c",
-      "rom_curve_BLS12381.c",
-      "rom_field_BLS12381.c",
-      "share.c",
-      "arch.h",
-      "big_384_58.h",
-      "bls_BLS12381.h",
-      "config_big_384_58.h",
-      "config_curve_BLS12381.h",
-      "config_field_BLS12381.h",
-      "core.h",
-      "ecdh_BLS12381.h",
-      "ecp2_BLS12381.h",
-      "ecp_BLS12381.h",
-      "fp12_BLS12381.h",
-      "fp2_BLS12381.h",
-      "fp4_BLS12381.h",
-      "fp_BLS12381.h",
-      "hpke_BLS12381.h",
-      "mpin_BLS12381.h",
-      "newhope.h",
-      "pair_BLS12381.h",
-      "randapi.h",
-      "x509.h",
-    ],
-    args = ["--options=31", "--path=$(location c/arch.h)", "--output-path=$(location arch.h)"],
-    target_compatible_with = ["@platforms//os:linux"],
-    tool = ":generate",
-    visibility = ["//visibility:public"],
-)
-cc_library(
-    name = "lib",
-    srcs = [
-      ":aes.c",
-      ":big_384_58.c",
-      ":bls_BLS12381.c",
-      ":ecp2_BLS12381.c",
-      ":ecp_BLS12381.c",
-      ":fp12_BLS12381.c",
-      ":fp2_BLS12381.c",
-      ":fp4_BLS12381.c",
-      ":fp_BLS12381.c",
-      ":gcm.c",
-      ":hash.c",
-      ":hmac.c",
-      ":newhope.c",
-      ":oct.c",
-      ":pair_BLS12381.c",
-      ":randapi.c",
-      ":rand.c",
-      ":rom_curve_BLS12381.c",
-      ":rom_field_BLS12381.c",
-      ":share.c",
-    ],
-    hdrs = [
-      ":arch.h",
-      ":big_384_58.h",
-      ":bls_BLS12381.h",
-      ":config_big_384_58.h",
-      ":config_curve_BLS12381.h",
-      ":config_field_BLS12381.h",
-      ":core.h",
-      ":ecdh_BLS12381.h",
-      ":ecp2_BLS12381.h",
-      ":ecp_BLS12381.h",
-      ":fp12_BLS12381.h",
-      ":fp2_BLS12381.h",
-      ":fp4_BLS12381.h",
-      ":fp_BLS12381.h",
-      ":hpke_BLS12381.h",
-      ":mpin_BLS12381.h",
-      ":newhope.h",
-      ":pair_BLS12381.h",
-      ":randapi.h",
-      ":x509.h",
-    ],
-    includes = [":cbits"],
-    visibility = ["//visibility:public"],
-    target_compatible_with = ["@platforms//os:linux"],
-)""",
+    build_file = "@//third_party:BUILD.miracl-core.bazel",
     patch_args = ["-p1"],
     patches = ["//hs/spec_compliance:miracl-core.patch"],
     sha256 = "b93a14c35f56eca8dddaab95dea94294d51ca680a7d6bb1c1f048e1cd71550cd",
@@ -936,6 +808,26 @@ http_archive(
     urls = ["https://github.com/llvm/llvm-project/archive/refs/tags/llvmorg-20.1.0.tar.gz"],
 )
 
+http_archive(
+    name = "jemalloc",
+    build_file = "@//third_party:BUILD.jemalloc.bazel",
+    sha256 = "ef6f74fd45e95ee4ef7f9e19ebe5b075ca6b7fbe0140612b2a161abafb7ee179",
+    strip_prefix = "jemalloc-5.3.0",
+    urls = [
+        "https://github.com/jemalloc/jemalloc/archive/refs/tags/5.3.0.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "lmdb",
+    build_file = "@//third_party:BUILD.lmdb.bazel",
+    sha256 = "d424c1eb841d0b78b91994b6ddef31aa6a3300727b9d9e7868033edfca0f142c",
+    strip_prefix = "openldap-OPENLDAP_REL_ENG_2_5_9/libraries/liblmdb",
+    urls = [
+        "https://github.com/openldap/openldap/archive/refs/tags/OPENLDAP_REL_ENG_2_5_9.zip",
+    ],
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
@@ -952,6 +844,22 @@ http_file(
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
     sha256 = "237272216498074e5250a0685813b96632963ff9abbc51a7030d9b625985028d",
     url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
+)
+
+http_archive(
+    name = "rclone-x86_64-darwin",
+    build_file = "@//third_party:BUILD.rclone.bazel",
+    sha256 = "0a9a107ba911bf6bd3c61ad5160a379ac7c81a1b63498e12efcccb4676c65361",
+    strip_prefix = "rclone-v1.69.2-osx-amd64",
+    url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-osx-amd64.zip",
+)
+
+http_archive(
+    name = "rclone-x86_64-linux",
+    build_file = "@//third_party:BUILD.rclone.bazel",
+    sha256 = "14aaed7163df57894c96f8aca94757f19065f9cb3cb8a84ff9c33234271e1d69",
+    strip_prefix = "rclone-v1.69.2-linux-amd64",
+    url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-linux-amd64.zip",
 )
 
 # Management canister candid interface
@@ -1015,23 +923,7 @@ new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.
 # this way is easier.
 new_local_repository(
     name = "libsystemd",
-    build_file_content = """
-cc_import(
-    name = "libsystemd-internal",
-    hdrs = glob(["include/systemd/*.h"]),
-    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
-    system_provided = True,
-    visibility = ["//visibility:private"],
-)
-
-# Use an extra cc_library to hide the depth of the include folder
-cc_library(
-    name = "libsystemd",
-    includes = ["include"],
-    deps = ["libsystemd-internal"],
-    visibility = ["//visibility:public"],
-)
-""",
+    build_file = "@//third_party:BUILD.libsystemd.bazel",
     path = "/usr",
 )
 
@@ -1039,13 +931,6 @@ cc_library(
 # Used for managing virtual machines programmatically.
 new_local_repository(
     name = "libvirt",
-    build_file_content = """
-cc_import(
-    name = "libvirt",
-    hdrs = glob(["include/libvirt/*.h"]),
-    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
-    visibility = ["//visibility:public"],
-)
-""",
+    build_file = "@//third_party:BUILD.libvirt.bazel",
     path = "/usr",
 )

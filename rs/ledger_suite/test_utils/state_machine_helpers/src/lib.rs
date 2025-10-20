@@ -3,6 +3,7 @@ use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::{Block, endpoints::StandardRecord};
+use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::tokens::TokensType;
@@ -14,6 +15,7 @@ use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -823,4 +825,48 @@ fn universal_canister_payload(
             cycles,
         )
         .build()
+}
+
+pub fn archive_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    archive_id: CanisterId,
+    num_blocks: u64,
+) -> u64 {
+    let archive_args = ArchiveBlocksArgs {
+        archive_id: archive_id.into(),
+        num_blocks,
+    };
+    Decode!(
+        &env.execute_ingress(ledger_id, "archive_blocks", Encode!(&archive_args).unwrap())
+            .expect("failed to archive blocks")
+            .bytes(),
+        Result<u64, String>
+    )
+    .expect("failed to decode archive_blocks response")
+    .expect("archiving blocks operation failed")
+}
+
+pub fn add_block(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    block: &ICRC3Value,
+) -> Result<Nat, String> {
+    Decode!(
+        &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
+            .expect("failed to add block")
+            .bytes(),
+        AddBlockResult
+    )
+    .expect("failed to decode add_block response")
+}
+
+pub fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
+    Decode!(
+        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
+            .expect("failed to set_icrc3_enabled")
+            .bytes(),
+        ()
+    )
+    .expect("failed to decode set_icrc3_enabled response")
 }
