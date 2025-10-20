@@ -56,6 +56,7 @@ canisters(
         "cycles_ledger": "cycles-ledger.wasm.gz",
         "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
+        "migration": "migration-canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     reponames = {
@@ -98,6 +99,7 @@ canisters(
         "cycles_ledger": "mainnet_cycles_ledger_canister",
         "cycles_ledger_index": "mainnet_cycles_ledger_index",
         "bitcoin_testnet": "bitcoin_testnet_canister_at_mainnet_commit",
+        "migration": "mainnet_migration-canister",
     },
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
