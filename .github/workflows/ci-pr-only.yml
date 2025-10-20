@@ -30,6 +30,8 @@ jobs:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
 
   insta-tests:
     name: Quick Feedback Tests
