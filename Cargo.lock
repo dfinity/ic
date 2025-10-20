@@ -6393,6 +6393,7 @@ dependencies = [
  "axum 0.8.4",
  "backoff",
  "bytes",
+ "criterion",
  "futures",
  "http-body-util",
  "ic-base-types",
