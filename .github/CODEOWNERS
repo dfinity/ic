@@ -150,6 +150,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
 /rs/interfaces/certified_stream_store/                  @dfinity/ic-message-routing-owners
+/rs/interfaces/mocks/src/payload_builder                @dfinity/consensus
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
@@ -274,7 +275,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/ledger_tests/                             @dfinity/finint
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint
 /rs/tests/src/rosetta_tests/                            @dfinity/finint
-/rs/tests/k8s/                                          @dfinity/idx @dfinity/node
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint

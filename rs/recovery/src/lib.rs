@@ -416,7 +416,7 @@ impl Recovery {
                 descr: format!(
                     r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
                     if add_and_bless_replica_version {
-                        " --and-and-bless-replica-version"
+                        " --add-and-bless-replica-version"
                     } else {
                         ""
                     },
@@ -553,7 +553,7 @@ impl Recovery {
         // split the content into lines, then split each line into a pair (<hash>, <image_name>)
         let hashes = output
             .split('\n')
-            .map(|line| line.split(" *").collect::<Vec<_>>())
+            .map(|line| line.split(' ').collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
         // return the hash for the selected image name

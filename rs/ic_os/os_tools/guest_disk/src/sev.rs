@@ -1,9 +1,12 @@
-use crate::crypt::{activate_crypt_device, destroy_key_slots_except, format_crypt_device};
+use crate::crypt::{
+    activate_crypt_device, check_encryption_key, destroy_key_slots_except, format_crypt_device,
+};
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
 use config_types::GuestVMType;
 use ic_sev::guest::firmware::SevGuestFirmware;
 use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
+use std::fs;
 use std::path::Path;
 
 pub struct SevDiskEncryption<'a> {
@@ -94,6 +97,8 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                 // GuestOS used to unlock the store (data) partition. During the upgrade this key is
                 // written to `previous_key_path`. After the upgrade, when the GuestOS boots for the
                 // first time, it unlocks the disk using the previous key and adds its own key.
+
+                // The logic should be kept consistent with can_open_store below
                 if self.previous_key_path.exists() {
                     println!(
                         "Unlocking store with existing key from {}",
@@ -138,4 +143,24 @@ impl DiskEncryption for SevDiskEncryption<'_> {
 
         Ok(())
     }
+}
+
+/// Check whether we can open the store partition with either the previous key or the SEV derived
+/// key.
+pub fn can_open_store(
+    device_path: &Path,
+    previous_key_path: &Path,
+    sev_firmware: &mut dyn SevGuestFirmware,
+) -> Result<bool> {
+    // The logic should be kept consistent with open above
+    if previous_key_path.exists()
+        && let Ok(key) = fs::read(previous_key_path)
+        && check_encryption_key(device_path, &key).is_ok()
+    {
+        return Ok(true);
+    }
+
+    let derived_key =
+        derive_key_from_sev_measurement(sev_firmware, Key::DiskEncryptionKey { device_path })?;
+    Ok(check_encryption_key(device_path, derived_key.as_bytes()).is_ok())
 }

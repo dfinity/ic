@@ -1,7 +1,7 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use evm_rpc_client::{Hex32, HttpOutcallError, LegacyRejectionCode};
+use evm_rpc_types::{Hex32, HttpOutcallError, LegacyRejectionCode};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};

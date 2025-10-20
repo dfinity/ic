@@ -27,6 +27,7 @@ use ic_types::{
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
 };
+use wirm::wasmparser;
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 

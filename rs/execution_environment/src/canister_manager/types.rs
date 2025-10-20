@@ -334,6 +334,7 @@ pub(crate) enum CanisterManagerError {
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
+    CallerNotAuthorized,
     CanisterAlreadyExists(CanisterId),
     CanisterIdAlreadyExists(CanisterId),
     CanisterNotFound(CanisterId),
@@ -736,6 +737,10 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
                 doc_link: "canister-metadata-section-not-found".to_string(),
             },
+            CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
+                suggestion: "The caller is not authorized to call this method.".to_string(),
+                doc_link: "".to_string(),
+            },
             CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
                 suggestion: "Set a higher canister log memory limit.".to_string(),
                 doc_link: "".to_string(),
@@ -1132,6 +1137,10 @@ impl From<CanisterManagerError> for UserError {
                 format!(
                     "The canister {canister_id} has no metadata section with the name {section_name}."
                 ),
+            ),
+            CallerNotAuthorized => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                "The caller is not authorized to call this method.".to_string(),
             ),
             CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
