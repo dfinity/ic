@@ -806,7 +806,7 @@ mod verify_combined_sig {
                 .expect("Master key extraction failed");
             let canister_public_key = derive_threshold_public_key(
                 &master_public_key,
-                &ExtendedDerivationPath {
+                ExtendedDerivationPath {
                     caller: inputs.caller,
                     derivation_path: inputs.derivation_path,
                 },
@@ -902,9 +902,9 @@ mod get_tecdsa_master_public_key {
             };
 
             assert_eq!(derivation_path_1, derivation_path_2);
-            let derived_pk_1 = derive_threshold_public_key(&master_public_key, &derivation_path_1)
+            let derived_pk_1 = derive_threshold_public_key(&master_public_key, derivation_path_1)
                 .expect("Public key derivation failed ");
-            let derived_pk_2 = derive_threshold_public_key(&master_public_key, &derivation_path_2)
+            let derived_pk_2 = derive_threshold_public_key(&master_public_key, derivation_path_2)
                 .expect("Public key derivation failed ");
             assert_eq!(derived_pk_1, derived_pk_2);
         }
@@ -947,12 +947,13 @@ mod get_tecdsa_master_public_key {
             ];
             let mut derived_keys = std::collections::HashSet::new();
             for derivation_path in &derivation_paths {
-                let derived_pk = derive_threshold_public_key(&master_public_key, derivation_path)
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "Public key derivation failed for derivation path {derivation_path:?}"
-                        )
-                    });
+                let derived_pk = derive_threshold_public_key(
+                    &master_public_key,
+                    derivation_path.clone(),
+                )
+                .unwrap_or_else(|_| {
+                    panic!("Public key derivation failed for derivation path {derivation_path:?}")
+                });
                 assert!(
                     derived_keys.insert(derived_pk),
                     "Duplicate derived key for derivation path {derivation_path:?}"
@@ -984,7 +985,7 @@ mod get_tecdsa_master_public_key {
             };
 
             let derived_public_key =
-                derive_threshold_public_key(&master_ecdsa_key.unwrap(), &derivation_path);
+                derive_threshold_public_key(&master_ecdsa_key.unwrap(), derivation_path);
 
             assert_matches!(derived_public_key, Ok(_));
         }

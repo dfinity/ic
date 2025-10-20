@@ -46,7 +46,7 @@ fn should_verify_combined_signature_with_usual_basic_sig_verification() {
         let master_public_key = get_master_public_key_from_transcript(inputs.key_transcript())
             .expect("Master key extraction failed");
         let canister_public_key =
-            derive_threshold_public_key(&master_public_key, inputs.derivation_path())
+            derive_threshold_public_key(&master_public_key, inputs.derivation_path().clone())
                 .expect("Public key derivation failed");
 
         match alg {
