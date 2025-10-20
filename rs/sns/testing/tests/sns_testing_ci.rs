@@ -64,6 +64,7 @@ async fn prepare_network_for_test(
         sns: Some(IcpFeaturesConfig::DefaultConfig),
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
     };
     let current_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)

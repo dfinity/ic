@@ -1,4 +1,5 @@
 //! Canister threshold transcripts and references related defininitions.
+use crate::consensus::get_faults_tolerated;
 use crate::{Height, RegistryVersion};
 use crate::{
     consensus::idkg::{
@@ -962,6 +963,19 @@ impl IDkgTranscriptParamsRef {
     pub fn update(&mut self, height: Height) {
         self.operation_type_ref.update(height);
     }
+
+    /// Number of contributions needed to reconstruct a sharing.
+    pub fn reconstruction_threshold(&self) -> usize {
+        let faulty = get_faults_tolerated(self.receivers.len());
+        faulty + 1
+    }
+
+    /// Number of multi-signature shares needed to include a dealing in a
+    /// transcript.
+    pub fn verification_threshold(&self) -> usize {
+        let faulty = get_faults_tolerated(self.receivers.len());
+        self.reconstruction_threshold() + faulty
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -1147,18 +1161,18 @@ impl BuildSignatureInputsError {
 // This warning is suppressed because Clippy incorrectly reports the size of the
 // `ThresholdEcdsaSigInputs` and `ThresholdSchnorrSigInputs` variants to be "at least 0 bytes".
 #[allow(clippy::large_enum_variant)]
-pub enum ThresholdSigInputs {
-    Ecdsa(ThresholdEcdsaSigInputs),
+pub enum ThresholdSigInputs<'a> {
+    Ecdsa(ThresholdEcdsaSigInputs<'a>),
     Schnorr(ThresholdSchnorrSigInputs),
     VetKd(VetKdArgs),
 }
 
-impl ThresholdSigInputs {
-    pub fn caller(&self) -> PrincipalId {
+impl ThresholdSigInputs<'_> {
+    pub fn caller(&self) -> &PrincipalId {
         match self {
-            ThresholdSigInputs::Ecdsa(inputs) => inputs.derivation_path().caller,
-            ThresholdSigInputs::Schnorr(inputs) => inputs.derivation_path().caller,
-            ThresholdSigInputs::VetKd(inputs) => inputs.context.caller,
+            ThresholdSigInputs::Ecdsa(inputs) => inputs.caller(),
+            ThresholdSigInputs::Schnorr(inputs) => &inputs.derivation_path().caller,
+            ThresholdSigInputs::VetKd(inputs) => &inputs.context.caller,
         }
     }
 

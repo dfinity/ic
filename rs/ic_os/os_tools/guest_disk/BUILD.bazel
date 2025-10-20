@@ -25,11 +25,10 @@ DEV_DEPENDENCIES = [
 
 rust_binary(
     name = "guest_disk",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["src/lib.rs"],
-    ),
-    crate_name = "guest_disk",
+    srcs = [
+        "src/main.rs",
+        "src/tests.rs",
+    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -38,7 +37,10 @@ rust_binary(
 
 rust_library(
     name = "guest_disk_lib",
-    srcs = ["src/lib.rs"],
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
     crate_name = "guest_disk",
     target_compatible_with = [
         "@platforms//os:linux",

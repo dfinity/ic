@@ -368,7 +368,7 @@ impl fmt::Display for DtsInstallCodeStatus {
 
 impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -387,8 +387,7 @@ impl ExecutionEnvironment {
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
-            config.deterministic_time_slicing == FlagStatus::Disabled
-                || config.canister_sandboxing_flag == FlagStatus::Enabled,
+            config.canister_sandboxing_flag == FlagStatus::Enabled,
             "Deterministic time slicing works only with canister sandboxing."
         );
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
@@ -2042,7 +2041,6 @@ impl ExecutionEnvironment {
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
                 let instruction_limits = InstructionLimits::new(
-                    FlagStatus::Enabled,
                     max_instructions_per_message_without_dts,
                     instruction_limits.slice(),
                 );
@@ -3020,7 +3018,6 @@ impl ExecutionEnvironment {
         // An inspect message is expected to finish quickly, so DTS is not
         // supported for it.
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.config.max_instructions_for_message_acceptance_calls,
             self.config.max_instructions_for_message_acceptance_calls,
         );
@@ -4286,6 +4283,18 @@ impl ExecutionEnvironment {
     #[doc(hidden)]
     pub fn own_subnet_type(&self) -> SubnetType {
         self.own_subnet_type
+    }
+
+    // Insert a compiled module in the compilation cache speed up tests by
+    // skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        self.hypervisor
+            .compilation_cache_insert_for_testing(bytes, compiled_module);
     }
 }
 
