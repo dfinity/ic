@@ -107,12 +107,12 @@ mod tests {
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr))
+            .map(|(k, v)| (*k, v.original_fr_percent))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr))
+            .map(|(k, v)| (*k, v.relative_fr_percent))
             .collect();
 
         // --- Assertions for Day 1, Subnet 1 ---
@@ -148,12 +148,12 @@ mod tests {
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr))
+            .map(|(k, v)| (*k, v.original_fr_percent))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr))
+            .map(|(k, v)| (*k, v.relative_fr_percent))
             .collect();
 
         // --- Assertions for Day 2, Subnet 1 ---

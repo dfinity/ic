@@ -1,6 +1,6 @@
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -98,11 +98,7 @@ fn test_api_for_update(
         canister_current_memory_usage,
         canister_current_message_memory_usage,
         ExecutionParameters {
-            instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
-                instruction_limit,
-                instruction_limit,
-            ),
+            instruction_limits: InstructionLimits::new(instruction_limit, instruction_limit),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: HypervisorConfig::default()

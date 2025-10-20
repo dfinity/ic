@@ -3,6 +3,8 @@ This module defines functions to run benchmarks using canbench.
 """
 
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:canisters.bzl", "wasm_rust_binary_rule")
 
 def rust_canbench(name, results_file, add_test = False, opt = "3", noise_threshold = None, data = [], env = {}, **kwargs):
@@ -56,8 +58,7 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
 
     if noise_threshold:
         env["NOISE_THRESHOLD"] = str(noise_threshold)
-
-    native.sh_binary(
+    sh_binary(
         name = name,
         testonly = True,
         srcs = [
@@ -66,8 +67,7 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         data = data,
         env = env,
     )
-
-    native.sh_binary(
+    sh_binary(
         name = name + "_update",
         testonly = True,
         srcs = [
@@ -77,8 +77,7 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         env = env,
         args = ["--update"],
     )
-
-    native.sh_binary(
+    sh_binary(
         name = name + "_debug",
         testonly = True,
         srcs = [
@@ -90,7 +89,7 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
     )
 
     if add_test:
-        native.sh_test(
+        sh_test(
             name = name + "_test",
             srcs = [
                 "//bazel:canbench.sh",

@@ -1,4 +1,5 @@
 use super::*;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::error::{
     EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
 };
@@ -273,21 +274,26 @@ fn should_create_ecdsa_inputs_correctly() {
     );
     assert!(quadruple.is_ok());
 
-    let derivation_path = derivation_path();
+    let extended_derivation_path = derivation_path();
     let hashed_message = hashed_message();
     let nonce = nonce();
     let quadruple = quadruple.unwrap();
     let result = ThresholdEcdsaSigInputs::new(
-        &derivation_path,
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
         &hashed_message,
-        nonce,
-        quadruple.clone(),
-        key_transcript.clone(),
+        &nonce,
+        &quadruple,
+        &key_transcript,
     );
     assert!(result.is_ok());
 
     let ecdsa_inputs = result.unwrap();
-    assert_eq!(ecdsa_inputs.derivation_path(), &derivation_path);
+    assert_eq!(ecdsa_inputs.caller(), &extended_derivation_path.caller);
+    assert_eq!(
+        ecdsa_inputs.derivation_path(),
+        &extended_derivation_path.derivation_path
+    );
     assert_eq!(ecdsa_inputs.hashed_message(), &hashed_message);
     assert_eq!(ecdsa_inputs.nonce(), &nonce);
     assert_eq!(ecdsa_inputs.presig_quadruple(), &quadruple);
@@ -327,12 +333,18 @@ fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
     );
     assert!(quadruple.is_ok());
 
+    let nonce = nonce();
+    let derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let quadruple = quadruple.unwrap();
+
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
+        &derivation_path.caller,
+        &derivation_path.derivation_path,
+        &hashed_message,
+        &nonce,
+        &quadruple,
+        &key_transcript,
     );
 
     assert_matches!(
@@ -370,12 +382,18 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
     );
     assert!(quadruple.is_ok());
 
+    let extended_derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let nonce = nonce();
+    let quadruple = quadruple.unwrap();
+
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
+        &hashed_message,
+        &nonce,
+        &quadruple,
+        &key_transcript,
     );
 
     assert_matches!(
@@ -399,12 +417,18 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
     );
     assert!(quadruple.is_ok());
 
+    let extended_derivation_path = derivation_path();
+    let hashed_message_invalid_length = [1u8; 33];
+    let nonce = nonce();
+    let quadruple = quadruple.unwrap();
+
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &[1u8; 33],
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
+        &hashed_message_invalid_length,
+        &nonce,
+        &quadruple,
+        &key_transcript,
     );
 
     assert_matches!(
@@ -433,12 +457,18 @@ fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
     );
     assert!(quadruple.is_ok());
 
+    let extended_derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let nonce = nonce();
+    let quadruple = quadruple.unwrap();
+
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
+        &hashed_message,
+        &nonce,
+        &quadruple,
+        &key_transcript,
     );
 
     assert_matches!(
@@ -467,15 +497,21 @@ fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
     );
     assert!(quadruple.is_ok());
 
+    let extended_derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let nonce = nonce();
+    let quadruple = quadruple.unwrap();
+
     let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.clone().unwrap(),
-        key_transcript.clone(),
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
+        &hashed_message,
+        &nonce,
+        &quadruple,
+        &key_transcript,
     );
     assert_matches!(ecdsa_inputs, Err(ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(error))
-        if error == format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, quadruple.unwrap().key_times_lambda().transcript_type)
+        if error == format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, quadruple.key_times_lambda().transcript_type)
     );
 }
 
@@ -530,16 +566,17 @@ fn should_return_correct_index_for_signer_id_from_threshold_ecdsa_sig_inputs() {
     );
     assert!(quadruple.is_ok());
 
-    let derivation_path = derivation_path();
+    let extended_derivation_path = derivation_path();
     let hashed_message = hashed_message();
     let nonce = nonce();
     let quadruple = quadruple.unwrap();
     let inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path,
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
         &hashed_message,
-        nonce,
-        quadruple.clone(),
-        key_transcript.clone(),
+        &nonce,
+        &quadruple,
+        &key_transcript,
     )
     .expect("failed to create ThresholdEcdsaSigInputs");
 
@@ -620,20 +657,28 @@ fn should_create_schnorr_sig_inputs_correctly() {
     let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
         .expect("failed to created presignature transcript");
 
-    let derivation_path = derivation_path();
+    let extended_derivation_path = derivation_path();
     let message = message_in_size_range(0..1_000, rng);
     let nonce = nonce();
     let tschnorr_sig_inputs = ThresholdSchnorrSigInputs::new(
-        &derivation_path,
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
         &message,
         None,
-        nonce,
-        presignature_transcript.clone(),
-        key_transcript.clone(),
+        &nonce,
+        &presignature_transcript,
+        &key_transcript,
     )
     .expect("failed to create threshold Schnorr signature inputs");
 
-    assert_eq!(tschnorr_sig_inputs.derivation_path(), &derivation_path);
+    assert_eq!(
+        tschnorr_sig_inputs.caller(),
+        &extended_derivation_path.caller
+    );
+    assert_eq!(
+        tschnorr_sig_inputs.derivation_path(),
+        &extended_derivation_path.derivation_path
+    );
     assert_eq!(tschnorr_sig_inputs.message(), &message);
     assert_eq!(tschnorr_sig_inputs.nonce(), &nonce);
     assert_eq!(
@@ -683,12 +728,13 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
         key_transcript.algorithm_id = AlgorithmId::Tls;
         assert_eq!(
             ThresholdSchnorrSigInputs::new(
-                &derivation_path,
+                &derivation_path.caller,
+                &derivation_path.derivation_path,
                 &message,
                 None,
-                nonce,
-                presignature_transcript.clone(),
-                key_transcript,
+                &nonce,
+                &presignature_transcript,
+                &key_transcript,
             ),
             Err(
                 error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
@@ -702,12 +748,13 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
     presignature_transcript.blinder_unmasked.algorithm_id = AlgorithmId::Tls;
     assert_eq!(
         ThresholdSchnorrSigInputs::new(
-            &derivation_path,
+            &derivation_path.caller,
+            &derivation_path.derivation_path,
             &message,
             None,
-            nonce,
-            presignature_transcript,
-            key_transcript,
+            &nonce,
+            &presignature_transcript,
+            &key_transcript,
         ),
         Err(
             error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
@@ -738,12 +785,13 @@ fn should_fail_creating_schnorr_sig_inputs_with_unsupported_algorithm() {
     presignature_transcript.blinder_unmasked.algorithm_id = unsupported_algorithm;
     assert_eq!(
         ThresholdSchnorrSigInputs::new(
-            &derivation_path,
+            &derivation_path.caller,
+            &derivation_path.derivation_path,
             &message,
             None,
-            nonce,
-            presignature_transcript,
-            key_transcript,
+            &nonce,
+            &presignature_transcript,
+            &key_transcript,
         ),
         Err(
             error::ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(
@@ -771,14 +819,18 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
     let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
         .expect("failed to created presignature transcript");
 
+    let extended_derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
     assert_eq!(
         ThresholdSchnorrSigInputs::new(
-            &derivation_path(),
-            &message_in_size_range(0..1_000, rng),
+            &extended_derivation_path.caller,
+            &extended_derivation_path.derivation_path,
+            &message,
             None,
-            nonce(),
-            presignature_transcript,
-            key_transcript,
+            &nonce,
+            &presignature_transcript,
+            &key_transcript,
         ),
         Err(error::ThresholdSchnorrSigInputsCreationError::InconsistentReceivers)
     );
@@ -816,12 +868,13 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
         presignature_transcript.blinder_unmasked.transcript_type = invalid_transcript_type.clone();
         assert_matches!(
             ThresholdSchnorrSigInputs::new(
-                &derivation_path,
+                &derivation_path.caller,
+                &derivation_path.derivation_path,
                 &message,
                 None,
-                nonce,
-                presignature_transcript.clone(),
-                key_transcript.clone(),
+                &nonce,
+                &presignature_transcript,
+                &key_transcript,
             ),
             Err(error::ThresholdSchnorrSigInputsCreationError::InvalidPreSignatureOrigin(internal_error))
             if internal_error == format!("Presignature transcript: {invalid_transcript_type:?}")
@@ -977,8 +1030,8 @@ fn derivation_path() -> ExtendedDerivationPath {
     }
 }
 
-fn nonce() -> Randomness {
-    Randomness::new([42u8; 32])
+fn nonce() -> [u8; 32] {
+    [42u8; 32]
 }
 
 fn hashed_message() -> Vec<u8> {
