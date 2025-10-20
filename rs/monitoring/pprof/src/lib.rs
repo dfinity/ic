@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use pprof::{ProfilerGuard, Report, protos::Message};
+use pprof::{ProfilerGuardBuilder, Report, protos::Message};
 use regex::Regex;
 use std::time::Duration;
 use thiserror::Error;
@@ -55,9 +55,16 @@ fn extract_thread_name(thread_name: &str) -> String {
 pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, Error> {
     // ProfilerGuard has a latency of 40-60 milliseconds. Hence we want to run it
     // without blocking the runtime with `spawn_blocking`.
-    let guard = spawn_blocking(move || ProfilerGuard::new(frequency))
-        .await
-        .map_err(|_| Error::Internal)??;
+    // NOTE: we block "libc" as libunwind is not signal safe, for more information
+    // see: https://github.com/tikv/pprof-rs/blob/01cff82dbe6fe110a707bf2b38d8ebb1d14a18f8/README.md#backtrace
+    let guard = spawn_blocking(move || {
+        ProfilerGuardBuilder::default()
+            .frequency(frequency)
+            .blocklist(&["libc"])
+            .build()
+    })
+    .await
+    .map_err(|_| Error::Internal)??;
 
     sleep(duration).await;
     guard
