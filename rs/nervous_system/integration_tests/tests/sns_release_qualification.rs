@@ -2,9 +2,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
+        self, add_wasm_via_nns_proposal, nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
@@ -14,9 +13,9 @@ use ic_nns_test_utils::sns_wasm::{
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
+use sns_upgrade_test_utils::test_sns_upgrade;
 
 mod sns_upgrade_test_utils;
-use sns_upgrade_test_utils::test_sns_upgrade;
 
 /// In order to ensure that creating an SNS still works, we need to test the following:
 /// We test new SNS canisters with mainnet NNS canisters
@@ -204,7 +203,9 @@ pub async fn test_sns_deployment(
         };
 
         let wasm = ensure_sns_wasm_gzipped(wasm);
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm, false)
+            .await
+            .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 

@@ -128,6 +128,7 @@ DEV_DATA = [
     "@mainnet_sns-governance-canister//file",
     "@mainnet_sns-root-canister//file",
     "@mainnet_sns-swap-canister//file",
+    "@hotfix_sns_root.wasm.gz//file",
 ]
 
 DEV_ENV = {
@@ -169,6 +170,7 @@ DEV_ENV = {
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    "HOTFIX_SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath @hotfix_sns_root.wasm.gz//file)",
 }
 
 rust_library(
