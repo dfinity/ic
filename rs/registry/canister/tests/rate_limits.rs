@@ -55,9 +55,9 @@ fn test_rate_limiting_state_machine() {
     )
     .unwrap();
 
-    for _ in 0..70 {
-        // Create a simple add_node payload for testing
-        let (add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
+    for i in 0..70 {
+        // Create a simple add_node payload for testing with unique IP addresses
+        let (add_node_payload, _node_pks) = prepare_add_node_payload(i + 1); // Use unique IDs
 
         let node_id: NodeId = env
             .execute_ingress_as(
@@ -80,7 +80,7 @@ fn test_rate_limiting_state_machine() {
         .unwrap();
     }
 
-    let (add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
+    let (add_node_payload, _node_pks) = prepare_add_node_payload(71);
     let error = env
         .execute_ingress_as(
             node_operator,
