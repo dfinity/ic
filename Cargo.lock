@@ -798,9 +798,9 @@ checksum = "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
 
 [[package]]
 name = "async-trait"
-version = "0.1.86"
+version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "644dd749086bf3771a2fbc5f256fdb982d53f011c7d5d560304eafeecebce79d"
+checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6393,6 +6393,7 @@ dependencies = [
  "axum 0.8.4",
  "backoff",
  "bytes",
+ "criterion",
  "futures",
  "http-body-util",
  "ic-base-types",
@@ -7456,6 +7457,7 @@ dependencies = [
  "ic-cdk",
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
+ "ic-secp256k1 0.3.0",
  "icrc-ledger-types",
  "pocket-ic",
  "serde",
@@ -7469,6 +7471,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "ic-bitcoin-canister-mock",
  "ic-ckdoge-minter",
  "ic-icrc1-ledger",
  "ic-management-canister-types",
@@ -7643,6 +7646,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
+ "mockall",
  "num-traits",
  "phantom_newtype",
  "prometheus 0.13.4",
@@ -10653,6 +10657,7 @@ dependencies = [
  "ic-base-types",
  "ic-http-types",
  "ic-icrc1",
+ "ic-icrc3-test-ledger",
  "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-state-machine-tests",
@@ -12362,7 +12367,7 @@ dependencies = [
 
 [[package]]
 name = "ic-pub-key"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "ic-ed25519 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",

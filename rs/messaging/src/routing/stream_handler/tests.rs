@@ -1339,11 +1339,8 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_REQUEST_MISROUTED, 1),
             ]);
 
-            // One critical errors raised.
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                request_misrouted: 1,
-                ..CriticalErrorCounts::default()
-            });
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
     );
 }
@@ -3770,10 +3767,6 @@ impl MetricsFixture {
                     counts.sender_subnet_mismatch
                 ),
                 (
-                    &[("error", &CRITICAL_ERROR_REQUEST_MISROUTED.to_string())],
-                    counts.request_misrouted
-                ),
-                (
                     &[(
                         "error",
                         &CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH.to_string()
@@ -3792,7 +3785,6 @@ struct CriticalErrorCounts {
     pub bad_reject_signal_for_response: u64,
     pub sender_subnet_mismatch: u64,
     pub receiver_subnet_mismatch: u64,
-    pub request_misrouted: u64,
 }
 
 /// Populates the given `state`'s canister migrations with a single entry,

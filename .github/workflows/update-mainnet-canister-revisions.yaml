@@ -1,4 +1,4 @@
-name: Update IC versions file
+name: Update mainnet canister versions file
 
 # NOTE: The workflow  update-nervous-system-wasms is crucial for keeping the currently deployed canister versions`
 # up to date.  SNS Canister release qualification tests (under rs/nervous_system/integration_tests) depend on the
@@ -15,31 +15,6 @@ defaults:
     shell: bash
 
 jobs:
-  update-ic-versions-file:
-    runs-on: ubuntu-latest
-    environment: CREATE_PR
-    steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Update IC versions file
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          set -eEuxo pipefail
-
-          time python ci/src/mainnet_revisions/mainnet_revisions.py icos
-
   # IMPORTANT: See note at the top of this file.
   update-nervous-system-wasms:
     runs-on:
@@ -76,7 +51,7 @@ jobs:
           sudo cp ./gh_cli/bin/gh /usr/local/bin/
           rm -rf gh_cli*
 
-      - name: Update Mainnet canisters file
+      - name: Update mainnet canister versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |

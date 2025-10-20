@@ -12,8 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled, is_neuron_follow_restrictions_enabled,
-    is_set_subnet_operational_level_enabled,
+    is_neuron_follow_restrictions_enabled, is_set_subnet_operational_level_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -8386,9 +8385,7 @@ fn record_known_neuron_abstentions(
 ) {
     // TODO(NNS1-4227): clean up `first_proposal_id_to_record_voting_history` after all proposals
     // before this id have votes finalized.
-    if is_known_neuron_voting_history_enabled()
-        && proposal_id >= first_proposal_id_to_record_voting_history
-    {
+    if proposal_id >= first_proposal_id_to_record_voting_history {
         for known_neuron_id in known_neuron_ids {
             if let Some(ballot) = ballots.get(&known_neuron_id.id)
                 && ballot.vote() == Vote::Unspecified
@@ -8460,7 +8457,7 @@ fn modify_followees(
     // If in the list of followees, there are any follow relationships
     // that don't adhere to the aforementioned rules, return a GovernanceError
     // including all the invalid followees.
-    let mut invalid_followees = 0_i32;
+    let mut invalid_followees = 0_u32;
     let mut error_message = String::new();
 
     // To avoid looking up the already existing followees of the neuron
@@ -8492,7 +8489,7 @@ fn modify_followees(
                 || followee_hot_keys.contains(&controller);
 
             if !allowed_to_follow {
-                invalid_followees += 1;
+                invalid_followees = invalid_followees.saturating_add(1);
                 error_message.push_str(&format!(
                                 "{}: Neuron {} is a private neuron.\n\
                                 If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
@@ -8503,7 +8500,7 @@ fn modify_followees(
                             ));
             }
         } else {
-            invalid_followees += 1;
+            invalid_followees = invalid_followees.saturating_add(1);
             error_message.push_str(&format!(
                             "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
                             invalid_followees,

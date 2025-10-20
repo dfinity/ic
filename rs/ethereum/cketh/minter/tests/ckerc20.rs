@@ -440,6 +440,7 @@ mod withdraw_erc20 {
                             .unwrap(),
                     })),
                     created_at_time: None,
+                    fee: None,
                 });
 
             let balance_after_withdrawal = ckerc20.cketh.balance_of(caller);
@@ -485,6 +486,7 @@ mod withdraw_erc20 {
                         withdrawal_id: cketh_burn_index.into(),
                     })),
                     created_at_time: None,
+                    fee: None,
                 });
         }
 
@@ -725,6 +727,7 @@ mod withdraw_erc20 {
                         .unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ckerc20_ledger_get_transaction(
                 deposit_params.token().ledger_canister_id,
@@ -744,6 +747,7 @@ mod withdraw_erc20 {
                         .unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
 
             let expected_cketh_balance_after_withdrawal =
@@ -873,6 +877,7 @@ mod withdraw_erc20 {
                             tx_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.parse().unwrap(),
                         })),
                         created_at_time: None,
+                        fee: None,
                     });
             }
         }
@@ -1361,6 +1366,7 @@ fn should_deposit_ckerc20() {
                     log_index: params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
     }
 }
@@ -1454,6 +1460,7 @@ fn should_deposit_cketh_and_ckerc20() {
                     log_index: cketh_params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
             .expect_mint(Mint {
@@ -1465,6 +1472,7 @@ fn should_deposit_cketh_and_ckerc20() {
                     log_index: params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
     }
 }
