@@ -1629,6 +1629,11 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
         ckbtc.deposit_utxos_with_value(user, &[deposit_value; COUNT]);
     });
 
+    // wait for the transaction resubmission
+    ckbtc
+        .env
+        .advance_time(MIN_RESUBMISSION_DELAY - Duration::from_secs(1));
+
     let user = Principal::from(ckbtc.caller);
     assert_eq!(
         ckbtc.balance_of(user),
