@@ -221,7 +221,7 @@ where
 
     if allocated_bytes > NumBytes::from(0) {
         runbook.subnet_memory_target_before_op =
-            NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes + NumBytes::from(1);
+            maximum_subnet_memory_target_before_op + NumBytes::from(1);
         let res = run(&runbook);
         let err = res.err.unwrap();
         match err.code() {
@@ -231,8 +231,7 @@ where
             }
             _ => panic!("Unexpected error: {:?}", err),
         };
-        runbook.subnet_memory_target_before_op =
-            NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes;
+        runbook.subnet_memory_target_before_op = maximum_subnet_memory_target_before_op;
 
         runbook.initial_cycles = minimum_initial_cycles - Cycles::from(1_u128);
         if runbook.params.early_prepayment_refund {
@@ -405,4 +404,20 @@ fn test_memory_allocation_suite_install_code() {
         early_prepayment_refund: true,
     };
     test_memory_allocation_suite(setup, op, params);
+}
+
+#[test]
+fn test_memory_allocation_suite_upgrade_code() {
+    let op = |test: &mut ExecutionTest, canister_id, ()| {
+        let payload = stable64_grow_checked_payload((60 * MIB) >> 16, false);
+        test.upgrade_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), payload)
+            .err()
+    };
+    let params = RunbookParams {
+        op_cycles_prepayment: true,
+        subnet_message: true,
+        ignore_canister_history_memory_usage: false,
+        early_prepayment_refund: true,
+    };
+    test_memory_allocation_suite(setup_universal_canister, op, params);
 }
