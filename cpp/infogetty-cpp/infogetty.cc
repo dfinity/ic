@@ -83,7 +83,7 @@ open_tty(const std::string& tty_dev, struct termios* term)
 }
 
 void
-loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const struct termios& saved_tios)
+loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, bool allow_limited_login, const struct termios& saved_tios)
 {
     struct termios cbreak_tios = saved_tios;
     cbreak_tios.c_lflag = cbreak_tios.c_lflag & ~ (ICANON | ECHO);
@@ -93,7 +93,7 @@ loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const stru
 
     for (;;) {
         auto info = format_network_info(read_network_info());
-        if (allow_root_login) {
+        if (allow_root_login || allow_limited_login) {
             info += "Press ENTER to activate console\n";
         }
         info += "\n";
@@ -113,7 +113,7 @@ loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const stru
             if (::read(0, buffer, 1024) < 0 && errno != EAGAIN) {
                 check_panic_errno(-1, tty_dev, "read to drain terminal failed");
             }
-            if (allow_root_login) {
+            if (allow_root_login || allow_limited_login) {
                 break;
             }
         }
@@ -203,7 +203,7 @@ main(int argc, char** argv)
     open_tty(opts.tty_dev, &tios);
 
     // System info loop, until user requests to activate terminal.
-    loop_print_sysinfo(opts.tty_dev, opts.allow_root_login, tios);
+    loop_print_sysinfo(opts.tty_dev, opts.allow_root_login, opts.allow_limited_login, tios);
 
 
     // Restore signal dispositions before executing shell.

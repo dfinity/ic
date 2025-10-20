@@ -40,6 +40,7 @@ component_files = {
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
+    Label("//cpp:infogetty"): "/opt/ic/bin/infogetty:0755",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("//ic-os/components/hostos/misc:sudoers"): "/etc/sudoers",
