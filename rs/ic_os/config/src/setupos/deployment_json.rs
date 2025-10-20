@@ -68,7 +68,7 @@ mod test {
                 "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
               "vm_resources": {
-                "memory": "42",
+                "memory": "16",
                 "cpu": "kvm",
                 "nr_of_vcpus": 64
               }
@@ -86,7 +86,7 @@ mod test {
     "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
   "vm_resources": {
-    "memory": "42",
+    "memory": "16",
     "cpu": "kvm",
     "nr_of_vcpus": 64
   }
@@ -106,7 +106,7 @@ mod test {
             ],
         },
         vm_resources: VmResources {
-            memory: 42,
+            memory: 16,
             cpu: "kvm".to_string(),
             nr_of_vcpus: 64,
         },

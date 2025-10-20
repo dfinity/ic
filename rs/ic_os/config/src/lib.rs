@@ -78,12 +78,12 @@ mod tests {
         let setupos_settings = SetupOSSettings;
         #[allow(deprecated)]
         let hostos_settings = HostOSSettings {
-            vm_memory: 42,
+            vm_memory: 16,
             vm_cpu: "kvm".to_string(),
             vm_nr_of_vcpus: 64,
             verbose: false,
             hostos_dev_settings: HostOSDevSettings {
-                vm_memory: 42,
+                vm_memory: 16,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 64,
             },

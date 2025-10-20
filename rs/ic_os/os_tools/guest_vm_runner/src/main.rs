@@ -872,12 +872,12 @@ mod tests {
             },
             #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 42,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
                 hostos_dev_settings: HostOSDevSettings {
-                    vm_memory: 42,
+                    vm_memory: 16,
                     vm_cpu: "qemu".to_string(),
                     vm_nr_of_vcpus: 56,
                 },

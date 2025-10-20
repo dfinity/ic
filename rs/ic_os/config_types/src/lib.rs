@@ -349,7 +349,7 @@ mod tests {
         {
             // Test with vm_nr_of_vcpus specified
             let json = r#"{
-                "vm_memory": 42,
+                "vm_memory": 16,
                 "vm_cpu": "host",
                 "vm_nr_of_vcpus": 4,
                 "verbose": true
@@ -359,7 +359,7 @@ mod tests {
 
             // Test without vm_nr_of_vcpus (should use default)
             let json = r#"{
-                "vm_memory": 42,
+                "vm_memory": 16,
                 "vm_cpu": "host",
                 "verbose": true
             }"#;
