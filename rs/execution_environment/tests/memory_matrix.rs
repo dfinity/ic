@@ -283,9 +283,10 @@ where
     test_memory_allocation(runbook);
 }
 
-fn stable64_grow_checked_payload(pages: u64, reply: bool) -> Vec<u8> {
+fn memory_grow_payload(heap_pages: u64, stable_pages: u64, reply: bool) -> Vec<u8> {
     let mut payload = wasm()
-        .stable64_grow(pages)
+        .wasm_memory_grow(heap_pages.try_into().unwrap())
+        .stable64_grow(stable_pages)
         .int64_to_blob()
         .trap_if_eq(u64::MAX.to_le_bytes(), "ic0.stable64_grow failed");
     if reply {
@@ -295,7 +296,7 @@ fn stable64_grow_checked_payload(pages: u64, reply: bool) -> Vec<u8> {
 }
 
 fn setup_universal_canister(test: &mut ExecutionTest, canister_id: CanisterId) {
-    let payload = stable64_grow_checked_payload((60 * MIB) >> 16, false);
+    let payload = memory_grow_payload((60 * MIB) >> 16, (60 * MIB) >> 16, false);
     test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), payload)
         .unwrap();
 }
@@ -303,15 +304,8 @@ fn setup_universal_canister(test: &mut ExecutionTest, canister_id: CanisterId) {
 #[test]
 fn test_memory_allocation_suite_grow_wasm_memory() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        test.ingress(
-            canister_id,
-            "update",
-            wasm()
-                .wasm_memory_grow((GIB >> 16).try_into().unwrap())
-                .reply()
-                .build(),
-        )
-        .err()
+        let payload = memory_grow_payload(GIB >> 16, 0, true);
+        test.ingress(canister_id, "update", payload).err()
     };
     let params = RunbookParams {
         op_cycles_prepayment: true,
@@ -325,7 +319,7 @@ fn test_memory_allocation_suite_grow_wasm_memory() {
 #[test]
 fn test_memory_allocation_suite_grow_stable_memory() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        let payload = stable64_grow_checked_payload(GIB >> 16, true);
+        let payload = memory_grow_payload(0, GIB >> 16, true);
         test.ingress(canister_id, "update", payload).err()
     };
     let params = RunbookParams {
@@ -393,7 +387,7 @@ fn test_memory_allocation_suite_load_snapshot() {
 fn test_memory_allocation_suite_install_code() {
     let setup = |_test: &mut ExecutionTest, _canister_id: CanisterId| {};
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        let payload = stable64_grow_checked_payload((60 * MIB) >> 16, false);
+        let payload = memory_grow_payload((60 * MIB) >> 16, (60 * MIB) >> 16, false);
         test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), payload)
             .err()
     };
@@ -408,9 +402,38 @@ fn test_memory_allocation_suite_install_code() {
 
 #[test]
 fn test_memory_allocation_suite_upgrade_code() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister(test, canister_id);
+        let pre_upgrade_grow_payload = memory_grow_payload(GIB >> 16, (120 * MIB) >> 16, false);
+        test.ingress(
+            canister_id,
+            "update",
+            wasm()
+                .set_pre_upgrade(pre_upgrade_grow_payload)
+                .reply()
+                .build(),
+        )
+        .unwrap();
+    };
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        let payload = stable64_grow_checked_payload((60 * MIB) >> 16, false);
+        let payload = memory_grow_payload((120 * MIB) >> 16, (120 * MIB) >> 16, false);
         test.upgrade_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), payload)
+            .err()
+    };
+    let params = RunbookParams {
+        op_cycles_prepayment: true,
+        subnet_message: true,
+        ignore_canister_history_memory_usage: false,
+        early_prepayment_refund: true,
+    };
+    test_memory_allocation_suite(setup, op, params);
+}
+
+#[test]
+fn test_memory_allocation_suite_reinstall_code() {
+    let op = |test: &mut ExecutionTest, canister_id, ()| {
+        let payload = memory_grow_payload((120 * MIB) >> 16, (120 * MIB) >> 16, false);
+        test.reinstall_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), payload)
             .err()
     };
     let params = RunbookParams {
