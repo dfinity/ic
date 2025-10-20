@@ -21,14 +21,12 @@ pub async fn get_doge_address(
 }
 
 pub fn account_to_p2pkh_address_from_state(state: &CkBtcMinterState, account: &Account) -> String {
-    let (ecdsa_public_key, network) = (
-        state
-            .ecdsa_public_key
-            .as_ref()
-            .cloned()
-            .expect("bug: the ECDSA public key must be initialized"),
-        Network::from(state.btc_network),
-    );
+    let ecdsa_public_key = state
+        .ecdsa_public_key
+        .as_ref()
+        .cloned()
+        .expect("bug: the ECDSA public key must be initialized");
+    let network = Network::from(state.btc_network);
     let public_key: [u8; 33] = derive_public_key(&ecdsa_public_key, account)
         .public_key
         .try_into()
