@@ -65,7 +65,7 @@ async fn pulse((msg, bytes_received, _): (Message, u32, u32)) -> Vec<u8> {
         .into_iter()
         .map(|reply| match reply {
             Ok(reply) => {
-                let (reply, bytes_sent_on_reply, _): (Reply, u32, u32) = decode(reply.into_bytes());
+                let (reply, bytes_sent_on_reply, _) = decode::<Reply>(reply.into_bytes());
                 Response::Success {
                     bytes_received_on_call: bytes_received,
                     bytes_sent_on_reply,
@@ -84,7 +84,10 @@ async fn pulse((msg, bytes_received, _): (Message, u32, u32)) -> Vec<u8> {
 
     // Collect the respondents together with the responses; encode them.
     let (payload, _) = encode(
-        &respondents.into_iter().zip(results).collect::<Vec<_>>(),
+        &Reply {
+            bytes_received_on_call: bytes_received,
+            downstream_responses: respondents.into_iter().zip(results).collect::<Vec<_>>(),
+        },
         msg.reply_bytes as usize,
     );
     payload

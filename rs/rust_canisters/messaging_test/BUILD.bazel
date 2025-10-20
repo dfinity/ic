@@ -53,6 +53,7 @@ rust_ic_test_suite(
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/messaging_test/utils",
         "//rs/state_machine_tests",
+        "//rs/types/types",
         "//rs/types/types_test_utils",
         "@crate_index//:proptest",
     ],

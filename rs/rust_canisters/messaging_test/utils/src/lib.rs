@@ -1,7 +1,9 @@
-use ic_types::CanisterId;
+use ic_types::{CanisterId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use messaging_test::{Call, Message, Reply, Response, decode, encode};
 use proptest::prelude::*;
 use std::ops::RangeInclusive;
+
+const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
 /*
  * The proptest crate has dependencies that don't play nice with Wasm, therefore
@@ -9,50 +11,25 @@ use std::ops::RangeInclusive;
  * are defined here.
  */
 
-prop_compose! {
-    /// Generates an arbitrary `Call` without any downstream calls.
-    fn arb_simple_call(
-        receivers: Vec<CanisterId>,
-        call_bytes_range: RangeInclusive<usize>,
-        reply_bytes_range: RangeInclusive<usize>,
-        best_effort_percentage: usize,
-        timeout_secs_range: RangeInclusive<usize>,
-    )(
-        receiver in proptest::sample::select(receivers),
-        call_bytes in call_bytes_range,
-        reply_bytes in reply_bytes_range,
-        best_effort_probe in 0..100_usize,
-        timeout_secs in timeout_secs_range,
-    ) -> Call {
-        Call {
-            receiver,
-            call_bytes: call_bytes as u32,
-            reply_bytes: reply_bytes as u32,
-            timeout_secs: (best_effort_probe < best_effort_percentage).then_some(timeout_secs as u32),
-            downstream_calls: Vec::new(),
-        }
-    }
-}
-
-/// Generates a count in `calls_count_range`, `make_calls_percentage` of the time, 0 otherwise.
-fn arb_call_count(
-    make_calls_percentage: usize,
-    calls_count_range: RangeInclusive<usize>,
-) -> impl Strategy<Value = usize> {
-    (0..100_usize).prop_flat_map(move |p| {
-        if p < make_calls_percentage {
-            calls_count_range.clone()
-        } else {
-            0..=0_usize
-        }
-    })
+/// Generates an arbitrary `Call` using reasonable default input ranges.
+pub fn arb_call(receivers: Vec<CanisterId>) -> impl Strategy<Value = Call> {
+    arb_call_with_config(
+        receivers,
+        0..=MAX_PAYLOAD_SIZE, // call_bytes_range
+        0..=MAX_PAYLOAD_SIZE, // reply_bytes_range
+        50,                   // best_effort_percentage
+        1..=300,              // timeout_secs_range
+        33,                   // make_calls_percentage
+        50,                   // max_total_calls
+        1..=3,                // calls_count_range
+    )
 }
 
 /// Generates an arbitrary `Call` including downstream calls.
 ///
 /// Starts with a list of `counts` and a correspondingly sized list of simple calls,
 /// then recursively generates one call with nested downstream calls from them.
-pub fn arb_nested_call(
+pub fn arb_call_with_config(
     receivers: Vec<CanisterId>,
     call_bytes_range: RangeInclusive<usize>,
     reply_bytes_range: RangeInclusive<usize>,
@@ -87,6 +64,45 @@ pub fn arb_nested_call(
         to_nested_call(&mut call, &mut simple_calls, &mut counts);
         call
     })
+}
+
+/// Generates a count in `calls_count_range`, `make_calls_percentage` of the time, 0 otherwise.
+fn arb_call_count(
+    make_calls_percentage: usize,
+    calls_count_range: RangeInclusive<usize>,
+) -> impl Strategy<Value = usize> {
+    (0..100_usize).prop_flat_map(move |p| {
+        if p < make_calls_percentage {
+            calls_count_range.clone()
+        } else {
+            0..=0_usize
+        }
+    })
+}
+
+prop_compose! {
+    /// Generates an arbitrary `Call` without any downstream calls.
+    fn arb_simple_call(
+        receivers: Vec<CanisterId>,
+        call_bytes_range: RangeInclusive<usize>,
+        reply_bytes_range: RangeInclusive<usize>,
+        best_effort_percentage: usize,
+        timeout_secs_range: RangeInclusive<usize>,
+    )(
+        receiver in proptest::sample::select(receivers),
+        call_bytes in call_bytes_range,
+        reply_bytes in reply_bytes_range,
+        best_effort_probe in 0..100_usize,
+        timeout_secs in timeout_secs_range,
+    ) -> Call {
+        Call {
+            receiver,
+            call_bytes: call_bytes as u32,
+            reply_bytes: reply_bytes as u32,
+            timeout_secs: (best_effort_probe < best_effort_percentage).then_some(timeout_secs as u32),
+            downstream_calls: Vec::new(),
+        }
+    }
 }
 
 /// Generates a `Call` from a number of simple calls (i.e. without downstream calls) using a vector of `counts`.
