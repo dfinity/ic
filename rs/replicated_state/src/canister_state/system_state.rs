@@ -988,7 +988,7 @@ impl SystemState {
     ///
     /// If the message is a `Request`, reserves a slot in the corresponding output
     /// queue for the eventual response; and guaranteed response memory for the
-    /// maximum `Response` size if it's guaranteed response. If it is a `Response`,
+    /// maximum `Response` size if it's a guaranteed response. If it is a `Response`,
     /// the protocol should have already reserved a slot and memory for it.
     ///
     /// Updates `subnet_available_guaranteed_response_memory` to reflect any change
