@@ -18,6 +18,9 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
+    permissions:
+      contents: read
+      pull-requests: read
 
   ci-pr-only:
     name: CI PR Only
@@ -26,6 +29,9 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
+    permissions:
+      contents: read
+      pull-requests: write
 
   post-commit-status:
     name: Post Commit Status
