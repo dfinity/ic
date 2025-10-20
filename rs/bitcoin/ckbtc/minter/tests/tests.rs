@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
+use canlog::LogEntry;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_checker::{
@@ -13,6 +14,7 @@ use ic_btc_interface::{
 };
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
+use ic_ckbtc_minter::logs::Priority;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
 use ic_ckbtc_minter::state::eventlog::{Event, EventType};
@@ -844,10 +846,15 @@ impl CkBtcSetup {
         .unwrap()
     }
 
-    pub fn get_logs(&self) -> Log {
+    pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {
+        self.get_logs_with_params("")
+    }
+
+    pub fn get_logs_with_params(&self, params: impl Into<String>) -> Vec<LogEntry<Priority>> {
+        let params = params.into();
         let request = HttpRequest {
             method: "".to_string(),
-            url: "/logs".to_string(),
+            url: format!("/logs{params}"),
             headers: vec![],
             body: serde_bytes::ByteBuf::new(),
         };
@@ -860,7 +867,9 @@ impl CkBtcSetup {
             HttpResponse
         )
         .unwrap();
-        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log")
+        serde_json::from_slice::<canlog::Log<Priority>>(&response.body)
+            .expect("failed to parse ckBTC minter log")
+            .entries
     }
 
     pub fn get_events(&self) -> Vec<Event> {
@@ -1284,7 +1293,7 @@ impl CkBtcSetup {
 
     pub fn print_minter_logs(&self) {
         let log = self.get_logs();
-        for entry in log.entries {
+        for entry in log {
             println!(
                 "{} {}:{} {}",
                 entry.timestamp, entry.file, entry.line, entry.message
@@ -1964,45 +1973,11 @@ fn test_filter_logs() {
         .expect("Time went backwards")
         .as_nanos();
 
-    let request = HttpRequest {
-        method: "".to_string(),
-        url: format!("/logs?time={nanos}"),
-        headers: vec![],
-        body: serde_bytes::ByteBuf::new(),
-    };
-    let response = Decode!(
-        &assert_reply(
-            ckbtc
-                .env
-                .query(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
-                .expect("failed to get minter info")
-        ),
-        HttpResponse
-    )
-    .unwrap();
-    let logs: Log =
-        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log");
+    let logs = ckbtc.get_logs_with_params(format!("?time={nanos}"));
 
-    let request = HttpRequest {
-        method: "".to_string(),
-        url: format!("/logs?time={}", nanos + 30 * 1_000_000_000),
-        headers: vec![],
-        body: serde_bytes::ByteBuf::new(),
-    };
-    let response = Decode!(
-        &assert_reply(
-            ckbtc
-                .env
-                .query(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
-                .expect("failed to get minter info")
-        ),
-        HttpResponse
-    )
-    .unwrap();
-    let logs_filtered: Log =
-        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log");
+    let logs_filtered = ckbtc.get_logs_with_params(format!("?time={}", nanos + 30 * 1_000_000_000));
 
-    assert_ne!(logs.entries.len(), logs_filtered.entries.len());
+    assert_ne!(logs.len(), logs_filtered.len());
 }
 
 #[test]
