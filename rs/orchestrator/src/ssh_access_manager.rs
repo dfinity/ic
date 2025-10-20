@@ -391,21 +391,17 @@ mod tests {
 
             // Regardless of what the registry says, if the orchestrator says we are unassigned
             // then we will not apply the subnet's keys
-            let manager = setup_ssh_access_manager(ASSIGNED_NODE, &test, &log);
-            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
-            assert!(keys.has_unassigned_readonly());
-            assert!(keys.backup.is_empty());
-            assert!(keys.has_recovery());
+            for node_id in [ASSIGNED_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                assert!(keys.has_unassigned_readonly());
+                assert!(keys.backup.is_empty());
+                assert!(keys.has_recovery());
+            }
 
             let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.readonly.is_empty());
-            assert!(keys.backup.is_empty());
-            assert!(keys.has_recovery());
-
-            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, &test, &log);
-            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
-            assert!(keys.has_unassigned_readonly());
             assert!(keys.backup.is_empty());
             assert!(keys.has_recovery());
         })
@@ -627,21 +623,17 @@ mod tests {
                 recovery: RegistryEntry::KeyDeployed,
             };
 
-            let manager = setup_ssh_access_manager(ASSIGNED_NODE, &test, &log);
-            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
-            assert!(keys.has_unassigned_readonly());
-            assert!(keys.backup.is_empty());
-            assert!(keys.has_recovery());
+            for node_id in [ASSIGNED_NODE, UNASSIGNED_NODE] {
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                assert!(keys.has_unassigned_readonly());
+                assert!(keys.backup.is_empty());
+                assert!(keys.has_recovery());
+            }
 
             let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.readonly.is_empty());
-            assert!(keys.backup.is_empty());
-            assert!(keys.has_recovery());
-
-            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, &test, &log);
-            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
-            assert!(keys.has_unassigned_readonly());
             assert!(keys.backup.is_empty());
             assert!(keys.has_recovery());
         })
