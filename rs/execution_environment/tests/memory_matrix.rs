@@ -8,6 +8,7 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
 use ic_types::Cycles;
+use ic_types::ingress::WasmResult;
 use num_traits::ops::saturating::SaturatingSub;
 
 const T: u128 = 1_000_000_000_000;
@@ -264,6 +265,23 @@ where
     test_memory_allocation(runbook);
 }
 
+fn stable64_grow_checked(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    pages: u64,
+) -> Result<WasmResult, UserError> {
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .stable64_grow(pages)
+            .int64_to_blob()
+            .trap_if_eq(u64::MAX.to_le_bytes(), "ic0.stable64_grow failed")
+            .reply()
+            .build(),
+    )
+}
+
 fn setup_universal_canister(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
@@ -271,12 +289,7 @@ fn setup_universal_canister(
 ) {
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
-    test.ingress(
-        canister_id,
-        "update",
-        wasm().stable64_grow((60 * MIB) >> 16).reply().build(),
-    )
-    .unwrap();
+    stable64_grow_checked(test, canister_id, (60 * MIB) >> 16).unwrap();
     let settings = CanisterSettingsArgsBuilder::new()
         .with_maybe_memory_allocation(params.memory_allocation)
         .with_reserved_cycles_limit(DEFAULT_INITIAL_CYCLES)
@@ -304,17 +317,7 @@ fn test_memory_allocation_suite_grow_wasm_memory() {
 #[test]
 fn test_memory_allocation_suite_grow_stable_memory() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        test.ingress(
-            canister_id,
-            "update",
-            wasm()
-                .stable64_grow(GIB >> 16)
-                .int64_to_blob()
-                .trap_if_eq(u64::MAX.to_le_bytes(), "ic0.stable64_grow failed")
-                .reply()
-                .build(),
-        )
-        .err()
+        stable64_grow_checked(test, canister_id, GIB >> 16).err()
     };
     test_memory_allocation_suite(setup_universal_canister, op, true);
 }
