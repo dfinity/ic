@@ -1095,7 +1095,7 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg
-                    && !look_up_callback(
+                    && !has_callback(
                         response,
                         call_context_manager,
                         self.aborted_or_paused_response(),
@@ -1425,7 +1425,7 @@ impl SystemState {
 
             // Protect against enqueuing duplicate responses.
             if let RequestOrResponse::Response(response) = &msg {
-                match look_up_callback(
+                match has_callback(
                     response,
                     call_context_manager,
                     self.aborted_or_paused_response(),
@@ -1978,9 +1978,9 @@ pub(crate) fn push_input(
     res
 }
 
-/// Looks up the `Callback` associated with the given response's `callback_id`.
-/// Verifies that the `Callback`'s respondent and originator, as well as its
-/// deadline match those of the response.
+/// Looks up the `Callback` associated with the given response's `callback_id`
+/// and verifies that its respondent, originator and deadline match those of the
+/// response.
 ///
 /// Returns:
 ///
@@ -1992,7 +1992,7 @@ pub(crate) fn push_input(
 ///    not found for a guaranteed response.
 ///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
 ///    found, but the response details do not match those of the callback.
-pub(crate) fn look_up_callback(
+fn has_callback(
     response: &Response,
     call_context_manager: &CallContextManager,
     aborted_or_paused_response: Option<&Response>,
