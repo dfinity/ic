@@ -78,6 +78,21 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         --experimental_profile_include_target_label
     )
 
+    if [ -n "${BAZEL_UUIDS_FILE:-}" ]; then
+        sponge=$(mktemp)
+        # pop the first line of the file into `this_uuid`
+        this_uuid=$(head -n1 <"$BAZEL_UUIDS_FILE")
+        tail -n +2 <"$BAZEL_UUIDS_FILE" > "$sponge"
+        mv "$sponge" "$BAZEL_UUIDS_FILE"
+
+        if [ -n "${this_uuid:-}" ]; then
+            bazel_args+=(
+                --invocation_id="$this_uuid"
+            )
+        fi
+    fi
+
+
     if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
         bazel_args+=(
             --build_metadata=BUILDBUDDY_LINKS="$BUILDBUDDY_LINKS"

@@ -69,6 +69,5 @@ rust_test_suite(
     deps = [
         ":ic-pub-key",
         "@crate_index//:hex",
-        "@crate_index//:hex-literal",
     ],
 )

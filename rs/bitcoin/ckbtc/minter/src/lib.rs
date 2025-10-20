@@ -20,7 +20,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use crate::state::CkBtcMinterState;
+use crate::updates::get_btc_address;
+use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
+use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
 pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
@@ -1040,7 +1043,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
     unsigned_tx: tx::UnsignedTransaction,
     runtime: &R,
 ) -> Result<tx::SignedTransaction, CallError> {
-    use crate::address::{derivation_path, derive_public_key};
+    use crate::address::{derivation_path, derive_public_key_from_account};
 
     let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
     let sighasher = tx::TxSigHasher::new(&unsigned_tx);
@@ -1051,7 +1054,8 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
             .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
 
         let path = derivation_path(&account);
-        let pubkey = ByteBuf::from(derive_public_key(ecdsa_public_key, &account).public_key);
+        let pubkey =
+            ByteBuf::from(derive_public_key_from_account(ecdsa_public_key, &account).public_key);
         let pkhash = tx::hash160(&pubkey);
 
         let sighash = sighasher.sighash(input, &pkhash);
@@ -1439,15 +1443,17 @@ pub trait CanisterRuntime {
         state.validate_config()
     }
 
-    /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
-    async fn bitcoin_get_utxos(
-        &self,
-        request: &GetUtxosRequest,
-    ) -> Result<GetUtxosResponse, CallError>;
+    fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
+
+    /// Address controlled by the minter (via threshold ECDSA) for a given user.
+    fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
+
+    /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified network.
+    async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
         &self,
-        btc_checker_principal: Principal,
+        btc_checker_principal: Option<Principal>,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError>;
@@ -1471,6 +1477,13 @@ pub trait CanisterRuntime {
         transaction: &tx::SignedTransaction,
         network: Network,
     ) -> Result<(), CallError>;
+
+    /// Check if the given address is blocked.
+    async fn check_address(
+        &self,
+        btc_checker_principal: Option<Principal>,
+        address: String,
+    ) -> Result<BtcAddressCheckStatus, CallError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1478,19 +1491,18 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
-    async fn bitcoin_get_utxos(
-        &self,
-        request: &GetUtxosRequest,
-    ) -> Result<GetUtxosResponse, CallError> {
+    async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }
 
     async fn check_transaction(
         &self,
-        btc_checker_principal: Principal,
+        btc_checker_principal: Option<Principal>,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError> {
+        let btc_checker_principal = btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set");
         management::check_transaction(btc_checker_principal, utxo, cycle_payment).await
     }
 
@@ -1528,6 +1540,43 @@ impl CanisterRuntime for IcCanisterRuntime {
         network: Network,
     ) -> Result<(), CallError> {
         management::send_transaction(transaction, network).await
+    }
+
+    fn parse_address(
+        &self,
+        address: &str,
+        network: Network,
+    ) -> Result<BitcoinAddress, std::string::String> {
+        BitcoinAddress::parse(address, network).map_err(|e| e.to_string())
+    }
+
+    fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
+        get_btc_address::account_to_p2wpkh_address_from_state(state, account)
+    }
+
+    async fn check_address(
+        &self,
+        btc_checker_principal: Option<Principal>,
+        address: String,
+    ) -> Result<BtcAddressCheckStatus, CallError> {
+        let btc_checker_principal = btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set");
+
+        ic_cdk::call::Call::bounded_wait(btc_checker_principal, "check_address")
+            .with_arg(CheckAddressArgs {
+                address: address.clone(),
+            })
+            .await
+            .map_err(|e| CallError::from_cdk_call_error("check_address", e))?
+            .candid()
+            .map(|res: CheckAddressResponse| match res {
+                CheckAddressResponse::Failed => {
+                    log!(P0, "Discovered a tainted btc address {}", address);
+                    BtcAddressCheckStatus::Tainted
+                }
+                CheckAddressResponse::Passed => BtcAddressCheckStatus::Clean,
+            })
+            .map_err(|e| CallError::from_cdk_call_error("check_address", e))
     }
 }
 

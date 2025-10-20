@@ -1,4 +1,4 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
@@ -6,9 +6,13 @@ use ic_certification::{
     hash_tree::{HashTreeNode, Label, LookupResult, SubtreeLookupResult, empty},
 };
 use ic_icrc1::endpoints::StandardRecord;
+use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_icrc3_test_ledger::AddBlockResult;
+use ic_ledger_suite_state_machine_helpers::{
+    add_block, archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+    set_icrc3_enabled,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -19,8 +23,8 @@ use icrc_ledger_types::icrc3::blocks::{
 };
 use num_traits::cast::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::{collections::BTreeMap, time::Duration};
 
 const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
 const TEST_USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
@@ -44,26 +48,16 @@ fn icrc3_test_ledger_wasm() -> Vec<u8> {
     )
 }
 
+pub fn index_ng_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").unwrap()).unwrap()
+}
+
 fn setup_icrc3_test_ledger() -> (StateMachine, CanisterId) {
     let env = StateMachine::new();
     let canister_id = env
         .install_canister(icrc3_test_ledger_wasm(), vec![], None)
         .unwrap();
     (env, canister_id)
-}
-
-fn add_block(
-    env: &StateMachine,
-    canister_id: CanisterId,
-    block: &ICRC3Value,
-) -> Result<Nat, String> {
-    Decode!(
-        &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
-            .expect("failed to add block")
-            .bytes(),
-        AddBlockResult
-    )
-    .expect("failed to decode add_block response")
 }
 
 fn icrc3_get_blocks(
@@ -546,16 +540,6 @@ fn get_supported_standards(env: &StateMachine, canister_id: CanisterId) -> Vec<S
     .expect("failed to decode icrc1_supported_standards response")
 }
 
-fn set_icrc3_enabled(env: &StateMachine, canister_id: CanisterId, enabled: bool) {
-    Decode!(
-        &env.execute_ingress(canister_id, "set_icrc3_enabled", Encode!(&enabled).unwrap())
-            .expect("failed to set_icrc3_enabled")
-            .bytes(),
-        ()
-    )
-    .expect("failed to decode set_icrc3_enabled response")
-}
-
 #[test]
 fn test_supported_standards() {
     let (env, canister_id) = setup_icrc3_test_ledger();
@@ -576,4 +560,166 @@ fn test_supported_standards() {
     assert_eq!(standards.len(), 2);
     assert_eq!(standards[0].name, "ICRC-3");
     assert_eq!(standards[1].name, "ICRC-10");
+}
+
+fn verify_blocks_in_ledger(env: &StateMachine, canister_id: CanisterId, start: u64, length: u64) {
+    let result = icrc3_get_blocks_helper(env, canister_id, 0, usize::MAX);
+    if length == 0 {
+        assert!(result.blocks.is_empty());
+    } else {
+        assert_eq!(result.blocks.first().unwrap().id, start);
+        assert_eq!(result.blocks.last().unwrap().id, start + length - 1);
+    }
+}
+
+#[test]
+fn test_archiving() {
+    let (env, ledger_id) = setup_icrc3_test_ledger();
+
+    const NUM_BLOCKS: u32 = 20;
+
+    for block_id in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(block_id as u64, block_id as u64)
+            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id)))
+            .build();
+        let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+        assert_eq!(result, Nat::from(block_id));
+    }
+
+    verify_blocks_in_ledger(&env, ledger_id, 0, 20);
+
+    let archive1 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive1, 2);
+    assert_eq!(archived_count, 2);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, ledger_id, 2, 18);
+
+    let archive2 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 2);
+    verify_blocks_in_ledger(&env, ledger_id, 4, 16);
+
+    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 4);
+    verify_blocks_in_ledger(&env, ledger_id, 6, 14);
+
+    let archive3 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive3, 10);
+    assert_eq!(archived_count, 10);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 4);
+    verify_blocks_in_ledger(&env, archive3, 6, 10);
+    verify_blocks_in_ledger(&env, ledger_id, 16, 4);
+
+    let test_blocks_with_index = || {
+        let index_init_arg = IndexArg::Init(InitArg {
+            ledger_id: Principal::from(ledger_id),
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        });
+        let index = env
+            .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
+            .unwrap();
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+        let balance = balance_of(&env, index, TEST_ACCOUNT_1);
+        assert_eq!(balance, 2u64.pow(NUM_BLOCKS) - 1);
+    };
+
+    test_blocks_with_index();
+
+    set_icrc3_enabled(&env, ledger_id, false);
+
+    test_blocks_with_index();
+}
+
+#[test]
+fn test_archiving_all_blocks() {
+    let (env, ledger_id) = setup_icrc3_test_ledger();
+
+    const NUM_BLOCKS: u64 = 5;
+
+    for block_id in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(block_id, block_id)
+            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id as u32)))
+            .build();
+        let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+        assert_eq!(result, Nat::from(block_id));
+    }
+
+    verify_blocks_in_ledger(&env, ledger_id, 0, NUM_BLOCKS);
+
+    let archive1 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive1, u64::MAX);
+    assert_eq!(archived_count, NUM_BLOCKS);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, NUM_BLOCKS);
+    verify_blocks_in_ledger(&env, ledger_id, 0, 0);
+
+    let blocks_req = GetBlocksRequest {
+        start: Nat::from(0u64),
+        length: Nat::from(u64::MAX),
+    };
+
+    let blocks = get_blocks(&env, ledger_id, &blocks_req);
+    assert_eq!(blocks.first_index, NUM_BLOCKS);
+    assert_eq!(blocks.chain_length, NUM_BLOCKS);
+    assert!(blocks.blocks.is_empty());
+
+    let index_init_arg = IndexArg::Init(InitArg {
+        ledger_id: Principal::from(ledger_id),
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    });
+    let index = env
+        .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
+        .unwrap();
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+    let balance = balance_of(&env, index, TEST_ACCOUNT_1);
+    assert_eq!(balance, 2u64.pow(NUM_BLOCKS as u32) - 1);
+
+    let block = BlockBuilder::new(NUM_BLOCKS, NUM_BLOCKS)
+        .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(NUM_BLOCKS as u32)))
+        .build();
+    let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+    assert_eq!(result, Nat::from(NUM_BLOCKS));
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+    let balance = balance_of(&env, index, TEST_ACCOUNT_1);
+    assert_eq!(balance, 2u64.pow((NUM_BLOCKS + 1) as u32) - 1);
+
+    let blocks = get_blocks(&env, ledger_id, &blocks_req);
+    assert_eq!(blocks.first_index, NUM_BLOCKS);
+    assert_eq!(blocks.chain_length, NUM_BLOCKS + 1);
+    assert_eq!(blocks.blocks.len(), 1);
 }

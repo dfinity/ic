@@ -51,8 +51,8 @@ impl<M: Memory> KnownNeuronIndex<M> {
 
     /// Adds a known neuron to the index. Returns error if nothing is added.
     /// The reason the known neuron might not gets added into the index might be that:
-    /// (1) the known neuron name already exists (caller should call `contains_known_neuron_name`
-    /// first)
+    /// (1) the known neuron name already exists for a different neuron id (caller should call
+    /// `known_neuron_id_by_name` first)
     /// (2) the known neuron name exceeds the maximum size.
     /// In both cases, the clients should check the condition before adding to the index.
     pub fn add_known_neuron(
@@ -109,14 +109,11 @@ impl<M: Memory> KnownNeuronIndex<M> {
         }
     }
 
-    /// Checks whether the known neuron name already exists in the index.
-    pub fn contains_known_neuron_name(&self, name: &str) -> bool {
+    /// Returns the neuron id for the given known neuron name if it exists. Returns None if the
+    /// known neuron name does not exist.
+    pub fn known_neuron_id_by_name(&self, name: &str) -> Option<NeuronId> {
         KnownNeuronName::new(name)
-            .map(|known_neuron_name| {
-                self.known_neuron_name_to_id
-                    .contains_key(&known_neuron_name)
-            })
-            .unwrap_or(false)
+            .and_then(|known_neuron_name| self.known_neuron_name_to_id.get(&known_neuron_name))
     }
 
     /// Lists all known neuron ids.
@@ -177,8 +174,11 @@ mod tests {
             .add_known_neuron("known neuron", NeuronId { id: 1 })
             .unwrap();
 
-        assert!(index.contains_known_neuron_name("known neuron"));
-        assert!(!index.contains_known_neuron_name("another known neuron"));
+        assert_eq!(
+            index.known_neuron_id_by_name("known neuron"),
+            Some(NeuronId { id: 1 })
+        );
+        assert_eq!(index.known_neuron_id_by_name("another known neuron"), None);
         assert_eq!(index.list_known_neuron_ids(), vec![NeuronId { id: 1 }]);
     }
 
@@ -217,7 +217,10 @@ mod tests {
             .add_known_neuron("known neuron", NeuronId { id: 1 })
             .unwrap();
 
-        assert!(index.contains_known_neuron_name("known neuron"));
+        assert_eq!(
+            index.known_neuron_id_by_name("known neuron"),
+            Some(NeuronId { id: 1 })
+        );
         assert_eq!(index.list_known_neuron_ids(), vec![NeuronId { id: 1 }]);
 
         // Removes old name and adds new when the neurons' name is changed.
@@ -229,8 +232,11 @@ mod tests {
             .add_known_neuron("known neuron with another name", NeuronId { id: 1 })
             .unwrap();
 
-        assert!(!index.contains_known_neuron_name("known neuron"));
-        assert!(index.contains_known_neuron_name("known neuron with another name"));
+        assert_eq!(index.known_neuron_id_by_name("known neuron"), None);
+        assert_eq!(
+            index.known_neuron_id_by_name("known neuron with another name"),
+            Some(NeuronId { id: 1 })
+        );
         assert_eq!(index.list_known_neuron_ids(), vec![NeuronId { id: 1 }]);
     }
 
@@ -242,7 +248,10 @@ mod tests {
         index
             .add_known_neuron(&known_neuron_name_max_length, NeuronId { id: 1 })
             .unwrap();
-        assert!(index.contains_known_neuron_name(&known_neuron_name_max_length));
+        assert_eq!(
+            index.known_neuron_id_by_name(&known_neuron_name_max_length),
+            Some(NeuronId { id: 1 })
+        );
     }
 
     #[test]
@@ -255,7 +264,7 @@ mod tests {
             index.add_known_neuron(&very_long_name, NeuronId { id: 1 }),
             Err(AddKnownNeuronError::ExceedsSizeLimit)
         );
-        assert!(!index.contains_known_neuron_name(&very_long_name));
+        assert_eq!(index.known_neuron_id_by_name(&very_long_name), None);
     }
 
     #[test]
@@ -264,7 +273,10 @@ mod tests {
         index
             .add_known_neuron("known neuron", NeuronId { id: 1 })
             .unwrap();
-        assert!(index.contains_known_neuron_name("known neuron"));
+        assert_eq!(
+            index.known_neuron_id_by_name("known neuron"),
+            Some(NeuronId { id: 1 })
+        );
 
         assert_matches!(
             index.remove_known_neuron("known neuron", NeuronId { id: 2 }),
@@ -274,7 +286,10 @@ mod tests {
 
         // After attempting to remove known neuron with the wrong id, the original entry still
         // exists.
-        assert!(index.contains_known_neuron_name("known neuron"));
+        assert_eq!(
+            index.known_neuron_id_by_name("known neuron"),
+            Some(NeuronId { id: 1 })
+        );
         assert_eq!(index.list_known_neuron_ids(), vec![NeuronId { id: 1 }]);
     }
 

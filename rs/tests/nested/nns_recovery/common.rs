@@ -1,10 +1,9 @@
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::bail;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
-    node::await_subnet_earliest_topology_version,
+    node::await_subnet_earliest_topology_version_with_retries,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
     },
@@ -13,7 +12,7 @@ use ic_consensus_system_test_utils::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
     },
-    upgrade::assert_assigned_replica_version,
+    upgrade::{assert_assigned_replica_version, bless_replica_version},
 };
 use ic_recovery::{
     RecoveryArgs, get_node_metrics,
@@ -52,7 +51,7 @@ pub const SUBNET_SIZE: usize = 4;
 /// test runtime low
 pub const DKG_INTERVAL: u64 = 9;
 
-/// 40 nodes and DKG interval of 199 are the production values for the NNS but 49 was chosen for
+/// 40 nodes and DKG interval of 499 are the production values for the NNS but 49 was chosen for
 /// the DKG interval to make the test faster
 pub const LARGE_SUBNET_SIZE: usize = 40;
 pub const LARGE_DKG_INTERVAL: u64 = 49;
@@ -61,7 +60,7 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
-const BACKUP_USERNAME: &str = "backup";
+pub const BACKUP_USERNAME: &str = "backup";
 
 const ADMIN_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
 const BACKUP_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/backup_key";
@@ -77,6 +76,8 @@ pub struct SetupConfig {
 pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
+    pub add_and_bless_upgrade_version: bool,
+    pub fix_dfinity_owned_node_like_np: bool,
 }
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
@@ -104,11 +105,9 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology = block_on(topology.block_for_newer_registry_version_within_duration(
-        Duration::from_secs(60),
-        Duration::from_secs(2),
-    ))
-    .unwrap();
+    let new_topology =
+        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
+            .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -124,12 +123,56 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
-    await_subnet_earliest_topology_version(
+    await_subnet_earliest_topology_version_with_retries(
         &nns_subnet,
         new_topology.get_registry_version(),
         &logger,
+        secs(15 * 60),
+        secs(15),
     );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
+}
+
+// Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
+// This is necessary as part of the `DownloadCertifications` step of the recovery to determine
+// the latest certified height of the subnet.
+pub fn grant_backup_access_to_all_nns_nodes(
+    env: &TestEnv,
+    ssh_priv_key_path: &Path,
+    ssh_pub_key_path: &Path,
+) {
+    let logger = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+
+    let ssh_priv_key =
+        std::fs::read_to_string(ssh_priv_key_path).expect("Failed to read SSH private key");
+    let backup_auth = AuthMean::PrivateKey(ssh_priv_key);
+    let ssh_pub_key =
+        std::fs::read_to_string(ssh_pub_key_path).expect("Failed to read SSH public key");
+
+    info!(logger, "Update the registry with the backup key");
+    let payload =
+        get_updatesubnetpayload_with_keys(nns_subnet.subnet_id, None, Some(vec![ssh_pub_key]));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+
+    for node in nns_subnet.nodes() {
+        info!(
+            logger,
+            "Waiting for authentication to be granted on node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+        wait_until_authentication_is_granted(
+            &logger,
+            &node.get_ip_addr(),
+            BACKUP_USERNAME,
+            &backup_auth,
+        );
+    }
+
+    info!(logger, "Success: Backup access granted to all NNS nodes");
 }
 
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
@@ -156,14 +199,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-
-    let topology = env.topology_snapshot();
-    let nns_subnet = topology.root_subnet();
-    let subnet_size = nns_subnet.nodes().count();
-    let nns_node = nns_subnet.nodes().next().unwrap();
-
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
@@ -176,32 +211,16 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     env.ssh_keygen_for_user(BACKUP_USERNAME)
         .expect("ssh-keygen failed for backup key");
     let ssh_backup_priv_key_path = ssh_authorized_priv_keys_dir.join(BACKUP_USERNAME);
-    let ssh_backup_priv_key = std::fs::read_to_string(&ssh_backup_priv_key_path)
-        .expect("Failed to read backup SSH private key");
-    let backup_auth = AuthMean::PrivateKey(ssh_backup_priv_key);
     let ssh_backup_pub_key_path = ssh_authorized_pub_keys_dir.join(BACKUP_USERNAME);
-    let ssh_backup_pub_key = std::fs::read_to_string(&ssh_backup_pub_key_path)
-        .expect("Failed to read backup SSH public key");
 
-    // Mirror production setup by granting backup SSH access to all NNS nodes to a specific SSH key.
-    // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
-    // the latest certified height of the subnet.
-    info!(logger, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(
-        nns_subnet.subnet_id,
-        None,
-        Some(vec![ssh_backup_pub_key]),
-    );
-    block_on(update_subnet_record(nns_node.get_public_url(), payload));
-    for node in nns_subnet.nodes() {
-        info!(
-            logger,
-            "Waiting for authentication to be granted on node {} ({:?})",
-            node.node_id,
-            node.get_ip_addr()
-        );
-        wait_until_authentication_is_granted(&node.get_ip_addr(), BACKUP_USERNAME, &backup_auth);
-    }
+    nested::registration(env.clone());
+    replace_nns_with_unassigned_nodes(&env);
+    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
+
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let subnet_size = nns_subnet.nodes().count();
+    let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
@@ -222,10 +241,24 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         "NNS is healthy - message stored and read successfully"
     );
 
-    let ic_version = get_guestos_img_version();
-    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
+    let current_version = get_guestos_img_version();
+    info!(logger, "Current GuestOS version: {:?}", &current_version);
     // identifies the version of the replica after the recovery
-    let working_version = get_guestos_update_img_version();
+    let upgrade_version = get_guestos_update_img_version();
+    let upgrade_image_url = get_guestos_update_img_url();
+    let upgrade_image_hash = get_guestos_update_img_sha256();
+    let guest_launch_measurements = get_guestos_launch_measurements();
+    if !cfg.add_and_bless_upgrade_version {
+        // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
+        block_on(bless_replica_version(
+            &nns_node,
+            &upgrade_version,
+            &logger,
+            upgrade_image_hash.clone(),
+            guest_launch_measurements,
+            vec![upgrade_image_url.to_string()],
+        ));
+    }
 
     let recovery_dir = get_dependency_path("rs/tests");
     let output_dir = env.get_path("recovery_output");
@@ -320,10 +353,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             node.get_ip_addr()
         );
 
-        let _ = disable_ssh_access_to_node(&node, SSH_USERNAME, &admin_auth).unwrap();
+        let _ = disable_ssh_access_to_node(&logger, &node, SSH_USERNAME, &admin_auth).unwrap();
     }
     // Ensure we can still SSH into the DFINITY-owned node with the admin key
     wait_until_authentication_is_granted(
+        &logger,
         &dfinity_owned_node.get_ip_addr(),
         SSH_USERNAME,
         &admin_auth,
@@ -342,7 +376,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
-        replica_version: Some(ic_version),
+        replica_version: Some(current_version),
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
@@ -353,14 +387,16 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // ahead of time.
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: nns_subnet.subnet_id,
-        upgrade_version: Some(working_version.clone()),
+        upgrade_version: Some(upgrade_version.clone()),
+        upgrade_image_url: Some(upgrade_image_url),
+        upgrade_image_hash: Some(upgrade_image_hash),
+        add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
         replay_until_height: Some(highest_certification_share_height),
-        upgrade_image_url: Some(get_guestos_update_img_url()),
-        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
-        wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
+        wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
+            .then_some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
@@ -400,23 +436,38 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     )
     .unwrap();
 
-    // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
-    // trigger the recovery on 2f other nodes.
-    info!(logger, "Simulate node provider action on 2f nodes");
+    // If we fix the DFINITY-owned node like the other NPs, we include it in the nodes to fix. If we
+    // do not, it has already been fixed as part of the recovery tool. We thus fix 2f other nodes to
+    // reach 2f+1 in total.
+    let (dfinity_owned_host, other_hosts): (Vec<NestedVm>, Vec<NestedVm>) = env
+        .get_all_nested_vms()
+        .unwrap()
+        .iter()
+        .cloned()
+        .partition(|vm| {
+            vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
+        });
+    let mut hosts_to_fix = other_hosts
+        .choose_multiple(&mut rand::thread_rng(), 2 * f)
+        .collect::<Vec<_>>();
+    if cfg.fix_dfinity_owned_node_like_np {
+        hosts_to_fix.push(dfinity_owned_host.first().unwrap());
+    }
+
+    info!(
+        logger,
+        "Simulate node provider action on {} nodes{}",
+        hosts_to_fix.len(),
+        if cfg.fix_dfinity_owned_node_like_np {
+            ", including the DFINITY-owned node"
+        } else {
+            ""
+        }
+    );
     block_on(async {
         let mut handles = JoinSet::new();
 
-        for vm in env
-            .get_all_nested_vms()
-            .unwrap()
-            .iter()
-            .filter(|&vm| {
-                vm.get_nested_network().unwrap().guest_ip != dfinity_owned_node.get_ip_addr()
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-            .choose_multiple(&mut rand::thread_rng(), 2 * f)
-        {
+        for vm in hosts_to_fix {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
@@ -448,7 +499,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             .expect("Could not obtain updated registry.")
             .root_subnet();
     for node in nns_subnet.nodes() {
-        assert_assigned_replica_version(&node, &working_version, env.logger());
+        assert_assigned_replica_version(&node, &upgrade_version, env.logger());
         node.await_status_is_healthy().unwrap_or_else(|_| {
             panic!(
                 "Node {} ({:?}) did not become healthy after the recovery",
@@ -525,8 +576,8 @@ async fn simulate_node_provider_action(
             host_boot_id_pre_reboot
         ),
         &logger,
-        Duration::from_secs(5 * 60),
-        Duration::from_secs(5),
+        secs(5 * 60),
+        secs(5),
         || async {
             let host_boot_id = get_host_boot_id_async(host).await;
             if host_boot_id != host_boot_id_pre_reboot {
@@ -632,11 +683,6 @@ fn local_recovery(
         .upgrade_version
         .map(|v| format!("--upgrade-version {v} "))
         .unwrap_or_default();
-    let maybe_replay_until_height = subnet_recovery_tool
-        .params
-        .replay_until_height
-        .map(|h| format!("--replay-until-height {h} "))
-        .unwrap_or_default();
     let maybe_upgrade_image_url = subnet_recovery_tool
         .params
         .upgrade_image_url
@@ -646,6 +692,16 @@ fn local_recovery(
         .params
         .upgrade_image_hash
         .map(|h| format!("--upgrade-image-hash {h} "))
+        .unwrap_or_default();
+    let maybe_add_and_bless_upgrade_version = subnet_recovery_tool
+        .params
+        .add_and_bless_upgrade_version
+        .map(|b| format!("--add-and-bless-upgrade-version {b} "))
+        .unwrap_or_default();
+    let maybe_replay_until_height = subnet_recovery_tool
+        .params
+        .replay_until_height
+        .map(|h| format!("--replay-until-height {h} "))
         .unwrap_or_default();
     let maybe_download_pool_node = subnet_recovery_tool
         .params
@@ -677,9 +733,10 @@ fn local_recovery(
         nns-recovery-same-nodes \
         --subnet-id {subnet_id} \
         {maybe_upgrade_version}\
-        {maybe_replay_until_height}\
         {maybe_upgrade_image_url}\
         {maybe_upgrade_image_hash}\
+        {maybe_add_and_bless_upgrade_version}\
+        {maybe_replay_until_height}\
         {maybe_download_pool_node}\
         --admin-access-location local \
         {maybe_keep_downloaded_state}\

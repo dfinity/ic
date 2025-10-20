@@ -174,7 +174,6 @@ pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
         InfraProvider::Farm => deployed_universal_vm
             .block_on_ipv4()
             .expect("Universal VM IPv4 not found."),
-        InfraProvider::K8s => deployed_universal_vm.get_vm().unwrap().ipv4.unwrap(),
     }
 }
 
