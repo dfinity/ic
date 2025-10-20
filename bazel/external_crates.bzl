@@ -242,7 +242,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.3.6",
             ),
             "async-trait": crate.spec(
-                version = "^0.1.83",
+                version = "^0.1.89",
             ),
             "axum": crate.spec(
                 version = "^0.8.4",
