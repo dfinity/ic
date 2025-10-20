@@ -37,7 +37,7 @@ use reqwest::{StatusCode, Url};
 use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{File, read_dir};
+use std::fs::read_dir;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -178,19 +178,6 @@ impl PocketIc {
             )
             .expect("Failed to copy state directory");
         };
-
-        // now that we initialized the state dir, we check if it contains a topology file
-        let has_topology = state_dir
-            .as_ref()
-            .map(|state_dir| File::open(state_dir.state_dir().join("topology.json")).is_ok())
-            .unwrap_or_default();
-
-        // if there is no topology to fetch from the state dir,
-        // the topology will be derived from the provided subnet config set
-        // that we need to validate
-        if !has_topology {
-            subnet_config_set.validate().unwrap();
-        }
 
         let instance_config = InstanceConfig {
             subnet_config_set,
