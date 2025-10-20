@@ -101,8 +101,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.get_max_payload_slot_size_bytes(Slot::Ingress, &subnet_records.context_version);
 
         let mut batch_payload = BatchPayload::default();
-
-        let mut accumulated_size = SlotCounter::<NumBytes>::default();
+        let mut accumulated_size = SlotCounter::default();
 
         for (priority, section_id) in section_select.into_iter().enumerate() {
             let slot = self.section_builder[section_id].slot();
@@ -115,7 +114,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
                 }
             };
 
-            let section_size = self.section_builder[section_id].build_payload(
+            *accumulated_size.get_mut(slot) += self.section_builder[section_id].build_payload(
                 &mut batch_payload,
                 height,
                 &ProposalContext {
@@ -128,8 +127,6 @@ impl PayloadBuilder for PayloadBuilderImpl {
                 &self.metrics,
                 &self.logger,
             );
-
-            *accumulated_size.get_mut(slot) += section_size;
         }
 
         self.metrics
@@ -158,7 +155,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let max_ingress_payload_size =
             self.get_max_payload_slot_size_bytes(Slot::Ingress, &subnet_record);
 
-        let mut accumulated_size = SlotCounter::<NumBytes>::default();
+        let mut accumulated_size = SlotCounter::default();
         for builder in &self.section_builder {
             *accumulated_size.get_mut(builder.slot()) +=
                 builder.validate_payload(height, batch_payload, proposal_context, past_payloads)?;
@@ -255,27 +252,27 @@ impl PayloadBuilderImpl {
 }
 
 #[derive(Default)]
-struct SlotCounter<T> {
-    rest: T,
-    ingress: T,
+struct SlotCounter {
+    rest: NumBytes,
+    ingress: NumBytes,
 }
 
-impl<T: Copy + std::ops::Add<Output = T>> SlotCounter<T> {
-    fn get(&self, slot: Slot) -> T {
+impl SlotCounter {
+    fn get(&self, slot: Slot) -> NumBytes {
         match slot {
             Slot::Ingress => self.ingress,
             Slot::Rest => self.rest,
         }
     }
 
-    fn get_mut(&mut self, slot: Slot) -> &mut T {
+    fn get_mut(&mut self, slot: Slot) -> &mut NumBytes {
         match slot {
             Slot::Ingress => &mut self.ingress,
             Slot::Rest => &mut self.rest,
         }
     }
 
-    fn total(&self) -> T {
+    fn total(&self) -> NumBytes {
         self.rest + self.ingress
     }
 }
