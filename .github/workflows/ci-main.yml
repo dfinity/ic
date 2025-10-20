@@ -164,23 +164,15 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }, {
-              "name": "Test",
-              "output_id": "test_id",
-            }]
+
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-test-all
+          invocation-names: |
+            build
+            test
           run: |
             set -euo pipefail
 
@@ -228,7 +220,6 @@ jobs:
 
             bazel_do() {
               bazel_cmd="$1"
-              invocation_id="$2"
 
               "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
@@ -254,11 +245,11 @@ jobs:
 
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
             }
 
-            bazel_do build "${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
-            bazel_do test "${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
+            bazel_do build
+            bazel_do test
 
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
@@ -281,38 +272,32 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }
-            ${{ needs.config.outputs.full_macos_build == 'true' && ', { "name": "Test", "output_id": "test_id" }' || '' }}
-            ]
-
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
         uses: ./.github/actions/bazel
         with:
+          invocation-names: eval
           run: |
             bazel build \
               --config=stamped \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" \
               --build_tag_filters=test_all_platforms \
               //... --nobuild
+
+            # make sure the artifacts always evaluate successfully even if we don't
+            # upload them
+            bazel build \
+              --config=stamped \
+              //:upload-artifacts --nobuild
 
       - name: Build & Test
         if: ${{ needs.config.outputs.full_macos_build == 'true' }}
         uses: ./.github/actions/bazel
         with:
+          invocation-names: build
           run: |
             bazel test \
               --config=stamped \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=test_all_platforms \
               //...
 
@@ -354,14 +339,7 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
-      # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
-      # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
-      - name: Install lld
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo apt install lld
-
-      - name: Build PocketIC server to publish
+      - name: Build and Test
         run: |
           bazel \
             --noworkspace_rc \
@@ -467,10 +445,12 @@ jobs:
       - name: Run Libfuzzer targets
         uses: ./.github/actions/bazel
         with:
+          invocation-names: libfuzzer
           run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
       - name: Run AFL targets
         uses: ./.github/actions/bazel
         with:
+          invocation-names: afl
           run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
@@ -511,15 +491,6 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }]
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -531,8 +502,6 @@ jobs:
             DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
             BASE_SHA='${{ github.event.pull_request.base.sha }}'
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
-
-            export BAZEL_BUILD_INVOCATION_ID="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}"
 
             cd "$CI_PROJECT_DIR"
 
@@ -651,19 +620,10 @@ jobs:
     timeout-minutes: 90
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Build",
-              "output_id": "build_id",
-            }]
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
-          run: bazel build --config=stamped --config=local --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).build_id }}" //...
+          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   cargo-linux:

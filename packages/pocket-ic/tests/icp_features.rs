@@ -63,6 +63,7 @@ fn all_icp_features() -> IcpFeatures {
         sns: Some(IcpFeaturesConfig::DefaultConfig),
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
+        bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }
 

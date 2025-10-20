@@ -50,6 +50,7 @@ icp-ledger = { path = "../ledger_suite/icp" }
 mockall = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }

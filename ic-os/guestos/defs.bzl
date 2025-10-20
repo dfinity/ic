@@ -55,6 +55,7 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/release:metrics_tool": "/opt/ic/bin/metrics_tool:0755",  # Collects and reports custom metrics.
             "//rs/ic_os/sev:sev_active": "/opt/ic/bin/sev_active:0755",  # Tool for querying the SEV activation status
             "//rs/ic_os/remote_attestation/server": "/opt/ic/bin/remote_attestation_server:0755",  # Remote Attestation service
+            "//rs/ic_os/guest_upgrade/client": "/opt/ic/bin/guest_upgrade_client:0755",  # Disk encryption key exchange client
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
@@ -103,6 +104,10 @@ def image_deps(mode, malicious = False):
         # Dev config tool
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+
+        # Dev guest_upgrade client
+        deps["rootfs"].pop("//rs/ic_os/guest_upgrade/client", None)
+        deps["rootfs"].update({"//rs/ic_os/guest_upgrade/client:client_dev": "/opt/ic/bin/guest_upgrade_client:0755"})
 
     # Update recovery component_files
     # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile

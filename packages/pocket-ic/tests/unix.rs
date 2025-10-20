@@ -209,6 +209,7 @@ impl HttpServer {
         // Bind to port 0 (OS assigns a free port)
         let listener = TcpListener::bind(format!("{bind_addr}:0")).expect("Failed to bind");
 
+        // We use non-blocking mode here to gracefully shutdown if `flag` becomes `false`.
         listener.set_nonblocking(true).unwrap();
 
         // Extract the assigned bind address
@@ -219,6 +220,8 @@ impl HttpServer {
             while flag_in_thread.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((stream, _)) => {
+                        // Convert this connection to blocking mode.
+                        stream.set_nonblocking(false).unwrap();
                         handle_connection(stream);
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
