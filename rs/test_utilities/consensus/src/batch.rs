@@ -2,7 +2,6 @@ use ic_base_types::NumBytes;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::PayloadValidationError,
-    ingress_manager::IngressSelector,
     validation::ValidationResult,
 };
 use ic_types::{
@@ -10,34 +9,6 @@ use ic_types::{
     batch::{ValidationContext, iterator_to_bytes},
 };
 use mockall::*;
-
-mock! {
-   pub IngressSelector {}
-
-   impl IngressSelector for IngressSelector {
-     fn get_ingress_payload(
-         &self,
-         past_ingress: &dyn ic_interfaces::ingress_manager::IngressSetQuery,
-         context: &ValidationContext,
-         byte_limit: NumBytes,
-     ) -> ic_types::batch::IngressPayload;
-
-     fn validate_ingress_payload(
-         &self,
-         payload: &ic_types::batch::IngressPayload,
-         past_ingress: &dyn ic_interfaces::ingress_manager::IngressSetQuery,
-         context: &ValidationContext,
-     ) -> ValidationResult<ic_interfaces::ingress_manager::IngressPayloadValidationError>;
-
-     fn filter_past_payloads(
-         &self,
-         past_payloads: &[(Height, ic_types::Time, ic_types::consensus::Payload)],
-         context: &ValidationContext,
-     ) -> ic_types::ingress::IngressSets;
-
-     fn request_purge_finalized_messages(&self, message_ids: Vec<ic_types::artifact::IngressMessageId>);
-   }
-}
 
 mock! {
     pub BatchPayloadBuilder {}

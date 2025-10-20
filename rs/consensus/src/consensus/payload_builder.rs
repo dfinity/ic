@@ -609,29 +609,22 @@ pub(crate) mod test {
                 }),
             );
 
+            let validation_result = payload_builder.validate_payload(
+                Height::from(1),
+                &proposal_context,
+                &payload,
+                &prev_payloads,
+            );
+
             match expected_hard_error {
                 Some(slot) => assert_matches!(
-                    payload_builder.validate_payload(
-                        Height::from(1),
-                        &proposal_context,
-                        &payload,
-                        &prev_payloads
-                    ),
+                    validation_result,
                     Err(ValidationError::InvalidArtifact(
                         InvalidPayloadReason::PayloadTooBig { slot_name, .. }
                     )) if slot_name == slot
                 ),
                 None => {
-                    assert!(
-                        payload_builder
-                            .validate_payload(
-                                Height::from(1),
-                                &proposal_context,
-                                &payload,
-                                &prev_payloads,
-                            )
-                            .is_ok(),
-                    );
+                    assert!(validation_result.is_ok());
                 }
             }
 
