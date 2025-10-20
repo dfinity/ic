@@ -99,27 +99,6 @@ pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
 
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
-#[derive(Clone, Debug, Deserialize, serde::Serialize)]
-pub enum PriorityLogEntry {
-    P0,
-    P1,
-}
-
-#[derive(Clone, Debug, Deserialize, serde::Serialize)]
-pub struct LogEntry {
-    pub timestamp: u64,
-    pub priority: PriorityLogEntry,
-    pub file: String,
-    pub line: u32,
-    pub message: String,
-    pub counter: u64,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, serde::Serialize)]
-pub struct Log {
-    pub entries: Vec<LogEntry>,
-}
-
 #[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct MinterInfo {
     pub min_confirmations: u32,

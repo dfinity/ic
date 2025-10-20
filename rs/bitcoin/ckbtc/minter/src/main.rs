@@ -24,7 +24,7 @@ use ic_ckbtc_minter::{IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
     logs::Priority,
     state::eventlog::{EventType, GetEventsArg},
-    storage, {Log, LogEntry},
+    storage,
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
@@ -277,7 +277,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             .with_body_and_content_length(dashboard)
             .build()
     } else if req.path() == "/logs" {
-        use serde_json;
+        use canlog::{Log, Sort};
 
         let max_skip_timestamp = match req.raw_query_param("time") {
             Some(arg) => match u64::from_str(arg) {
@@ -291,33 +291,44 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             None => 0,
         };
 
-        let mut entries: Log = Default::default();
-        for entry in export_logs(&ic_ckbtc_minter::logs::P0) {
-            entries.entries.push(LogEntry {
-                timestamp: entry.timestamp,
-                counter: entry.counter,
-                priority: Priority::P0,
-                file: entry.file.to_string(),
-                line: entry.line,
-                message: entry.message,
-            });
+        let mut log: Log<Priority> = Default::default();
+
+        match req.raw_query_param("priority").map(Priority::from_str) {
+            Some(Ok(priority)) => match priority {
+                Priority::P0 => log.push_logs(Priority::P0),
+                Priority::P1 => log.push_logs(Priority::P1),
+            },
+            Some(Err(_)) | None => {
+                log.push_logs(Priority::P0);
+                log.push_logs(Priority::P1);
+            }
         }
-        for entry in export_logs(&ic_ckbtc_minter::logs::P1) {
-            entries.entries.push(LogEntry {
-                timestamp: entry.timestamp,
-                counter: entry.counter,
-                priority: Priority::P1,
-                file: entry.file.to_string(),
-                line: entry.line,
-                message: entry.message,
-            });
-        }
-        entries
-            .entries
+
+        log.entries
             .retain(|entry| entry.timestamp >= max_skip_timestamp);
+
+        fn ordering_from_query_params(sort: Option<&str>, max_skip_timestamp: u64) -> Sort {
+            match sort.map(Sort::from_str) {
+                Some(Ok(order)) => order,
+                Some(Err(_)) | None => {
+                    if max_skip_timestamp == 0 {
+                        Sort::Ascending
+                    } else {
+                        Sort::Descending
+                    }
+                }
+            }
+        }
+
+        log.sort_logs(ordering_from_query_params(
+            req.raw_query_param("sort"),
+            max_skip_timestamp,
+        ));
+
+        const MAX_BODY_SIZE: usize = 2_000_000;
         HttpResponseBuilder::ok()
             .header("Content-Type", "application/json; charset=utf-8")
-            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
+            .with_body_and_content_length(log.serialize_logs(MAX_BODY_SIZE))
             .build()
     } else {
         HttpResponseBuilder::not_found().build()

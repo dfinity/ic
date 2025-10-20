@@ -26,7 +26,7 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    CKBTC_LEDGER_MEMO_SIZE, Log, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RELAY_FEE_PER_VBYTE,
+    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RELAY_FEE_PER_VBYTE,
     MIN_RESUBMISSION_DELAY, MinterInfo, Network, REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
     UTXOS_COUNT_THRESHOLD,
 };

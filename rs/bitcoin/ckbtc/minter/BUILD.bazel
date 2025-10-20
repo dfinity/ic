@@ -95,6 +95,7 @@ alias(
         deps = [
             # Keep sorted.
             ":ckbtc_minter_lib",
+            "//packages/canlog",
             "//packages/ic-dummy-getrandom-for-wasm",
             "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -303,10 +304,10 @@ rust_canbench(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib-canbench",
+        "//packages/canlog",
         "//packages/ic-dummy-getrandom-for-wasm",
         "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rust_canisters/canister_log",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
