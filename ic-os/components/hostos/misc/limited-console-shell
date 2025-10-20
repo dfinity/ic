@@ -70,13 +70,6 @@ execute_command() {
             echo "Traceroute to 8.8.8.8 (first 10 hops):"
             traceroute -m 10 8.8.8.8 2>/dev/null || echo "Traceroute not available"
             echo ""
-            # Check if mtr is available
-            if command -v mtr >/dev/null 2>&1; then
-                echo "MTR to 8.8.8.8 (5 packets):"
-                mtr -r -c 5 8.8.8.8 2>/dev/null || echo "MTR failed"
-            else
-                echo "MTR not available"
-            fi
             ;;
         "network-settings")
             echo "=== Network Settings from Config ==="
