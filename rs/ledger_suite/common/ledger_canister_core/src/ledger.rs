@@ -429,6 +429,11 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
     )
     .await;
 
+    // FIXME: Increment archiving_failed metric on error.
+    if let Err((_num, err)) = &result {
+        ic_cdk::println!("Ledger archive blocks error: {:?}", err.0);
+    }
+
     remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, result)
 }
 

@@ -5129,7 +5129,7 @@ pub mod archiving {
     use ic_ledger_canister_core::archive::DEFAULT_CYCLES_FOR_ARCHIVE_CREATION;
     use ic_ledger_canister_core::ledger::MAX_BLOCKS_TO_ARCHIVE;
     use ic_ledger_canister_core::range_utils;
-    use ic_ledger_suite_state_machine_helpers::icrc3_get_blocks;
+    use ic_ledger_suite_state_machine_helpers::{get_logs, icrc3_get_blocks};
     use ic_state_machine_tests::StateMachineBuilder;
     use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::messages::MessageId;
@@ -5235,8 +5235,7 @@ pub mod archiving {
         const NUM_BLOCKS_TO_ARCHIVE: usize = 1_000;
         const NUM_INITIAL_BALANCES: u64 = 70_000;
         const TRIGGER_THRESHOLD: usize = 2_000;
-        const EXPECTED_CREATE_CANISTER_ERROR: &str =
-            "only 0 cycles were received with the create_canister request";
+        const EXPECTED_CREATE_CANISTER_ERROR: &str = "only 0 cycles were provided";
         let p1 = PrincipalId::new_user_test_id(1);
         let p2 = PrincipalId::new_user_test_id(2);
         let archive_controller = PrincipalId::new_user_test_id(1_000_000);
@@ -5309,10 +5308,12 @@ pub mod archiving {
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
         // Verify that the expected create_canister error was logged.
-        let logs = env.canister_log(ledger_id);
+        let logs = parse_ledger_logs(&get_logs(&env, ledger_id));
         let mut create_canister_error_found = false;
-        for entry in logs.records() {
-            let log_message = String::from_utf8(entry.content.clone()).unwrap();
+        println!("Ledger log entries found: {}", logs.entries.len());
+        for entry in &logs.entries {
+            let log_message = &entry.message;
+            println!("Ledger log message: {}", log_message);
             if log_message.contains(EXPECTED_CREATE_CANISTER_ERROR) {
                 create_canister_error_found = true;
                 break;
@@ -5320,8 +5321,9 @@ pub mod archiving {
         }
         assert!(
             create_canister_error_found,
-            "No error log message containing '{}' was found in the ledger logs",
-            EXPECTED_CREATE_CANISTER_ERROR
+            "No error log message containing '{}' was found in {} ledger logs",
+            EXPECTED_CREATE_CANISTER_ERROR,
+            logs.entries.len()
         );
     }
 
@@ -6210,6 +6212,43 @@ pub mod archiving {
                 panic!("Unexpected ingress status: {s:?}");
             }
         }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LogEntry {
+        pub timestamp: u64,
+        pub file: String,
+        pub line: u32,
+        pub message: String,
+    }
+
+    #[derive(Clone, Debug, Default)]
+    pub struct Log {
+        pub entries: Vec<LogEntry>,
+    }
+
+    /// Parse ledger logs into a Log struct.
+    /// Example log line:
+    /// 1620328630000000031 rs/ledger_suite/common/ledger_canister_core/src/ledger.rs:456 [ledger] archiving 1000 blocks
+    pub fn parse_ledger_logs(logs: &Vec<u8>) -> Log {
+        let logs_as_single_string = String::from_utf8_lossy(logs).to_string();
+        let mut entries = vec![];
+        for line in logs_as_single_string.lines() {
+            let parts: Vec<&str> = line.splitn(3, ' ').collect();
+            assert_eq!(parts.len(), 3, "log line has insufficient parts: {}", line);
+            let timestamp = parts[0].parse::<u64>().unwrap_or(0);
+            let file_and_line_parts: Vec<&str> = parts[1].split(':').collect();
+            let file = file_and_line_parts[0].to_string();
+            let line_num = file_and_line_parts[1].parse::<u32>().unwrap_or(0);
+            let message = parts[2].to_string();
+            entries.push(LogEntry {
+                timestamp,
+                file,
+                line: line_num,
+                message,
+            });
+        }
+        Log { entries }
     }
 }
 

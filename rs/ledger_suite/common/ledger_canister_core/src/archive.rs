@@ -14,6 +14,8 @@ use ic_ledger_core::block::EncodedBlock;
 
 /// 10 trillion cycles.
 pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
+/// The minimum cycles that the ledger must have left after creating an archive canister.
+pub const MIN_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
 
 fn default_cycles_for_archive_creation() -> u64 {
     0
@@ -354,6 +356,55 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         )
     });
 
+    // The [cost of creating a canister](https://internetcomputer.org/docs/references/cycles-cost-formulas#cycles-price-breakdown)
+    // can change over time, and depends on the subnet size. At the time of writing, the cost is
+    // 500_000_000_000 for a subnet of size 13, and 1_307_692_307_692 for a subnet of size 34.
+    let cost_create_canister = ic_cdk::api::cost_create_canister();
+
+    // If the cost to create a canister is 0, assume we are running on a system subnet, in which
+    // case subsequent checks are unnecessary.
+    if cost_create_canister != 0u128 {
+        let ledger_liquid_cycles_balance = ic_cdk::api::canister_liquid_cycle_balance();
+
+        if (cycles_for_archive_creation as u128) < cost_create_canister {
+            return Err(FailedToArchiveBlocks(format!(
+                "Archiving options do not provide enough cycles to create archive canister. \
+            Needed at least {} cycles to create the canister, \
+            but only {} cycles were provided.",
+                cost_create_canister, cycles_for_archive_creation
+            )));
+        }
+
+        if ledger_liquid_cycles_balance < cost_create_canister {
+            return Err(FailedToArchiveBlocks(format!(
+                "Not enough liquid cycles in the ledger to create archive canister. \
+            Needed at least {} cycles to create the canister, \
+            but only have {} cycles.",
+                cost_create_canister, ledger_liquid_cycles_balance
+            )));
+        }
+
+        let ledger_liquid_cycles_after_archive_creation =
+            ledger_liquid_cycles_balance.saturating_sub(cycles_for_archive_creation as u128);
+        if ledger_liquid_cycles_after_archive_creation < MIN_CYCLES_AFTER_ARCHIVE_CREATION {
+            return Err(FailedToArchiveBlocks(format!(
+                "Not enough liquid cycles in the ledger to create archive canister. \
+            Needed at least {} cycles remaining after creation, \
+            but only have {} cycles (cycles for archive creation: {}, canister creation cost: {}).",
+                MIN_CYCLES_AFTER_ARCHIVE_CREATION,
+                ledger_liquid_cycles_balance,
+                cycles_for_archive_creation,
+                cost_create_canister
+            )));
+        }
+    }
+
+    // Try to create a new canister for the archive node. Note that this will implicitly panic if:
+    // - `cycles_for_archive_creation` is enough to create a canister, but
+    // - the ledger does not have enough (liquid) cycles to attach to the call.
+    // Panicking leads to the rolling back of the transaction that triggered the archiving, and no
+    // more transactions will be processed by the ledger until it has been topped up with enough
+    // cycles to spawn the archive canister.
     let node_canister_id: CanisterId = spawn::create_canister::<Rt>(cycles_for_archive_creation)
         .await
         .map_err(|(code, msg)| FailedToArchiveBlocks(format!("{code} {msg}")))?;
