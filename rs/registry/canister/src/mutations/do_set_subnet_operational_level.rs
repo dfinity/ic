@@ -198,7 +198,7 @@ fn modify_node_record_for_set_subnet_operational_level(
     ssh_node_state_write_access
         .unwrap_or_default() // Treat None the same as Some(vec![])
         .into_iter()
-        .map(|node_ssh_access| {
+        .filter_map(|node_ssh_access| {
             let NodeSshAccess {
                 node_id,
                 public_keys,
@@ -207,19 +207,19 @@ fn modify_node_record_for_set_subnet_operational_level(
             // Assuming validate_set_subnet_operational_level is correct,
             // these unwraps will not panic.
             let node_id = node_id.unwrap();
+            let public_keys = public_keys.unwrap();
 
             let mut node_record = node_record_fetcher(node_id);
 
-            node_record.ssh_node_state_write_access = public_keys.unwrap_or_default();
+            if node_record.ssh_node_state_write_access == public_keys {
+                return None;
+            }
 
-            // This could be skipped if the original value of
-            // ssh_node_state_write_access == public_keys, but for simplicity,
-            // we just "brute force" it, i.e. create a mutation for every
-            // element, even if it's not really needed.
-            update(
+            node_record.ssh_node_state_write_access = public_keys;
+            Some(update(
                 make_node_record_key(node_id).into_bytes(),
                 node_record.encode_to_vec(),
-            )
+            ))
         })
         .collect()
 }
