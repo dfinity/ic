@@ -14,14 +14,13 @@ show_menu() {
     echo "4. view-logs          - View service logs"
     echo "5. network-interfaces - Show network interfaces"
     echo "6. network-routing    - Show routing table"
-    echo "7. network-dns        - Show DNS configuration"
-    echo "8. network-connectivity - Test network connectivity"
-    echo "9. network-settings   - Show network settings from config"
-    echo "10. guestos-logs      - Show last 50 lines of guestos serial log"
-    echo "11. config-json       - Show /boot/config/config.json"
-    echo "12. failed-services   - Show failed services"
-    echo "13. clear             - Clear the console"
-    echo "14. exit              - Exit console"
+    echo "7. network-connectivity - Test network connectivity"
+    echo "8. network-settings   - Show network settings from config"
+    echo "9. guestos-logs      - Show last 50 lines of guestos serial log"
+    echo "10. config-json       - Show /boot/config/config.json"
+    echo "11. failed-services   - Show failed services"
+    echo "12. clear             - Clear the console"
+    echo "13. exit              - Exit console"
     echo ""
 }
 
@@ -58,15 +57,12 @@ execute_command() {
             echo "=== Routing Table ==="
             ip route show
             ;;
-        "network-dns")
-            echo "=== DNS Configuration ==="
-            cat /etc/resolv.conf
-            ;;
         "network-connectivity")
             echo "=== Network Connectivity Tests ==="
             echo "Testing connectivity to 8.8.8.8..."
             ping -c 3 8.8.8.8 2>/dev/null || echo "Ping to 8.8.8.8 failed"
             echo ""
+            # TODO: add traceroute to HostOS
             echo "Traceroute to 8.8.8.8 (first 10 hops):"
             traceroute -m 10 8.8.8.8 2>/dev/null || echo "Traceroute not available"
             echo ""
