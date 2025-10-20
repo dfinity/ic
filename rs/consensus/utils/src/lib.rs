@@ -459,6 +459,13 @@ pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option
         .min()
 }
 
+// Calculate the number of heights in the given range
+pub fn range_len(start: Height, end: Height) -> usize {
+    end.get()
+        .saturating_sub(start.get())
+        .saturating_add((start <= end) as u64) as usize
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;

@@ -9,11 +9,7 @@ use crate::consensus::{
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
-    RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
-    crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version,
-    membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, crypto::ConsensusCrypto, get_oldest_idkg_state_registry_version, membership::{Membership, MembershipError}, pool_reader::PoolReader, range_len, RoundRobin
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -86,6 +82,7 @@ enum ValidationFailure {
     FailedToGetRegistryVersion,
     ValidationContextNotReached(ValidationContext, ValidationContext),
     CatchUpHeightNegligible,
+    MissingPastPayloads,
 }
 
 /// Possible reasons for invalid artifacts.
@@ -1260,10 +1257,23 @@ impl Validator {
         }
 
         // Below are all the payload validations
-        let payloads = pool_reader.get_payloads_from_height(
-            proposal.context.certified_height.increment(),
-            parent.clone(),
-        );
+        let start_height = proposal.context.certified_height.increment();
+        let past_payloads = pool_reader.get_payloads_from_height(start_height, parent.clone());
+
+        // Defer validation if there are some past payloads missing
+        let expected_len = range_len(start_height, parent.height);
+        if past_payloads.len() != expected_len {
+            warn!(
+                every_n_seconds => 10,
+                self.log,
+                "Missing past payloads when attempting to validate batch payload at height {}. \
+                Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
+                proposal.height(), proposal.context.certified_height, expected_len, past_payloads.len()
+            );
+            return Err(ValidationError::ValidationFailed(
+                ValidationFailure::MissingPastPayloads,
+            ));
+        }
 
         self.payload_builder
             .validate_payload(
@@ -1273,7 +1283,7 @@ impl Validator {
                     validation_context: &proposal.context,
                 },
                 &proposal.payload,
-                &payloads,
+                &past_payloads,
             )
             .map_err(|err| {
                 err.map(

@@ -8,7 +8,7 @@ use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
-    get_subnet_record, membership::Membership, pool_reader::PoolReader,
+    get_subnet_record, membership::Membership, pool_reader::PoolReader, range_len,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -425,8 +425,28 @@ impl BlockMaker {
         parent: &Block,
         subnet_records: &SubnetRecords,
     ) -> BatchPayload {
-        let past_payloads =
-            pool.get_payloads_from_height(context.certified_height.increment(), parent.clone());
+        let start_height = context.certified_height.increment();
+        let past_payloads = pool.get_payloads_from_height(start_height, parent.clone());
+
+        // If there are some past payloads missing, propose an empty payload instead
+        let expected_len = range_len(start_height, parent.height);
+        if past_payloads.len() != expected_len {
+            self.metrics
+                .get_payload_calls
+                .with_label_values(&["error"])
+                .inc();
+            error!(
+                self.log,
+                "Missing past payloads when attempting to build new batch payload at height {}. \
+                Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
+                height,
+                context.certified_height,
+                expected_len,
+                past_payloads.len()
+            );
+            return BatchPayload::default();
+        }
+
         let payload =
             self.payload_builder
                 .get_payload(height, &past_payloads, context, subnet_records);
