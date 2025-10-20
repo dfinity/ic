@@ -424,7 +424,10 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
     assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
 
     // Expire the callback.
-    fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX));
+    assert_eq!(
+        (1, Vec::new()),
+        fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX))
+    );
 
     // A few rounds later, have the running call context produce a response.
     fixture.push_output_response(response);
@@ -434,6 +437,7 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
     assert!(!fixture.system_state.queues().has_output());
 
     // Pop the timeout reject response and execute it (consuming the callback).
+    // The late response was silently dropped, as a duplicate.
     assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(resp)) if resp.response_payload == Payload::Reject(RejectContext::new(RejectCode::SysUnknown, "Call deadline has expired.")));
     assert_matches!(
         fixture.system_state.unregister_callback(callback),
