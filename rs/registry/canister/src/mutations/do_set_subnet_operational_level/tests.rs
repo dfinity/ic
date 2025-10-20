@@ -125,32 +125,37 @@ fn test_set_subnet_operational_level() {
 }
 
 #[test]
-#[should_panic(expected = "WE ARE AT THE END OF THE TEST")]
 fn test_validate_operational_level_ok() {
-    validate_operational_level(None);
+    validate_operational_level(None).unwrap();
 
-    validate_operational_level(Some(operational_level::NORMAL));
-    validate_operational_level(Some(operational_level::DOWN_FOR_REPAIRS));
+    validate_operational_level(Some(operational_level::NORMAL)).unwrap();
+    validate_operational_level(Some(operational_level::DOWN_FOR_REPAIRS)).unwrap();
 
     for code in operational_level::ALL_VALID_CODES {
-        validate_operational_level(Some(code));
+        validate_operational_level(Some(code)).unwrap();
     }
-
-    panic!("WE ARE AT THE END OF THE TEST");
 }
 
 #[test]
-#[should_panic(expected = "operational_level")]
 fn test_validate_operational_level_zero() {
-    validate_operational_level(Some(0));
+    let result = validate_operational_level(Some(0));
+
+    match result {
+        Ok(()) => panic!("Err not returned"),
+        Err(err) => assert!(err.contains("operational_level")),
+    }
 }
 
 #[test]
-#[should_panic(expected = "not one of the allowed values")]
 fn test_validate_operational_level_garbage() {
     let garbage = 6;
     assert!(!operational_level::ALL_VALID_CODES.contains(&garbage));
-    validate_operational_level(Some(garbage));
+    let result = validate_operational_level(Some(garbage));
+
+    match result {
+        Ok(()) => panic!("Err not returned"),
+        Err(err) => assert!(err.contains("not one of the allowed values")),
+    }
 }
 
 lazy_static! {
@@ -170,38 +175,46 @@ lazy_static! {
 }
 
 #[test]
-#[should_panic(expected = "WE ARE AT THE END OF THE TEST")]
 fn test_validate_ssh_node_state_write_access_ok() {
-    validate_ssh_node_state_write_access(&None);
-    validate_ssh_node_state_write_access(&Some(vec![]));
-
-    validate_ssh_node_state_write_access(&Some(GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone()));
-
-    panic!("WE ARE AT THE END OF THE TEST");
+    validate_ssh_node_state_write_access(&None).unwrap();
+    validate_ssh_node_state_write_access(&Some(vec![])).unwrap();
+    validate_ssh_node_state_write_access(&Some(GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone())).unwrap();
 }
 
 #[test]
-#[should_panic(expected = "unique")]
 fn test_validate_ssh_node_state_write_access_not_unique() {
     let mut ssh_node_state_write_access = GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone();
     ssh_node_state_write_access.push(ssh_node_state_write_access.get(0).unwrap().clone());
-    validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+    let result = validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+
+    match result {
+        Ok(()) => panic!("Err not returned"),
+        Err(err) => assert!(err.contains("unique")),
+    }
 }
 
 #[test]
-#[should_panic(expected = "node_id")]
 fn test_validate_ssh_node_state_write_access_missing_node_id() {
     let mut ssh_node_state_write_access = GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone();
     ssh_node_state_write_access.get_mut(0).unwrap().node_id = None;
-    validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+    let result = validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+
+    match result {
+        Ok(()) => panic!("Err not returned"),
+        Err(err) => assert!(err.contains("node_id")),
+    }
 }
 
 #[test]
-#[should_panic(expected = "public_keys")]
 fn test_validate_ssh_node_state_write_access_missing_public_keys() {
     let mut ssh_node_state_write_access = GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone();
     ssh_node_state_write_access.get_mut(0).unwrap().public_keys = None;
-    validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+    let result = validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
+
+    match result {
+        Ok(()) => panic!("Err not returned"),
+        Err(err) => assert!(err.contains("public_keys")),
+    }
 }
 
 lazy_static! {
@@ -313,9 +326,8 @@ fn test_validate_payload_no_nothing_ok() {
 }
 
 #[test]
-#[should_panic(expected = "operational_level")]
 fn test_validate_payload_no_subnet_but_operational_level() {
-    REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
+    let result = REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
         subnet_id: None,
         operational_level: Some(operational_level::NORMAL),
         ssh_readonly_access: None,
@@ -327,13 +339,15 @@ fn test_validate_payload_no_subnet_but_operational_level() {
     });
 
     // Step 3: Verify results.
-    // Actually, the assertion appears at the top: should_panic...
+    match result {
+        Ok(()) => panic!("Err not returned"),
+        Err(err) => assert!(err.contains("operational_level")),
+    }
 }
 
 #[test]
-#[should_panic(expected = "ssh_readonly_access")]
 fn test_validate_payload_no_subnet_but_ssh_readonly_access() {
-    REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
+    let result = REGISTRY.validate_set_subnet_operational_level(&SetSubnetOperationalLevelPayload {
         subnet_id: None,
         operational_level: None,
         ssh_readonly_access: Some(vec!["hello".to_string()]),
@@ -343,4 +357,9 @@ fn test_validate_payload_no_subnet_but_ssh_readonly_access() {
             public_keys: Some(vec!["fake node state write public key".to_string()]),
         }]),
     });
+
+    match result {
+        Ok(()) => panic!("Err not returned"),
+        Err(err) => assert!(err.contains("ssh_readonly_access")),
+    }
 }
