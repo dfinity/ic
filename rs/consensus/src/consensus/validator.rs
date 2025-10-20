@@ -9,7 +9,12 @@ use crate::consensus::{
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, crypto::ConsensusCrypto, get_oldest_idkg_state_registry_version, membership::{Membership, MembershipError}, pool_reader::PoolReader, range_len, RoundRobin
+    RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
+    crypto::ConsensusCrypto,
+    get_oldest_idkg_state_registry_version,
+    membership::{Membership, MembershipError},
+    pool_reader::PoolReader,
+    range_len,
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,

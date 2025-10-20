@@ -4,7 +4,7 @@ use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
-use ic_consensus_utils::{pool_reader::PoolReader, range_len, RoundRobin};
+use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader, range_len};
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
