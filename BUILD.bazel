@@ -96,6 +96,7 @@ alias(
     actual = select({
         "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
         "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_aarch64": "@bitcoin_core_linux_aarch64//:bitcoind",
         "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
     }),
 )
@@ -111,6 +112,17 @@ alias(
     actual = select({
         "@bazel_tools//src/conditions:linux_x86_64": "@dogecoin_core_linux_x86//:dogecoind",
         "//conditions:default": "//:dogecoind_stub",
+    }),
+)
+
+### rclone, used for uploading artifacts to S3-compatible storage
+
+alias(
+    name = "rclone",
+    actual = select({
+        "@platforms//os:osx": "@rclone-x86_64-darwin//:rclone",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@rclone-x86_64-linux//:rclone",
+        "//conditions:default": "@platforms//:incompatible",
     }),
 )
 

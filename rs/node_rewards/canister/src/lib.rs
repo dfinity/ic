@@ -5,7 +5,9 @@
 // 4. Structure makes boundaries clear and easy to enforce
 // 5. Simple Organization
 
+use crate::storage::NaiveDateStorable;
 use candid::Principal;
+use chrono::{Datelike, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_management_canister_types::NodeMetrics;
 use ic_stable_structures::Storable;
@@ -13,13 +15,14 @@ use ic_stable_structures::storable::Bound;
 use prost::Message;
 use std::borrow::Cow;
 
-pub mod api_conversion;
 pub mod canister;
+mod chrono_utils;
 pub mod metrics;
 pub mod pb;
 pub mod registry_querier;
 pub mod storage;
 pub mod telemetry;
+pub mod timer_tasks;
 
 // Maximum sizes for the storable types chosen as result of test `max_bound_size`
 const MAX_BYTES_SUBNET_ID_STORED: u32 = 33;
@@ -53,6 +56,28 @@ impl KeyRange for pb::v1::SubnetMetricsKey {
 }
 
 //------------ Storable Implementations ------------//
+
+impl Storable for NaiveDateStorable {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        // We'll store it as a 32-bit integer: number of days since a fixed epoch.
+        // NaiveDate stores dates internally as (year, ordinal_day), but we can easily
+        // reconstruct it from a serializable integer.
+        let days = self.0.num_days_from_ce();
+        Cow::Owned(days.to_be_bytes().to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut arr = [0u8; 4];
+        arr.copy_from_slice(&bytes);
+        let days = i32::from_be_bytes(arr);
+        Self(NaiveDate::from_num_days_from_ce_opt(days).unwrap())
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 4,
+        is_fixed_size: true,
+    };
+}
 
 impl Storable for pb::v1::SubnetIdKey {
     fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {

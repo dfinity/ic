@@ -7,7 +7,7 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg as dkg;
-use ic_consensus_idkg as idkg;
+use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
     RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -46,6 +46,7 @@ use ic_types::{
     state_manager::StateManagerError,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
+use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -682,6 +683,7 @@ pub struct Validator {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    thread_pool: Arc<ThreadPool>,
     log: ReplicaLogger,
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
@@ -700,6 +702,7 @@ impl Validator {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
@@ -713,6 +716,7 @@ impl Validator {
             state_manager,
             message_routing,
             dkg_pool,
+            thread_pool,
             log,
             metrics,
             schedule: RoundRobin::default(),
@@ -1282,6 +1286,7 @@ impl Validator {
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
+            self.thread_pool.as_ref(),
             pool_reader,
             self.state_manager.as_ref(),
             &proposal.context,
@@ -1913,7 +1918,9 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::block_maker::get_block_maker_delay;
+    use crate::consensus::{
+        MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -1921,6 +1928,7 @@ pub mod test {
         Dependencies, RefMockPayloadBuilder, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
@@ -1932,7 +1940,7 @@ pub mod test {
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
         fake::*,
@@ -2010,6 +2018,7 @@ pub mod test {
                 dependencies.state_manager.clone(),
                 message_routing.clone(),
                 dependencies.dkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,

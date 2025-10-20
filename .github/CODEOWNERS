@@ -84,7 +84,7 @@ go_deps.bzl               @dfinity/idx
 /ci/actions/dependencies/                                                @dfinity/product-security
 /ci/src/dependencies/                                                    @dfinity/product-security
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
-/ci/tools/repro-check                                                    @dfinity/dre
+/ci/scripts/repro-check                                                  @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
 /.mergify.yaml                                                           @dfinity/idx
@@ -132,6 +132,7 @@ go_deps.bzl               @dfinity/idx
 /rs/cycles_account_manager/                             @dfinity/execution
 /rs/depcheck/                                           @dfinity/ic-interface-owners
 /rs/determinism_test/                                   @dfinity/execution
+/rs/dogecoin/                                           @dfinity/cross-chain-team
 /rs/embedders/                                          @dfinity/execution
 /rs/ethereum/                                           @dfinity/cross-chain-team
 /rs/execution_environment/                              @dfinity/execution
@@ -149,6 +150,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
 /rs/interfaces/certified_stream_store/                  @dfinity/ic-message-routing-owners
+/rs/interfaces/mocks/src/payload_builder                @dfinity/consensus
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
@@ -273,7 +275,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/ledger_tests/                             @dfinity/finint
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint
 /rs/tests/src/rosetta_tests/                            @dfinity/finint
-/rs/tests/k8s/                                          @dfinity/idx @dfinity/node
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint

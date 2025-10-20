@@ -19,7 +19,7 @@ fn should_have_expected_size_for_initial_idkg_dealings() {
     /*
     subnet_size = 13
 
-    # by default assume sending and reciving subnet are same size
+    # by default assume sending and receiving subnet are same size
     dealers = subnet_size
     receivers = subnet_size
 

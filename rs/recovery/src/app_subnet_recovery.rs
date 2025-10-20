@@ -15,7 +15,7 @@ use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
-use std::{iter::Peekable, net::IpAddr};
+use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
@@ -124,7 +124,11 @@ pub struct AppSubnetRecoveryArgs {
 
     /// Public ssh key to be deployed to the subnet for read only access
     #[clap(long)]
-    pub pub_key: Option<String>,
+    pub readonly_pub_key: Option<String>,
+
+    /// The path to a file containing the private key associated with `readonly_pub_key`.
+    #[clap(long)]
+    pub readonly_key_file: Option<PathBuf>,
 
     /// The method of downloading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the source node.
@@ -225,8 +229,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
         // it.
         match step_type {
             StepType::Halt => {
-                if self.params.pub_key.is_none() {
-                    self.params.pub_key = read_optional(
+                if self.params.readonly_pub_key.is_none() {
+                    self.params.readonly_pub_key = read_optional(
                         &self.logger,
                         "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
                         Format:   ssh-ed25519 <pubkey> <identity>\n\
@@ -259,7 +263,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     );
                 }
 
-                if let Some(&DataLocation::Remote(_)) = self.params.download_method.as_ref() {
+                if self.params.keep_downloaded_state.is_none()
+                    && let Some(&DataLocation::Remote(_)) = self.params.download_method.as_ref()
+                {
                     self.params.keep_downloaded_state = Some(consent_given(
                         &self.logger,
                         "Preserve original downloaded state locally?",
@@ -306,13 +312,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::WaitForCUP => {
-                if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
-                    self.params.wait_for_cup_node = Some(ip);
-                } else {
-                    self.params.wait_for_cup_node = read_optional(
-                        &self.logger,
-                        "Enter IP of the node to be polled for the recovery CUP:",
-                    );
+                if self.params.wait_for_cup_node.is_none() {
+                    if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
+                        self.params.wait_for_cup_node = Some(ip);
+                    } else {
+                        self.params.wait_for_cup_node = read_optional(
+                            &self.logger,
+                            "Enter IP of the node to be polled for the recovery CUP:",
+                        );
+                    }
                 }
             }
 
@@ -323,7 +331,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
             StepType::Halt => {
-                let keys = if let Some(pub_key) = &self.params.pub_key {
+                let keys = if let Some(pub_key) = &self.params.readonly_pub_key {
                     vec![pub_key.clone()]
                 } else {
                     vec![]
@@ -336,11 +344,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::DownloadCertifications => {
-                if self.params.pub_key.is_some() {
+                if self.params.readonly_pub_key.is_some() {
                     Ok(Box::new(self.recovery.get_download_certs_step(
                         self.params.subnet_id,
                         SshUser::Readonly,
-                        /*alt_key_file=*/ None,
+                        self.params.readonly_key_file.clone(),
                         !self.interactive(),
                     )))
                 } else {
@@ -349,7 +357,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::MergeCertificationPools => {
-                if self.params.pub_key.is_some() {
+                if self.params.readonly_pub_key.is_some() {
                     Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -362,13 +370,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         Ok(Box::new(self.recovery.get_copy_local_state_step()))
                     }
                     Some(DataLocation::Remote(node_ip)) => {
+                        let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
+                            (SshUser::Readonly, self.params.readonly_key_file.clone())
+                        } else {
+                            (SshUser::Admin, self.recovery.admin_key_file.clone())
+                        };
+
                         Ok(Box::new(self.recovery.get_download_state_step(
                             node_ip,
-                            if self.params.pub_key.is_some() {
-                                SshUser::Readonly
-                            } else {
-                                SshUser::Admin
-                            },
+                            ssh_user,
+                            key_file,
                             self.params.keep_downloaded_state == Some(true),
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))

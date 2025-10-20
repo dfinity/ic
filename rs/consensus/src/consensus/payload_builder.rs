@@ -270,8 +270,10 @@ pub(crate) mod test {
     };
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
-    use ic_interfaces_mocks::MockSelfValidatingPayloadBuilder;
     use ic_interfaces_mocks::messaging::MockXNetPayloadBuilder;
+    use ic_interfaces_mocks::payload_builder::{
+        MockIngressSelector, MockSelfValidatingPayloadBuilder,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
@@ -288,7 +290,7 @@ pub(crate) mod test {
         messages::SignedIngressBuilder,
     };
     use ic_types::{
-        CryptoHashOfPartialState, RegistryVersion,
+        CountBytes, CryptoHashOfPartialState, RegistryVersion,
         batch::{IngressPayload, SelfValidatingPayload, XNetPayload},
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::{
@@ -487,11 +489,20 @@ pub(crate) mod test {
             const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
             const INGRESS_MESSAGE_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
 
+<<<<<<< HEAD
+=======
+            let ingress = SignedIngressBuilder::new()
+                .method_payload(vec![0; INGRESS_MESSAGE_PAYLOAD_SIZE.get() as usize])
+                .build();
+            let ingress_size = NumBytes::from(ingress.count_bytes() as u64);
+
+>>>>>>> master
             let payload_builder = set_up_payload_builder(
                 registry,
                 MocksSettings {
                     vetkd_payload_to_return: vec![0; VETKD_PAYLOAD_SIZE.get() as usize],
                     expected_vetkd_payload_size_limit: MAX_BLOCK_SIZE,
+<<<<<<< HEAD
                     ingress_payload_to_return: IngressPayload::from(vec![
                         SignedIngressBuilder::new()
                             .method_payload(vec![0; INGRESS_MESSAGE_PAYLOAD_SIZE.get() as usize])
@@ -505,6 +516,21 @@ pub(crate) mod test {
                     xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
                     expected_xnet_payload_size_limit: NumBytes::new(
                         95 * (MAX_BLOCK_SIZE - VETKD_PAYLOAD_SIZE - BITCOIN_PAYLOAD_SIZE).get()
+=======
+                    ingress_payload_to_return: IngressPayload::from(vec![ingress]),
+                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - VETKD_PAYLOAD_SIZE,
+                    bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
+                    expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE
+                        - VETKD_PAYLOAD_SIZE
+                        - ingress_size,
+                    xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
+                    expected_xnet_payload_size_limit: NumBytes::new(
+                        95 * (MAX_BLOCK_SIZE
+                            - VETKD_PAYLOAD_SIZE
+                            - ingress_size
+                            - BITCOIN_PAYLOAD_SIZE)
+                            .get()
+>>>>>>> master
                             / 100,
                     ),
                     http_outcalls_payload_to_return: vec![
@@ -513,11 +539,19 @@ pub(crate) mod test {
                     ],
                     expected_http_outcalls_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
+<<<<<<< HEAD
+=======
+                        - ingress_size
+>>>>>>> master
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE,
                     query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
                     expected_query_stats_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
+<<<<<<< HEAD
+=======
+                        - ingress_size
+>>>>>>> master
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE
                         - CANISTER_HTTP_PAYLOAD_SIZE,
@@ -542,6 +576,7 @@ pub(crate) mod test {
     }
 
     #[rstest]
+<<<<<<< HEAD
     #[case(2 * MB, 2 * MB, false, None)]
     #[case(3 * MB, 2 * MB, false, None)]
     #[case(4 * MB, 2 * MB, true, None)]
@@ -557,6 +592,17 @@ pub(crate) mod test {
         #[case] http_outcalls_payload_size: u64,
         #[case] expects_soft_error: bool,
         #[case] expected_hard_error: Option<&str>,
+=======
+    #[case(2 * MB, false, false)]
+    #[case(3 * MB, true, false)]
+    #[case(6 * MB, true, false)]
+    #[case(7 * MB, true, true)]
+    // Note: payloads other than the ingress payload sum to a little below 2 MB.
+    fn test_validate_payload_respect_limits(
+        #[case] ingress_payload_size: u64,
+        #[case] expects_soft_error: bool,
+        #[case] expects_hard_error: bool,
+>>>>>>> master
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             const ZERO_BYTES: NumBytes = NumBytes::new(0);
@@ -569,9 +615,15 @@ pub(crate) mod test {
 
             let settings = MocksSettings {
                 ingress_payload_to_return: IngressPayload::from(vec![ingress]),
+<<<<<<< HEAD
                 http_outcalls_payload_to_return: vec![0; http_outcalls_payload_size as usize],
                 query_stats_payload_to_return: vec![0; MB as usize],
                 vetkd_payload_to_return: vec![0; 512 * KB as usize],
+=======
+                query_stats_payload_to_return: vec![0; MB as usize],
+                vetkd_payload_to_return: vec![0; 512 * KB as usize],
+                http_outcalls_payload_to_return: vec![0; 256 * KB as usize],
+>>>>>>> master
                 bitcoin_payload_size_to_return: NumBytes::new(128 * KB),
                 xnet_payload_size_to_return: NumBytes::new(64 * KB),
                 // The fields below are irrelevant for the test
@@ -610,6 +662,7 @@ pub(crate) mod test {
                 }),
             );
 
+<<<<<<< HEAD
             match expected_hard_error {
                 Some(slot) => assert_matches!(
                     payload_builder.validate_payload(
@@ -635,6 +688,14 @@ pub(crate) mod test {
                     );
                 }
             }
+=======
+            assert_eq!(
+                payload_builder
+                    .validate_payload(Height::from(1), &proposal_context, &payload, &prev_payloads,)
+                    .is_err(),
+                expects_hard_error,
+            );
+>>>>>>> master
 
             if expects_soft_error {
                 assert!(payload_builder.count_critical_errors() > 0);

@@ -10,9 +10,6 @@ CANISTER_RUNTIME_DEPS = [
 
 system_test_nns(
     name = "ic_xc_ledger_suite_orchestrator_test",
-    tags = [
-        "k8s",
-    ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_RUNTIME_DEPS,

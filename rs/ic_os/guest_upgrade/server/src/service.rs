@@ -1,6 +1,7 @@
 use crate::SevFirmwareFactory;
 use crate::server::ConnInfo;
 use attestation::attestation_package::generate_attestation_package;
+use attestation::custom_data::DerEncodedCustomData;
 use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
@@ -78,6 +79,26 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
         &self,
         request: Request<GetDiskEncryptionKeyRequest>,
     ) -> Result<Response<GetDiskEncryptionKeyResponse>, Status> {
+        let result = self.get_disk_encryption_key_impl(request).await;
+        if let Err(e) = result.as_ref() {
+            eprintln!("get_disk_encryption_key returned error: {}", e.message());
+        }
+        result
+    }
+
+    async fn signal_status(
+        &self,
+        request: Request<SignalStatusRequest>,
+    ) -> Result<Response<SignalStatusResponse>, Status> {
+        self.signal_status_impl(request).await
+    }
+}
+
+impl DiskEncryptionKeyExchangeServiceImpl {
+    async fn get_disk_encryption_key_impl(
+        &self,
+        request: Request<GetDiskEncryptionKeyRequest>,
+    ) -> Result<Response<GetDiskEncryptionKeyResponse>, Status> {
         let Some(client_attestation_package) = &request.get_ref().sev_attestation_package else {
             return Err(Status::invalid_argument(
                 "sev_attestation_package must not be empty",
@@ -85,23 +106,23 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
         };
 
         let mut sev_firmware = self.sev_firmware_factory.deref()()
-            .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e:?}")))?;
 
         let client_public_key = Self::client_public_key_from_request(&request)?;
 
-        let custom_data = GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(&client_public_key)
                 .expect("Could not encode client public key"),
             server_tls_public_key: OctetStringRef::new(&self.my_public_key)
                 .expect("Could not encode server public key"),
-        };
+        });
 
         let my_attestation_package = generate_attestation_package(
             sev_firmware.as_mut(),
             &self.trusted_execution_environment_config,
             &custom_data,
         )
-        .map_err(|e| Status::internal(format!("Failed to generate attestation package: {e}")))?;
+        .map_err(|e| Status::internal(format!("Failed to generate attestation package: {e:?}")))?;
 
         let my_attestation_report = AttestationReport::from_bytes(
             my_attestation_package
@@ -109,7 +130,7 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
                 .as_ref()
                 .expect("Expected attestation report to be present"),
         )
-        .map_err(|e| Status::internal(format!("Failed to parse own attestation report: {e}")))?;
+        .map_err(|e| Status::internal(format!("Failed to parse own attestation report: {e:?}")))?;
 
         verify_attestation_package(
             client_attestation_package,
@@ -119,11 +140,11 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
             Some(my_attestation_report.chip_id.as_slice()),
         )
         .map_err(|e| {
-            Status::invalid_argument(format!("Attestation report verification failed: {e}"))
+            Status::invalid_argument(format!("Attestation report verification failed: {e:?}"))
         })?;
 
         let mut sev_firmware = self.sev_firmware_factory.deref()()
-            .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e:?}")))?;
 
         Ok(Response::new(GetDiskEncryptionKeyResponse {
             key: Some(
@@ -133,14 +154,14 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
                         device_path: Path::new("/dev/vda10"),
                     },
                 )
-                .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e}")))?
+                .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
                 .into_bytes(),
             ),
             sev_attestation_package: Some(my_attestation_package),
         }))
     }
 
-    async fn signal_status(
+    async fn signal_status_impl(
         &self,
         request: Request<SignalStatusRequest>,
     ) -> Result<Response<SignalStatusResponse>, Status> {

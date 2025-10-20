@@ -1,7 +1,6 @@
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::{DataProvider, PerformanceBasedAlgorithm};
-use crate::types::DayUtc;
-use ic_base_types::PrincipalId;
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -36,15 +35,13 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
 
 impl RewardsCalculationV1 {
     pub fn calculate_rewards(
-        from_day: &DayUtc,
-        to_day: &DayUtc,
-        node_provider_filter: Option<PrincipalId>,
+        from_date: &NaiveDate,
+        to_date: &NaiveDate,
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
-            from_day,
-            to_day,
-            node_provider_filter,
+            from_date,
+            to_date,
             data_provider,
         )
     }
@@ -110,12 +107,12 @@ mod tests {
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr))
+            .map(|(k, v)| (*k, v.original_fr_percent))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr))
+            .map(|(k, v)| (*k, v.relative_fr_percent))
             .collect();
 
         // --- Assertions for Day 1, Subnet 1 ---
@@ -151,12 +148,12 @@ mod tests {
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr))
+            .map(|(k, v)| (*k, v.original_fr_percent))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr))
+            .map(|(k, v)| (*k, v.relative_fr_percent))
             .collect();
 
         // --- Assertions for Day 2, Subnet 1 ---

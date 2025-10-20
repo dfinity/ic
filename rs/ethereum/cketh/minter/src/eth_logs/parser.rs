@@ -7,7 +7,7 @@ use crate::eth_logs::{
 use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, Erc20Value, Wei};
 use candid::Principal;
-use evm_rpc_client::{Hex, Hex32, LogEntry};
+use evm_rpc_types::{Hex, Hex32, LogEntry};
 use ic_ethereum_types::Address;
 
 /// Parse an Ethereum log event into a `ReceivedEvent`.

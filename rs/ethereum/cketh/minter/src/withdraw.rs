@@ -12,7 +12,7 @@ use crate::state::transactions::{
 use crate::state::{State, TaskType, mutate_state, read_state};
 use crate::tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate};
 use candid::Nat;
-use evm_rpc_client::{SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt};
+use evm_rpc_types::{SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt};
 use futures::future::join_all;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
