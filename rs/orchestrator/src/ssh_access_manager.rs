@@ -662,7 +662,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_api_boundary_node_record_fails() {
+    fn test_get_keysets_fails_for_unknown_registry_version() {
         with_test_replica_logger(|log| {
             let test = TestCase {
                 assigned_readonly: RegistryEntry::KeyDeployed,
