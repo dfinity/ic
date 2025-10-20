@@ -3,8 +3,6 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
     storage::{with_stable_neuron_indexes, with_voting_history_store},
-    temporarily_disable_known_neuron_voting_history,
-    temporarily_enable_known_neuron_voting_history,
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -1017,7 +1015,8 @@ fn test_approve_genesis_kyc_cap_exceeded() {
     }
 }
 
-fn test_record_neuron_vote(enabled: bool) {
+#[test]
+fn test_record_neuron_vote() {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = simple_neuron_builder(1)
         .with_known_neuron_data(Some(KnownNeuronData {
@@ -1053,30 +1052,11 @@ fn test_record_neuron_vote(enabled: bool) {
     let voting_history = with_voting_history_store(|voting_history| {
         voting_history.list_neuron_votes(neuron_id, None, Some(10))
     });
-    if enabled {
-        assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
-    } else {
-        assert_eq!(voting_history, vec![]);
-    }
-}
-
-#[test]
-fn test_record_neuron_vote_disabled() {
-    let _t = temporarily_disable_known_neuron_voting_history();
-
-    test_record_neuron_vote(false);
-}
-
-#[test]
-fn test_record_neuron_vote_enabled() {
-    let _t = temporarily_enable_known_neuron_voting_history();
-
-    test_record_neuron_vote(true);
+    assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
 }
 
 #[test]
 fn test_record_neuron_vote_filters_by_first_proposal_id() {
-    let _t = temporarily_enable_known_neuron_voting_history();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = simple_neuron_builder(1)
         .with_known_neuron_data(Some(KnownNeuronData {
