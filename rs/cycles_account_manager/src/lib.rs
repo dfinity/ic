@@ -330,10 +330,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> [(CyclesUseCase, Cycles); 3] {
-        let memory = match memory_allocation {
-            MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => memory_usage,
-        };
+        let memory = memory_allocation.allocated_bytes(memory_usage);
         [
             (
                 CyclesUseCase::Memory,

@@ -2699,7 +2699,7 @@ fn test_cycles_burn() {
         &mut balance,
         amount_to_burn,
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
@@ -2721,7 +2721,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
@@ -2737,7 +2737,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         &mut balance,
         Cycles::new(10 * amount),
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
