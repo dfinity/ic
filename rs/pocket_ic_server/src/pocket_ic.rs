@@ -2131,6 +2131,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(2_000_000_000_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
