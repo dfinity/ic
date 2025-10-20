@@ -3,12 +3,13 @@ use clap::{Parser, Subcommand};
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
-use config::setupos::create_setupos_config;
-use config::setupos::deployment_json::get_deployment_settings;
+use config::setupos::deployment_json::{VmResources, get_deployment_settings};
 use config_types::*;
+use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::path::{Path, PathBuf};
+use url::Url;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -125,7 +126,7 @@ pub fn main() -> Result<()> {
                 Path::new("/config/node_operator_private_key.pem").exists();
             let use_ssh_authorized_keys = Path::new("/config/ssh_authorized_keys").exists();
 
-            let setupos_config = create_setupos_config(
+            let setupos_config = assemble_setupos_config(
                 node_reward_type,
                 mgmt_mac,
                 deployment_json_settings.deployment.deployment_environment,
@@ -196,5 +197,57 @@ pub fn main() -> Result<()> {
             println!("No command provided. Use --help for usage information.");
             Ok(())
         }
+    }
+}
+
+pub fn assemble_setupos_config(
+    node_reward_type: Option<String>,
+    mgmt_mac: MacAddr6,
+    deployment_environment: DeploymentEnvironment,
+    nns_urls: &[Url],
+    dev_vm_resources: VmResources,
+    enable_trusted_execution_environment: bool,
+    use_node_operator_private_key: bool,
+    use_ssh_authorized_keys: bool,
+    verbose: bool,
+    network_settings: NetworkSettings,
+) -> SetupOSConfig {
+    let icos_settings = ICOSSettings {
+        node_reward_type,
+        mgmt_mac,
+        deployment_environment,
+        logging: Logging {},
+        use_nns_public_key: false,
+        nns_urls: nns_urls.to_vec(),
+        use_node_operator_private_key,
+        enable_trusted_execution_environment,
+        use_ssh_authorized_keys,
+        icos_dev_settings: ICOSDevSettings::default(),
+    };
+
+    let setupos_settings = SetupOSSettings;
+
+    #[allow(deprecated)]
+    let hostos_settings = HostOSSettings {
+        vm_memory: dev_vm_resources.memory,
+        vm_cpu: dev_vm_resources.cpu.clone(),
+        vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
+        verbose,
+        hostos_dev_settings: HostOSDevSettings {
+            vm_memory: dev_vm_resources.memory,
+            vm_cpu: dev_vm_resources.cpu,
+            vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
+        },
+    };
+
+    let guestos_settings = GuestOSSettings::default();
+
+    SetupOSConfig {
+        config_version: CONFIG_VERSION.to_string(),
+        network_settings,
+        icos_settings,
+        setupos_settings,
+        hostos_settings,
+        guestos_settings,
     }
 }
