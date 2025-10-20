@@ -17,10 +17,11 @@ show_menu() {
     echo "7. network-dns        - Show DNS configuration"
     echo "8. network-connectivity - Test network connectivity"
     echo "9. network-settings   - Show network settings from config"
-    echo "10. config-json       - Show /boot/config/config.json"
-    echo "11. failed-services   - Show failed services"
-    echo "12. clear             - Clear the console"
-    echo "13. exit              - Exit console"
+    echo "10. guestos-logs      - Show last 50 lines of guestos serial log"
+    echo "11. config-json       - Show /boot/config/config.json"
+    echo "12. failed-services   - Show failed services"
+    echo "13. clear             - Clear the console"
+    echo "14. exit              - Exit console"
     echo ""
 }
 
@@ -84,6 +85,14 @@ execute_command() {
                 echo "$network_settings" | jq . 2>/dev/null || echo "$network_settings"
             else
                 echo "No network settings found in config"
+            fi
+            ;;
+        "guestos-logs")
+            echo "=== GuestOS Serial Log (Last 50 lines) ==="
+            if [ -f "/var/log/libvirt/qemu/guestos-serial.log" ]; then
+                tail -n 50 /var/log/libvirt/qemu/guestos-serial.log
+            else
+                echo "GuestOS serial log not found at /var/log/libvirt/qemu/guestos-serial.log"
             fi
             ;;
         "config-json")
