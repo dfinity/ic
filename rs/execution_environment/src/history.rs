@@ -6,7 +6,10 @@ use ic_interfaces::{
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, fatal};
-use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use ic_metrics::{
+    MetricsRegistry,
+    buckets::{decimal_buckets, linear_buckets},
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, Time,
@@ -97,6 +100,7 @@ pub struct IngressHistoryWriterImpl {
     message_state_transition_completed_wall_clock_duration_seconds: Histogram,
     message_state_transition_failed_ic_duration_seconds: HistogramVec,
     message_state_transition_failed_wall_clock_duration_seconds: HistogramVec,
+    time_in_ingress_history_seconds: Histogram,
     completed_execution_messages_tx: Sender<(MessageId, Height)>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
@@ -164,6 +168,11 @@ impl IngressHistoryWriterImpl {
                 // The `user_error_code` label is internal information that provides more
                 // detail about the reason for rejection.
                 &["reject_code", "user_error_code"],
+            ),
+            time_in_ingress_history_seconds: metrics_registry.histogram(
+                "time_in_ingress_history_seconds",
+                "The time an entry is present in the ingress history before being pruned.",
+                linear_buckets(0.0, 10.0, 30),
             ),
             completed_execution_messages_tx,
             state_reader
@@ -302,11 +311,18 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             ));
         };
 
-        state.set_ingress_status(
+        let (ingress_status, pruned_times) = state.set_ingress_status(
             message_id,
             status,
             self.config.ingress_history_memory_capacity,
-        )
+        );
+        for (time, count) in pruned_times.iter() {
+            for _ in 0..*count {
+                self.time_in_ingress_history_seconds.observe(*time as f64);
+            }
+        }
+
+        ingress_status
     }
 }
 

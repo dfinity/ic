@@ -1088,7 +1088,8 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
 
     // Forgetting terminal statuses when the ingress history only contains non-terminal
     // statuses should be a no-op.
-    ingress_history_limit.forget_terminal_statuses(NumBytes::from(0));
+    ingress_history_limit
+        .forget_terminal_statuses(NumBytes::from(0), Time::from_nanos_since_unix_epoch(0));
     // ... except the next_terminal_time is updated to the first key in the `pruning_times` map.
     ingress_history_before.next_terminal_time =
         *ingress_history_limit.pruning_times().next().unwrap().0;
@@ -1176,7 +1177,7 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(status_size, Time::from_nanos_since_unix_epoch(0));
 
     // ... which should lead to the next_terminal_time pointing to 6 + TTL.
     assert_eq!(
@@ -1201,7 +1202,7 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
     // At this point forgetting terminal statuses with a limit sufficient
     // for 5 statuses should lead to "forgetting" the terminal status
     // we just inserted above.
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(status_size, Time::from_nanos_since_unix_epoch(0));
 
     let expected_forgotten = ingress_history.get(&message_test_id(11)).unwrap();
 
@@ -1237,7 +1238,7 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(status_size, Time::from_nanos_since_unix_epoch(0));
 
     // ... which should lead to the next_terminal_time pointing to 6 + TTL.
     assert_eq!(
@@ -1270,7 +1271,7 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(status_size, Time::from_nanos_since_unix_epoch(0));
     ingress_history_reset.forget_terminal_statuses(status_size);
 
     // ... which should bring both versions of the ingress history in the
@@ -1297,7 +1298,7 @@ fn ingress_history_roundtrip_encode() {
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(status_size, Time::from_nanos_since_unix_epoch(0));
 
     let ingress_history_proto = pb::IngressHistoryState::from(&ingress_history);
 
@@ -1352,7 +1353,7 @@ fn ingress_history_split() {
     // We should have 10 messages, 5 for each canister.
     assert_eq!(10, ingress_history.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    ingress_history.forget_terminal_statuses(NumBytes::from(u64::MAX));
+    ingress_history.forget_terminal_statuses(NumBytes::from(u64::MAX), Time::from_nanos_since_unix_epoch(0);
     assert_ne!(
         0,
         ingress_history
@@ -1380,7 +1381,7 @@ fn ingress_history_split() {
     // We should only have 8 messages, 3 terminal ones for canister_1 and 5 for canister_2.
     assert_eq!(8, expected.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    expected.forget_terminal_statuses(NumBytes::from(u64::MAX));
+    expected.forget_terminal_statuses(NumBytes::from(u64::MAX), Time::from_nanos_since_unix_epoch(0));
 
     ingress_history.prune_after_split(is_local_canister);
     assert_eq!(expected, ingress_history);

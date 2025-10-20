@@ -41,6 +41,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::ops::Bound::{Included, Unbounded};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -1140,14 +1141,15 @@ impl IngressHistoryState {
     /// status (`completed`, `failed`, or `done`) the entry will also be enrolled
     /// to be pruned at `time + MAX_INGRESS_TTL`.
     ///
-    /// Returns the previous status associated with `message_id`.
+    /// Returns the previous status associated with `message_id` and a histogram
+    /// of times spent in ingress history.
     pub fn insert(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         time: Time,
         ingress_memory_capacity: NumBytes,
-    ) -> Arc<IngressStatus> {
+    ) -> (Arc<IngressStatus>, HashMap<u64, u64>) {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -1172,8 +1174,10 @@ impl IngressHistoryState {
             self.memory_usage -= old.payload_bytes();
         }
 
+        // Metrics for time spent in ingress history.
+        let mut pruned_times: HashMap<u64, u64> = HashMap::new();
         if self.memory_usage > ingress_memory_capacity.get() as usize {
-            self.forget_terminal_statuses(ingress_memory_capacity);
+            pruned_times = self.forget_terminal_statuses(ingress_memory_capacity, time);
         }
 
         debug_assert_eq!(
@@ -1181,7 +1185,10 @@ impl IngressHistoryState {
             self.memory_usage
         );
 
-        old_status.unwrap_or_else(|| IngressStatus::Unknown.into())
+        (
+            old_status.unwrap_or_else(|| IngressStatus::Unknown.into()),
+            pruned_times,
+        )
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
@@ -1217,7 +1224,6 @@ impl IngressHistoryState {
     /// that's older than the given time.
     pub fn prune(&mut self, time: Time) {
         let new_pruning_times = Arc::make_mut(&mut self.pruning_times).split_off(&time);
-
         let statuses = Arc::make_mut(&mut self.statuses);
         for pruning_times in self.pruning_times.as_ref().values() {
             for message_id in pruning_times {
@@ -1240,14 +1246,20 @@ impl IngressHistoryState {
     /// usage is below `target_size` for the first time. To handle repeated calls
     /// efficiently it remembers the pruning time it stopped at.
     ///
+    /// Returns a histogram of times spent in the ingress history represented
+    /// as a Map<time_in_ingress_history_seconds, count>.
+    ///
     /// Note that this function must remain private and should only be
     /// called from within `insert` to ensure that `next_terminal_time`
     /// is consistently updated and we don't miss any completed statuses.
-    fn forget_terminal_statuses(&mut self, target_size: NumBytes) {
+    fn forget_terminal_statuses(&mut self, target_size: NumBytes, now: Time) -> HashMap<u64, u64> {
         // In debug builds we store the length of the statuses map here so that
         // we can later debug_assert that no status disappeared.
         #[cfg(debug_assertions)]
         let statuses_len_before = self.statuses.len();
+
+        // Return an age histogram for metrics: (seconds, count)
+        let mut pruned_ages: HashMap<u64, u64> = HashMap::new();
 
         let target_size = target_size.get() as usize;
         let statuses = Arc::make_mut(&mut self.statuses);
@@ -1261,6 +1273,12 @@ impl IngressHistoryState {
             if self.memory_usage <= target_size {
                 break;
             }
+
+            // We keep track of entries by how much they are evicted before their "pruning_time".
+            let time_until_pruning = time.saturating_duration_since(now);
+            let time_in_ingress_history_secs =
+                MAX_INGRESS_TTL.saturating_sub(time_until_pruning).as_secs();
+            *pruned_ages.entry(time_in_ingress_history_secs).or_default() += ids.len() as u64;
 
             for id in ids.iter() {
                 match statuses.get(id).map(Arc::as_ref) {
@@ -1295,6 +1313,7 @@ impl IngressHistoryState {
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
         );
+        pruned_ages
     }
 
     /// Returns the memory usage of the statuses in the ingress history. See the

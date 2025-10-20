@@ -40,7 +40,7 @@ use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
@@ -725,13 +725,14 @@ impl ReplicatedState {
     /// oldest to newest in case inserting `status` pushes the memory
     /// consumption over the bound.
     ///
-    /// Returns the previous status associated with `message_id`.
+    /// Returns the previous status associated with `message_id` and a histogram
+    /// of times spent in ingress history.
     pub fn set_ingress_status(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
-    ) -> Arc<IngressStatus> {
+    ) -> (Arc<IngressStatus>, HashMap<u64, u64>) {
         self.metadata.ingress_history.insert(
             message_id,
             status,
