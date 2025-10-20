@@ -1,5 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -31,7 +32,7 @@ rust_canister(
     ],
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "messaging_test_integration",
     srcs = [
         "tests/messaging_test.rs",

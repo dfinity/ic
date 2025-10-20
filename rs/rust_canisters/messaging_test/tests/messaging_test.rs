@@ -4,6 +4,8 @@ use ic_types_test_utils::ids::canister_test_id;
 use messaging_test::{Call, Message, decode, encode};
 use messaging_test_utils::{arb_nested_call, to_encoded_ingress};
 
+// Tests payloads can be encoded and decoded into the same message again while producing
+/// payloads of the requested size (or larger where the target is too small).
 #[test_strategy::proptest]
 fn test_message_roundtrip_with_payload_size(
     #[strategy(arb_nested_call(
@@ -44,6 +46,8 @@ fn test_message_roundtrip_with_payload_size(
     assert_eq!(payload_size_bytes as u32, payload_size_bytes_);
 }
 
+/// Tests traffic between canisters works as intended without triggering any traps and that
+/// the instructions are adhered to faithfully.
 #[test]
 fn smoke_test() {
     let (env1, env2) = two_subnets_simple();
