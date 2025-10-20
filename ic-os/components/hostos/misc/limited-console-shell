@@ -2,11 +2,6 @@
 # Limited Console Shell - POC implementation
 # Provides restricted access to HostOS administrative commands
 
-# Log all command attempts
-log_command() {
-    echo "$(date): User $USER attempted: $*" >> /var/log/limited-console.log
-}
-
 # Show available commands
 show_menu() {
     echo "=== HostOS Limited Console ==="
@@ -65,8 +60,7 @@ echo ""
 while true; do
     echo -n "limited-console> "
     read -r command
-    log_command "$command"
-    
+
     if [ "$command" = "help" ]; then
         show_menu
     else
