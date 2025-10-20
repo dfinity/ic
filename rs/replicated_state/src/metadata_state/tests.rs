@@ -1272,7 +1272,8 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     ingress_history.forget_terminal_statuses(status_size, Time::from_nanos_since_unix_epoch(0));
-    ingress_history_reset.forget_terminal_statuses(status_size);
+    ingress_history_reset
+        .forget_terminal_statuses(status_size, Time::from_nanos_since_unix_epoch(0));
 
     // ... which should bring both versions of the ingress history in the
     // same state.

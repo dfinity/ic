@@ -1223,6 +1223,7 @@ impl IngressHistoryState {
     /// that's older than the given time.
     pub fn prune(&mut self, time: Time) {
         let new_pruning_times = Arc::make_mut(&mut self.pruning_times).split_off(&time);
+
         let statuses = Arc::make_mut(&mut self.statuses);
         for pruning_times in self.pruning_times.as_ref().values() {
             for message_id in pruning_times {
