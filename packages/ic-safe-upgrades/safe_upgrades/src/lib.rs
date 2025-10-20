@@ -9,7 +9,7 @@ use ic_cdk::management_canister::{
     CanisterInfoArgs, CanisterInfoResult, CanisterInstallMode, ChunkHash, ClearChunkStoreArgs,
     InstallCodeArgs, UploadChunkArgs,
 };
-use ic_management_canister_types::{ChangeDetails, ChangeOrigin, StartCanisterArgs, StopCanisterArgs, UploadChunkResult, InstallChunkedCodeArgs};
+use ic_cdk::management_canister::{ChangeDetails, ChangeOrigin, StartCanisterArgs, StopCanisterArgs, UploadChunkResult, InstallChunkedCodeArgs};
 use sha2::{Digest, Sha256};
 
 #[cfg(feature = "use_call_chaos")]
@@ -103,8 +103,8 @@ async fn version_change_check(
             if rec.canister_id == canister_self() =>
         {
             let expected_hash: Vec<u8> = match wasm_module {
-                WasmModule::Bytes(ref wasm_bytes) => Sha256::digest(wasm_bytes).to_vec(),
-                WasmModule::ChunkedModule(ref chunked) => chunked.wasm_module_hash.clone(),
+                WasmModule::Bytes(wasm_bytes) => Sha256::digest(wasm_bytes).to_vec(),
+                WasmModule::ChunkedModule(chunked) => chunked.wasm_module_hash.clone(),
             };
             if dep.module_hash != expected_hash {
                 Ok(VersionChangeCheck::ConcurrentChangeDetected)
@@ -387,7 +387,6 @@ where
             .collect(),
         wasm_module_hash: chunked.wasm_module_hash.clone(),
         arg: arg.to_vec(),
-        sender_canister_version: None,
     };
 
     let install_call = Call::bounded_wait(Principal::management_canister(), "install_chunked_code")

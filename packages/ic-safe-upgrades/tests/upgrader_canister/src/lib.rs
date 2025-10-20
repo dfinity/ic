@@ -13,14 +13,15 @@ pub async fn try_upgrading_target(
     deadline: u64,
     chunked: bool,
 ) -> Result<(), String> {
-    let deadline = &mut when_out_of_time_or_stopping(&Deadline::TimeOrStopping(deadline));
+    let deadline = &Deadline::TimeOrStopping(deadline);
+    let stopping_condition = &mut when_out_of_time_or_stopping(&deadline);
     if chunked {
         let chunks: Vec<_> = new_wasm.chunks(1024 * 50).map(|c| c.to_vec()).collect();
         let hashes = chunks.iter().map(|c| Sha256::digest(c).to_vec()).collect();
         upload_chunks(
             target_canister,
             chunks,
-            deadline,
+            stopping_condition,
         ).await
             .map_err(|e| format!("Failed to upload chunks: {:?}", e))?;
 
@@ -33,7 +34,7 @@ pub async fn try_upgrading_target(
             target_canister,
             module,
             vec![],
-            deadline,
+            stopping_condition,
         )
             .await
             .map_err(|e| format!("Failed to upgrade canister: {:?}", e))
@@ -42,7 +43,7 @@ pub async fn try_upgrading_target(
             target_canister,
             WasmModule::Bytes(new_wasm),
             vec![],
-            deadline,
+            stopping_condition,
         )
         .await
             .map_err(|e| format!("Failed to upgrade canister: {:?}", e))
