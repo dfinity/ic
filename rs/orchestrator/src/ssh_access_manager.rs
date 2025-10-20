@@ -77,7 +77,7 @@ impl SshAccessManager {
         let key_sets = self.get_ssh_keysets(subnet_id, registry_version);
 
         // Update the readonly, backup & recovery keys. If it fails, log why.
-        if self.update_access_keys(key_sets) {
+        if self.update_access_keys(&key_sets) {
             *self.last_applied_parameters.write().unwrap() = SshAccessParameters {
                 registry_version,
                 subnet_id,
@@ -92,7 +92,7 @@ impl SshAccessManager {
         Arc::clone(&self.last_applied_parameters)
     }
 
-    fn update_access_keys(&self, key_sets: KeySets) -> bool {
+    fn update_access_keys(&self, key_sets: &KeySets) -> bool {
         let update = |account, keys_result| {
             let keys: &Vec<String> = match keys_result {
                 Ok(keys) => keys,
