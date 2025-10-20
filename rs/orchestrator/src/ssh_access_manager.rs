@@ -226,7 +226,6 @@ mod tests {
     const BACKUP_KEY: &str = "backup_key";
     const RECOVERY_KEY: &str = "recovery_key";
 
-    #[derive(Clone)]
     enum RegistryEntry {
         /// The Subnet/Node/API Bounday node record corresponding
         /// to this SSH key doesn't exist
@@ -247,7 +246,6 @@ mod tests {
         }
     }
 
-    #[derive(Clone)]
     struct TestCase {
         assigned_readonly: RegistryEntry,
         unassigned_readonly: RegistryEntry,
@@ -270,7 +268,7 @@ mod tests {
         }
     }
 
-    fn setup_registry(test: TestCase) -> Arc<FakeRegistryClient> {
+    fn setup_registry(test: &TestCase) -> Arc<FakeRegistryClient> {
         let ssh_assigned_readonly_access =
             test.assigned_readonly.to_ssh_access(ASSIGNED_READONLY_KEY);
         let ssh_unassigned_readonly_access = test
@@ -343,13 +341,18 @@ mod tests {
 
     fn setup_ssh_access_manager(
         node_id: NodeId,
-        test: TestCase,
-        logger: ReplicaLogger,
+        test: &TestCase,
+        logger: &ReplicaLogger,
     ) -> SshAccessManager {
         let registry_client = setup_registry(test);
         let registry = RegistryHelper::new(node_id, registry_client, logger.clone());
         let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
-        SshAccessManager::new(Arc::new(registry), Arc::new(metrics), node_id, logger)
+        SshAccessManager::new(
+            Arc::new(registry),
+            Arc::new(metrics),
+            node_id,
+            logger.clone(),
+        )
     }
 
     #[test]
@@ -365,7 +368,7 @@ mod tests {
             // Regardless of what the registry says, if the orchestrator says we are assigned to a subnet
             // then we will apply the subnet's keys
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager
                     .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
                     .unwrap();
@@ -388,19 +391,19 @@ mod tests {
 
             // Regardless of what the registry says, if the orchestrator says we are unassigned
             // then we will not apply the subnet's keys
-            let manager = setup_ssh_access_manager(ASSIGNED_NODE, test.clone(), log.clone());
+            let manager = setup_ssh_access_manager(ASSIGNED_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.has_unassigned_readonly());
             assert!(keys.backup.is_empty());
             assert!(keys.has_recovery());
 
-            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, test.clone(), log.clone());
+            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.readonly.is_empty());
             assert!(keys.backup.is_empty());
             assert!(keys.has_recovery());
 
-            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, test.clone(), log.clone());
+            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.has_unassigned_readonly());
             assert!(keys.backup.is_empty());
@@ -419,7 +422,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager
                     .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
                     .unwrap();
@@ -442,7 +445,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
 
                 assert!(keys.readonly.is_empty());
@@ -463,7 +466,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager
                     .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
                     .unwrap();
@@ -486,7 +489,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
 
                 assert!(keys.has_unassigned_readonly());
@@ -495,7 +498,7 @@ mod tests {
             }
 
             // API boundary nodes do not use the unassigned readonly keys
-            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, test.clone(), log.clone());
+            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
 
             assert!(keys.readonly.is_empty());
@@ -515,7 +518,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager
                     .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
                     .unwrap();
@@ -538,7 +541,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
 
                 assert!(keys.readonly.is_empty());
@@ -559,7 +562,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager
                     .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
                     .unwrap();
@@ -582,7 +585,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
 
                 assert!(keys.readonly.is_empty());
@@ -603,7 +606,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys_result = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
                 assert_matches!(
@@ -624,19 +627,19 @@ mod tests {
                 recovery: RegistryEntry::KeyDeployed,
             };
 
-            let manager = setup_ssh_access_manager(ASSIGNED_NODE, test.clone(), log.clone());
+            let manager = setup_ssh_access_manager(ASSIGNED_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.has_unassigned_readonly());
             assert!(keys.backup.is_empty());
             assert!(keys.has_recovery());
 
-            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, test.clone(), log.clone());
+            let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.readonly.is_empty());
             assert!(keys.backup.is_empty());
             assert!(keys.has_recovery());
 
-            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, test.clone(), log.clone());
+            let manager = setup_ssh_access_manager(UNASSIGNED_NODE, &test, &log);
             let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
             assert!(keys.has_unassigned_readonly());
             assert!(keys.backup.is_empty());
@@ -655,7 +658,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 let keys_result = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
                 assert_matches!(
@@ -677,7 +680,7 @@ mod tests {
             };
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
-                let manager = setup_ssh_access_manager(node_id, test.clone(), log.clone());
+                let manager = setup_ssh_access_manager(node_id, &test, &log);
                 // Use unknown registry version
                 let keys_result = manager.get_ssh_keysets(None, REGISTRY_VERSION.increment());
 
