@@ -42,9 +42,9 @@ pub struct MemoryArea {
 impl MemoryArea {
     pub fn new(addr: *const libc::c_void, size: NumBytes) -> Self {
         let addr = addr as usize;
-        assert!(addr % PAGE_SIZE == 0, "address is page-aligned");
+        assert!(addr.is_multiple_of(PAGE_SIZE), "address is page-aligned");
         assert!(
-            size.get() % PAGE_SIZE as u64 == 0,
+            size.get().is_multiple_of(PAGE_SIZE as u64),
             "size is a multiple of page size"
         );
         let size = Cell::new(size);
