@@ -91,6 +91,10 @@ impl Registry {
                 if ssh_readonly_access.is_some() {
                     return Err("ssh_readonly_access specified, but not subnet_id.".to_string());
                 }
+
+                if ssh_node_state_write_access.is_none() {
+                    return Err("Request contains no changes at all!".to_string());
+                }
             }
 
             Some(_subnet_id) => {

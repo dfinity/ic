@@ -297,9 +297,9 @@ fn test_validate_payload_no_node_ok() {
     assert_eq!(new_node_record, ORIGINAL_NODE_RECORD.clone(),);
 }
 
-/// The situation tested here is degenerate, but not broken per se, and therefore, allowed.
 #[test]
-fn test_validate_payload_no_nothing_ok() {
+#[should_panic(expected = "no changes")]
+fn test_validate_payload_empty() {
     // Step 1: Prepare the world.
     let mut registry = REGISTRY.clone();
 
@@ -315,14 +315,7 @@ fn test_validate_payload_no_nothing_ok() {
     });
 
     // Step 3: Verify results.
-
-    // Step 3A.1: Verify SubnetRecord.
-    let new_subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
-    assert_eq!(new_subnet_record, ORIGINAL_SUBNET_RECORD.clone(),);
-
-    // Step 3A.2: Verify NodeRecord.
-    let new_node_record = registry.get_node_or_panic(*NODE_ID);
-    assert_eq!(new_node_record, ORIGINAL_NODE_RECORD.clone(),);
+    // Actually, this is done by should_panic, at the top.
 }
 
 #[test]
