@@ -342,7 +342,7 @@ pub struct SystemState {
 
     /// The memory used for storing log entries.
     #[validate_eq(CompareWithValidateEq)]
-    pub log_memory_storage: LogMemoryStore,
+    pub log_memory_store: LogMemoryStore,
 
     /// The Wasm memory limit. This is a field in developer-visible canister
     /// settings that allows the developer to limit the usage of the Wasm memory

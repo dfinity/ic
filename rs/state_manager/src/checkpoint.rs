@@ -179,7 +179,7 @@ pub(crate) enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
     WasmChunkStore(CanisterId),
-    LogMemory(CanisterId),
+    LogMemoryStore(CanisterId),
     SnapshotWasmMemory(SnapshotId),
     SnapshotStableMemory(SnapshotId),
     SnapshotWasmChunkStore(SnapshotId),
@@ -191,6 +191,7 @@ impl PageMapType {
         let mut result = vec![];
         for (id, canister) in &state.canister_states {
             result.push(Self::WasmChunkStore(id.to_owned()));
+            result.push(Self::LogMemoryStore(id.to_owned()));
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
@@ -224,7 +225,7 @@ impl PageMapType {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
-            PageMapType::LogMemory(id) => Ok(layout.canister(id)?.log_memory()),
+            PageMapType::LogMemoryStore(id) => Ok(layout.canister(id)?.log_memory_store()),
             PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot(id)?.vmemory_0()),
             PageMapType::SnapshotStableMemory(id) => Ok(layout.snapshot(id)?.stable_memory()),
             PageMapType::SnapshotWasmChunkStore(id) => Ok(layout.snapshot(id)?.wasm_chunk_store()),
@@ -247,9 +248,9 @@ impl PageMapType {
             PageMapType::WasmChunkStore(id) => state
                 .canister_state(id)
                 .map(|can| can.system_state.wasm_chunk_store.page_map()),
-            PageMapType::LogMemory(id) => state
+            PageMapType::LogMemoryStore(id) => state
                 .canister_state(id)
-                .and_then(|can| can.system_state.log_memory_storage.page_map()),
+                .and_then(|can| can.system_state.log_memory_store.page_map()),
             PageMapType::SnapshotWasmMemory(id) => state
                 .canister_snapshots
                 .get(*id)
@@ -360,6 +361,10 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         add_to_pagemaps_and_strip(
             PageMapType::WasmChunkStore(id.to_owned()),
             canister.system_state.wasm_chunk_store.page_map_mut(),
+        );
+        add_to_pagemaps_and_strip(
+            PageMapType::LogMemoryStore(id.to_owned()),
+            canister.system_state.log_memory_store.page_map_mut(),
         );
         if let Some(execution_state) = canister.execution_state.as_mut() {
             add_to_pagemaps_and_strip(
