@@ -295,12 +295,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
         match req.raw_query_param("priority").map(Priority::from_str) {
             Some(Ok(priority)) => match priority {
-                Priority::P0 => log.push_logs(Priority::P0),
-                Priority::P1 => log.push_logs(Priority::P1),
+                Priority::Info => log.push_logs(Priority::Info),
+                Priority::Debug => log.push_logs(Priority::Debug),
             },
             Some(Err(_)) | None => {
-                log.push_logs(Priority::P0);
-                log.push_logs(Priority::P1);
+                log.push_logs(Priority::Info);
+                log.push_logs(Priority::Debug);
             }
         }
 

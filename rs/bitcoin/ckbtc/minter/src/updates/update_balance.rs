@@ -256,7 +256,7 @@ pub async fn update_balance<R: CanisterRuntime>(
                 state::audit::ignore_utxo(s, utxo.clone(), caller_account, now, runtime)
             });
             log!(
-                Priority::P1,
+                Priority::Debug,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the check fee {}",
                 DisplayOutpoint(&utxo.outpoint),
                 DisplayAmount(utxo.value),
@@ -308,7 +308,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         {
             Ok(block_index) => {
                 log!(
-                    Priority::P1,
+                    Priority::Debug,
                     "Minted {amount} {token_name} for account {caller_account} corresponding to utxo {} with value {}",
                     DisplayOutpoint(&utxo.outpoint),
                     DisplayAmount(utxo.value),
@@ -330,7 +330,7 @@ pub async fn update_balance<R: CanisterRuntime>(
             }
             Err(err) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "Failed to mint ckBTC for UTXO {}: {:?}",
                     DisplayOutpoint(&utxo.outpoint),
                     err
@@ -383,7 +383,7 @@ async fn check_utxo<R: CanisterRuntime>(
             })? {
             CheckTransactionResponse::Failed(addresses) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "Discovered a tainted UTXO {} (due to input addresses {}) for update_balance({:?}) call",
                     DisplayOutpoint(&utxo.outpoint),
                     addresses.join(","),
@@ -394,7 +394,7 @@ async fn check_utxo<R: CanisterRuntime>(
             CheckTransactionResponse::Passed => return Ok(UtxoCheckStatus::Clean),
             CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles) => {
                 log!(
-                    Priority::P1,
+                    Priority::Debug,
                     "The Bitcoin checker canister requires more cycles, Remaining tries: {}",
                     MAX_CHECK_TRANSACTION_RETRY - i - 1
                 );
@@ -402,7 +402,7 @@ async fn check_utxo<R: CanisterRuntime>(
             }
             CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(status)) => {
                 log!(
-                    Priority::P1,
+                    Priority::Debug,
                     "The Bitcoin checker canister is temporarily unavailable: {:?}",
                     status
                 );
@@ -411,7 +411,7 @@ async fn check_utxo<R: CanisterRuntime>(
                 )));
             }
             CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(error)) => {
-                log!(Priority::P1, "Bitcoin checker error: {:?}", error);
+                log!(Priority::Debug, "Bitcoin checker error: {:?}", error);
                 return Err(UpdateBalanceError::GenericError {
                     error_code: ErrorCode::KytError as u64,
                     error_message: format!("Bitcoin checker error: {error:?}"),

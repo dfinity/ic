@@ -565,7 +565,7 @@ impl CkBtcMinterState {
                 self.min_confirmations = min_conf;
             } else {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "Didn't increase min_confirmations to {} (current value: {})",
                     min_conf,
                     self.min_confirmations
@@ -1533,7 +1533,7 @@ impl CkBtcMinterState {
     ) -> Option<MillisatoshiPerByte> {
         if fees.len() < 100 {
             log!(
-                Priority::P0,
+                Priority::Info,
                 "[update_median_fee_per_vbyte]: not enough data points ({}) to compute the fee",
                 fees.len()
             );

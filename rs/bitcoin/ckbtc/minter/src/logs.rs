@@ -7,9 +7,9 @@ use std::str::FromStr;
 #[derive(LogPriorityLevels, Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub enum Priority {
     #[log_level(capacity = 1000, name = "INFO")]
-    P0,
+    Info,
     #[log_level(capacity = 1000, name = "DEBUG")]
-    P1,
+    Debug,
 }
 
 impl GetLogFilter for Priority {
@@ -23,8 +23,8 @@ impl FromStr for Priority {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "info" => Ok(Priority::P0),
-            "debug" => Ok(Priority::P1),
+            "info" => Ok(Priority::Info),
+            "debug" => Ok(Priority::Debug),
             _ => Err("could not recognize priority".to_string()),
         }
     }

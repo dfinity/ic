@@ -54,13 +54,17 @@ pub async fn init_ecdsa_public_key() -> ECDSAPublicKey {
         return key;
     };
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    log!(Priority::P1, "Fetching the ECDSA public key {}", &key_name);
+    log!(
+        Priority::Debug,
+        "Fetching the ECDSA public key {}",
+        &key_name
+    );
     let ecdsa_public_key =
         crate::management::ecdsa_public_key(key_name, DerivationPath::new(vec![]))
             .await
             .unwrap_or_else(|e| ic_cdk::trap(format!("failed to retrieve ECDSA public key: {e}")));
     log!(
-        Priority::P1,
+        Priority::Debug,
         "ECDSA public key set to {}, chain code to {}",
         hex::encode(&ecdsa_public_key.public_key),
         hex::encode(&ecdsa_public_key.chain_code)

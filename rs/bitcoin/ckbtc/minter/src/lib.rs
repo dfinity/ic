@@ -224,7 +224,7 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
         Ok(response) => response.utxos,
         Err(e) => {
             log!(
-                Priority::P0,
+                Priority::Info,
                 "[fetch_main_utxos]: failed to fetch UTXOs for the main address {}: {}",
                 main_address.display(btc_network),
                 e
@@ -277,7 +277,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
         }
         Err(err) => {
             log!(
-                Priority::P0,
+                Priority::Info,
                 "[estimate_fee_per_vbyte]: failed to get median fee per vbyte: {}",
                 err
             );
@@ -317,7 +317,7 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
             }
         } else {
             log!(
-                Priority::P0,
+                Priority::Info,
                 "[reimburse_canceled_requests]: account is not found for retrieve_btc request ({:?})",
                 request
             );
@@ -400,7 +400,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[submit_pending_requests]: error in building transaction ({:?})",
                     err
                 );
@@ -416,7 +416,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::AmountTooLow) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[submit_pending_requests]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
                     tx::DisplayAmount(batch.iter().map(|req| req.amount).sum::<u64>()),
                     batch
@@ -440,7 +440,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::DustOutput { address, amount }) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[submit_pending_requests]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
                     tx::DisplayAmount(amount),
                     address.display(s.btc_network)
@@ -469,7 +469,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::NotEnoughFunds) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[submit_pending_requests]: not enough funds to unsigned transaction for requests at block indexes [{}]",
                     batch
                         .iter()
@@ -486,7 +486,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
 
     if let Some((req, total_fee)) = maybe_sign_request {
         log!(
-            Priority::P1,
+            Priority::Debug,
             "[submit_pending_requests]: signing a new transaction: {}",
             hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
         );
@@ -518,14 +518,14 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 });
 
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[submit_pending_requests]: sending a signed transaction {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 match runtime.send_transaction(&signed_tx, req.network).await {
                     Ok(()) => {
                         log!(
-                            Priority::P1,
+                            Priority::Debug,
                             "[submit_pending_requests]: successfully sent transaction {}",
                             &txid,
                         );
@@ -555,7 +555,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     }
                     Err(err) => {
                         log!(
-                            Priority::P0,
+                            Priority::Info,
                             "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
                             err
                         );
@@ -564,7 +564,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(err) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
                     err
                 );
@@ -632,7 +632,7 @@ pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
 
     for txid in unstuck_transactions {
         log!(
-            Priority::P0,
+            Priority::Info,
             "[finalize_requests]: finalized transaction {} previously assumed to be stuck",
             &txid
         );
@@ -709,7 +709,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         Ok(response) => response.utxos,
         Err(e) => {
             log!(
-                Priority::P0,
+                Priority::Info,
                 "[finalize_requests]: failed to fetch UTXOs for the main address {}: {}",
                 main_address.display(btc_network),
                 e
@@ -735,7 +735,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     //
     // Let's resubmit these transactions.
     log!(
-        Priority::P0,
+        Priority::Info,
         "[finalize_requests]: found {} stuck transactions: {}",
         maybe_finalized_transactions.len(),
         maybe_finalized_transactions
@@ -817,7 +817,7 @@ pub async fn resubmit_transactions<
         ) {
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[finalize_requests]: {:?}, transaction {} will be canceled",
                     err,
                     &submitted_tx.txid,
@@ -856,7 +856,7 @@ pub async fn resubmit_transactions<
             // Let's ignore this transaction and wait for fees to go down.
             Err(err) => {
                 log!(
-                    Priority::P1,
+                    Priority::Debug,
                     "[finalize_requests]: failed to rebuild stuck transaction {}: {:?}",
                     &submitted_tx.txid,
                     err
@@ -879,7 +879,7 @@ pub async fn resubmit_transactions<
             Ok(tx) => tx,
             Err(err) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[finalize_requests]: failed to sign a BTC transaction: {}",
                     err
                 );
@@ -895,7 +895,7 @@ pub async fn resubmit_transactions<
                     // transaction with itself is not allowed, we still handle the transaction
                     // equality in case the fee computation rules change in the future.
                     log!(
-                        Priority::P0,
+                        Priority::Info,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
                         &new_txid,
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
@@ -903,7 +903,7 @@ pub async fn resubmit_transactions<
                     continue;
                 }
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
                     &new_txid,
                     &old_txid,
@@ -922,7 +922,7 @@ pub async fn resubmit_transactions<
             }
             Err(err) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new())),
                     &old_txid,
@@ -1545,7 +1545,11 @@ impl CanisterRuntime for IcCanisterRuntime {
             .candid()
             .map(|res: CheckAddressResponse| match res {
                 CheckAddressResponse::Failed => {
-                    log!(Priority::P0, "Discovered a tainted btc address {}", address);
+                    log!(
+                        Priority::Info,
+                        "Discovered a tainted btc address {}",
+                        address
+                    );
                     BtcAddressCheckStatus::Tainted
                 }
                 CheckAddressResponse::Passed => BtcAddressCheckStatus::Clean,

@@ -82,7 +82,7 @@ pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
         {
             Ok(mint_index) => {
                 log!(
-                    Priority::P1,
+                    Priority::Debug,
                     "[reimburse_withdrawals]: Successfully reimbursed {:?} at mint block index {}",
                     reimbursement,
                     mint_index
@@ -93,7 +93,7 @@ pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
             }
             Err(err) => {
                 log!(
-                    Priority::P0,
+                    Priority::Info,
                     "[reimburse_withdrawals]: Failed to reimburse {:?}: {:?}. Will retry later",
                     reimbursement,
                     err
@@ -109,7 +109,7 @@ pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
 
     if error_count > 0 {
         log!(
-            Priority::P0,
+            Priority::Info,
             "[reimburse_withdrawals] Failed to reimburse {error_count} withdrawal requests, retrying later."
         );
     }

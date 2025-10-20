@@ -54,7 +54,7 @@ pub struct UpgradeArgs {
 pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {
     if let Some(upgrade_args) = upgrade_args {
         log!(
-            Priority::P0,
+            Priority::Info,
             "[upgrade]: updating configuration with {:?}",
             upgrade_args
         );
@@ -64,10 +64,14 @@ pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runti
     let start = ic_cdk::api::instruction_counter();
 
     if let Some(removed) = migrate_old_events_if_not_empty() {
-        log!(Priority::P0, "[upgrade]: {} empty events removed", removed)
+        log!(
+            Priority::Info,
+            "[upgrade]: {} empty events removed",
+            removed
+        )
     }
     log!(
-        Priority::P0,
+        Priority::Info,
         "[upgrade]: replaying {} events",
         count_events()
     );
@@ -83,7 +87,7 @@ pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runti
     let end = ic_cdk::api::instruction_counter();
 
     log!(
-        Priority::P0,
+        Priority::Info,
         "[upgrade]: replaying events consumed {} instructions",
         end - start
     );

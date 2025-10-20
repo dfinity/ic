@@ -194,7 +194,7 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
-                Priority::P1,
+                Priority::Debug,
                 "rejected an attempt to withdraw {} BTC to address {} due to failed Bitcoin check",
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
@@ -228,7 +228,7 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
     };
 
     log!(
-        Priority::P1,
+        Priority::Debug,
         "accepted a retrieve btc request for {} BTC to address {} (block_index = {})",
         crate::tx::DisplayAmount(request.amount),
         args.address,
