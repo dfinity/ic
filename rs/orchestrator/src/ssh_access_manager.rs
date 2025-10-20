@@ -219,6 +219,7 @@ mod tests {
     const UNASSIGNED_NODE: NodeId = NODE_2;
     const API_BOUNDARY_NODE: NodeId = NODE_3;
     const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+    const REPLICA_VERSION: &str = "some_version";
 
     const ASSIGNED_READONLY_KEY: &str = "assigned_readonly_key";
     const UNASSIGNED_READONLY_KEY: &str = "unassigned_readonly_key";
@@ -305,7 +306,7 @@ mod tests {
                     REGISTRY_VERSION,
                     Some(UnassignedNodesConfigRecord {
                         ssh_readonly_access,
-                        replica_version: "some_version".into(),
+                        replica_version: REPLICA_VERSION.into(),
                     }),
                 )
                 .expect("Failed to add unassigned nodes record.");
@@ -331,7 +332,7 @@ mod tests {
                 &make_api_boundary_node_record_key(API_BOUNDARY_NODE),
                 REGISTRY_VERSION,
                 Some(ApiBoundaryNodeRecord {
-                    version: "some_version".into(),
+                    version: REPLICA_VERSION.into(),
                 }),
             )
             .expect("Failed to add boundary node record.");
