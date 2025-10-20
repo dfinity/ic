@@ -27,7 +27,6 @@ use crate::{
     metrics::observe_update_call_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
-    updates::get_btc_address,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -167,9 +166,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     };
     let _guard = balance_update_guard(caller_account)?;
 
-    let address = state::read_state(|s| {
-        get_btc_address::account_to_p2wpkh_address_from_state(s, &caller_account)
-    });
+    let address = state::read_state(|s| runtime.derive_user_address(s, &caller_account));
 
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
@@ -358,12 +355,7 @@ async fn check_utxo<R: CanisterRuntime>(
 ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
     use ic_btc_checker::{CHECK_TRANSACTION_CYCLES_REQUIRED, CheckTransactionStatus};
 
-    let btc_checker_principal = read_state(|s| {
-        s.btc_checker_principal
-            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
-            .get()
-            .into()
-    });
+    let btc_checker_principal = read_state(|s| s.btc_checker_principal.map(Principal::from));
 
     if let Some(checked_utxo) = read_state(|s| s.checked_utxos.get(utxo).cloned()) {
         return Ok(checked_utxo.status);
@@ -427,7 +419,7 @@ async fn check_utxo<R: CanisterRuntime>(
 }
 
 /// Mint an amount of ckBTC to an Account.
-pub(crate) async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError> {
+pub async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError> {
     debug_assert!(memo.0.len() <= crate::CKBTC_LEDGER_MEMO_SIZE as usize);
     let client = ICRC1Client {
         runtime: CdkRuntime,
