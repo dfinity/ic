@@ -18,11 +18,16 @@ pub(crate) struct SshAccessParameters {
     pub subnet_id: Option<SubnetId>,
 }
 
-#[derive(Debug)]
-struct KeySets {
+#[derive(Debug, Default)]
+struct ReadonlyBackupKeySets {
     readonly: Vec<String>,
     backup: Vec<String>,
-    recovery: Vec<String>,
+}
+
+#[derive(Debug)]
+struct KeySets {
+    readonly_backup: OrchestratorResult<ReadonlyBackupKeySets>,
+    recovery: OrchestratorResult<Vec<String>>,
 }
 
 /// Provides function to continuously check the Registry to determine if there
@@ -69,20 +74,10 @@ impl SshAccessManager {
             subnet_id
         );
 
-        let key_sets = match self.get_ssh_keysets(subnet_id, registry_version) {
-            Err(error) => {
-                warn!(
-                    every_n_seconds => 300,
-                    self.logger,
-                    "Cannot retrieve the readonly, backup or recovery keysets from the registry {}", error
-                );
-                return;
-            }
-            Ok(keys) => keys,
-        };
+        let key_sets = self.get_ssh_keysets(subnet_id, registry_version);
 
         // Update the readonly, backup & recovery keys. If it fails, log why.
-        if self.update_access_keys(&key_sets) {
+        if self.update_access_keys(key_sets) {
             *self.last_applied_parameters.write().unwrap() = SshAccessParameters {
                 registry_version,
                 subnet_id,
@@ -97,8 +92,19 @@ impl SshAccessManager {
         Arc::clone(&self.last_applied_parameters)
     }
 
-    fn update_access_keys(&self, key_sets: &KeySets) -> bool {
-        let update = |account, keys| {
+    fn update_access_keys(&self, key_sets: KeySets) -> bool {
+        let update = |account, keys_result| {
+            let keys: &Vec<String> = match keys_result {
+                Ok(keys) => keys,
+                Err(e) => {
+                    warn!(
+                        every_n_seconds => 300,
+                        self.logger,
+                        "Cannot retrieve the {} keysets from the registry: {}", account, e
+                    );
+                    return false;
+                }
+            };
             self.update_access_to_one_account(account, keys)
                 .map_err(|e| {
                     warn!(
@@ -109,9 +115,15 @@ impl SshAccessManager {
                 })
                 .is_ok()
         };
-        let readonly_result = update("readonly", &key_sets.readonly);
-        let backup_result = update("backup", &key_sets.backup);
-        let recovery_result = update("recovery", &key_sets.recovery);
+        let readonly_result = update(
+            "readonly",
+            key_sets.readonly_backup.as_ref().map(|keys| &keys.readonly),
+        );
+        let backup_result = update(
+            "backup",
+            key_sets.readonly_backup.as_ref().map(|keys| &keys.backup),
+        );
+        let recovery_result = update("recovery", key_sets.recovery.as_ref());
         readonly_result && backup_result && recovery_result
     }
 
@@ -140,48 +152,45 @@ impl SshAccessManager {
         }
     }
 
-    fn get_ssh_keysets(
-        &self,
-        subnet_id: Option<SubnetId>,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<KeySets> {
-        let ssh_recovery_access = self.registry.get_ssh_recovery_access(version)?;
-        let (ssh_readonly_access, ssh_backup_access) = match subnet_id {
+    fn get_ssh_keysets(&self, subnet_id: Option<SubnetId>, version: RegistryVersion) -> KeySets {
+        let ssh_recovery_access = self.registry.get_ssh_recovery_access(version);
+        let ssh_readonly_backup_access = match subnet_id {
             None => match self
                 .registry
                 .get_api_boundary_node_record(self.node_id, version)
             {
                 // API boundary nodes (for now) do not have readonly or backup keys
-                Ok(_) => Ok((vec![], vec![])),
+                Ok(_) => Ok(ReadonlyBackupKeySets::default()),
                 // If it is not an API boundary node, it is an unassigned node
                 Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => match self
                     .registry
                     .registry_client
                     .get_unassigned_nodes_config(version)
-                    .map_err(OrchestratorError::RegistryClientError)?
+                    .map_err(OrchestratorError::RegistryClientError)
                 {
                     // Unassigned nodes do not need backup keys
-                    Some(record) => Ok((record.ssh_readonly_access, vec![])),
-                    None => Ok((vec![], vec![])),
+                    Ok(Some(record)) => Ok(ReadonlyBackupKeySets {
+                        readonly: record.ssh_readonly_access,
+                        backup: vec![],
+                    }),
+                    Ok(None) => Ok(ReadonlyBackupKeySets::default()),
+                    Err(err) => Err(err),
                 },
                 Err(err) => Err(err),
             },
             Some(subnet_id) => {
                 self.registry
                     .get_subnet_record(subnet_id, version)
-                    .map(|subnet_record| {
-                        (
-                            subnet_record.ssh_readonly_access,
-                            subnet_record.ssh_backup_access,
-                        )
+                    .map(|subnet_record| ReadonlyBackupKeySets {
+                        readonly: subnet_record.ssh_readonly_access,
+                        backup: subnet_record.ssh_backup_access,
                     })
             }
-        }?;
-        Ok(KeySets {
-            readonly: ssh_readonly_access,
-            backup: ssh_backup_access,
+        };
+        KeySets {
+            readonly_backup: ssh_readonly_backup_access,
             recovery: ssh_recovery_access,
-        })
+        }
     }
 }
 
@@ -255,16 +264,37 @@ mod tests {
 
     impl KeySets {
         fn has_assigned_readonly(&self) -> bool {
-            self.readonly == vec![ASSIGNED_READONLY_KEY.to_string()]
+            self.readonly_backup
+                .as_ref()
+                .is_ok_and(|keys| keys.readonly == vec![ASSIGNED_READONLY_KEY.to_string()])
         }
         fn has_unassigned_readonly(&self) -> bool {
-            self.readonly == vec![UNASSIGNED_READONLY_KEY.to_string()]
+            self.readonly_backup
+                .as_ref()
+                .is_ok_and(|keys| keys.readonly == vec![UNASSIGNED_READONLY_KEY.to_string()])
+        }
+        fn has_empty_readonly(&self) -> bool {
+            self.readonly_backup
+                .as_ref()
+                .is_ok_and(|keys| keys.readonly.is_empty())
         }
         fn has_recovery(&self) -> bool {
-            self.recovery == vec![RECOVERY_KEY.to_string()]
+            self.recovery
+                .as_ref()
+                .is_ok_and(|keys| *keys == vec![RECOVERY_KEY.to_string()])
+        }
+        fn has_empty_recovery(&self) -> bool {
+            self.recovery.as_ref().is_ok_and(|keys| keys.is_empty())
         }
         fn has_backup(&self) -> bool {
-            self.backup == vec![BACKUP_KEY.to_string()]
+            self.readonly_backup
+                .as_ref()
+                .is_ok_and(|keys| keys.backup == vec![BACKUP_KEY.to_string()])
+        }
+        fn has_empty_backup(&self) -> bool {
+            self.readonly_backup
+                .as_ref()
+                .is_ok_and(|keys| keys.backup.is_empty())
         }
     }
 
@@ -369,9 +399,7 @@ mod tests {
             // then we will apply the subnet's keys
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager
-                    .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
-                    .unwrap();
+                let keys = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
                 assert!(keys.has_assigned_readonly());
                 assert!(keys.has_backup());
                 assert!(keys.has_recovery());
@@ -393,16 +421,16 @@ mod tests {
             // then we will not apply the subnet's keys
             for node_id in [ASSIGNED_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
                 assert!(keys.has_unassigned_readonly());
-                assert!(keys.backup.is_empty());
+                assert!(keys.has_empty_backup());
                 assert!(keys.has_recovery());
             }
 
             let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
-            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
-            assert!(keys.readonly.is_empty());
-            assert!(keys.backup.is_empty());
+            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
+            assert!(keys.has_empty_readonly());
+            assert!(keys.has_empty_backup());
             assert!(keys.has_recovery());
         })
     }
@@ -419,13 +447,11 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager
-                    .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
-                    .unwrap();
+                let keys = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
-                assert!(keys.readonly.is_empty());
-                assert!(keys.backup.is_empty());
-                assert!(keys.recovery.is_empty());
+                assert!(keys.has_empty_readonly());
+                assert!(keys.has_empty_backup());
+                assert!(keys.has_empty_recovery());
             }
         })
     }
@@ -442,11 +468,11 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
 
-                assert!(keys.readonly.is_empty());
-                assert!(keys.backup.is_empty());
-                assert!(keys.recovery.is_empty());
+                assert!(keys.has_empty_readonly());
+                assert!(keys.has_empty_backup());
+                assert!(keys.has_empty_recovery());
             }
         })
     }
@@ -463,13 +489,11 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager
-                    .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
-                    .unwrap();
+                let keys = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
                 assert!(keys.has_assigned_readonly());
-                assert!(keys.backup.is_empty());
-                assert!(keys.recovery.is_empty());
+                assert!(keys.has_empty_backup());
+                assert!(keys.has_empty_recovery());
             }
         })
     }
@@ -486,20 +510,20 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
 
                 assert!(keys.has_unassigned_readonly());
-                assert!(keys.backup.is_empty());
-                assert!(keys.recovery.is_empty());
+                assert!(keys.has_empty_backup());
+                assert!(keys.has_empty_recovery());
             }
 
             // API boundary nodes do not use the unassigned readonly keys
             let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
-            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
 
-            assert!(keys.readonly.is_empty());
-            assert!(keys.backup.is_empty());
-            assert!(keys.recovery.is_empty());
+            assert!(keys.has_empty_readonly());
+            assert!(keys.has_empty_backup());
+            assert!(keys.has_empty_recovery());
         })
     }
 
@@ -515,13 +539,11 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager
-                    .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
-                    .unwrap();
+                let keys = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
-                assert!(keys.readonly.is_empty());
+                assert!(keys.has_empty_readonly());
                 assert!(keys.has_backup());
-                assert!(keys.recovery.is_empty());
+                assert!(keys.has_empty_recovery());
             }
         })
     }
@@ -538,11 +560,11 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
 
-                assert!(keys.readonly.is_empty());
-                assert!(keys.backup.is_empty());
-                assert!(keys.recovery.is_empty());
+                assert!(keys.has_empty_readonly());
+                assert!(keys.has_empty_backup());
+                assert!(keys.has_empty_recovery());
             }
         })
     }
@@ -559,12 +581,10 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager
-                    .get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION)
-                    .unwrap();
+                let keys = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
-                assert!(keys.readonly.is_empty());
-                assert!(keys.backup.is_empty());
+                assert!(keys.has_empty_readonly());
+                assert!(keys.has_empty_backup());
                 assert!(keys.has_recovery());
             }
         })
@@ -582,10 +602,10 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
 
-                assert!(keys.readonly.is_empty());
-                assert!(keys.backup.is_empty());
+                assert!(keys.has_empty_readonly());
+                assert!(keys.has_empty_backup());
                 assert!(keys.has_recovery());
             }
         })
@@ -603,12 +623,13 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys_result = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
+                let keys = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
                 assert_matches!(
-                    keys_result,
+                    keys.readonly_backup,
                     Err(OrchestratorError::SubnetMissingError(_, _))
                 );
+                assert!(keys.has_recovery());
             }
         })
     }
@@ -625,22 +646,22 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
                 assert!(keys.has_unassigned_readonly());
-                assert!(keys.backup.is_empty());
+                assert!(keys.has_empty_backup());
                 assert!(keys.has_recovery());
             }
 
             let manager = setup_ssh_access_manager(API_BOUNDARY_NODE, &test, &log);
-            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION).unwrap();
-            assert!(keys.readonly.is_empty());
-            assert!(keys.backup.is_empty());
+            let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION);
+            assert!(keys.has_empty_readonly());
+            assert!(keys.has_empty_backup());
             assert!(keys.has_recovery());
         })
     }
 
     #[test]
-    fn test_fails_without_node_record() {
+    fn test_recovery_fails_without_node_record() {
         with_test_replica_logger(|log| {
             let test = TestCase {
                 assigned_readonly: RegistryEntry::KeyDeployed,
@@ -651,12 +672,14 @@ mod tests {
 
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
-                let keys_result = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
+                let keys = manager.get_ssh_keysets(Some(SUBNET_ID), REGISTRY_VERSION);
 
                 assert_matches!(
-                    keys_result,
+                    keys.recovery,
                     Err(OrchestratorError::NodeRecordMissingError(_, _))
                 );
+                assert!(keys.has_assigned_readonly());
+                assert!(keys.has_backup());
             }
         })
     }
@@ -674,9 +697,16 @@ mod tests {
             for node_id in [ASSIGNED_NODE, API_BOUNDARY_NODE, UNASSIGNED_NODE] {
                 let manager = setup_ssh_access_manager(node_id, &test, &log);
                 // Use unknown registry version
-                let keys_result = manager.get_ssh_keysets(None, REGISTRY_VERSION.increment());
+                let keys = manager.get_ssh_keysets(None, REGISTRY_VERSION.increment());
 
-                assert_matches!(keys_result, Err(OrchestratorError::RegistryClientError(_)));
+                assert_matches!(
+                    keys.readonly_backup,
+                    Err(OrchestratorError::RegistryClientError(_))
+                );
+                assert_matches!(
+                    keys.recovery,
+                    Err(OrchestratorError::RegistryClientError(_))
+                );
             }
         })
     }
