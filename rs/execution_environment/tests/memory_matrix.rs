@@ -145,11 +145,11 @@ where
         .canister_state(canister_id)
         .memory_allocation()
         .allocated_bytes(final_memory_usage);
+    let allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
     let reserved_cycles = test
         .canister_state(canister_id)
         .system_state
         .reserved_balance();
-    let allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
     if err.is_none() {
         if let Some(expected_reserved_cycles) = expected_reserved_cycles {
             assert_eq!(reserved_cycles, expected_reserved_cycles);
@@ -165,6 +165,9 @@ where
         if let Some(expected_allocated_bytes) = runbook.expected_allocated_bytes {
             assert_eq!(allocated_bytes, expected_allocated_bytes);
         }
+    } else {
+        assert_eq!(reserved_cycles, Cycles::zero());
+        assert_eq!(allocated_bytes, NumBytes::from(0));
     }
 
     let canister_memory_usage = test
@@ -176,10 +179,10 @@ where
         .memory_allocated_bytes()
         .get();
     assert_eq!(
+        initial_subnet_available_memory.get_execution_memory(),
         test.subnet_available_memory().get_execution_memory()
             + canister_memory_usage as i64
-            + dummy_canister_memory_usage as i64,
-        initial_subnet_available_memory.get_execution_memory()
+            + dummy_canister_memory_usage as i64
     );
 
     let cycles_balance = test.canister_state(canister_id).system_state.balance()
