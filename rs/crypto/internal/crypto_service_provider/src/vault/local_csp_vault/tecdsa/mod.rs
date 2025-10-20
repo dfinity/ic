@@ -4,7 +4,7 @@ use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVaul
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    IDkgTranscriptInternal, ThresholdEcdsaSigShareInternal,
+    DerivationPath, IDkgTranscriptInternal, ThresholdEcdsaSigShareInternal,
     create_ecdsa_signature_share as tecdsa_sign_share,
 };
 use ic_types::Randomness;
@@ -50,7 +50,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let kappa_times_lambda = deserialize_transcript(kappa_times_lambda_raw.as_ref())?;
         let key_times_lambda = deserialize_transcript(key_times_lambda_raw.as_ref())?;
         let result = self.ecdsa_sign_share_internal(
-            &derivation_path,
+            derivation_path,
             &hashed_message[..],
             &nonce,
             &key,
@@ -76,7 +76,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 {
     fn ecdsa_sign_share_internal(
         &self,
-        derivation_path: &ExtendedDerivationPath,
+        derivation_path: ExtendedDerivationPath,
         hashed_message: &[u8],
         nonce: &Randomness,
         key: &IDkgTranscriptInternal,
@@ -94,7 +94,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             self.combined_commitment_opening_from_sks(&key_times_lambda.combined_commitment)?;
 
         tecdsa_sign_share(
-            &derivation_path.into(),
+            &DerivationPath::from(derivation_path),
             hashed_message,
             *nonce,
             key,
