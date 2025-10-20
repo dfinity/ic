@@ -21,11 +21,16 @@ const FREEZING_THRESHOLD_SECS: u64 = FREEZING_THRESHOLD_DAYS * 24 * 3600;
 const SUBNET_EXECUTION_MEMORY: u64 = 200 * GIB;
 const SUBNET_MEMORY_THRESHOLD: u64 = 100 * GIB;
 
+struct SetupParams {
+    memory_allocation: Option<u64>,
+}
+
 struct Runbook<F, G> {
     initial_cycles: Cycles,
     memory_allocation: Option<u64>,
     setup: F,
     op: G,
+    subnet_memory_target_before_op: NumBytes,
     expected_allocated_bytes: Option<NumBytes>,
     reserved_cycles_increased_after_op: bool,
     memory_allocation_exceeded_before_op: bool,
@@ -44,7 +49,7 @@ struct RunResult {
 #[must_use]
 fn run<F, G, H>(runbook: &Runbook<F, G>) -> RunResult
 where
-    F: Fn(&mut ExecutionTest, CanisterId) -> H,
+    F: Fn(&mut ExecutionTest, CanisterId, SetupParams) -> H,
     G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError>,
 {
     let scaling = 4;
@@ -58,24 +63,22 @@ where
     let initial_subnet_available_memory = test.subnet_available_memory();
 
     let initial_cycles = runbook.initial_cycles;
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_maybe_memory_allocation(runbook.memory_allocation)
-        .with_reserved_cycles_limit(initial_cycles.get())
-        .with_freezing_threshold(FREEZING_THRESHOLD_SECS)
-        .build();
-    let canister_id = test
-        .create_canister_with_settings(initial_cycles, settings)
-        .unwrap();
-    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
-    let res = (runbook.setup)(&mut test, canister_id);
+    let canister_id = test.create_canister(initial_cycles);
+    let params = SetupParams {
+        memory_allocation: runbook.memory_allocation,
+    };
+    let res = (runbook.setup)(&mut test, canister_id, params);
     let memory_allocated_bytes_after_setup =
         test.canister_state(canister_id).memory_allocated_bytes();
 
-    // Dummy canister that fills the memory capacity up to the subnet memory threshold.
+    // Dummy canister that fills the memory capacity up to the desired subnet memory target before executing `op`.
     let dummy_canister_initial_cycles: Cycles = DEFAULT_INITIAL_CYCLES.into();
+    let subnet_memory_target = runbook.subnet_memory_target_before_op;
+    assert!(memory_allocated_bytes_after_setup <= subnet_memory_target);
+    let dummy_canister_memory_allocation =
+        subnet_memory_target - memory_allocated_bytes_after_setup;
     let dummy_canister_settings = CanisterSettingsArgsBuilder::new()
-        .with_memory_allocation(SUBNET_MEMORY_THRESHOLD - memory_allocated_bytes_after_setup.get())
+        .with_memory_allocation(dummy_canister_memory_allocation.get())
         .with_reserved_cycles_limit(dummy_canister_initial_cycles.get())
         .build();
     let dummy_canister_id = test
@@ -175,24 +178,24 @@ where
         err,
         unused_cycles_prepayment,
         allocated_bytes,
-        cycles_used: initial_cycles - cycles_balance,
+        cycles_used: runbook.initial_cycles - cycles_balance,
         idle_cycles_burned_per_day,
     }
 }
 
 fn test_memory_allocation<F, G, H>(mut runbook: Runbook<F, G>)
 where
-    F: Fn(&mut ExecutionTest, CanisterId) -> H,
+    F: Fn(&mut ExecutionTest, CanisterId, SetupParams) -> H,
     G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError>,
 {
     let res = run(&runbook);
-    if runbook.memory_allocation_exceeded_after_op {
-        runbook.initial_cycles = res.cycles_used
-            + res.idle_cycles_burned_per_day * FREEZING_THRESHOLD_DAYS
-            + res.unused_cycles_prepayment;
-        runbook.expected_allocated_bytes = Some(res.allocated_bytes);
-        let res = run(&runbook);
-        assert!(res.err.is_none());
+    runbook.initial_cycles = res.cycles_used
+        + res.idle_cycles_burned_per_day * FREEZING_THRESHOLD_DAYS
+        + res.unused_cycles_prepayment;
+    runbook.expected_allocated_bytes = Some(res.allocated_bytes);
+    let res = run(&runbook);
+    assert!(res.err.is_none());
+    if res.allocated_bytes > NumBytes::from(0) {
         runbook.initial_cycles = res.cycles_used
             + res.idle_cycles_burned_per_day * FREEZING_THRESHOLD_DAYS
             + res.unused_cycles_prepayment
@@ -208,7 +211,7 @@ where
 
 fn test_memory_allocation_suite<F, G, H>(setup: F, op: G, op_cycles_prepayment: bool)
 where
-    F: Fn(&mut ExecutionTest, CanisterId) -> H + Copy,
+    F: Fn(&mut ExecutionTest, CanisterId, SetupParams) -> H + Copy,
     G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError> + Copy,
 {
     // very low memory allocation (exceeded already before executing `op`)
@@ -216,6 +219,7 @@ where
         memory_allocation: Some(0),
         setup,
         op,
+        subnet_memory_target_before_op: SUBNET_MEMORY_THRESHOLD.into(),
         reserved_cycles_increased_after_op: true,
         expected_allocated_bytes: None,
         initial_cycles: DEFAULT_INITIAL_CYCLES.into(),
@@ -230,6 +234,7 @@ where
         memory_allocation: Some(100 * GIB),
         setup,
         op,
+        subnet_memory_target_before_op: SUBNET_MEMORY_THRESHOLD.into(),
         reserved_cycles_increased_after_op: false,
         expected_allocated_bytes: None,
         initial_cycles: DEFAULT_INITIAL_CYCLES.into(),
@@ -240,7 +245,26 @@ where
     test_memory_allocation(runbook);
 }
 
-fn noop(_test: &mut ExecutionTest, _canister_id: CanisterId) {}
+fn setup_universal_canister(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    params: SetupParams,
+) {
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().stable64_grow((60 * MIB) >> 16).reply().build(),
+    )
+    .unwrap();
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_maybe_memory_allocation(params.memory_allocation)
+        .with_reserved_cycles_limit(DEFAULT_INITIAL_CYCLES)
+        .with_freezing_threshold(FREEZING_THRESHOLD_SECS)
+        .build();
+    test.update_settings(canister_id, settings).unwrap();
+}
 
 #[test]
 fn test_memory_allocation_suite_grow_wasm_memory() {
@@ -255,7 +279,7 @@ fn test_memory_allocation_suite_grow_wasm_memory() {
         )
         .err()
     };
-    test_memory_allocation_suite(noop, op, true);
+    test_memory_allocation_suite(setup_universal_canister, op, true);
 }
 
 #[test]
@@ -268,18 +292,12 @@ fn test_memory_allocation_suite_grow_stable_memory() {
         )
         .err()
     };
-    test_memory_allocation_suite(noop, op, true);
+    test_memory_allocation_suite(setup_universal_canister, op, true);
 }
 
 #[test]
 fn test_memory_allocation_suite_take_snapshot() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        test.ingress(
-            canister_id,
-            "update",
-            wasm().stable64_grow((60 * MIB) >> 16).reply().build(),
-        )
-        .unwrap();
         let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
@@ -287,18 +305,13 @@ fn test_memory_allocation_suite_take_snapshot() {
         )
         .err()
     };
-    test_memory_allocation_suite(noop, op, false);
+    test_memory_allocation_suite(setup_universal_canister, op, false);
 }
 
 #[test]
 fn test_memory_allocation_suite_load_snapshot() {
-    let setup = |test: &mut ExecutionTest, canister_id| {
-        test.ingress(
-            canister_id,
-            "update",
-            wasm().stable64_grow((60 * MIB) >> 16).reply().build(),
-        )
-        .unwrap();
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId, params: SetupParams| {
+        setup_universal_canister(test, canister_id, params);
         let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,

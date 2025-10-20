@@ -815,6 +815,21 @@ impl ExecutionTest {
         }
     }
 
+    /// Updates the settings of the given canister.
+    pub fn update_settings(
+        &mut self,
+        canister_id: CanisterId,
+        settings: CanisterSettingsArgs,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings,
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
     /// Updates the freezing threshold of the given canister.
     pub fn update_freezing_threshold(
         &mut self,
