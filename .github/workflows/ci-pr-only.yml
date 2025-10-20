@@ -2,9 +2,12 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
-  merge_group:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
 
 concurrency:
   # only triggered on PR, so head_ref will always be set
