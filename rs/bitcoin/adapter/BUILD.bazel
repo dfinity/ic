@@ -135,6 +135,7 @@ rust_test(
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
         "RUST_TEST_THREADS": "4",
+        "RUST_TEST_NOCAPTURE": "1",
     },
     flaky = True,
     tags = [

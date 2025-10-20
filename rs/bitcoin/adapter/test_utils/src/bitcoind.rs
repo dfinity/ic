@@ -376,15 +376,18 @@ impl<T: RpcClientType> Daemon<T> {
             process::Stdio::null()
         };
 
-        let mut process = process::Command::new(daemon_path)
-            .arg("-printtoconsole")
+        let mut cmd = process::Command::new(daemon_path);
+        cmd.arg("-printtoconsole")
             .arg(format!("-conf={}", conf_path.display()))
             .arg(format!("-datadir={}", work_dir.path().display()))
             .arg(format!("-rpcport={rpc_port}"))
             .args(&p2p_args)
             .args(&conf.args)
-            .stdout(stdout)
-            .spawn()?;
+            .stdout(stdout);
+
+        println!("Spawning daemon: {cmd:?}");
+
+        let mut process = cmd.spawn()?;
 
         if let Some(status) = process.try_wait()? {
             panic!("early exit with: {status:?}");
