@@ -1,5 +1,4 @@
-use ic_base_types::NodeId;
-use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId};
+use ic_interfaces::p2p::state_sync::ChunkId;
 use std::collections::VecDeque;
 
 /// Maintains a list of chunks that are still be downloaded
