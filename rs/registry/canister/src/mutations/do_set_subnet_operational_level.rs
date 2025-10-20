@@ -42,7 +42,8 @@ pub mod operational_level {
 impl Registry {
     pub fn do_set_subnet_operational_level(&mut self, payload: SetSubnetOperationalLevelPayload) {
         println!("{LOG_PREFIX}do_set_subnet_operational_level: {payload:?}");
-        self.validate_set_subnet_operational_level(&payload);
+        self.validate_set_subnet_operational_level(&payload)
+            .unwrap();
         let SetSubnetOperationalLevelPayload {
             subnet_id,
             operational_level,
@@ -71,7 +72,10 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
     }
 
-    fn validate_set_subnet_operational_level(&self, payload: &SetSubnetOperationalLevelPayload) {
+    fn validate_set_subnet_operational_level(
+        &self,
+        payload: &SetSubnetOperationalLevelPayload,
+    ) -> Result<(), String> {
         let SetSubnetOperationalLevelPayload {
             subnet_id,
             operational_level,
@@ -81,14 +85,12 @@ impl Registry {
 
         match subnet_id {
             None => {
-                assert_eq!(
-                    operational_level, &None,
-                    "operational_level specified, but not subnet_id."
-                );
-                assert_eq!(
-                    ssh_readonly_access, &None,
-                    "ssh_readonly_access specified, but not subnet_id."
-                );
+                if operational_level.is_some() {
+                    return Err("operational_level specified, but not subnet_id.".to_string());
+                }
+                if ssh_readonly_access.is_some() {
+                    return Err("ssh_readonly_access specified, but not subnet_id.".to_string());
+                }
             }
 
             Some(_subnet_id) => {
@@ -96,70 +98,81 @@ impl Registry {
             }
         }
 
-        validate_operational_level(*operational_level);
-        validate_ssh_readonly_access(ssh_readonly_access);
-        validate_ssh_node_state_write_access(ssh_node_state_write_access);
+        validate_operational_level(*operational_level)?;
+        validate_ssh_readonly_access(ssh_readonly_access)?;
+        validate_ssh_node_state_write_access(ssh_node_state_write_access)?;
+
+        Ok(())
     }
 }
 
-fn validate_operational_level(operational_level: Option<i32>) {
+fn validate_operational_level(operational_level: Option<i32>) -> Result<(), String> {
     // None is ok.
     let Some(operational_level) = operational_level else {
-        return;
+        return Ok(());
     };
 
-    assert!(
-        operational_level::ALL_VALID_CODES.contains(&operational_level),
-        "Specified {} for operational_level, but that is not one of the allowed values",
-        operational_level,
-    );
+    if !operational_level::ALL_VALID_CODES.contains(&operational_level) {
+        return Err(format!(
+            "Specified {operational_level} for operational_level, \
+             but that is not one of the allowed values"
+        ));
+    };
+
+    Ok(())
 }
 
-fn validate_ssh_readonly_access(_ssh_readonly_access: &Option<Vec<String>>) {
-    // Nothing to do here.
+fn validate_ssh_readonly_access(_ssh_readonly_access: &Option<Vec<String>>) -> Result<(), String> {
+    Ok(())
 }
 
-fn validate_ssh_node_state_write_access(ssh_node_state_write_access: &Option<Vec<NodeSshAccess>>) {
+fn validate_ssh_node_state_write_access(
+    ssh_node_state_write_access: &Option<Vec<NodeSshAccess>>,
+) -> Result<(), String> {
     // None is ok.
     let Some(ssh_node_state_write_access) = ssh_node_state_write_access.as_ref() else {
-        return;
+        return Ok(());
     };
 
     // Each element must be valid.
     ssh_node_state_write_access
         .iter()
-        .for_each(validate_node_ssh_access);
+        .map(validate_node_ssh_access)
+        .collect::<Result<Vec<()>, String>>()?;
 
     // The node_ids must be unique.
     let node_ids = ssh_node_state_write_access
         .iter()
         .map(|e| e.node_id)
         .collect::<HashSet<_>>();
-    assert_eq!(
-        node_ids.len(),
-        ssh_node_state_write_access.len(),
-        "node_ids in ssh_node_state_write_access are not unique: {ssh_node_state_write_access:?}",
-    );
+    if node_ids.len() != ssh_node_state_write_access.len() {
+        return Err(format!(
+            "node_ids in ssh_node_state_write_access are not unique: \
+             {ssh_node_state_write_access:?}",
+        ));
+    }
+
+    Ok(())
 }
 
-fn validate_node_ssh_access(node_ssh_access: &NodeSshAccess) {
+fn validate_node_ssh_access(node_ssh_access: &NodeSshAccess) -> Result<(), String> {
     let NodeSshAccess {
         node_id,
         public_keys,
     } = node_ssh_access;
 
-    assert!(
-        node_id.is_some(),
-        "node_id must be specified in NodeSshAccess."
-    );
+    let Some(_node_id) = node_id else {
+        return Err("node_id must be specified in NodeSshAccess.".to_string());
+    };
 
     // We could treat None the same as Some(vec![]), but that would make it far
     // too easy to commit unintentional deletion. (Some(vec![]) tells us to
     // clear the field!) Always make sure that clobbering is INTENTIONAL!
-    assert!(
-        public_keys.is_some(),
-        "public_keys must be specified in NodeSshAccess."
-    );
+    let Some(_public_keys) = public_keys else {
+        return Err("public_keys must be specified in NodeSshAccess.".to_string());
+    };
+
+    Ok(())
 }
 
 /// Returns mutation(s) (possibly 0) to subnet_record to effect
