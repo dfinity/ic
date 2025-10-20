@@ -11,9 +11,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterStatusResultV2, CanisterStatusType,
-    CanisterUpgradeOptions, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm,
-    SchnorrKeyId, VetKdCurve, VetKdKeyId,
+    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -669,7 +669,8 @@ fn ic0_stable_read_traps_if_out_of_bounds() {
 #[test]
 fn ic0_stable_read_handles_overflows() {
     let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing_disabled()
+        .with_instruction_limit(5_000_000_000)
+        .with_slice_instruction_limit(5_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -3446,7 +3447,7 @@ fn instruction_limit_is_respected() {
 #[test]
 fn subnet_available_memory_is_respected_by_memory_grow() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(9 * WASM_PAGE_SIZE as i64)
+        .with_subnet_execution_memory(9 * WASM_PAGE_SIZE as u64)
         .with_subnet_memory_reservation(0)
         .build();
     let wat = r#"
@@ -7886,9 +7887,10 @@ fn stable_memory_grow_reserves_cycles() {
 
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(subnet_type)
-            .with_subnet_execution_memory(CAPACITY as i64)
-            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_execution_memory(CAPACITY)
+            .with_subnet_memory_threshold(THRESHOLD)
             .with_subnet_memory_reservation(0)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let canister_id = test
@@ -7976,9 +7978,10 @@ fn wasm_memory_grow_reserves_cycles() {
 
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(subnet_type)
-            .with_subnet_execution_memory(CAPACITY as i64)
-            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_execution_memory(CAPACITY)
+            .with_subnet_memory_threshold(THRESHOLD)
             .with_subnet_memory_reservation(0)
+            .with_resource_saturation_scaling(1)
             .build();
 
         let wat = r#"
@@ -8056,9 +8059,10 @@ fn set_reserved_cycles_limit_below_existing_fails() {
     const THRESHOLD: u64 = 500_000_000;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_memory_threshold(THRESHOLD)
         .with_subnet_memory_reservation(0)
+        .with_resource_saturation_scaling(1)
         .build();
 
     let wat = r#"
@@ -8192,13 +8196,13 @@ fn resource_saturation_scaling_works_in_regular_execution() {
     const SCALING: u64 = 4;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory(SCALING * CAPACITY)
+        .with_subnet_memory_threshold(SCALING * THRESHOLD)
         .with_subnet_memory_reservation(0)
         .with_resource_saturation_scaling(SCALING as usize)
         .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD / SCALING))
+    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
         .unwrap();
 
     let wat = r#"
@@ -8230,6 +8234,10 @@ fn resource_saturation_scaling_works_in_regular_execution() {
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
     let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
     let balance_before = test.canister_state(canister_id).system_state.balance();
+    let reserved_balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
     let result = test.ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
     let balance_after = test.canister_state(canister_id).system_state.balance();
@@ -8243,16 +8251,13 @@ fn resource_saturation_scaling_works_in_regular_execution() {
     assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(
-                subnet_memory_usage / SCALING,
-                THRESHOLD / SCALING,
-                CAPACITY / SCALING
-            ),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        )
+        reserved_balance_before
+            + test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
     );
 
     assert!(balance_before - balance_after > reserved_cycles);
@@ -8264,7 +8269,7 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
     const CAPACITY: u64 = 1_000_000_000;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_execution_memory(CAPACITY)
         .with_subnet_memory_threshold(0)
         .with_subnet_memory_reservation(0)
         .build();
@@ -8318,8 +8323,8 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
     const THRESHOLD: u64 = 10_000_000;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_memory_threshold(THRESHOLD)
         .with_subnet_memory_reservation(0)
         .build();
 
@@ -8364,8 +8369,8 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_memory_threshold(THRESHOLD)
         .with_subnet_memory_reservation(0)
         .build();
 
@@ -8623,34 +8628,6 @@ fn yield_for_dirty_page_copy_does_not_trigger_dts_slice_without_enough_dirty_pag
 
     // The test touches `pages_to_touch`, but the embedder is configured to yield when `pages_to_touch + 1` pages are dirty.
     // Therefore we should have only one slice here.
-    test.execute_slice(canister_id);
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::None
-    );
-}
-
-#[test]
-fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets_without_dts() {
-    let pages_to_touch = 100;
-    let wat = generate_wat_to_touch_pages(pages_to_touch);
-
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing_disabled()
-        .with_subnet_type(SubnetType::System)
-        .with_manual_execution()
-        .with_max_dirty_pages_optimization_embedder_config(pages_to_touch - 1)
-        .build();
-
-    let wasm = wat::parse_str(wat).unwrap();
-    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
-
-    let _result = test.ingress_raw(canister_id, "test", vec![]);
-
-    // The test touches `pages_to_touch`, but the embedder is configured to yield when `pages_to_touch - 1` pages are dirty.
-    // This should not happen for system subnets.
     test.execute_slice(canister_id);
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
@@ -10529,8 +10506,7 @@ fn reply_in_entry_point_and_callback() {
     // Make sure the callback was executed by stopping and starting the canister.
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
-    let res = test.canister_status(canister_id);
-    let canister_status = Decode!(&get_reply(res), CanisterStatusResultV2).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     assert_eq!(canister_status.status(), CanisterStatusType::Stopped);
     test.start_canister(canister_id).unwrap();
 

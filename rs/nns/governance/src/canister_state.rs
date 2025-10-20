@@ -403,7 +403,8 @@ fn get_effective_payload(
         | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
         | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
         | NnsFunction::PauseCanisterMigrations
-        | NnsFunction::UnpauseCanisterMigrations => Ok(payload),
+        | NnsFunction::UnpauseCanisterMigrations
+        | NnsFunction::SetSubnetOperationalLevel => Ok(payload),
     }
 }
 

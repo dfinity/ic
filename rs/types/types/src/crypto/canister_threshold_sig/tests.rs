@@ -1,4 +1,5 @@
 use super::*;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::error::{
     EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
 };
@@ -519,20 +520,28 @@ fn should_create_schnorr_sig_inputs_correctly() {
     let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
         .expect("failed to created presignature transcript");
 
-    let derivation_path = derivation_path();
+    let extended_derivation_path = derivation_path();
     let message = message_in_size_range(0..1_000, rng);
-    let nonce = Randomness::new(nonce());
+    let nonce = nonce();
     let tschnorr_sig_inputs = ThresholdSchnorrSigInputs::new(
-        &derivation_path,
+        &extended_derivation_path.caller,
+        &extended_derivation_path.derivation_path,
         &message,
         None,
-        nonce,
-        presignature_transcript.clone(),
-        key_transcript.clone(),
+        &nonce,
+        &presignature_transcript,
+        &key_transcript,
     )
     .expect("failed to create threshold Schnorr signature inputs");
 
-    assert_eq!(tschnorr_sig_inputs.derivation_path(), &derivation_path);
+    assert_eq!(
+        tschnorr_sig_inputs.caller(),
+        &extended_derivation_path.caller
+    );
+    assert_eq!(
+        tschnorr_sig_inputs.derivation_path(),
+        &extended_derivation_path.derivation_path
+    );
     assert_eq!(tschnorr_sig_inputs.message(), &message);
     assert_eq!(tschnorr_sig_inputs.nonce(), &nonce);
     assert_eq!(
@@ -575,19 +584,20 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
 
     let derivation_path = derivation_path();
     let message = message_in_size_range(0..1_000, rng);
-    let nonce = Randomness::new(nonce());
+    let nonce = nonce();
 
     {
         let mut key_transcript = key_transcript.clone();
         key_transcript.algorithm_id = AlgorithmId::Tls;
         assert_eq!(
             ThresholdSchnorrSigInputs::new(
-                &derivation_path,
+                &derivation_path.caller,
+                &derivation_path.derivation_path,
                 &message,
                 None,
-                nonce,
-                presignature_transcript.clone(),
-                key_transcript,
+                &nonce,
+                &presignature_transcript,
+                &key_transcript,
             ),
             Err(
                 error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
@@ -601,12 +611,13 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
     presignature_transcript.blinder_unmasked.algorithm_id = AlgorithmId::Tls;
     assert_eq!(
         ThresholdSchnorrSigInputs::new(
-            &derivation_path,
+            &derivation_path.caller,
+            &derivation_path.derivation_path,
             &message,
             None,
-            nonce,
-            presignature_transcript,
-            key_transcript,
+            &nonce,
+            &presignature_transcript,
+            &key_transcript,
         ),
         Err(
             error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
@@ -630,19 +641,20 @@ fn should_fail_creating_schnorr_sig_inputs_with_unsupported_algorithm() {
 
     let derivation_path = derivation_path();
     let message = message_in_size_range(0..1_000, rng);
-    let nonce = Randomness::new(nonce());
+    let nonce = nonce();
 
     let unsupported_algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
     key_transcript.algorithm_id = unsupported_algorithm;
     presignature_transcript.blinder_unmasked.algorithm_id = unsupported_algorithm;
     assert_eq!(
         ThresholdSchnorrSigInputs::new(
-            &derivation_path,
+            &derivation_path.caller,
+            &derivation_path.derivation_path,
             &message,
             None,
-            nonce,
-            presignature_transcript,
-            key_transcript,
+            &nonce,
+            &presignature_transcript,
+            &key_transcript,
         ),
         Err(
             error::ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(
@@ -670,14 +682,18 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
     let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
         .expect("failed to created presignature transcript");
 
+    let extended_derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
     assert_eq!(
         ThresholdSchnorrSigInputs::new(
-            &derivation_path(),
-            &message_in_size_range(0..1_000, rng),
+            &extended_derivation_path.caller,
+            &extended_derivation_path.derivation_path,
+            &message,
             None,
-            Randomness::new(nonce()),
-            presignature_transcript,
-            key_transcript,
+            &nonce,
+            &presignature_transcript,
+            &key_transcript,
         ),
         Err(error::ThresholdSchnorrSigInputsCreationError::InconsistentReceivers)
     );
@@ -696,7 +712,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
 
     let derivation_path: ExtendedDerivationPath = derivation_path();
     let message = message_in_size_range(0..1_000, rng);
-    let nonce = Randomness::new(nonce());
+    let nonce = nonce();
 
     let invalid_transcript_types = [
         IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
@@ -715,12 +731,13 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
         presignature_transcript.blinder_unmasked.transcript_type = invalid_transcript_type.clone();
         assert_matches!(
             ThresholdSchnorrSigInputs::new(
-                &derivation_path,
+                &derivation_path.caller,
+                &derivation_path.derivation_path,
                 &message,
                 None,
-                nonce,
-                presignature_transcript.clone(),
-                key_transcript.clone(),
+                &nonce,
+                &presignature_transcript,
+                &key_transcript,
             ),
             Err(error::ThresholdSchnorrSigInputsCreationError::InvalidPreSignatureOrigin(internal_error))
             if internal_error == format!("Presignature transcript: {invalid_transcript_type:?}")

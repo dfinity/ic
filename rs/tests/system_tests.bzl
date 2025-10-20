@@ -2,7 +2,6 @@
 Rules for system-tests.
 """
 
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
@@ -12,9 +11,6 @@ load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
-
-    # whether to use k8s instead of farm
-    k8s = ctx.attr._k8s[BuildSettingInfo].value
 
     no_logs = True
     if ctx.executable.colocated_test_bin != None:
@@ -81,11 +77,9 @@ def _run_system_test(ctx):
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
             # relative to the $RUNFILES directory.
             export RUNFILES="$PWD"
-            KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
             mkdir "$TEST_TMPDIR/root_env"
             "$RUNFILES/{test_executable}" \
               --working-dir "$TEST_TMPDIR" \
-              {k8s} \
               --group-base-name {group_base_name} \
               {logs} \
               {no_summary_report} \
@@ -93,7 +87,6 @@ def _run_system_test(ctx):
               "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
-            k8s = "--k8s" if k8s else "",
             group_base_name = ctx.label.name,
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
             info_file = ctx.info_file.short_path,
@@ -142,10 +135,6 @@ def _run_system_test(ctx):
 
     runtime_deps = []
 
-    if k8s:
-        env["KUBECONFIG"] = ctx.file._k8sconfig.path
-        runtime_deps.append([ctx.file._k8sconfig])
-
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
@@ -182,8 +171,6 @@ run_system_test = rule(
         "src": attr.label(executable = True, cfg = "exec"),
         "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
-        "_k8s": attr.label(default = "//rs/tests:k8s"),
-        "_k8sconfig": attr.label(allow_single_file = True, default = None),
         "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
         "runtime_deps": attr.label_list(allow_files = True),
         "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
