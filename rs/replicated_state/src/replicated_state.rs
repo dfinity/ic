@@ -40,7 +40,7 @@ use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
@@ -732,7 +732,7 @@ impl ReplicatedState {
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
-    ) -> (Arc<IngressStatus>, HashMap<u64, u64>) {
+    ) -> (Arc<IngressStatus>, BTreeMap<u64, u64>) {
         self.metadata.ingress_history.insert(
             message_id,
             status,

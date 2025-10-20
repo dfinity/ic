@@ -41,7 +41,6 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::ops::Bound::{Included, Unbounded};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -1149,7 +1148,7 @@ impl IngressHistoryState {
         status: IngressStatus,
         time: Time,
         ingress_memory_capacity: NumBytes,
-    ) -> (Arc<IngressStatus>, HashMap<u64, u64>) {
+    ) -> (Arc<IngressStatus>, BTreeMap<u64, u64>) {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -1175,7 +1174,7 @@ impl IngressHistoryState {
         }
 
         // Metrics for time spent in ingress history.
-        let mut pruned_times: HashMap<u64, u64> = HashMap::new();
+        let mut pruned_times: BTreeMap<u64, u64> = BTreeMap::new();
         if self.memory_usage > ingress_memory_capacity.get() as usize {
             pruned_times = self.forget_terminal_statuses(ingress_memory_capacity, time);
         }
@@ -1252,14 +1251,14 @@ impl IngressHistoryState {
     /// Note that this function must remain private and should only be
     /// called from within `insert` to ensure that `next_terminal_time`
     /// is consistently updated and we don't miss any completed statuses.
-    fn forget_terminal_statuses(&mut self, target_size: NumBytes, now: Time) -> HashMap<u64, u64> {
+    fn forget_terminal_statuses(&mut self, target_size: NumBytes, now: Time) -> BTreeMap<u64, u64> {
         // In debug builds we store the length of the statuses map here so that
         // we can later debug_assert that no status disappeared.
         #[cfg(debug_assertions)]
         let statuses_len_before = self.statuses.len();
 
         // Return an age histogram for metrics: (seconds, count)
-        let mut pruned_ages: HashMap<u64, u64> = HashMap::new();
+        let mut pruned_ages: BTreeMap<u64, u64> = BTreeMap::new();
 
         let target_size = target_size.get() as usize;
         let statuses = Arc::make_mut(&mut self.statuses);
