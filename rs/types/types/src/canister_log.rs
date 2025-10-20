@@ -25,6 +25,9 @@ const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
 /// Prevents unbounded growth of `delta_log_sizes`.
 const DELTA_LOG_SIZES_CAP: usize = 100;
 
+/// Maximum number of response bytes for a canister http request.
+pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
+
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT >= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
