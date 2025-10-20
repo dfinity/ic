@@ -2,11 +2,12 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
     fs,
-    io::{self, Read},
+    io::{self, BufRead, BufReader, Read, Write},
     net,
     path::PathBuf,
     process,
     sync::Arc,
+    time::Duration,
 };
 
 use bitcoin::p2p::{Magic, ServiceFlags};
@@ -370,12 +371,6 @@ impl<T: RpcClientType> Daemon<T> {
             (vec!["-listen=0".to_string()], None)
         };
 
-        let stdout = if conf.view_stdout {
-            process::Stdio::inherit()
-        } else {
-            process::Stdio::null()
-        };
-
         let mut cmd = process::Command::new(daemon_path);
         cmd.arg("-printtoconsole")
             .arg(format!("-conf={}", conf_path.display()))
@@ -383,7 +378,8 @@ impl<T: RpcClientType> Daemon<T> {
             .arg(format!("-rpcport={rpc_port}"))
             .args(&p2p_args)
             .args(&conf.args)
-            .stdout(stdout);
+            // Always pipe stdout so we can watch for "Done loading"
+            .stdout(process::Stdio::piped());
 
         println!("Spawning daemon: {cmd:?}");
 
@@ -394,17 +390,39 @@ impl<T: RpcClientType> Daemon<T> {
         }
         assert!(process.stderr.is_none());
 
-        let mut i = 0;
-        let rpc_client = loop {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            match RpcClient::new(network, &rpc_url, auth.clone()) {
-                Ok(client) => break client.ensure_wallet()?,
-                Err(err) if i > 50 => return Err(err),
-                Err(_) => {
-                    i += 1;
+        // Read child's stdout and wait for "Done loading"
+        let stdout = process.stdout.take().expect("child stdout must be piped");
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            let mut line = String::new();
+            let mut notified = false;
+            let mut out = std::io::stdout();
+            loop {
+                line.clear();
+                match reader.read_line(&mut line) {
+                    Ok(0) => break, // EOF
+                    Ok(_) => {
+                        if conf.view_stdout {
+                            let _ = out.write_all(line.as_bytes());
+                            let _ = out.flush();
+                        }
+                        if !notified && line.contains("Done loading") {
+                            let _ = ready_tx.send(());
+                            notified = true; // keep mirroring until EOF
+                        }
+                    }
+                    Err(_) => break,
                 }
             }
-        };
+        });
+
+        let timeout = Duration::from_secs(60);
+        ready_rx
+            .recv_timeout(timeout)
+            .expect("expected {cmd:?} to be done loading within {timeout:?}");
+
+        let rpc_client = RpcClient::new(network, &rpc_url, auth.clone())?.ensure_wallet()?;
 
         Ok(Self {
             _work_dir: work_dir,
