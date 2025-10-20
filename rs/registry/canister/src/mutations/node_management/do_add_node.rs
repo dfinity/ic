@@ -1144,21 +1144,25 @@ mod tests {
 
         // Check that we start with capacity available
         let initial_capacity = get_available_add_node_capacity(test_ip.clone(), now);
-        assert_eq!(initial_capacity, 1, "Should start with 1 capacity");
+        assert_eq!(initial_capacity, 7, "Should start with 1 capacity");
 
         // Act: Add first node with a specific IP - should succeed
         let result_1 = registry.do_add_node_(payload_1.clone(), node_operator_id, now);
         assert!(result_1.is_ok(), "First node addition should succeed");
 
-        // Check that capacity is now exhausted
         let after_first_capacity = get_available_add_node_capacity(test_ip.clone(), now);
         assert_eq!(
-            after_first_capacity, 0,
+            after_first_capacity, 6,
             "Capacity should be exhausted after first node"
         );
 
-        // Act: Try to add second node with the same IP immediately - should fail
-        let result_2 = registry.do_add_node_(payload_2.clone(), node_operator_id, now);
+        for _ in 0..6 {
+            registry
+                .do_add_node_(prepare_add_node_payload(1).0, node_operator_id, now)
+                .unwrap();
+        }
+
+        let result_2 = registry.do_add_node_(prepare_add_node_payload(1).0, node_operator_id, now);
         assert!(
             result_2.is_err(),
             "Second node addition should fail due to rate limiting"
@@ -1177,7 +1181,7 @@ mod tests {
             "Capacity should be restored after 24 hours"
         );
 
-        let result_3 = registry.do_add_node_(payload_2.clone(), node_operator_id, one_day_later);
+        let result_3 = registry.do_add_node_(payload_1.clone(), node_operator_id, one_day_later);
         assert!(
             result_3.is_ok(),
             "Node addition should succeed after 24 hours"
