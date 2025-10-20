@@ -1353,7 +1353,10 @@ fn ingress_history_split() {
     // We should have 10 messages, 5 for each canister.
     assert_eq!(10, ingress_history.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    ingress_history.forget_terminal_statuses(NumBytes::from(u64::MAX), Time::from_nanos_since_unix_epoch(0);
+    ingress_history.forget_terminal_statuses(
+        NumBytes::from(u64::MAX),
+        Time::from_nanos_since_unix_epoch(0),
+    );
     assert_ne!(
         0,
         ingress_history
@@ -1381,7 +1384,10 @@ fn ingress_history_split() {
     // We should only have 8 messages, 3 terminal ones for canister_1 and 5 for canister_2.
     assert_eq!(8, expected.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    expected.forget_terminal_statuses(NumBytes::from(u64::MAX), Time::from_nanos_since_unix_epoch(0));
+    expected.forget_terminal_statuses(
+        NumBytes::from(u64::MAX),
+        Time::from_nanos_since_unix_epoch(0),
+    );
 
     ingress_history.prune_after_split(is_local_canister);
     assert_eq!(expected, ingress_history);
