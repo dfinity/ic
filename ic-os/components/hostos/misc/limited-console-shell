@@ -2,16 +2,25 @@
 # Limited Console Shell - POC implementation
 # Provides restricted access to HostOS administrative commands
 
+source /opt/ic/bin/config.sh
+
 # Show available commands
 show_menu() {
     echo "=== HostOS Limited Console ==="
     echo "Available commands:"
-    echo "1. system-status    - Show system status"
-    echo "2. service-status   - Show service status" 
-    echo "3. restart-service  - Restart a service"
-    echo "4. view-logs        - View service logs"
-    echo "5. network-config   - Show network configuration"
-    echo "6. exit             - Exit console"
+    echo "1. system-status      - Show system status"
+    echo "2. service-status     - Show service status" 
+    echo "3. restart-service    - Restart a service"
+    echo "4. view-logs          - View service logs"
+    echo "5. network-interfaces - Show network interfaces"
+    echo "6. network-routing    - Show routing table"
+    echo "7. network-dns        - Show DNS configuration"
+    echo "8. network-connectivity - Test network connectivity"
+    echo "9. network-settings   - Show network settings from config"
+    echo "10. config-json       - Show /boot/config/config.json"
+    echo "11. failed-services   - Show failed services"
+    echo "12. clear             - Clear the console"
+    echo "13. exit              - Exit console"
     echo ""
 }
 
@@ -20,7 +29,10 @@ execute_command() {
     case "$1" in
         "system-status")
             echo "=== System Status ==="
-            sudo /opt/ic/bin/hostos_tool set-hardware-gen-metric
+            echo "Hostname: $(hostname)"
+            echo "Uptime: $(uptime)"
+            echo "Memory: $(free -h | grep Mem)"
+            echo "Disk Usage: $(df -h / | tail -1)"
             ;;
         "service-status")
             echo "Enter service name (e.g., guestos, vsock-agent): "
@@ -37,9 +49,57 @@ execute_command() {
             read service
             sudo journalctl -u "$service" --no-pager -n 50
             ;;
-        "network-config")
-            echo "=== Network Configuration ==="
-            sudo /opt/ic/bin/hostos_tool generate-network-config
+        "network-interfaces")
+            echo "=== Network Interfaces ==="
+            ip addr show
+            ;;
+        "network-routing")
+            echo "=== Routing Table ==="
+            ip route show
+            ;;
+        "network-dns")
+            echo "=== DNS Configuration ==="
+            cat /etc/resolv.conf
+            ;;
+        "network-connectivity")
+            echo "=== Network Connectivity Tests ==="
+            echo "Testing connectivity to 8.8.8.8..."
+            ping -c 3 8.8.8.8 2>/dev/null || echo "Ping to 8.8.8.8 failed"
+            echo ""
+            echo "Traceroute to 8.8.8.8 (first 10 hops):"
+            traceroute -m 10 8.8.8.8 2>/dev/null || echo "Traceroute not available"
+            echo ""
+            # Check if mtr is available
+            if command -v mtr >/dev/null 2>&1; then
+                echo "MTR to 8.8.8.8 (5 packets):"
+                mtr -r -c 5 8.8.8.8 2>/dev/null || echo "MTR failed"
+            else
+                echo "MTR not available"
+            fi
+            ;;
+        "network-settings")
+            echo "=== Network Settings from Config ==="
+            local network_settings=$(get_config_value '.network_settings' 2>/dev/null)
+            if [ -n "$network_settings" ]; then
+                echo "$network_settings" | jq . 2>/dev/null || echo "$network_settings"
+            else
+                echo "No network settings found in config"
+            fi
+            ;;
+        "config-json")
+            echo "=== /boot/config/config.json ==="
+            cat /boot/config/config.json 
+            ;;
+        "failed-services")
+            echo "=== Failed Services ==="
+            echo "Services in failed state:"
+            systemctl --failed --no-pager
+            echo ""
+            echo "Services with errors in the last 24 hours:"
+            journalctl --since "24 hours ago" --priority=err --no-pager | head -20
+            ;;
+        "clear")
+            clear
             ;;
         "exit")
             echo "Exiting limited console..."
