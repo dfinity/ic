@@ -154,10 +154,7 @@ impl PocketIc {
             server_url
         };
 
-        let subnet_config_set = subnet_config_set
-            .into()
-            .try_with_icp_features(&icp_features)
-            .unwrap();
+        let subnet_config_set: ExtendedSubnetConfigSet = subnet_config_set.into();
 
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)

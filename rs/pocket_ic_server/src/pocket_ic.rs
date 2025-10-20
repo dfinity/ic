@@ -2354,7 +2354,7 @@ impl PocketIc {
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
         seed: u64,
-        mut subnet_configs: ExtendedSubnetConfigSet,
+        subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         icp_config: IcpConfig,
         log_level: Option<Level>,
@@ -2441,9 +2441,6 @@ impl PocketIc {
                 })
                 .collect()
         } else {
-            if let Some(ref icp_features) = icp_features {
-                subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
-            }
             let fixed_range_subnets = subnet_configs.get_named();
             let flexible_subnets = {
                 let sys = subnet_configs.system.iter().map(|spec| {
