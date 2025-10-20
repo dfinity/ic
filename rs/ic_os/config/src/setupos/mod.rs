@@ -11,7 +11,7 @@ pub fn create_setupos_config(
     mgmt_mac: MacAddr6,
     deployment_environment: DeploymentEnvironment,
     nns_urls: &[Url],
-    vm_resources: VmResources,
+    dev_vm_resources: VmResources,
     enable_trusted_execution_environment: bool,
     use_node_operator_private_key: bool,
     use_ssh_authorized_keys: bool,
@@ -35,14 +35,14 @@ pub fn create_setupos_config(
 
     #[allow(deprecated)]
     let hostos_settings = HostOSSettings {
-        vm_memory: vm_resources.memory,
-        vm_cpu: vm_resources.cpu.clone(),
-        vm_nr_of_vcpus: vm_resources.nr_of_vcpus,
+        vm_memory: dev_vm_resources.memory,
+        vm_cpu: dev_vm_resources.cpu.clone(),
+        vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
         verbose,
         hostos_dev_settings: HostOSDevSettings {
-            vm_memory: vm_resources.memory,
-            vm_cpu: vm_resources.cpu,
-            vm_nr_of_vcpus: vm_resources.nr_of_vcpus,
+            vm_memory: dev_vm_resources.memory,
+            vm_cpu: dev_vm_resources.cpu,
+            vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
         },
     };
 

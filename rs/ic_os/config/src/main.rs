@@ -130,7 +130,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_json_settings.deployment.deployment_environment,
                 &deployment_json_settings.nns.urls,
-                deployment_json_settings.vm_resources,
+                deployment_json_settings.dev_vm_resources,
                 enable_trusted_execution_environment,
                 use_node_operator_private_key,
                 use_ssh_authorized_keys,

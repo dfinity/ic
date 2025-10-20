@@ -9,10 +9,11 @@ use std::{
 use anyhow::{Context, Error};
 use clap::{Args, Parser};
 use config::setupos::config_ini::ConfigIniSettings;
+use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use url::Url;
 
-use config::setupos::deployment_json::DeploymentSettings;
+use config::setupos::deployment_json::{Deployment, Logging, Nns, VmResources};
 use config_types::DeploymentEnvironment;
 use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
 use setupos_image_config::write_config;
@@ -105,10 +106,21 @@ fn write_public_keys(path: &Path, ks: Vec<String>) -> Result<(), Error> {
     Ok(())
 }
 
+// NOTE #7037: We should use DeploymentSettings directly, but we need to be
+// compatible with old naming
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
+struct CompatDeploymentSettings {
+    pub deployment: Deployment,
+    pub logging: Logging,
+    pub nns: Nns,
+    pub vm_resources: Option<VmResources>,
+    pub dev_vm_resources: Option<VmResources>,
+}
+
 fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
     let mut deployment_json = {
         let f = File::open(path).context("failed to open deployment config file")?;
-        let deployment_json: DeploymentSettings = serde_json::from_reader(f)?;
+        let deployment_json: CompatDeploymentSettings = serde_json::from_reader(f)?;
 
         deployment_json
     };
@@ -122,15 +134,27 @@ fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
     }
 
     if let Some(memory) = cfg.memory_gb {
-        deployment_json.vm_resources.memory = memory;
+        deployment_json
+            .dev_vm_resources
+            .get_or_insert_default()
+            .memory = memory;
+        deployment_json.vm_resources.get_or_insert_default().memory = memory;
     }
 
     if let Some(cpu) = &cfg.cpu {
-        deployment_json.vm_resources.cpu = cpu.to_owned();
+        deployment_json.dev_vm_resources.get_or_insert_default().cpu = cpu.to_owned();
+        deployment_json.vm_resources.get_or_insert_default().cpu = cpu.to_owned();
     }
 
     if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
-        deployment_json.vm_resources.nr_of_vcpus = nr_of_vcpus.to_owned();
+        deployment_json
+            .dev_vm_resources
+            .get_or_insert_default()
+            .nr_of_vcpus = nr_of_vcpus.to_owned();
+        deployment_json
+            .vm_resources
+            .get_or_insert_default()
+            .nr_of_vcpus = nr_of_vcpus.to_owned();
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {

@@ -733,7 +733,7 @@ fn create_setupos_config_image(
             nns: deployment_json::Nns {
                 urls: vec![nns_url.clone()],
             },
-            vm_resources: deployment_json::VmResources {
+            dev_vm_resources: deployment_json::VmResources {
                 memory: (HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).get() as u32,
                 cpu: cpu.to_string(),
                 nr_of_vcpus: (HOSTOS_VCPUS_PER_VM / 2).get() as u32,
