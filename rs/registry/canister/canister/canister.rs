@@ -50,6 +50,7 @@ use registry_canister::{
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
         do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
         do_update_api_boundary_nodes_version::{
             DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
@@ -1206,6 +1207,17 @@ fn remove_node_directly_(payload: RemoveNodeDirectlyPayload) {
     recertify_registry();
 }
 
+#[unsafe(export_name = "canister_update set_subnet_operational_level")]
+fn set_subnet_operational_level() {
+    check_caller_is_governance_and_log("set_subnet_operational_level");
+    over(candid_one, set_subnet_operational_level_);
+}
+
+#[candid_method(update, rename = "set_subnet_operational_level")]
+fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
+    registry_mut().do_set_subnet_operational_level(payload);
+}
+
 fn recertify_registry() {
     registry_canister::certification::recertify_registry(registry());
 }
@@ -1227,6 +1239,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "registry_total_memory_size_bytes",
         ic_nervous_system_common::total_memory_size_bytes() as f64,
         "Size of the total memory allocated by this canister measured in bytes.",
+    )?;
+    w.encode_gauge(
+        "registry_latest_version",
+        registry().latest_version() as f64,
+        "The current latest version of the registry.",
     )?;
 
     Ok(())

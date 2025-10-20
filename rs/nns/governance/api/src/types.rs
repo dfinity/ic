@@ -2190,6 +2190,31 @@ pub struct KnownNeuron {
     pub id: Option<NeuronId>,
     pub known_neuron_data: Option<KnownNeuronData>,
 }
+/// Topic variants that can be followed by known neurons.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug,
+)]
+pub enum TopicToFollow {
+    CatchAll,
+    NeuronManagement,
+    ExchangeRate,
+    NetworkEconomics,
+    Governance,
+    NodeAdmin,
+    ParticipantManagement,
+    SubnetManagement,
+    Kyc,
+    NodeProviderRewards,
+    IcOsVersionDeployment,
+    IcOsVersionElection,
+    SnsAndCommunityFund,
+    ApiBoundaryNodeManagement,
+    SubnetRental,
+    ApplicationCanisterManagement,
+    ProtocolCanisterManagement,
+    ServiceNervousSystemManagement,
+}
+
 /// Known neurons have extra information (a name and optionally a description) that can be used to identify them.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
@@ -2197,6 +2222,7 @@ pub struct KnownNeuron {
 pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
+    pub committed_topics: Option<Vec<Option<TopicToFollow>>>,
     pub links: Option<Vec<String>>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.
@@ -4072,6 +4098,23 @@ pub enum NnsFunction {
     DeployHostosToSomeNodes = 51,
     /// The proposal requests a subnet rental.
     SubnetRentalRequest = 52,
+    /// Instruct the migration canister to not accept any more migration requests.
+    PauseCanisterMigrations = 53,
+    /// Instruct the migration canister to accept migration requests again.
+    UnpauseCanisterMigrations = 54,
+    /// For taking a subnet offline for repairs, as well as back online. These
+    /// are the first and last steps in subnet recovery.
+    ///
+    /// The primary thing this does is set the `halted` field in `SubnetRecord`.
+    /// However, there are a couple of secondary changes that this also does:
+    ///
+    ///     1. Set the `ssh_read_only_access` field in `SubnetRecord`.
+    ///     2. Set the `ssh_node_state_write_access` field in `NodeRecord`.
+    ///
+    /// When there is a DFINITY node where SEV is not enabled in the subnet,
+    /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
+    /// state of the art (as of Oct 2025) way of doing subnet recovery.
+    SetSubnetOperationalLevel = 55,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4152,6 +4195,9 @@ impl NnsFunction {
             }
             NnsFunction::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
             NnsFunction::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
+            NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
+            NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
+            NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4229,6 +4275,9 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
             "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
+            "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
+            "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
+            "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             _ => None,
         }
     }
@@ -4389,4 +4438,40 @@ pub struct MaturityDisbursement {
     pub account_to_disburse_to: Option<Account>,
     /// The account identifier to disburse the maturity to.
     pub account_identifier_to_disburse_to: Option<AccountIdentifier>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+)]
+pub struct GetNeuronIndexRequest {
+    exclusive_start_neuron_id: Option<NeuronId>,
+    page_size: Option<u32>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+)]
+pub struct NeuronIndexData {
+    neurons: Vec<NeuronInfo>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct ListNeuronVotesRequest {
+    pub neuron_id: Option<NeuronId>,
+    pub before_proposal: Option<ProposalId>,
+    pub limit: Option<u64>,
+}
+
+pub type ListNeuronVotesResponse = Result<NeuronVotes, GovernanceError>;
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct NeuronVotes {
+    pub votes: Option<Vec<NeuronVote>>,
+    pub all_finalized_before_proposal: Option<ProposalId>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct NeuronVote {
+    pub proposal_id: Option<ProposalId>,
+    pub vote: Option<Vote>,
 }

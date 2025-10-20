@@ -1,6 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
-use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -8,6 +7,7 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -17,9 +17,9 @@ use ic_embedders::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, Hypervisor,
-    IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions,
-    RoundLimits, execute_canister,
+    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
+    ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics, InternalHttpQueryHandler,
+    RoundInstructions, RoundLimits, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -30,9 +30,10 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
+    CanisterUpgradeOptions, EmptyBlob, InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2,
+    MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
+    UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -53,7 +54,7 @@ use ic_replicated_state::{
     },
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
-use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -81,7 +82,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     os::unix::prelude::FileExt,
-    path::Path,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -265,7 +265,7 @@ pub struct ExecutionTest {
     replica_version: ReplicaVersion,
 
     // The actual implementation.
-    exec_env: ExecutionEnvironment,
+    exec_env: Arc<ExecutionEnvironment>,
     query_handler: InternalHttpQueryHandler,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics_registry: MetricsRegistry,
@@ -282,8 +282,8 @@ impl ExecutionTest {
         self.exec_env.hypervisor_for_testing()
     }
 
-    pub fn execution_environment(&self) -> &ExecutionEnvironment {
-        &self.exec_env
+    pub fn execution_environment(&self) -> Arc<ExecutionEnvironment> {
+        Arc::clone(&self.exec_env)
     }
 
     pub fn dirty_heap_page_overhead(&self) -> u64 {
@@ -784,9 +784,17 @@ impl ExecutionTest {
     }
 
     /// Returns the canister status by canister id.
-    pub fn canister_status(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+    pub fn canister_status(
+        &mut self,
+        canister_id: CanisterId,
+    ) -> Result<CanisterStatusResultV2, UserError> {
         let payload = CanisterIdRecord::from(canister_id).encode();
-        self.subnet_message(Method::CanisterStatus, payload)
+        let result = self.subnet_message(Method::CanisterStatus, payload);
+        match result {
+            Ok(WasmResult::Reply(bytes)) => Ok(CanisterStatusResultV2::decode(&bytes).unwrap()),
+            Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
+            Err(err) => Err(err),
+        }
     }
 
     /// Updates the freezing threshold of the given canister.
@@ -1092,7 +1100,17 @@ impl ExecutionTest {
         state
             .canister_state_mut(&canister_id)
             .unwrap()
-            .push_ingress(ingress);
+            .push_ingress(ingress.clone());
+        self.ingress_history_writer.set_status(
+            &mut state,
+            ingress.message_id,
+            IngressStatus::Known {
+                receiver: ingress.receiver.get(),
+                user_id: ingress.source,
+                time: self.time,
+                state: IngressState::Received,
+            },
+        );
         self.state = Some(state);
         if !self.manual_execution {
             self.execute_all();
@@ -1113,7 +1131,6 @@ impl ExecutionTest {
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
@@ -1188,6 +1205,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             data_certificate,
             /*certification_delegation_metadata=*/ None,
+            true,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1329,7 +1347,18 @@ impl ExecutionTest {
             .method_payload(method_payload)
             .build();
 
-        state.subnet_queues_mut().push_ingress(message);
+        state.subnet_queues_mut().push_ingress(message.clone());
+
+        self.ingress_history_writer.set_status(
+            &mut state,
+            message.message_id,
+            IngressStatus::Known {
+                receiver: message.receiver.get(),
+                user_id: message.source,
+                time: self.time,
+                state: IngressState::Received,
+            },
+        );
 
         self.state = Some(state);
 
@@ -1714,6 +1743,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             data_certificate,
             certificate_delegation_metadata,
+            true,
         )
     }
 
@@ -1806,8 +1836,12 @@ impl ExecutionTest {
 }
 
 /// A builder for `ExecutionTest`.
+///
+/// Invariant: `subnet_config` must match the `subnet_type`. If `subnet_type` is
+/// updated, then `subnet_config` must be updated accordingly.
 pub struct ExecutionTestBuilder {
     execution_config: Config,
+    subnet_config: SubnetConfig,
     nns_subnet_id: SubnetId,
     root_key: Option<Vec<u8>>,
     own_subnet_id: SubnetId,
@@ -1818,11 +1852,6 @@ pub struct ExecutionTestBuilder {
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
-    instruction_limit: NumInstructions,
-    slice_instruction_limit: NumInstructions,
-    install_code_instruction_limit: NumInstructions,
-    install_code_slice_instruction_limit: NumInstructions,
-    instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
@@ -1830,29 +1859,24 @@ pub struct ExecutionTestBuilder {
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     time: Time,
     current_round: ExecutionRound,
-    resource_saturation_scaling: usize,
-    heap_delta_rate_limit: NumBytes,
-    upload_wasm_chunk_instructions: NumInstructions,
-    canister_snapshot_baseline_instructions: NumInstructions,
-    canister_snapshot_data_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
-    cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
     cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+        let mut subnet_config = SubnetConfig::new(subnet_type);
+        subnet_config.scheduler_config.scheduler_cores = 2;
         Self {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Enabled,
-                allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
+            subnet_config,
             nns_subnet_id: subnet_test_id(2),
             root_key: None,
             own_subnet_id: subnet_test_id(1),
@@ -1863,13 +1887,6 @@ impl Default for ExecutionTestBuilder {
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
             chain_keys_enabled_status: Default::default(),
-            instruction_limit: scheduler_config.max_instructions_per_message,
-            slice_instruction_limit: scheduler_config.max_instructions_per_slice,
-            install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
-            install_code_slice_instruction_limit: scheduler_config
-                .max_instructions_per_install_code_slice,
-            instruction_limit_without_dts: scheduler_config
-                .max_instructions_per_message_without_dts,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             registry_settings: test_registry_settings(),
             manual_execution: false,
@@ -1877,16 +1894,8 @@ impl Default for ExecutionTestBuilder {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: UNIX_EPOCH,
             current_round: ExecutionRound::new(1),
-            resource_saturation_scaling: 1,
-            heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
-            upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
-            canister_snapshot_baseline_instructions: scheduler_config
-                .canister_snapshot_baseline_instructions,
-            canister_snapshot_data_baseline_instructions: scheduler_config
-                .canister_snapshot_data_baseline_instructions,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
-            cycles_account_manager_config: None,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
@@ -1941,11 +1950,12 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        Self {
-            subnet_type,
-            ..self
-        }
+    pub fn with_subnet_type(mut self, subnet_type: SubnetType) -> Self {
+        self.subnet_type = subnet_type;
+        // If `subnet_type` is updated, then we need to update the subnet config
+        // to match it.
+        self.subnet_config = SubnetConfig::new(subnet_type);
+        self
     }
 
     pub fn with_subnet_id(self, principal_id: PrincipalId) -> Self {
@@ -1991,39 +2001,39 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_instruction_limit(self, limit: u64) -> Self {
-        Self {
-            instruction_limit: NumInstructions::from(limit),
-            ..self
-        }
+    pub fn with_instruction_limit(mut self, limit: u64) -> Self {
+        self.subnet_config
+            .scheduler_config
+            .max_instructions_per_message = NumInstructions::from(limit);
+        self
     }
 
-    pub fn with_slice_instruction_limit(self, limit: u64) -> Self {
-        Self {
-            slice_instruction_limit: NumInstructions::from(limit),
-            ..self
-        }
+    pub fn with_slice_instruction_limit(mut self, limit: u64) -> Self {
+        self.subnet_config
+            .scheduler_config
+            .max_instructions_per_slice = NumInstructions::from(limit);
+        self
     }
 
-    pub fn with_instruction_limit_without_dts(self, limit: u64) -> Self {
-        Self {
-            instruction_limit_without_dts: NumInstructions::from(limit),
-            ..self
-        }
+    pub fn with_instruction_limit_without_dts(mut self, limit: u64) -> Self {
+        self.subnet_config
+            .scheduler_config
+            .max_instructions_per_message_without_dts = NumInstructions::from(limit);
+        self
     }
 
-    pub fn with_install_code_instruction_limit(self, limit: u64) -> Self {
-        Self {
-            install_code_instruction_limit: NumInstructions::from(limit),
-            ..self
-        }
+    pub fn with_install_code_instruction_limit(mut self, limit: u64) -> Self {
+        self.subnet_config
+            .scheduler_config
+            .max_instructions_per_install_code = NumInstructions::from(limit);
+        self
     }
 
-    pub fn with_install_code_slice_instruction_limit(self, limit: u64) -> Self {
-        Self {
-            install_code_slice_instruction_limit: NumInstructions::from(limit),
-            ..self
-        }
+    pub fn with_install_code_slice_instruction_limit(mut self, limit: u64) -> Self {
+        self.subnet_config
+            .scheduler_config
+            .max_instructions_per_install_code_slice = NumInstructions::from(limit);
+        self
     }
 
     pub fn with_initial_canister_cycles(self, initial_canister_cycles: u128) -> Self {
@@ -2033,41 +2043,38 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_execution_memory(mut self, subnet_execution_memory: i64) -> Self {
-        self.execution_config.subnet_memory_capacity =
-            NumBytes::from(subnet_execution_memory as u64);
+    pub fn with_subnet_execution_memory(mut self, subnet_execution_memory: u64) -> Self {
+        self.execution_config.subnet_memory_capacity = NumBytes::from(subnet_execution_memory);
         self
     }
 
-    pub fn with_subnet_memory_reservation(mut self, subnet_memory_reservation: i64) -> Self {
-        self.execution_config.subnet_memory_reservation =
-            NumBytes::from(subnet_memory_reservation as u64);
+    pub fn with_subnet_memory_reservation(mut self, subnet_memory_reservation: u64) -> Self {
+        self.execution_config.subnet_memory_reservation = NumBytes::from(subnet_memory_reservation);
         self
     }
 
-    pub fn with_subnet_memory_threshold(mut self, subnet_memory_threshold: i64) -> Self {
-        self.execution_config.subnet_memory_threshold =
-            NumBytes::from(subnet_memory_threshold as u64);
+    pub fn with_subnet_memory_threshold(mut self, subnet_memory_threshold: u64) -> Self {
+        self.execution_config.subnet_memory_threshold = NumBytes::from(subnet_memory_threshold);
         self
     }
 
     pub fn with_subnet_guaranteed_response_message_memory(
         mut self,
-        subnet_guaranteed_response_message_memory: i64,
+        subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
         self.execution_config
             .guaranteed_response_message_memory_capacity =
-            NumBytes::from(subnet_guaranteed_response_message_memory as u64);
+            NumBytes::from(subnet_guaranteed_response_message_memory);
         self
     }
 
     pub fn with_subnet_wasm_custom_sections_memory(
         mut self,
-        subnet_wasm_custom_sections_memory: i64,
+        subnet_wasm_custom_sections_memory: u64,
     ) -> Self {
         self.execution_config
             .subnet_wasm_custom_sections_memory_capacity =
-            NumBytes::from(subnet_wasm_custom_sections_memory as u64);
+            NumBytes::from(subnet_wasm_custom_sections_memory);
         self
     }
 
@@ -2102,11 +2109,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_rate_limiting_of_instructions(mut self) -> Self {
         self.execution_config.rate_limiting_of_instructions = FlagStatus::Enabled;
-        self
-    }
-
-    pub fn with_deterministic_time_slicing_disabled(mut self) -> Self {
-        self.execution_config.deterministic_time_slicing = FlagStatus::Disabled;
         self
     }
 
@@ -2255,12 +2257,28 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_resource_saturation_scaling(mut self, scaling: usize) -> Self {
-        self.resource_saturation_scaling = scaling;
+        self.subnet_config.scheduler_config.scheduler_cores = scaling;
+        // If scaling == 1, i.e. a single core is requested in the test, DTS must
+        // be disabled by setting the slice limit to be equal to the message limit.
+        if scaling == 1 {
+            self.subnet_config
+                .scheduler_config
+                .max_instructions_per_slice = self
+                .subnet_config
+                .scheduler_config
+                .max_instructions_per_message;
+            self.subnet_config
+                .scheduler_config
+                .max_instructions_per_install_code_slice = self
+                .subnet_config
+                .scheduler_config
+                .max_instructions_per_install_code;
+        }
         self
     }
 
     pub fn with_heap_delta_rate_limit(mut self, heap_delta_rate_limit: NumBytes) -> Self {
-        self.heap_delta_rate_limit = heap_delta_rate_limit;
+        self.subnet_config.scheduler_config.heap_delta_rate_limit = heap_delta_rate_limit;
         self
     }
 
@@ -2345,6 +2363,28 @@ impl ExecutionTestBuilder {
         state.metadata.bitcoin_get_successors_follow_up_responses =
             self.bitcoin_get_successors_follow_up_responses;
 
+        // On a single core scheduler, DTS must be disabled.
+        if self.subnet_config.scheduler_config.scheduler_cores == 1 {
+            assert_eq!(
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_message,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_slice,
+                "On a single core scheduler, DTS must be disabled by setting max_instructions_per_message == max_instructions_per_slice"
+            );
+            assert_eq!(
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code_slice,
+                "On a single core scheduler, DTS must be disabled by setting max_instructions_per_install_code == max_instructions_per_install_code_slice"
+            );
+        }
+
         if self.subnet_features.is_empty() {
             state.metadata.own_subnet_features = SubnetFeatures::default();
         } else {
@@ -2354,14 +2394,15 @@ impl ExecutionTestBuilder {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let mut config = self
-            .cycles_account_manager_config
-            .unwrap_or_else(|| SubnetConfig::new(self.subnet_type).cycles_account_manager_config);
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
-            config.ecdsa_signature_fee = ecdsa_signature_fee;
+            self.subnet_config
+                .cycles_account_manager_config
+                .ecdsa_signature_fee = ecdsa_signature_fee;
         }
         if let Some(schnorr_signature_fee) = self.schnorr_signature_fee {
-            config.schnorr_signature_fee = schnorr_signature_fee;
+            self.subnet_config
+                .cycles_account_manager_config
+                .schnorr_signature_fee = schnorr_signature_fee;
         }
         for (key_id, is_enabled) in &self.chain_keys_enabled_status {
             // Populate the chain key settings
@@ -2455,14 +2496,6 @@ impl ExecutionTestBuilder {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            self.instruction_limit,
-            self.subnet_type,
-            self.own_subnet_id,
-            config,
-        ));
-        let config = self.execution_config.clone();
-
         let dirty_page_overhead = match self.subnet_type {
             SubnetType::Application => SchedulerConfig::application_subnet().dirty_page_overhead,
             SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
@@ -2471,75 +2504,43 @@ impl ExecutionTestBuilder {
             }
         };
 
-        let dirty_heap_page_overhead = match config.embedders_config.metering_type {
+        let dirty_heap_page_overhead = match self.execution_config.embedders_config.metering_type {
             MeteringType::New => dirty_page_overhead.get(),
             _ => 0,
         };
 
-        let hypervisor = Hypervisor::new(
-            config.clone(),
-            &metrics_registry,
-            self.own_subnet_id,
-            self.log.clone(),
-            Arc::clone(&cycles_account_manager),
-            dirty_page_overhead,
-            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            Arc::new(FakeStateManager::new()),
-            Path::new("/tmp"),
-        );
-        if self.precompiled_universal_canister {
-            hypervisor.compilation_cache_insert_for_testing(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
-                bincode::deserialize(&UNIVERSAL_CANISTER_SERIALIZED_MODULE)
-                    .expect("Failed to deserialize universal canister module"),
-            )
-        }
-        let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
-        let state_reader = Arc::new(FakeStateManager::new());
-        let ingress_history_writer = IngressHistoryWriterImpl::new(
-            config.clone(),
+        let state_manager = Arc::new(FakeStateManager::new());
+
+        let execution_services = ExecutionServicesForTesting::setup_execution(
             self.log.clone(),
-            &metrics_registry,
-            completed_execution_messages_tx,
-            state_reader,
-        );
-        let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
-            Arc::new(ingress_history_writer);
-        let exec_env = ExecutionEnvironment::new(
-            self.log.clone(),
-            Arc::clone(&hypervisor),
-            Arc::clone(&ingress_history_writer),
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            // Compute capacity for 2-core scheduler is 100%
-            // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
-            100,
-            config.clone(),
-            Arc::clone(&cycles_account_manager),
-            self.resource_saturation_scaling,
-            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            self.heap_delta_rate_limit,
-            self.upload_wasm_chunk_instructions,
-            self.canister_snapshot_baseline_instructions,
-            self.canister_snapshot_data_baseline_instructions,
+            self.execution_config.clone(),
+            self.subnet_config.clone(),
+            state_manager.clone(),
+            state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
+            state_manager.tmp(),
+            None,
         );
-        let (query_stats_collector, _) =
-            ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
 
-        let query_handler = InternalHttpQueryHandler::new(
-            self.log.clone(),
-            hypervisor,
-            self.subnet_type,
-            config.clone(),
-            &metrics_registry,
-            self.instruction_limit_without_dts,
-            Arc::clone(&cycles_account_manager),
-            query_stats_collector,
-        );
+        if self.precompiled_universal_canister {
+            execution_services
+                .execution_environment
+                .compilation_cache_insert_for_testing(
+                    UNIVERSAL_CANISTER_WASM.to_vec(),
+                    bincode::deserialize(&UNIVERSAL_CANISTER_SERIALIZED_MODULE)
+                        .expect("Failed to deserialize universal canister module"),
+                )
+        }
+
         state.set_own_cost_schedule(self.cost_schedule);
         self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
+        let subnet_available_memory = execution_services
+            .execution_environment
+            .scaled_subnet_available_memory(&state);
         ExecutionTest {
             state: Some(state),
             message_id: 0,
@@ -2547,40 +2548,40 @@ impl ExecutionTestBuilder {
             execution_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
-            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
-                self.execution_config.subnet_memory_capacity.get() as i64
-                    - self.execution_config.subnet_memory_reservation.get() as i64,
-                self.execution_config
-                    .guaranteed_response_message_memory_capacity
-                    .get() as i64,
-                self.execution_config
-                    .subnet_wasm_custom_sections_memory_capacity
-                    .get() as i64,
-            ),
+            subnet_available_memory,
             subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
-                self.instruction_limit,
-                self.slice_instruction_limit,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_message,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_slice,
             ),
             install_code_instruction_limits: InstructionLimits::new(
-                self.execution_config.deterministic_time_slicing,
-                self.install_code_instruction_limit,
-                self.install_code_slice_instruction_limit,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code,
+                self.subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code_slice,
             ),
-            ingress_memory_capacity: config.ingress_history_memory_capacity,
-            instruction_limit_without_dts: self.instruction_limit_without_dts,
+            ingress_memory_capacity: self.execution_config.ingress_history_memory_capacity,
+            instruction_limit_without_dts: self
+                .subnet_config
+                .scheduler_config
+                .max_instructions_per_message_without_dts,
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),
             caller_canister_id: self.caller_canister_id,
-            exec_env,
-            query_handler,
-            cycles_account_manager,
+            exec_env: execution_services.execution_environment,
+            query_handler: execution_services.query_execution_service,
+            cycles_account_manager: execution_services.cycles_account_manager,
             metrics_registry,
-            ingress_history_writer,
+            ingress_history_writer: execution_services.ingress_history_writer,
             manual_execution: self.manual_execution,
             chain_key_data: ChainKeyData {
                 master_public_keys: chain_key_subnet_public_keys,
@@ -2749,6 +2750,10 @@ macro_rules! assert_delta {
             assert_eq!($x, $y, "delta: `{:?}`", $d);
         }
     };
+}
+
+fn mock_random_number_generator() -> Box<ReproducibleRng> {
+    Box::new(ReproducibleRng::from_seed_for_debugging([0u8; 32]))
 }
 
 #[cfg(test)]
