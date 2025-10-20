@@ -52,14 +52,16 @@ def arrange_component_files(context_dir, component_files):
         elif len(parts) == 3:
             source_file, install_target, permissions = parts
         else:
-            raise ValueError(f"Invalid component file format: {component_file}. Expected 'source:target' or 'source:target:permissions'")
-        
+            raise ValueError(
+                f"Invalid component file format: {component_file}. Expected 'source:target' or 'source:target:permissions'"
+            )
+
         if install_target[0] == "/":
             install_target = install_target[1:]
         install_target = os.path.join(context_dir, install_target)
         os.makedirs(os.path.dirname(install_target), exist_ok=True)
         shutil.copy(source_file, install_target)
-        
+
         # Set permissions if specified
         if permissions:
             os.chmod(install_target, int(permissions, 8))
