@@ -149,6 +149,7 @@ pub fn init_ic(
                 initial_replica.replica_version.clone(),
                 subnet.max_ingress_bytes_per_message,
                 subnet.max_ingress_messages_per_block,
+                subnet.max_ingress_bytes_per_block,
                 subnet.max_block_payload_size,
                 subnet.unit_delay,
                 subnet.initial_notary_delay,

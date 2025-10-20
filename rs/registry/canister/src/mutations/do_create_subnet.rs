@@ -259,6 +259,7 @@ pub struct CreateSubnetPayload {
 
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
+    pub max_ingress_bytes_per_block: u64,
     pub max_block_payload_size: u64,
     pub unit_delay_millis: u64,
     pub initial_notary_delay_millis: u64,
@@ -511,6 +512,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .collect::<Vec<_>>(),
             max_ingress_bytes_per_message: val.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: val.max_ingress_messages_per_block,
+            max_ingress_bytes_per_block: val.max_ingress_bytes_per_block,
             max_block_payload_size: val.max_block_payload_size,
             replica_version_id: val.replica_version_id.clone(),
             unit_delay_millis: val.unit_delay_millis,

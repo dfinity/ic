@@ -223,10 +223,18 @@ impl PayloadBuilderImpl {
         subnet_record: &SubnetRecord,
     ) -> NumBytes {
         match slot {
-            Slot::Ingress => NumBytes::new(std::cmp::max(
-                subnet_record.max_ingress_bytes_per_message,
-                ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
-            )),
+            Slot::Ingress => {
+                let limit = if subnet_record.max_block_payload_size > 0 {
+                    subnet_record.max_block_payload_size
+                } else {
+                    ic_limits::MAX_INGRESS_BYTES_PER_BLOCK
+                };
+
+                NumBytes::new(std::cmp::max(
+                    subnet_record.max_ingress_bytes_per_message,
+                    limit,
+                ))
+            }
             Slot::Rest => {
                 let required_min_size =
                     MAX_BITCOIN_PAYLOAD_IN_BYTES.max(MAX_XNET_PAYLOAD_IN_BYTES.get());
