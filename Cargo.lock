@@ -17552,9 +17552,11 @@ name = "messaging-test"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "canister-test",
  "futures",
  "ic-base-types",
  "ic-cdk",
+ "ic-state-machine-tests",
  "ic-types",
  "ic-types-test-utils",
  "messaging-test-utils",
