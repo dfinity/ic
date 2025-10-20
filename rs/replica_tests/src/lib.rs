@@ -233,6 +233,7 @@ pub fn get_ic_config() -> IcConfig {
             None,
             None,
             None,
+            None,
             Some(Duration::from_millis(0)), // Notary time out
             Some(Height::from(19)),         // DKG interval length
             None,

@@ -63,6 +63,9 @@ pub struct SubnetConfig {
     /// maximum number of ingress message per block
     pub max_ingress_messages_per_block: u64,
 
+    /// maximum number of ingress bytes per block
+    pub max_ingress_bytes_per_block: u64,
+
     /// maximum size in byte, payload can have in total
     pub max_block_payload_size: u64,
 
@@ -155,6 +158,7 @@ pub struct SubnetConfigParams {
     pub dkg_interval_length: Height,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
+    pub max_ingress_bytes_per_block: u64,
     pub max_block_payload_size: u64,
     pub dkg_dealings_per_block: usize,
 }
@@ -203,6 +207,7 @@ pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> S
         dkg_interval_length: dynamic_config.dkg_interval_length,
         max_ingress_bytes_per_message: dynamic_config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: ic_limits::MAX_INGRESS_MESSAGES_PER_BLOCK,
+        max_ingress_bytes_per_block: ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
         max_block_payload_size: ic_limits::MAX_BLOCK_PAYLOAD_SIZE,
         dkg_dealings_per_block: ic_limits::DKG_DEALINGS_PER_BLOCK,
     }
@@ -216,6 +221,7 @@ impl SubnetConfig {
         replica_version_id: ReplicaVersion,
         max_ingress_bytes_per_message: Option<u64>,
         max_ingress_messages_per_block: Option<u64>,
+        max_ingress_bytes_per_block: Option<u64>,
         max_block_payload_size: Option<u64>,
         unit_delay: Option<Duration>,
         initial_notary_delay: Option<Duration>,
@@ -246,6 +252,8 @@ impl SubnetConfig {
                 .unwrap_or(config.max_ingress_bytes_per_message),
             max_ingress_messages_per_block: max_ingress_messages_per_block
                 .unwrap_or(config.max_ingress_messages_per_block),
+            max_ingress_bytes_per_block: max_ingress_bytes_per_block
+                .unwrap_or(config.max_ingress_bytes_per_block),
             max_block_payload_size: max_block_payload_size.unwrap_or(config.max_block_payload_size),
             unit_delay: unit_delay.unwrap_or(config.unit_delay),
             initial_notary_delay: initial_notary_delay.unwrap_or(config.initial_notary_delay),
@@ -298,6 +306,7 @@ impl SubnetConfig {
             membership: membership_nodes,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: self.max_ingress_messages_per_block,
+            max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
             max_block_payload_size: self.max_block_payload_size,
             unit_delay_millis: self.unit_delay.as_millis() as u64,
             initial_notary_delay_millis: self.initial_notary_delay.as_millis() as u64,
