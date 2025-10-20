@@ -194,6 +194,7 @@ mod deposit {
                     kyt_fee: Some(0),
                 }))),
                 created_at_time: None,
+                fee: None,
             });
 
         // TODO XC-495: retrieve and assert on expected events
