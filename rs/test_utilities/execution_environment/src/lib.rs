@@ -2045,41 +2045,38 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_execution_memory(mut self, subnet_execution_memory: i64) -> Self {
-        self.execution_config.subnet_memory_capacity =
-            NumBytes::from(subnet_execution_memory as u64);
+    pub fn with_subnet_execution_memory(mut self, subnet_execution_memory: u64) -> Self {
+        self.execution_config.subnet_memory_capacity = NumBytes::from(subnet_execution_memory);
         self
     }
 
-    pub fn with_subnet_memory_reservation(mut self, subnet_memory_reservation: i64) -> Self {
-        self.execution_config.subnet_memory_reservation =
-            NumBytes::from(subnet_memory_reservation as u64);
+    pub fn with_subnet_memory_reservation(mut self, subnet_memory_reservation: u64) -> Self {
+        self.execution_config.subnet_memory_reservation = NumBytes::from(subnet_memory_reservation);
         self
     }
 
-    pub fn with_subnet_memory_threshold(mut self, subnet_memory_threshold: i64) -> Self {
-        self.execution_config.subnet_memory_threshold =
-            NumBytes::from(subnet_memory_threshold as u64);
+    pub fn with_subnet_memory_threshold(mut self, subnet_memory_threshold: u64) -> Self {
+        self.execution_config.subnet_memory_threshold = NumBytes::from(subnet_memory_threshold);
         self
     }
 
     pub fn with_subnet_guaranteed_response_message_memory(
         mut self,
-        subnet_guaranteed_response_message_memory: i64,
+        subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
         self.execution_config
             .guaranteed_response_message_memory_capacity =
-            NumBytes::from(subnet_guaranteed_response_message_memory as u64);
+            NumBytes::from(subnet_guaranteed_response_message_memory);
         self
     }
 
     pub fn with_subnet_wasm_custom_sections_memory(
         mut self,
-        subnet_wasm_custom_sections_memory: i64,
+        subnet_wasm_custom_sections_memory: u64,
     ) -> Self {
         self.execution_config
             .subnet_wasm_custom_sections_memory_capacity =
-            NumBytes::from(subnet_wasm_custom_sections_memory as u64);
+            NumBytes::from(subnet_wasm_custom_sections_memory);
         self
     }
 
