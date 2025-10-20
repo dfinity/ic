@@ -38,6 +38,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+mod chunks_to_download;
+
 // TODO: NET-1461 find appropriate value for the parallelism
 const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
 const ONGOING_STATE_SYNC_CHANNEL_SIZE: usize = 200;
