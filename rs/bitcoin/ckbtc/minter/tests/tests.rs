@@ -1272,7 +1272,7 @@ impl CkBtcSetup {
                 }
             }
         }
-        dbg!(self.get_logs());
+        self.print_minter_logs();
         panic!(
             "the minter did not submit a transaction in {max_ticks} ticks; last status {last_status:?}"
         )
@@ -1617,7 +1617,10 @@ fn test_transaction_resubmission_finalize_setup() -> (CkBtcSetup, u64, Txid, bit
 
 #[test]
 fn test_transaction_resubmission_finalize_new_above_threshold() {
-    let deposit_value = 100_000;
+    let ckbtc = CkBtcSetup::new();
+    let user = Principal::from(ckbtc.caller);
+
+    let deposit_value = 1_000_000;
 
     // Step 1: deposit btc
     //
@@ -1625,14 +1628,7 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
     // one, the remaining available count is still greater than the threshold.
     // This is to make sure utxo count optimization is triggered.
     const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
-    let (ckbtc, _, _, _) = test_transaction_resubmission_finalize_helper(|ckbtc, user| {
-        ckbtc.deposit_utxos_with_value(user, &[deposit_value; COUNT]);
-    });
-
-    // wait for the transaction resubmission
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY - Duration::from_secs(1));
+    ckbtc.deposit_utxos_with_value(user, &[deposit_value; COUNT]);
 
     let user = Principal::from(ckbtc.caller);
     assert_eq!(
