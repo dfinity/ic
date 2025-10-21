@@ -36,7 +36,7 @@ use ic_types::{
         ConsensusResponse, ValidationContext, VetKdAgreement, VetKdErrorCode, VetKdPayload,
         bytes_to_vetkd_payload, vetkd_payload_to_bytes,
     },
-    crypto::vetkd::{VetKdArgs, VetKdDerivationContext, VetKdEncryptedKey},
+    crypto::vetkd::{VetKdArgs, VetKdEncryptedKey},
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
 };
 use num_traits::ops::saturating::SaturatingSub;
@@ -230,13 +230,13 @@ impl VetKdPayloadBuilderImpl {
                     continue;
                 };
                 let args = VetKdArgs {
-                    context: VetKdDerivationContext {
-                        caller: context.request.sender.into(),
-                        context: context.derivation_path.iter().flatten().cloned().collect(),
-                    },
-                    ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-                    input: ctxt_args.input.to_vec(),
-                    transport_public_key: ctxt_args.transport_public_key.clone(),
+                    caller: context.request.sender.get_ref(),
+                    context: context.derivation_path.as_ref().first().expect(
+                        "the context's derivation path for vetKD should have exactly one element",
+                    ),
+                    ni_dkg_id: &ctxt_args.ni_dkg_id,
+                    input: &ctxt_args.input,
+                    transport_public_key: &ctxt_args.transport_public_key,
                 };
                 let key_id = context.key_id();
                 match self.crypto.combine_encrypted_key_shares(shares, &args) {
@@ -346,15 +346,16 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
-        let args = VetKdArgs {
-            context: VetKdDerivationContext {
-                caller: context.request.sender.into(),
-                context: context.derivation_path.iter().flatten().cloned().collect(),
-            },
-            ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-            input: ctxt_args.input.to_vec(),
-            transport_public_key: ctxt_args.transport_public_key.clone(),
-        };
+        let args =
+            VetKdArgs {
+                caller: context.request.sender.get_ref(),
+                context: context.derivation_path.as_ref().first().expect(
+                    "the context's derivation path for vetKD should have exactly one element",
+                ),
+                ni_dkg_id: &ctxt_args.ni_dkg_id,
+                input: &ctxt_args.input,
+                transport_public_key: &ctxt_args.transport_public_key,
+            };
         let reply = match VetKdDeriveKeyResult::decode(&data) {
             Ok(data) => data,
             Err(error) => {

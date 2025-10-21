@@ -11,30 +11,29 @@ use std::fmt;
 #[cfg(test)]
 mod test;
 
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-pub struct VetKdArgs {
-    pub ni_dkg_id: NiDkgId,
-    #[serde(with = "serde_bytes")]
-    pub input: Vec<u8>,
-    pub context: VetKdDerivationContext,
-    #[serde(with = "serde_bytes")]
-    pub transport_public_key: Vec<u8>,
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct VetKdArgs<'a> {
+    pub ni_dkg_id: &'a NiDkgId,
+    pub input: &'a Vec<u8>,
+    pub caller: &'a PrincipalId,
+    pub context: &'a Vec<u8>,
+    pub transport_public_key: &'a Vec<u8>,
 }
 
-impl fmt::Debug for VetKdArgs {
+impl fmt::Debug for VetKdArgs<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("VetKdArgs")
             .field("ni_dkg_id", &self.ni_dkg_id)
-            .field("input", &HexEncoding::from(&self.input))
+            .field("input", &HexEncoding::from(self.input))
             .field("context", &self.context)
             .field(
                 "transport_public_key",
-                &HexEncoding::from(&self.transport_public_key),
+                &HexEncoding::from(self.transport_public_key),
             )
             .finish()
     }
 }
-impl_display_using_debug!(VetKdArgs);
+impl_display_using_debug!(VetKdArgs<'_>);
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKeyShareContent(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -149,3 +148,24 @@ pub enum VetKdKeyVerificationError {
     VerificationError,
 }
 impl_display_using_debug!(VetKdKeyVerificationError);
+
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct VetKdArgsOwned {
+    pub ni_dkg_id: NiDkgId,
+    pub input: Vec<u8>,
+    pub caller: PrincipalId,
+    pub context: Vec<u8>,
+    pub transport_public_key: Vec<u8>,
+}
+
+impl VetKdArgsOwned {
+    pub fn as_ref<'a>(&'a self) -> VetKdArgs<'a> {
+        VetKdArgs {
+            ni_dkg_id: &self.ni_dkg_id,
+            input: &self.input,
+            caller: &self.caller,
+            context: &self.context,
+            transport_public_key: &self.transport_public_key,
+        }
+    }
+}
