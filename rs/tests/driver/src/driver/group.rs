@@ -624,7 +624,7 @@ impl SystemTestGroup {
                                         continue;
                                     }
 
-                                        streamed_uvms.entry(key.clone()).or_insert_with(|| {
+                                    streamed_uvms.entry(key.clone()).or_insert_with(|| {
                                             let logger = logger.clone();
                                             info!(
                                                     logger,
@@ -634,9 +634,9 @@ impl SystemTestGroup {
                                             rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
                                             value
                                         });
-                                    }
                                 }
-                                Err(err) => {
+                            }
+                            Err(err) => {
                                 warn!(logger, "Discovering deployed uvms failed with err:{err}");
                             }
                         }
